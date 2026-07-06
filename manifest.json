@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "AutoPostula",
+  "version": "2.6.0",
+  "description": "Postulaci\u00f3n autom\u00e1tica inteligente para Computrabajo. Powered by IA.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://www.computrabajo.cl/*",
+    "https://cl.computrabajo.com/*",
+    "https://computrabajo.cl/*",
+    "https://computrabajo.com/*",
+    "https://api.anthropic.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.computrabajo.cl/*",
+        "https://cl.computrabajo.com/*",
+        "https://computrabajo.cl/*",
+        "https://computrabajo.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}

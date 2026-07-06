@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title>AutoPostula</title>
+<style>
+/* ── Reset & base ────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #F8F9FC;
+  --surface:  #FFFFFF;
+  --border:   #E4E7EF;
+  --accent:   #2563EB;
+  --accent-h: #1D4ED8;
+  --accent-s: #EFF4FF;
+  --danger:   #DC2626;
+  --danger-s: #FEF2F2;
+  --success:  #16A34A;
+  --success-s:#F0FDF4;
+  --warn:     #D97706;
+  --text-1:   #111827;
+  --text-2:   #4B5563;
+  --text-3:   #9CA3AF;
+  --radius:   8px;
+  --shadow:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+}
+
+html { font-size: 13px; }
+body {
+  width: 400px;
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.5;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+body::-webkit-scrollbar { width: 4px; }
+body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Header ──────────────────────────────────────────────── */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header-logo {
+  width: 34px; height: 34px;
+  background: var(--accent);
+  border-radius: 9px;
+  display: grid; place-items: center;
+  font-size: 17px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(37,99,235,.3);
+}
+.header-info { flex: 1; min-width: 0; }
+.header-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -.2px;
+}
+.header-sub { font-size: 11px; color: var(--text-3); }
+
+/* Pulso de actividad — firma visual */
+.pulse-wrap {
+  display: flex; align-items: center; gap: 6px;
+  flex-shrink: 0;
+}
+.pulse {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  transition: background .3s;
+}
+.pulse.active {
+  background: var(--success);
+  animation: pulse-ring 1.4s ease-out infinite;
+}
+.pulse.working { background: var(--warn); animation: pulse-ring 0.8s ease-out infinite; }
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 currentColor; }
+  70%  { box-shadow: 0 0 0 5px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.pulse.active  { box-shadow: 0 0 0 0 rgba(22,163,74,.4); }
+.pulse.working { box-shadow: 0 0 0 0 rgba(217,119,6,.4); }
+.pulse-label { font-size: 11px; font-weight: 600; color: var(--text-3); }
+.pulse-label.active  { color: var(--success); }
+.pulse-label.working { color: var(--warn); }
+
+/* ── Toggle master ───────────────────────────────────────── */
+.master-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.master-left .label { font-size: 13px; font-weight: 600; }
+.master-left .hint  { font-size: 11px; color: var(--text-3); }
+.toggle {
+  position: relative; width: 42px; height: 23px; flex-shrink: 0;
+}
+.toggle input { display: none; }
+.toggle-track {
+  position: absolute; inset: 0;
+  background: var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background .2s;
+}
+.toggle-thumb {
+  position: absolute;
+  width: 17px; height: 17px;
+  top: 3px; left: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  pointer-events: none;
+}
+.toggle input:checked ~ .toggle-track { background: var(--accent); }
+.toggle input:checked ~ .toggle-thumb { transform: translateX(19px); }
+
+/* ── Stats strip ─────────────────────────────────────────── */
+.stats {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.stat {
+  padding: 10px 0;
+  text-align: center;
+  border-right: 1px solid var(--border);
+}
+.stat:last-child { border-right: none; }
+.stat-n  { font-size: 18px; font-weight: 700; color: var(--text-1); line-height: 1; }
+.stat-n.accent { color: var(--accent); }
+.stat-n.success { color: var(--success); }
+.stat-label { font-size: 10px; color: var(--text-3); margin-top: 2px; }
+
+/* ── Secciones ───────────────────────────────────────────── */
+.section {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+}
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.section-title {
+  font-size: 11px; font-weight: 700;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+}
+.section-action {
+  font-size: 11px; color: var(--accent);
+  cursor: pointer; font-weight: 500;
+}
+.section-action:hover { text-decoration: underline; }
+
+/* ── Tags ────────────────────────────────────────────────── */
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; min-height: 10px; }
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 500;
+  cursor: default;
+}
+.tag.inc { background: var(--accent-s); color: var(--accent); border: 1px solid #BFDBFE; }
+.tag.exc { background: var(--danger-s); color: var(--danger); border: 1px solid #FECACA; }
+.tag-x {
+  background: none; border: none; cursor: pointer;
+  color: inherit; opacity: .5; font-size: 12px; padding: 0; line-height: 1;
+}
+.tag-x:hover { opacity: 1; }
+
+.input-row { display: flex; gap: 6px; }
+.field {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg);
+  outline: none;
+  font-family: inherit;
+  transition: border-color .15s;
+}
+.field:focus { border-color: var(--accent); background: #fff; }
+.field::placeholder { color: var(--text-3); }
+.field.danger:focus { border-color: var(--danger); }
+
+.btn {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  border: none;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, opacity .15s;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-h); }
+.btn-ghost { background: var(--bg); color: var(--text-2); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--text-3); color: var(--text-1); }
+.btn-danger-ghost { background: var(--danger-s); color: var(--danger); border: 1px solid #FECACA; }
+.btn-danger-ghost:hover { background: #FEE2E2; }
+
+/* ── Chips jornada ───────────────────────────────────────── */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-size: 11px; font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all .15s;
+  user-select: none;
+}
+.chip.selected { background: var(--accent-s); color: var(--accent); border-color: #BFDBFE; }
+
+/* ── Perfil ───────────────────────────────────────────────── */
+.profile-grid { display: flex; flex-direction: column; gap: 8px; }
+.field-group { display: flex; flex-direction: column; gap: 3px; }
+.field-label {
+  font-size: 10px; font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+textarea.field { resize: vertical; min-height: 56px; }
+
+/* ── Preguntas personalizadas ─────────────────────────────── */
+.qa-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.qa-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.qa-item-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg);
+  gap: 8px;
+}
+.qa-question {
+  font-size: 11px; font-weight: 600; color: var(--text-1);
+  flex: 1; line-height: 1.4;
+}
+.qa-item-body {
+  padding: 6px 10px 8px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.qa-answer { font-size: 11px; color: var(--text-2); line-height: 1.4; }
+.qa-badge {
+  font-size: 9px; font-weight: 700;
+  padding: 2px 6px; border-radius: 10px;
+  white-space: nowrap; flex-shrink: 0;
+}
+.qa-badge.manual { background: var(--accent-s); color: var(--accent); }
+.qa-badge.ai     { background: #F3E8FF; color: #7C3AED; }
+
+.qa-add-form {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.qa-add-form.hidden { display: none; }
+.qa-add-row { display: flex; gap: 6px; }
+
+/* ── API key ──────────────────────────────────────────────── */
+.apikey-row { display: flex; gap: 6px; align-items: center; }
+.apikey-input-wrap { flex: 1; position: relative; }
+.apikey-input-wrap .field { width: 100%; padding-right: 36px; }
+.apikey-eye {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer;
+  font-size: 14px; color: var(--text-3); line-height: 1;
+}
+.apikey-eye:hover { color: var(--text-1); }
+.apikey-status {
+  font-size: 10px; margin-top: 4px;
+  display: flex; align-items: center; gap: 4px;
+}
+.apikey-status .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
+.apikey-status .dot.ok { background: var(--success); }
+.apikey-status .dot.err { background: var(--danger); }
+
+/* ── Log ──────────────────────────────────────────────────── */
+.log-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 140px; overflow-y: auto;
+}
+.log-list::-webkit-scrollbar { width: 3px; }
+.log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.log-empty {
+  font-size: 11px; color: var(--text-3);
+  text-align: center; padding: 16px 0; font-style: italic;
+}
+.log-entry {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 5px 8px; border-radius: 6px; background: var(--bg);
+}
+.log-icon { font-size: 11px; margin-top: 1px; flex-shrink: 0; }
+.log-text { flex: 1; font-size: 11px; color: var(--text-2); line-height: 1.3; }
+.log-title { font-weight: 500; color: var(--text-1); }
+.log-reason { color: var(--text-3); font-size: 10px; }
+.log-time { font-size: 10px; color: var(--text-3); flex-shrink: 0; }
+
+/* ── Footer ───────────────────────────────────────────────── */
+.footer {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex; gap: 8px;
+  position: sticky; bottom: 0; z-index: 10;
+}
+.footer .btn-primary { flex: 1; font-size: 13px; padding: 8px; }
+
+/* ── Toast ────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 52px; left: 50%; transform: translateX(-50%) translateY(8px);
+  background: var(--text-1); color: #fff;
+  font-size: 11px; font-weight: 600;
+  padding: 6px 14px; border-radius: 20px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  white-space: nowrap; z-index: 100;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Divider helper ──────────────────────────────────────── */
+.spacer { height: 6px; background: var(--bg); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-logo">🤖</div>
+  <div class="header-info">
+    <div class="header-title">AutoPostula</div>
+    <div class="header-sub">Roberto Hidalgo · Computrabajo</div>
+  </div>
+  <div class="pulse-wrap">
+    <div class="pulse" id="pulse"></div>
+    <span class="pulse-label" id="pulse-label">Inactivo</span>
+  </div>
+</div>
+
+<!-- MASTER TOGGLE -->
+<div class="master-row">
+  <div class="master-left">
+    <div class="label">Postulación automática</div>
+    <div class="hint" id="toggle-hint">Activa para comenzar a postular</div>
+  </div>
+  <label class="toggle">
+    <input type="checkbox" id="toggle-main">
+    <div class="toggle-track"></div>
+    <div class="toggle-thumb"></div>
+  </label>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat">
+    <div class="stat-n accent" id="stat-total">0</div>
+    <div class="stat-label">Postuladas</div>
+  </div>
+  <div class="stat">
+    <div class="stat-n" id="stat-hoy">0</div>
+    <div class="stat-label">Hoy</div>
+  </div>
+  <div class="stat">
+    <div class="stat-n success" id="stat-ok">0</div>
+    <div class="stat-label">Exitosas</div>
+  </div>
+</div>
+
+<div class="spacer"></div>
+
+<!-- FILTROS: PALABRAS CLAVE -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">Buscar ofertas que contengan</span>
+  </div>
+  <div class="tags" id="inc-tags"></div>
+  <div class="input-row">
+    <input class="field" id="inc-input" placeholder="ej: vendedor, retail, cajero…">
+    <button class="btn btn-primary" id="inc-btn">+ Agregar</button>
+  </div>
+</div>
+
+<!-- FILTROS: EXCLUIR -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">Ignorar ofertas que digan</span>
+  </div>
+  <div class="tags" id="exc-tags"></div>
+  <div class="input-row">
+    <input class="field danger" id="exc-input" placeholder="ej: full time, 5 años experiencia…">
+    <button class="btn btn-danger-ghost" id="exc-btn">Excluir</button>
+  </div>
+</div>
+
+<!-- FILTROS: JORNADA -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">Tipo de jornada</span>
+  </div>
+  <div class="chips" id="jornada-chips">
+    <div class="chip selected" data-val="part time">Part time</div>
+    <div class="chip" data-val="full time">Full time</div>
+    <div class="chip selected" data-val="fines de semana">Fines de semana</div>
+    <div class="chip selected" data-val="turno rotativo">Turno rotativo</div>
+    <div class="chip" data-val="teletrabajo">Teletrabajo</div>
+  </div>
+</div>
+
+<div class="spacer"></div>
+
+<!-- MI PERFIL -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">Mi perfil</span>
+    <span class="section-action" id="toggle-profile">Ocultar</span>
+  </div>
+  <div id="profile-body" class="profile-grid">
+    <div class="field-group">
+      <span class="field-label">Nombre completo</span>
+      <input class="field" id="p-nombre" value="Roberto Hidalgo Andrés Bizama">
+    </div>
+    <div class="field-group">
+      <span class="field-label">Email</span>
+      <input class="field" id="p-email" value="robertohidalgo2004@hotmail.com">
+    </div>
+    <div class="field-group">
+      <span class="field-label">Teléfono</span>
+      <input class="field" id="p-tel" value="+56 9 2636 2069">
+    </div>
+    <div class="field-group">
+      <span class="field-label">Cargo objetivo</span>
+      <input class="field" id="p-cargo" value="Asistente de Ventas / Retail">
+    </div>
+    <div class="field-group">
+      <span class="field-label">Expectativa de renta</span>
+      <input class="field" id="p-renta" value="$550.000 - $650.000 CLP">
+    </div>
+    <div class="field-group">
+      <span class="field-label">Disponibilidad</span>
+      <input class="field" id="p-disp" value="Part time, tardes y fines de semana, turnos rotativos">
+    </div>
+    <div class="field-group">
+      <span class="field-label">Presentación profesional</span>
+      <textarea class="field" id="p-bio" rows="3">Estudiante de Ingeniería Civil en Informática en la Universidad Andrés Bello, con más de 3 años de experiencia en retail y atención al cliente en SPID Cencosud. Manejo de caja, reposición, control de inventario y liderazgo de equipos. Responsable, proactivo y orientado al servicio al cliente.</textarea>
+    </div>
+  </div>
+</div>
+
+<!-- PREGUNTAS PERSONALIZADAS -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">Respuestas a preguntas</span>
+    <span class="section-action" id="qa-add-toggle">+ Nueva</span>
+  </div>
+
+  <div class="qa-list" id="qa-list"></div>
+
+  <!-- Formulario para agregar pregunta -->
+  <div class="qa-add-form hidden" id="qa-form">
+    <div class="field-group">
+      <span class="field-label">Pregunta del formulario</span>
+      <input class="field" id="qa-q" placeholder="ej: ¿Tienes experiencia en caja?">
+    </div>
+    <div class="field-group">
+      <span class="field-label">Tu respuesta (déjalo vacío para que la IA responda sola)</span>
+      <textarea class="field" id="qa-a" rows="2" placeholder="ej: Sí, tengo 3 años manejando caja en retail…"></textarea>
+    </div>
+    <div class="qa-add-row">
+      <button class="btn btn-primary" id="qa-save-btn">Guardar respuesta</button>
+      <button class="btn btn-ghost" id="qa-cancel-btn">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="spacer"></div>
+
+<!-- OPCIONES IA -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">Opciones de IA</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-1);">Revisar antes de enviar</div>
+        <div style="font-size:10px;color:var(--text-3);">Muestra las respuestas y pide confirmación</div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="toggle-revision"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+    </label>
+    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-1);">IA para filtrar ofertas</div>
+        <div style="font-size:10px;color:var(--text-3);">La IA decide si el aviso es relevante para ti</div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="toggle-ia-filtros"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+    </label>
+  </div>
+</div>
+
+<!-- API KEY CLAUDE -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">IA para formularios</span>
+  </div>
+  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;">
+    La IA lee el aviso completo y responde preguntas del formulario usando tu perfil. Necesitas una API key de Anthropic (gratis para empezar).
+  </p>
+  <div class="apikey-row">
+    <div class="apikey-input-wrap">
+      <input class="field" type="password" id="api-key" placeholder="sk-ant-…">
+      <button class="apikey-eye" id="api-eye" title="Mostrar/ocultar">👁</button>
+    </div>
+    <button class="btn btn-ghost" id="api-test-btn">Probar</button>
+  </div>
+  <div class="apikey-status" id="apikey-status">
+    <div class="dot" id="api-dot"></div>
+    <span id="api-status-text">Sin configurar — la IA no estará disponible</span>
+  </div>
+</div>
+
+<div class="spacer"></div>
+
+<!-- LOG DE ACTIVIDAD -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">Actividad reciente</span>
+    <span class="section-action" id="clear-log">Limpiar</span>
+  </div>
+  <div class="log-list" id="log-list">
+    <div class="log-empty">Aún no hay postulaciones registradas.</div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <button class="btn btn-primary" id="save-btn">Guardar cambios</button>
+  <button class="btn btn-ghost" id="scan-now-btn" title="Forzar escaneo ahora">🔍 Escanear</button>
+  <button class="btn btn-ghost" id="open-ct-btn" title="Abrir Computrabajo">Abrir CT</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="popup.js"></script>
+</body>
+</html>
