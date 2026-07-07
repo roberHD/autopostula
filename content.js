@@ -178,7 +178,10 @@ async function postular(url, id, titulo) {
 
   // Verificar si ya postulamos
   const panelDetalle = document.querySelector('.box_detail,[data-offers-grid-box-detail]');
-  if (panelDetalle && n(panelDetalle.innerText||'').includes('ya aplicaste')) {
+  if (panelDetalle && (
+    panelDetalle.querySelector('.offer-detail-applied:not(.hide), span.b_primary.postulated:not(.hide)') ||
+    n(panelDetalle.innerText||'').includes('ya aplicaste')
+  )) {
     addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Ya postulado'});
     return false;
   }
@@ -266,7 +269,9 @@ async function escanear() {
   tarjetas.forEach((t, idx) => {
     const id = getId(t, idx);
     if (vistos.has(id)) return;
-    if (t.querySelector('.applied-offer-tag')) { vistos.add(id); return; }
+    // Badge visible = tiene .postulated SIN clase .hide
+    const badge = t.querySelector('.postulated:not(.hide), .applied-offer-tag:not(.hide)');
+    if (badge && badge.offsetParent !== null) { vistos.add(id); return; }
     if (pasa(t)) pendientes.push({t, id, idx});
   });
 
@@ -305,7 +310,7 @@ try {
     cfg = data.config || null;
     activo = !!(data.active || (cfg && cfg.active));
     log = data.log || [];
-    vistos = new Set(log.filter(e=>e.status==='ok').map(e=>e.uid||'').filter(Boolean));
+    vistos = new Set(); // Solo sesion actual
     console.log('[AP v3] config:', !!cfg, 'activo:', activo, 'incTags:', cfg && cfg.incTags && cfg.incTags.length);
     if (activo) { msg('Activado — escaneando…','#16A34A'); setTimeout(escanear, 1800); }
   });
