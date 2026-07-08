@@ -107,43 +107,262 @@ function setVal(el, val) {
   el.dispatchEvent(new Event('change', {bubbles:true}));
 }
 
+// ── Módulo: Opciones (radio / checkbox / widgets interactivos) ─
+// Maneja preguntas de opción única o múltiple sin importar si están
+// implementadas como <input type=radio/checkbox> nativos o como
+// divs/spans que simulan botones de opción (role="radio", aria-checked, etc).
+
+// Selectores de "elementos opción" que reconocemos. Se puede ampliar
+// esta lista si Computrabajo (u otro sitio) usa otras variantes.
+const SELECTOR_OPCIONES = [
+  'input[type=radio]',
+  'input[type=checkbox]',
+  '[role="radio"]',
+  '[role="option"]',
+  '[aria-checked]'
+].join(',');
+
+// Visibilidad real (no basta con offsetParent en layouts con position:fixed/sticky)
+function esVisible(el) {
+  if (!el) return false;
+  if (el.offsetParent !== null) return true;
+  try {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+  } catch (e) { return false; }
+}
+
+// Espera (con timeout) a que existan opciones en el DOM, por si el
+// formulario las carga de forma asíncrona tras abrir el panel.
+function esperarOpciones(selector, opts) {
+  const timeout = (opts && opts.timeout) || 2500;
+  return new Promise(resolve => {
+    const yaHay = document.querySelectorAll(selector);
+    if (yaHay.length) return resolve([...yaHay]);
+    const obs = new MutationObserver(() => {
+      const els = document.querySelectorAll(selector);
+      if (els.length) { obs.disconnect(); clearTimeout(t); resolve([...els]); }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    const t = setTimeout(() => { obs.disconnect(); resolve([...document.querySelectorAll(selector)]); }, timeout);
+  });
+}
+
+// Extrae el texto visible de UNA opción individual (radio/checkbox/widget)
+function textoDeOpcion(el) {
+  try {
+    const ariaLabel = el.getAttribute && el.getAttribute('aria-label');
+    if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+
+    if (el.id) {
+      const lf = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+      if (lf && lf.textContent.trim()) return lf.textContent.trim();
+    }
+    const labelPadre = el.closest && el.closest('label');
+    if (labelPadre && labelPadre.textContent.trim()) return labelPadre.textContent.trim();
+
+    if (el.tagName === 'INPUT') {
+      // Patrón común: <input><span>Texto de la opción</span>
+      const sigu = el.nextElementSibling;
+      if (sigu && sigu.textContent && sigu.textContent.trim()) return sigu.textContent.trim();
+      const prev = el.previousElementSibling;
+      if (prev && prev.textContent && prev.textContent.trim()) return prev.textContent.trim();
+      return el.value || el.getAttribute('data-value') || '';
+    }
+
+    // div/span interactivo: su propio texto suele ser la opción completa
+    const propio = (el.textContent || '').trim().replace(/\s+/g, ' ');
+    if (propio) return propio;
+    return el.getAttribute('title') || el.getAttribute('data-value') || '';
+  } catch (e) { return ''; }
+}
+
+// Sube por los ancestros buscando el contenedor mínimo que agrupa
+// más de una opción (útil para widgets sin "name" ni role=radiogroup)
+function hallarContenedorPregunta(el) {
+  let nodo = el.parentElement;
+  let profundidad = 0;
+  while (nodo && profundidad < 6) {
+    if (nodo.querySelectorAll(SELECTOR_OPCIONES).length > 1) return nodo;
+    nodo = nodo.parentElement;
+    profundidad++;
+  }
+  return el.parentElement || el;
+}
+
+// Texto de la PREGUNTA a partir de su contenedor (clona y quita las opciones
+// para no mezclar el enunciado con el texto de cada alternativa)
+function textoPreguntaContenedor(contenedor) {
+  try {
+    const clon = contenedor.cloneNode(true);
+    clon.querySelectorAll(SELECTOR_OPCIONES).forEach(e => e.remove());
+    const t = (clon.textContent || '').trim().replace(/\s+/g, ' ');
+    if (t && t.length > 3 && t.length < 300) return t;
+  } catch (e) {}
+  let prev = contenedor.previousElementSibling, intentos = 0;
+  while (prev && intentos < 4) {
+    const t = (prev.textContent || '').trim();
+    if (t && t.length > 3 && t.length < 300) return t;
+    prev = prev.previousElementSibling; intentos++;
+  }
+  return '';
+}
+
+// Analiza el texto de la pregunta + las opciones disponibles y decide
+// cuál opción responde mejor. Devuelve el objeto {el, texto} elegido o null
+// si no hay suficiente confianza (mejor no responder que responder mal).
+function calcularRespuesta(preguntaTexto, opciones, perfil, qa) {
+  const p = n(preguntaTexto);
+  const textos = opciones.map(o => ({ ...o, t: n(o.texto) }));
+
+  // 1) Preguntas y respuestas guardadas por el usuario (mayor prioridad)
+  if (qa && qa.length) {
+    const palabras = p.split(' ').filter(w => w.length > 3);
+    const encontrada = qa.find(q => !q.isAI && palabras.some(w => n(q.question).includes(w)));
+    if (encontrada) {
+      const resp = n(encontrada.answer || '');
+      const mejor = textos.find(o => o.t && (resp.includes(o.t) || o.t.includes(resp)));
+      if (mejor) return mejor;
+    }
+  }
+
+  // 2) Preguntas binarias (sí/no, verdadero/falso, acepto/no acepto)
+  const esSi = t => /^(si|sí|yes|verdadero|true|acepto)\b/.test(t);
+  const esNo = t => /^(no|not|false|falso)\b/.test(t);
+  const opSi = textos.find(o => esSi(o.t));
+  const opNo = textos.find(o => esNo(o.t));
+
+  if (opSi || opNo) {
+    if (p.includes('disponib') || p.includes('part time') || p.includes('horario')) return opSi || null;
+    if (p.includes('experiencia') && (p.includes('retail') || p.includes('venta') || p.includes('caja') || p.includes('atencion'))) return opSi || null;
+    if (p.includes('mayor') && p.includes('18')) return opSi || null;
+    if (p.includes('vehiculo') || p.includes('auto ') || p.includes('licencia de conducir')) return opNo || null;
+    if (p.includes('acepto') || p.includes('termin') || p.includes('politica') || p.includes('autoriz')) return opSi || null;
+    return opSi || null; // default afirmativo cuando existe esa opción
+  }
+
+  // 3) Coincidencia directa con datos del perfil (jornada, modalidad, nivel, etc.)
+  const camposPerfil = [perfil.disp, perfil.nivelEducacion, perfil.modalidad, perfil.jornada]
+    .filter(Boolean).map(n);
+  for (const campo of camposPerfil) {
+    const match = textos.find(o => o.t && (campo.includes(o.t) || o.t.includes(campo)));
+    if (match) return match;
+  }
+
+  // 4) Sin coincidencia clara: no se responde (evita marcar algo incorrecto)
+  return null;
+}
+
+// Simula una interacción real y segura: usa .click() cuando es posible y,
+// además, dispara los eventos nativos que muchos frameworks (React, Vue,
+// listeners custom) esperan para detectar el cambio.
+function seleccionarOpcion(el) {
+  try {
+    if (!el || !esVisible(el)) return false;
+    el.scrollIntoView({ block: 'nearest' });
+
+    if (el.tagName === 'INPUT') {
+      el.checked = true;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.click();
+    } else {
+      // Widget custom (div/span): simular la secuencia de puntero + click real
+      ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach(tipo => {
+        try { el.dispatchEvent(new MouseEvent(tipo, { bubbles: true, cancelable: true })); } catch (e) {}
+      });
+      el.click();
+      if (el.hasAttribute('aria-checked')) el.setAttribute('aria-checked', 'true');
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    return true;
+  } catch (e) {
+    console.warn('[AP] No se pudo seleccionar la opción:', e);
+    return false;
+  }
+}
+
+// Punto de entrada: recorre TODO tipo de grupo de opciones del formulario
+// visible en pantalla y contesta la que mejor calce con el perfil/QA.
+async function manejarGruposDeOpciones(perfil, cfg) {
+  let interacciones = 0;
+  const qa = (cfg && cfg.qa) || [];
+
+  // Da tiempo a que carguen opciones inyectadas de forma asíncrona
+  await esperarOpciones(SELECTOR_OPCIONES, { timeout: 2500 });
+
+  // ── Radios nativos, agrupados por atributo "name" ──
+  const gruposRadioVistos = new Set();
+  for (const radio of document.querySelectorAll('input[type=radio]')) {
+    if (!esVisible(radio)) continue;
+    const nombre = radio.name || '';
+    const clave = nombre || radio;
+    if (gruposRadioVistos.has(clave)) continue;
+    gruposRadioVistos.add(clave);
+
+    const grupo = nombre
+      ? [...document.querySelectorAll('input[type=radio][name="' + CSS.escape(nombre) + '"]')].filter(esVisible)
+      : [radio];
+    if (!grupo.length) continue;
+
+    const opciones = grupo.map(r => ({ el: r, texto: textoDeOpcion(r) }));
+    const pregunta = getLabel(radio) || textoPreguntaContenedor(hallarContenedorPregunta(radio));
+    const elegida = calcularRespuesta(pregunta, opciones, perfil, qa);
+    if (elegida && seleccionarOpcion(elegida.el)) { interacciones++; await sleep(300); }
+  }
+
+  // ── Checkboxes nativos ──
+  const gruposCbVistos = new Set();
+  for (const cb of document.querySelectorAll('input[type=checkbox]')) {
+    if (!esVisible(cb)) continue;
+    const textoCb = n(textoDeOpcion(cb) || (cb.closest('label,div') && cb.closest('label,div').textContent) || '');
+
+    // Checkbox individual de aceptación (términos, políticas, autorización)
+    if (textoCb.includes('acepto') || textoCb.includes('terminos') || textoCb.includes('politica') || textoCb.includes('autorizo')) {
+      if (!cb.checked && seleccionarOpcion(cb)) { interacciones++; await sleep(200); }
+      continue;
+    }
+
+    // Grupo de checkboxes de selección múltiple (mismo "name")
+    const nombre = cb.name || '';
+    if (nombre && !gruposCbVistos.has(nombre)) {
+      gruposCbVistos.add(nombre);
+      const grupo = [...document.querySelectorAll('input[type=checkbox][name="' + CSS.escape(nombre) + '"]')].filter(esVisible);
+      const opciones = grupo.map(c => ({ el: c, texto: textoDeOpcion(c) }));
+      const pregunta = getLabel(cb) || textoPreguntaContenedor(hallarContenedorPregunta(cb));
+      const elegida = calcularRespuesta(pregunta, opciones, perfil, qa);
+      if (elegida && !elegida.el.checked && seleccionarOpcion(elegida.el)) { interacciones++; await sleep(200); }
+    }
+  }
+
+  // ── Widgets interactivos (div/span con role="radio"/"option"/aria-checked) ──
+  const widgets = [...document.querySelectorAll('[role="radio"],[role="option"],[aria-checked]:not(input)')]
+    .filter(el => el.tagName !== 'INPUT' && esVisible(el));
+  const gruposWidgetVistos = new Set();
+  for (const widget of widgets) {
+    const contenedor = hallarContenedorPregunta(widget);
+    if (gruposWidgetVistos.has(contenedor)) continue;
+    gruposWidgetVistos.add(contenedor);
+
+    const grupo = [...contenedor.querySelectorAll('[role="radio"],[role="option"],[aria-checked]:not(input)')].filter(esVisible);
+    if (!grupo.length) continue;
+    const opciones = grupo.map(el => ({ el, texto: textoDeOpcion(el) }));
+    const pregunta = textoPreguntaContenedor(contenedor);
+    const elegida = calcularRespuesta(pregunta, opciones, perfil, qa);
+    if (elegida && seleccionarOpcion(elegida.el)) { interacciones++; await sleep(300); }
+  }
+
+  return interacciones;
+}
+
 async function rellenar(contexto) {
   await sleep(1000);
   const p = (cfg && cfg.perfil) || {};
   let n2 = 0;
 
-  // Radio buttons
-  const gruposVistos = new Set();
-  for (const radio of document.querySelectorAll('input[type=radio]')) {
-    if (!radio.offsetParent) continue;
-    const nombre = radio.name || '';
-    if (gruposVistos.has(nombre) && nombre) continue;
-    if (nombre) gruposVistos.add(nombre);
-    const grupo = nombre
-      ? [...document.querySelectorAll('input[type=radio][name="' + nombre + '"]')].filter(r => r.offsetParent)
-      : [radio];
-    if (!grupo.length) continue;
-    const labelPregunta = getLabel(radio);
-    const lp = n(labelPregunta);
-    let elegir = null;
-    const opSi = grupo.find(r => { const l = n(r.closest('label') && r.closest('label').textContent || r.value || ''); return l==='si'||l==='sí'||l==='yes'; });
-    const opNo = grupo.find(r => { const l = n(r.closest('label') && r.closest('label').textContent || r.value || ''); return l==='no'; });
-    if (lp.includes('disponib')||lp.includes('part time')||lp.includes('horario')) elegir = opSi;
-    else if (lp.includes('experiencia')&&(lp.includes('retail')||lp.includes('venta')||lp.includes('caja'))) elegir = opSi;
-    else if (lp.includes('mayor')&&lp.includes('18')) elegir = opSi;
-    else if (lp.includes('vehiculo')||lp.includes('auto ')||lp.includes('licencia de conducir')) elegir = opNo;
-    else elegir = opSi; // default Sí
-    if (elegir) { elegir.checked = true; elegir.dispatchEvent(new Event('change',{bubbles:true})); elegir.click(); n2++; await sleep(300); }
-  }
-
-  // Checkboxes
-  for (const cb of document.querySelectorAll('input[type=checkbox]')) {
-    if (!cb.offsetParent) continue;
-    const lbl = n(cb.closest('label,div') && cb.closest('label,div').textContent || '');
-    if (lbl.includes('acepto')||lbl.includes('terminos')||lbl.includes('politica')||lbl.includes('autorizo')) {
-      if (!cb.checked) { cb.click(); n2++; }
-    }
-  }
+  // Radios, checkboxes y widgets interactivos (div/span que simulan opciones)
+  n2 += await manejarGruposDeOpciones(p, cfg);
 
   // Textareas e inputs
   for (const el of document.querySelectorAll('textarea:not([style*="display:none"]),input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=file]):not([type=radio]):not([type=checkbox])')) {
