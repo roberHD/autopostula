@@ -112,61 +112,28 @@ async function rellenar(contexto) {
   const p = (cfg && cfg.perfil) || {};
   let n2 = 0;
 
-  // ── REESCRITURA: Radio Buttons e Interfaces de Opción Múltiple Flexibles ──
-  // Buscamos todos los contenedores de preguntas posibles en portales de empleo
-  const bloquesPreguntas = document.querySelectorAll('fieldset, .pregunta-container, .question-block, div[class*="question"], div[class*="pregunta"], div[class*="form-group"]');
-  
-  for (const bloque of bloquesPreguntas) {
-    if (!bloque.offsetParent) continue; // Ignorar si está oculto
-
-    // Buscamos opciones interactivas dentro del bloque (nativos, cajas personalizadas, labels clicables o divs dinámicos)
-    const opciones = [...bloque.querySelectorAll('input[type="radio"], [role="radio"], label, div[class*="option"], div[class*="button-choice"], div[class*="selection-box"]')];
-    if (!opciones.length) continue;
-
-    // Verificar si el bloque ya cuenta con una opción marcada o seleccionada por el usuario
-    const yaRespondido = opciones.some(opt => {
-      if (opt.tagName === 'INPUT') return opt.checked;
-      return opt.classList.contains('selected') || opt.getAttribute('aria-checked') === 'true' || opt.className.includes('active') || opt.className.includes('checked');
-    });
-
-    if (!yaRespondido) {
-      let elegir = opciones[0]; // Por defecto apuntamos a la primera opción si no hay match claro
-      const labelPregunta = n(bloque.innerText || '');
-
-      // Clasificamos las opciones disponibles basándonos en su contenido textual
-      const opSi = opciones.find(opt => { 
-        const txt = n(opt.innerText || opt.value || ''); 
-        return txt === 'si' || txt === 'sí' || txt === 'yes' || txt.includes('acepto') || txt.includes('disponible'); 
-      });
-      const opNo = opciones.find(opt => { 
-        const txt = n(opt.innerText || opt.value || ''); 
-        return txt === 'no' || txt.includes('no cuento') || txt.includes('no tengo'); 
-      });
-
-      // Lógica de descarte inteligente según el enunciado de la pregunta
-      if (labelPregunta.includes('disponib') || labelPregunta.includes('part time') || labelPregunta.includes('horario') || labelPregunta.includes('modalidad')) {
-        elegir = opSi || opciones[0];
-      } else if (labelPregunta.includes('experiencia') && (labelPregunta.includes('retail') || labelPregunta.includes('venta') || labelPregunta.includes('caja'))) {
-        elegir = opSi || opciones[0];
-      } else if (labelPregunta.includes('mayor') && labelPregunta.includes('18')) {
-        elegir = opSi || opciones[0];
-      } else if (labelPregunta.includes('vehiculo') || labelPregunta.includes('auto ') || labelPregunta.includes('licencia de conducir')) {
-        elegir = opNo || opciones[1] || opciones[0];
-      } else {
-        // Fallback robusto: Priorizar opción afirmativa ("SÍ"), si no existe, toma la primera disponible de la lista
-        elegir = opSi || opciones[0];
-      }
-
-      if (elegir) {
-        if (elegir.tagName === 'INPUT') {
-          elegir.checked = true;
-          elegir.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        elegir.click();
-        n2++;
-        await sleep(300);
-      }
-    }
+  // Radio buttons
+  const gruposVistos = new Set();
+  for (const radio of document.querySelectorAll('input[type=radio]')) {
+    if (!radio.offsetParent) continue;
+    const nombre = radio.name || '';
+    if (gruposVistos.has(nombre) && nombre) continue;
+    if (nombre) gruposVistos.add(nombre);
+    const grupo = nombre
+      ? [...document.querySelectorAll('input[type=radio][name="' + nombre + '"]')].filter(r => r.offsetParent)
+      : [radio];
+    if (!grupo.length) continue;
+    const labelPregunta = getLabel(radio);
+    const lp = n(labelPregunta);
+    let elegir = null;
+    const opSi = grupo.find(r => { const l = n(r.closest('label') && r.closest('label').textContent || r.value || ''); return l==='si'||l==='sí'||l==='yes'; });
+    const opNo = grupo.find(r => { const l = n(r.closest('label') && r.closest('label').textContent || r.value || ''); return l==='no'; });
+    if (lp.includes('disponib')||lp.includes('part time')||lp.includes('horario')) elegir = opSi;
+    else if (lp.includes('experiencia')&&(lp.includes('retail')||lp.includes('venta')||lp.includes('caja'))) elegir = opSi;
+    else if (lp.includes('mayor')&&lp.includes('18')) elegir = opSi;
+    else if (lp.includes('vehiculo')||lp.includes('auto ')||lp.includes('licencia de conducir')) elegir = opNo;
+    else elegir = opSi; // default Sí
+    if (elegir) { elegir.checked = true; elegir.dispatchEvent(new Event('change',{bubbles:true})); elegir.click(); n2++; await sleep(300); }
   }
 
   // Checkboxes
@@ -237,8 +204,8 @@ async function postular(url, id, titulo) {
   btn.click();
   await sleep(2000);
 
-  // Detectar formulario (Inyección de selectores flexibles para encontrar el formulario activo)
-  const hayForm = [...document.querySelectorAll('textarea, input[type=radio], [role="radio"], div[class*="option"], label')].some(el => el.offsetParent && !el.closest('.hide'));
+  // Detectar formulario
+  const hayForm = [...document.querySelectorAll('textarea,input[type=radio]')].some(el => el.offsetParent && !el.closest('.hide'));
 
   if (hayForm) {
     msg('Rellenando formulario…', '#D97706');
