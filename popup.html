@@ -437,40 +437,54 @@ textarea.field { resize: vertical; min-height: 56px; }
 
 <div class="spacer"></div>
 
-<!-- MI PERFIL -->
+<!-- CV + PERFIL integrados -->
 <div class="section">
   <div class="section-head">
-    <span class="section-title">Mi perfil</span>
+    <span class="section-title">Mi CV y Perfil</span>
     <span class="section-action" id="toggle-profile">Ocultar</span>
   </div>
-  <div id="profile-body" class="profile-grid">
-    <div class="field-group">
-      <span class="field-label">Nombre completo</span>
-      <input class="field" id="p-nombre" value="Roberto Hidalgo Andrés Bizama">
+  <div id="profile-body">
+
+    <!-- Subida de CV -->
+    <div id="cv-drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:14px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:8px;">
+      <div id="cv-status" style="font-size:12px;color:var(--text-3);">📄 Sube tu CV en PDF — la IA leerá tu información</div>
     </div>
-    <div class="field-group">
-      <span class="field-label">Email</span>
-      <input class="field" id="p-email" value="robertohidalgo2004@hotmail.com">
+    <input type="file" id="cv-file-input" accept=".pdf" style="display:none">
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button class="btn btn-primary" id="cv-extract-btn" style="flex:1;display:none;font-size:11px;">✨ Extraer datos del CV automáticamente</button>
+      <button class="btn btn-ghost" id="cv-clear" style="display:none;color:var(--danger);font-size:11px;">🗑 Eliminar CV</button>
     </div>
-    <div class="field-group">
-      <span class="field-label">Teléfono</span>
-      <input class="field" id="p-tel" value="+56 9 2636 2069">
-    </div>
-    <div class="field-group">
-      <span class="field-label">Cargo objetivo</span>
-      <input class="field" id="p-cargo" value="Asistente de Ventas / Retail">
-    </div>
-    <div class="field-group">
-      <span class="field-label">Expectativa de renta</span>
-      <input class="field" id="p-renta" value="$550.000 - $650.000 CLP">
-    </div>
-    <div class="field-group">
-      <span class="field-label">Disponibilidad</span>
-      <input class="field" id="p-disp" value="Part time, tardes y fines de semana, turnos rotativos">
-    </div>
-    <div class="field-group">
-      <span class="field-label">Presentación profesional</span>
-      <textarea class="field" id="p-bio" rows="3">Estudiante de Ingeniería Civil en Informática en la Universidad Andrés Bello, con más de 3 años de experiencia en retail y atención al cliente en SPID Cencosud. Manejo de caja, reposición, control de inventario y liderazgo de equipos. Responsable, proactivo y orientado al servicio al cliente.</textarea>
+
+    <!-- Campos del perfil — vacíos por defecto para cualquier usuario -->
+    <div class="profile-grid">
+      <div class="field-group">
+        <span class="field-label">Nombre completo</span>
+        <input class="field" id="p-nombre" placeholder="Ej: Juan Pérez González">
+      </div>
+      <div class="field-group">
+        <span class="field-label">Email</span>
+        <input class="field" id="p-email" placeholder="tu@email.com">
+      </div>
+      <div class="field-group">
+        <span class="field-label">Teléfono</span>
+        <input class="field" id="p-tel" placeholder="+56 9 1234 5678">
+      </div>
+      <div class="field-group">
+        <span class="field-label">Cargo objetivo</span>
+        <input class="field" id="p-cargo" placeholder="Ej: Vendedor / Retail">
+      </div>
+      <div class="field-group">
+        <span class="field-label">Expectativa de renta</span>
+        <input class="field" id="p-renta" placeholder="Ej: $500.000 - $600.000">
+      </div>
+      <div class="field-group">
+        <span class="field-label">Disponibilidad horaria</span>
+        <input class="field" id="p-disp" placeholder="Ej: Part time, tardes y fines de semana">
+      </div>
+      <div class="field-group">
+        <span class="field-label">Resumen profesional</span>
+        <textarea class="field" id="p-bio" rows="3" placeholder="Breve descripción de tu experiencia y perfil. Si subes tu CV, esto se completa automáticamente."></textarea>
+      </div>
     </div>
   </div>
 </div>

@@ -11,24 +11,11 @@ let qaList = [];   // [{id, question, answer, isAI}]
 
 // ── Defaults precargados con el perfil de Roberto ──────────────
 const DEFAULTS = {
-  incTags: ['vendedor','vendedora','retail','cajero','cajera','atención al cliente','reponedor','asistente de ventas'],
-  excTags: ['jornada completa exclusiva','experiencia 5 años','sin estudios','senior'],
-  jornada: ['part time','fines de semana','turno rotativo'],
-  perfil: {
-    nombre: 'Roberto Hidalgo Andrés Bizama',
-    email:  'robertohidalgo2004@hotmail.com',
-    tel:    '+56 9 2636 2069',
-    cargo:  'Asistente de Ventas / Retail',
-    renta:  '$550.000 - $650.000 CLP',
-    disp:   'Part time, tardes y fines de semana, turnos rotativos',
-    bio:    'Estudiante de Ingeniería Civil en Informática en la Universidad Andrés Bello, con más de 3 años de experiencia en retail y atención al cliente en SPID Cencosud. Manejo de caja, reposición, control de inventario y liderazgo de equipos. Responsable, proactivo y orientado al servicio al cliente.'
-  },
-  qa: [
-    { id: 1, question: '¿Tienes experiencia en manejo de caja?', answer: 'Sí, tengo 3 años de experiencia manejando caja en SPID Cencosud, con cuadratura diaria y manejo de distintos medios de pago.', isAI: false },
-    { id: 2, question: '¿Cuál es tu disponibilidad horaria?', answer: 'Tengo disponibilidad part time, preferentemente tardes, fines de semana y turnos rotativos.', isAI: false },
-    { id: 3, question: '¿Por qué te interesa trabajar en retail?', answer: '', isAI: true },
-    { id: 4, question: '¿Tienes experiencia liderando equipos?', answer: 'Sí, coordiné equipos durante mis turnos en SPID Cencosud, asignando tareas y asegurando el cumplimiento operativo.', isAI: false },
-  ]
+  incTags: [],
+  excTags: [],
+  jornada: ['part time'],
+  perfil: { nombre:'', email:'', tel:'', cargo:'', renta:'', disp:'', bio:'' },
+  qa: []
 };
 
 // ── DOM ────────────────────────────────────────────────────────
@@ -454,14 +441,14 @@ function loadState() {
 
     qaList = cfg.qa || DEFAULTS.qa;
 
-    const p = cfg.perfil || DEFAULTS.perfil;
-    $('p-nombre').value = p.nombre || DEFAULTS.perfil.nombre;
-    $('p-email').value  = p.email  || DEFAULTS.perfil.email;
-    $('p-tel').value    = p.tel    || DEFAULTS.perfil.tel;
-    $('p-cargo').value  = p.cargo  || DEFAULTS.perfil.cargo;
-    $('p-renta').value  = p.renta  || DEFAULTS.perfil.renta;
-    $('p-disp').value   = p.disp   || DEFAULTS.perfil.disp;
-    $('p-bio').value    = p.bio    || DEFAULTS.perfil.bio;
+    const p = cfg.perfil || {};
+    $('p-nombre').value = p.nombre || '';
+    $('p-email').value  = p.email  || '';
+    $('p-tel').value    = p.tel    || '';
+    $('p-cargo').value  = p.cargo  || '';
+    $('p-renta').value  = p.renta  || '';
+    $('p-disp').value   = p.disp   || '';
+    $('p-bio').value    = p.bio    || '';
 
     if (cfg.apiKey) {
       apiKeyEl.value = cfg.apiKey;
@@ -484,3 +471,146 @@ function loadState() {
 }
 
 loadState();
+
+// ── CV: subida, extracción automática y limpieza ───────────────
+const cvDropZone  = document.getElementById('cv-drop-zone');
+const cvFileInput = document.getElementById('cv-file-input');
+const cvStatus    = document.getElementById('cv-status');
+const cvExtractBtn = document.getElementById('cv-extract-btn');
+const cvClearBtn  = document.getElementById('cv-clear');
+
+function setCVStatus(nombre, size) {
+  const kb = Math.round((size || 0) / 1024);
+  if (cvStatus) cvStatus.innerHTML = '✅ <strong>' + nombre + '</strong> (' + kb + ' KB) — listo para usar con IA';
+  if (cvDropZone) { cvDropZone.style.borderColor = 'var(--success)'; cvDropZone.style.background = 'var(--success-s)'; }
+  if (cvExtractBtn) cvExtractBtn.style.display = 'flex';
+  if (cvClearBtn) cvClearBtn.style.display = 'block';
+}
+
+function clearCV() {
+  chrome.storage.local.remove(['cvBase64','cvNombre','cvSize'], () => {
+    if (cvStatus) cvStatus.innerHTML = '📄 Sube tu CV en PDF — la IA leerá tu información';
+    if (cvDropZone) { cvDropZone.style.borderColor = ''; cvDropZone.style.background = ''; }
+    if (cvExtractBtn) cvExtractBtn.style.display = 'none';
+    if (cvClearBtn) cvClearBtn.style.display = 'none';
+    toast('🗑 CV eliminado');
+  });
+}
+
+async function procesarCV(file) {
+  if (!file || file.type !== 'application/pdf') { toast('⚠ Solo se aceptan archivos PDF'); return; }
+  if (file.size > 5 * 1024 * 1024) { toast('⚠ El PDF es muy grande (máx 5MB)'); return; }
+
+  if (cvStatus) cvStatus.textContent = '⏳ Subiendo CV…';
+
+  const base64 = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('Error al leer el archivo'));
+    r.readAsDataURL(file);
+  });
+
+  chrome.storage.local.set({ cvBase64: base64, cvNombre: file.name, cvSize: file.size }, () => {
+    setCVStatus(file.name, file.size);
+    toast('✅ CV subido correctamente');
+    // Ofrecer extracción automática si hay API key
+    const key = apiKeyEl?.value?.trim();
+    if (key) {
+      setTimeout(() => {
+        if (confirm('¿Quieres que la IA extraiga automáticamente tus datos del CV para completar el perfil?')) {
+          extraerDatosCV(base64, key);
+        }
+      }, 500);
+    }
+  });
+}
+
+async function extraerDatosCV(base64, key) {
+  if (cvStatus) cvStatus.innerHTML = '⏳ Extrayendo datos del CV con IA…';
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+            { type: 'text', text:
+              'Extrae la información de este CV y responde SOLO con un JSON válido con estos campos exactos:\n' +
+              '{"nombre":"","email":"","tel":"","cargo":"","bio":""}\n' +
+              '- nombre: nombre completo de la persona\n' +
+              '- email: email de contacto\n' +
+              '- tel: teléfono de contacto\n' +
+              '- cargo: último cargo o cargo objetivo que busca\n' +
+              '- bio: resumen profesional de 2-3 oraciones en primera persona\n' +
+              'Si no encuentras algún dato, deja el campo vacío. Responde SOLO el JSON, sin texto adicional.'
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await res.json();
+    const texto = data.content && data.content[0] && data.content[0].text || '';
+    const jsonMatch = texto.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Sin JSON en respuesta');
+
+    const perfil = JSON.parse(jsonMatch[0]);
+
+    // Rellenar campos solo si están vacíos o si el usuario confirma
+    if (perfil.nombre && !$('p-nombre').value) $('p-nombre').value = perfil.nombre;
+    if (perfil.email  && !$('p-email').value)  $('p-email').value  = perfil.email;
+    if (perfil.tel    && !$('p-tel').value)    $('p-tel').value    = perfil.tel;
+    if (perfil.cargo  && !$('p-cargo').value)  $('p-cargo').value  = perfil.cargo;
+    if (perfil.bio    && !$('p-bio').value)    $('p-bio').value    = perfil.bio;
+
+    chrome.storage.local.get(['cvNombre','cvSize'], d => {
+      setCVStatus(d.cvNombre || 'CV.pdf', d.cvSize || 0);
+    });
+    toast('✨ Datos extraídos del CV — revisa y guarda');
+
+  } catch(e) {
+    chrome.storage.local.get(['cvNombre','cvSize'], d => {
+      setCVStatus(d.cvNombre || 'CV.pdf', d.cvSize || 0);
+    });
+    toast('⚠ No se pudieron extraer los datos automáticamente');
+  }
+}
+
+// Eventos de subida
+if (cvDropZone) {
+  cvDropZone.addEventListener('click', () => cvFileInput && cvFileInput.click());
+  cvDropZone.addEventListener('dragover', e => { e.preventDefault(); cvDropZone.style.borderColor = 'var(--accent)'; });
+  cvDropZone.addEventListener('dragleave', () => { cvDropZone.style.borderColor = ''; });
+  cvDropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    cvDropZone.style.borderColor = '';
+    const file = e.dataTransfer?.files?.[0];
+    if (file) procesarCV(file);
+  });
+}
+if (cvFileInput) cvFileInput.addEventListener('change', e => { if (e.target.files[0]) procesarCV(e.target.files[0]); });
+if (cvClearBtn)  cvClearBtn.addEventListener('click',  e => { e.stopPropagation(); clearCV(); });
+if (cvExtractBtn) cvExtractBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  const key = apiKeyEl?.value?.trim();
+  if (!key) { toast('⚠ Necesitas una API key para extraer datos'); return; }
+  chrome.storage.local.get(['cvBase64'], d => {
+    if (d.cvBase64) extraerDatosCV(d.cvBase64, key);
+    else toast('⚠ Sube un CV primero');
+  });
+});
+
+// Cargar CV guardado al abrir popup
+chrome.storage.local.get(['cvBase64','cvNombre','cvSize'], data => {
+  if (data.cvBase64) setCVStatus(data.cvNombre || 'CV.pdf', data.cvSize || 0);
+});

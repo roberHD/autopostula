@@ -67,6 +67,7 @@ function pasa(tarjeta) {
 }
 
 // ── IA: responder pregunta de formulario ──────────────────────
+// REGLA: Solo responde si la info está en el CV o perfil. Si no sabe → null.
 async function aiResponde(pregunta, contexto) {
   const key = cfg && cfg.apiKey;
   if (!key) return null;
@@ -74,41 +75,34 @@ async function aiResponde(pregunta, contexto) {
   const qa = (cfg && cfg.qa || []).filter(q => !q.isAI).map(q => 'P:"' + q.question + '"→R:"' + q.answer + '"').join('\n');
 
   try {
-    // Intentar cargar CV en base64
     const cvData = await new Promise(resolve => {
       try { chrome.storage.local.get(['cvBase64'], d => resolve(d.cvBase64 || null)); }
       catch(e) { resolve(null); }
     });
 
+    const instruccion =
+      'Eres un asistente que ayuda a ' + (p.nombre||'el candidato') + ' a postular empleos.\n' +
+      'REGLAS:\n' +
+      '1. Usa solo información real del CV, perfil o respuestas guardadas.\n' +
+      '2. Si la pregunta es sobre algo que NO está en tu información (zapatos, vehículo, herramientas, etc.), responde: SINRESPUESTA\n' +
+      '3. Para preguntas sobre experiencia, motivación o habilidades, usa el CV y perfil para dar respuesta real.\n\n' +
+      'Perfil: ' + (p.bio||'Sin información de perfil aún') + '\n' +
+      'Cargo buscado: ' + (p.cargo||'') + '\n' +
+      'Renta esperada: ' + (p.renta||'') + '\n' +
+      'Disponibilidad: ' + (p.disp||'') + '\n' +
+      'Respuestas guardadas:\n' + (qa||'Ninguna') + '\n' +
+      'Aviso de trabajo:\n' + (contexto||'').slice(0,500) + '\n\n' +
+      'Pregunta del formulario: "' + pregunta + '"\n' +
+      'Responde en primera persona, máx 2 oraciones. Si no tienes información para responder, escribe: SINRESPUESTA';
+
     let messages;
     if (cvData) {
-      messages = [{
-        role: 'user',
-        content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: cvData } },
-          { type: 'text', text:
-            'Eres un asistente que ayuda a ' + (p.nombre||'Roberto') + ' a postular empleos.\n' +
-            'El documento adjunto es su CV.\n' +
-            'Renta esperada: ' + (p.renta||'') + '\n' +
-            'Disponibilidad: ' + (p.disp||'') + '\n' +
-            'Respuestas guardadas:\n' + (qa||'Ninguna') + '\n' +
-            'Aviso de trabajo:\n' + (contexto||'').slice(0,600) + '\n\n' +
-            'Responde SOLO esta pregunta en primera persona, máx 2 oraciones:\n"' + pregunta + '"\nRESPUESTA:'
-          }
-        ]
-      }];
+      messages = [{ role: 'user', content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: cvData } },
+        { type: 'text', text: instruccion }
+      ]}];
     } else {
-      messages = [{
-        role: 'user',
-        content:
-          'Ayuda a ' + (p.nombre||'Roberto') + ' a postular.\n' +
-          'Perfil: ' + (p.bio||'') + '\n' +
-          'Renta: ' + (p.renta||'') + '\n' +
-          'Disponibilidad: ' + (p.disp||'') + '\n' +
-          'Respuestas guardadas:\n' + (qa||'Ninguna') + '\n' +
-          'Aviso:\n' + (contexto||'').slice(0,600) + '\n\n' +
-          'Responde SOLO esta pregunta en primera persona, máx 2 oraciones:\n"' + pregunta + '"\nRESPUESTA:'
-      }];
+      messages = [{ role: 'user', content: instruccion }];
     }
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -122,7 +116,10 @@ async function aiResponde(pregunta, contexto) {
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 150, messages })
     });
     const data = await res.json();
-    return data.content && data.content[0] && data.content[0].text && data.content[0].text.trim() || null;
+    const respuesta = data.content && data.content[0] && data.content[0].text && data.content[0].text.trim() || '';
+    // Si la IA dice que no sabe, retornar null (dejar vacío)
+    if (!respuesta || respuesta.includes('SINRESPUESTA') || respuesta.toLowerCase().includes('sin respuesta')) return null;
+    return respuesta;
   } catch(e) { return null; }
 }
 
@@ -295,9 +292,13 @@ function calcularRespuesta(preguntaTexto, opciones, perfil, qa) {
     if (p.includes('disponib') || p.includes('part time') || p.includes('horario')) return opSi || null;
     if (p.includes('experiencia') && (p.includes('retail') || p.includes('venta') || p.includes('caja') || p.includes('atencion'))) return opSi || null;
     if (p.includes('mayor') && p.includes('18')) return opSi || null;
-    if (p.includes('vehiculo') || p.includes('auto ') || p.includes('licencia de conducir')) return opNo || null;
-    if (p.includes('acepto') || p.includes('termin') || p.includes('politica') || p.includes('autoriz')) return opSi || null;
-    return opSi || null;
+    if (p.includes('enseñanza') || p.includes('ensenanza') || p.includes('educacion') || p.includes('estudios completados')) return opSi || null;
+    if (p.includes('vehiculo') || p.includes('auto propio') || p.includes('licencia de conducir') || p.includes('moto')) return opNo || null;
+    if (p.includes('zapato') || p.includes('uniforme') || p.includes('herramienta') || p.includes('equipo propio')) return opNo || null;
+    if (p.includes('acepto') || p.includes('termin') || p.includes('politica') || p.includes('autoriz') || p.includes('privacidad')) return opSi || null;
+    if (p.includes('discapacidad')) return opNo || null;
+    // Para preguntas ambiguas NO asumir Sí — dejar null para que la IA responda
+    return null;
   }
   const camposPerfil = [perfil.disp, perfil.nivelEducacion, perfil.modalidad, perfil.jornada].filter(Boolean).map(n);
   for (const campo of camposPerfil) {
@@ -348,7 +349,15 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog) {
     if (!grupo.length) continue;
     const opciones = grupo.map(r => ({ el:r, texto:textoDeOpcion(r) }));
     const pregunta = getLabel(radio) || textoPreguntaContenedor(hallarContenedorPregunta(radio));
-    const elegida = calcularRespuesta(pregunta, opciones, perfil, qa);
+    let elegida = calcularRespuesta(pregunta, opciones, perfil, qa);
+    // Si no hay match y hay IA, preguntarle
+    if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
+      const respIA = await aiResponde(pregunta, '');
+      if (respIA) {
+        const rNorm = n(respIA);
+        elegida = opciones.find(o => rNorm.includes(n(o.texto)) || n(o.texto).length < 4 && rNorm.startsWith(n(o.texto)));
+      }
+    }
     if (elegida && seleccionarOpcion(elegida.el)) {
       interacciones++;
       respuestasLog.push({ pregunta, respuesta: elegida.texto });
@@ -426,17 +435,30 @@ async function rellenar(contexto) {
 
     if      (lbl.includes('renta')||lbl.includes('sueldo')||lbl.includes('pretension')||lbl.includes('expectativa')) val = p.renta;
     else if (lbl.includes('contacto')||lbl.includes('numero')) val = (p.tel||'') + ' / ' + (p.email||'');
-    else if (lbl.includes('disponib')||lbl.includes('horario')||lbl.includes('modalidad')) val = p.disp;
+    else if ((lbl.includes('disponib')||lbl.includes('horario')||lbl.includes('modalidad')) && !lbl.includes('discapacidad') && !lbl.includes('identifica') && !lbl.includes('identificas')) val = p.disp;
+    else if (lbl.includes('discapacidad')||lbl.includes('identifica')&&lbl.includes('discapacidad')) {
+      // Preguntas de discapacidad — responder con IA si está disponible, sino "No"
+      if (cfg && cfg.apiKey) {
+        msg('IA respondiendo…', '#7C3AED');
+        val = await aiResponde(labelRaw, contexto);
+        fueIA = !!val;
+        await sleep(200);
+      } else {
+        val = 'No';
+      }
+    }
     else if (lbl.includes('presentac')||lbl.includes('carta')||lbl.includes('sobre ti')) val = p.bio;
     else if (lbl.includes('email')||lbl.includes('correo')) val = p.email;
     else if (lbl.includes('telefono')||lbl.includes('celular')) val = p.tel;
     else if (lbl.includes('nombre')&&!lbl.includes('empresa')) val = p.nombre;
+    else if (lbl.includes('cargo')||lbl.includes('categoria')||lbl.includes('puesto')||lbl.includes('posicion')) val = p.cargo || 'Asistente de Ventas / Retail';
+    else if (lbl.includes('comuna')||lbl.includes('ciudad')||lbl.includes('region')||lbl.includes('residencia')) val = 'Las Condes';
     else {
       const qa = (cfg && cfg.qa) || [];
       const found = qa.find(q => !q.isAI && n(q.question).split(' ').filter(w=>w.length>3).some(w=>lbl.includes(w)));
       if (found) val = found.answer;
-      // Si no hay respuesta guardada y hay API key, usar IA
-      if (!val && cfg && cfg.apiKey && el.tagName === 'TEXTAREA' && labelRaw.length > 5) {
+      // Usar IA para cualquier campo sin respuesta (textarea O input de texto con label largo)
+      if (!val && cfg && cfg.apiKey && labelRaw.length > 5) {
         msg('IA respondiendo…', '#7C3AED');
         val = await aiResponde(labelRaw, contexto);
         fueIA = !!val;
