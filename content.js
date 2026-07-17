@@ -29,6 +29,14 @@ function msg(texto, color) {
 
 // ── Helpers ───────────────────────────────────────────────────
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// ── Extraer el texto completo del aviso (no todo el body con menús/ruido) ─
+function extraerTextoAviso() {
+  const panel = document.querySelector('.box_detail,[data-offers-grid-box-detail]');
+  let texto = (panel ? panel.innerText : document.body.innerText) || '';
+  texto = texto.replace(/\n{3,}/g, '\n\n').trim();
+  return texto.slice(0, 4000);
+}
+
 function n(s) { return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
 function safeSet(data) { try { chrome.storage.local.set(data); } catch(e) {} }
 function safeSend(m) { try { chrome.runtime.sendMessage(m).catch(()=>{}); } catch(e) {} }
@@ -67,12 +75,13 @@ function pasa(tarjeta) {
 }
 
 // ── IA: responder pregunta de formulario ──────────────────────
-// REGLA: Solo responde si la info está en el CV o perfil. Si no sabe → null.
-async function aiResponde(pregunta, contexto) {
+// REGLA: Solo responde si la info está en el CV, perfil o datos adicionales. Si no sabe → null.
+// Si se pasa `opciones` (array de strings), la IA debe elegir UNA opción textual exacta en vez de redactar libremente.
+async function aiResponde(pregunta, contexto, opciones) {
   const key = cfg && cfg.apiKey;
   if (!key) return null;
   const p = (cfg && cfg.perfil) || {};
-  const qa = (cfg && cfg.qa || []).filter(q => !q.isAI).map(q => 'P:"' + q.question + '"→R:"' + q.answer + '"').join('\n');
+  const info = (cfg && cfg.info || []).map(it => '- ' + it.texto).join('\n');
 
   try {
     const cvData = await new Promise(resolve => {
@@ -80,20 +89,33 @@ async function aiResponde(pregunta, contexto) {
       catch(e) { resolve(null); }
     });
 
+    const bloqueOpciones = (opciones && opciones.length)
+      ? '\nOpciones disponibles (debes responder EXACTAMENTE con el texto de una de estas, sin agregar nada más):\n' +
+        opciones.map(o => '- "' + o + '"').join('\n') + '\n'
+      : '';
+
     const instruccion =
       'Eres un asistente que ayuda a ' + (p.nombre||'el candidato') + ' a postular empleos.\n' +
       'REGLAS:\n' +
-      '1. Usa solo información real del CV, perfil o respuestas guardadas.\n' +
-      '2. Si la pregunta es sobre algo que NO está en tu información (zapatos, vehículo, herramientas, etc.), responde: SINRESPUESTA\n' +
-      '3. Para preguntas sobre experiencia, motivación o habilidades, usa el CV y perfil para dar respuesta real.\n\n' +
+      '1. Usa solo información real del CV, perfil o datos adicionales entregados abajo. Nunca inventes datos concretos (años, empresas, certificaciones) que no estén ahí.\n' +
+      '3. Para preguntas sobre experiencia, motivación o habilidades, usa el CV y perfil para dar una respuesta real y específica.\n' +
+      '5. MUY IMPORTANTE: personaliza la respuesta según el AVISO DE TRABAJO específico de abajo (rubro, productos, marca, tareas mencionadas). Si el aviso es de venta de zapatillas, tu respuesta debe conectar con calzado/retail de zapatillas; si es de una cafetería, con café y atención en cafeterías; etc. No des una respuesta genérica que serviría igual para cualquier aviso — debe notarse que leíste este aviso en particular.\n' +
+      (bloqueOpciones
+        ? '2. Si la pregunta es sobre algo que NO está en tu información y no puedes inferirlo razonablemente, responde: SINRESPUESTA\n' +
+          '4. Debes elegir una de las opciones dadas textualmente, o SINRESPUESTA si ninguna aplica.\n'
+        : '2. Si no tienes el dato exacto que pide la pregunta, NUNCA respondas SINRESPUESTA ni dejes el campo vacío: responde con honestidad, reconociendo que no tienes esa experiencia específica, pero conectándolo con la experiencia real más cercana que sí tengas (ej: "No cuento con experiencia directa en ese rubro, pero tengo experiencia en atención al cliente y ventas retail que me permite adaptarme rápido"). Solo usa SINRESPUESTA si la pregunta es completamente irrelevante para un postulante a empleo.\n') +
+      '\n' +
       'Perfil: ' + (p.bio||'Sin información de perfil aún') + '\n' +
       'Cargo buscado: ' + (p.cargo||'') + '\n' +
       'Renta esperada: ' + (p.renta||'') + '\n' +
       'Disponibilidad: ' + (p.disp||'') + '\n' +
-      'Respuestas guardadas:\n' + (qa||'Ninguna') + '\n' +
-      'Aviso de trabajo:\n' + (contexto||'').slice(0,500) + '\n\n' +
-      'Pregunta del formulario: "' + pregunta + '"\n' +
-      'Responde en primera persona, máx 2 oraciones. Si no tienes información para responder, escribe: SINRESPUESTA';
+      'Datos adicionales del candidato:\n' + (info||'Ninguno') + '\n' +
+      'AVISO DE TRABAJO (léelo completo y usa sus detalles específicos):\n' + (contexto||'').slice(0,2500) + '\n' +
+      bloqueOpciones +
+      '\nPregunta del formulario: "' + pregunta + '"\n' +
+      (opciones && opciones.length
+        ? 'Responde solo con el texto exacto de la opción elegida, o SINRESPUESTA.'
+        : 'Responde en primera persona, máx 2 oraciones, siempre con una respuesta honesta, útil y personalizada al aviso de arriba (nunca la dejes en blanco ni la hagas genérica).');
 
     let messages;
     if (cvData) {
@@ -123,7 +145,7 @@ async function aiResponde(pregunta, contexto) {
   } catch(e) { return null; }
 }
 
-// ── Panel de revisión antes de enviar ────────────────────────
+// ── Panel de revisión antes de enviar (editable) ─────────────
 function mostrarRevision(titulo, respuestasLog) {
   return new Promise(resolve => {
     document.getElementById('ap-revision-panel')?.remove();
@@ -132,24 +154,46 @@ function mostrarRevision(titulo, respuestasLog) {
     Object.assign(div.style, {
       position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
       zIndex:'2147483648', background:'#fff', border:'1px solid #e4e7ef',
-      borderRadius:'12px', padding:'20px', width:'500px', maxWidth:'92vw',
+      borderRadius:'12px', padding:'20px', width:'520px', maxWidth:'92vw',
       maxHeight:'80vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,.2)',
       fontFamily:'system-ui,sans-serif'
     });
 
-    const filas = respuestasLog.map(r => {
+    const filas = respuestasLog.map((r, idx) => {
       const color = r.vacia ? '#DC2626' : '#16A34A';
       const icon = r.vacia ? '⚠️' : '✅';
-      return '<div style="margin-bottom:10px;padding:8px 10px;background:#f8f9fc;border-radius:8px;border:1px solid #e4e7ef">' +
-        '<div style="font-size:11px;font-weight:700;color:#4b5563;margin-bottom:3px">' + (r.pregunta||'').slice(0,80) + '</div>' +
-        '<div style="font-size:12px;color:' + color + '">' + icon + ' ' + (r.vacia ? '<em>Sin respuesta</em>' : (r.respuesta||'').slice(0,200)) + '</div>' +
+      const cabecera =
+        '<div style="font-size:11px;font-weight:700;color:#4b5563;margin-bottom:5px">' + (r.pregunta||'').slice(0,90) + '</div>' +
+        '<div style="font-size:10px;color:' + color + ';margin-bottom:5px">' + icon + (r.vacia ? ' Sin respuesta — puedes completarla' : (r.fueIA ? ' Generada por IA — puedes editarla' : '')) + '</div>';
+
+      if (r.tipo === 'opcion') {
+        const opts = (r.opciones||[]).map((o, oi) => {
+          const sel = r.elegidoEl && o.el === r.elegidoEl ? ' selected' : '';
+          return '<option value="' + oi + '"' + sel + '>' + (o.texto||'(opción sin texto)').slice(0,80) + '</option>';
+        }).join('');
+        return '<div class="ap-rev-item" data-idx="' + idx + '" data-tipo="opcion" style="margin-bottom:12px;padding:8px 10px;background:#f8f9fc;border-radius:8px;border:1px solid #e4e7ef">' +
+          cabecera +
+          '<select class="ap-rev-select" data-idx="' + idx + '" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;font-family:inherit">' +
+            '<option value="-1"' + (r.elegidoEl ? '' : ' selected') + '>— Sin selección —</option>' + opts +
+          '</select>' +
         '</div>';
+      }
+
+      // tipo texto (o sin tipo, por compatibilidad)
+      const max = (r.el && r.el.maxLength && r.el.maxLength > 0 && r.el.maxLength < 10000) ? r.el.maxLength : 500;
+      const valorEsc = (r.respuesta||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<div class="ap-rev-item" data-idx="' + idx + '" data-tipo="texto" style="margin-bottom:12px;padding:8px 10px;background:#f8f9fc;border-radius:8px;border:1px solid #e4e7ef">' +
+        cabecera +
+        '<textarea class="ap-rev-textarea" data-idx="' + idx + '" maxlength="' + max + '" rows="3" ' +
+          'style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;font-family:inherit;resize:vertical">' + valorEsc + '</textarea>' +
+        '<div class="ap-rev-counter" data-idx="' + idx + '" style="font-size:10px;color:#9ca3af;text-align:right;margin-top:2px">' + (r.respuesta||'').length + ' / ' + max + '</div>' +
+      '</div>';
     }).join('');
 
     div.innerHTML =
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
         '<span style="font-size:20px">👀</span>' +
-        '<div><div style="font-weight:700;font-size:14px">Revisar antes de enviar</div>' +
+        '<div><div style="font-weight:700;font-size:14px">Revisar y editar antes de enviar</div>' +
         '<div style="font-size:11px;color:#6b7280">' + titulo.slice(0,60) + '</div></div>' +
       '</div>' +
       '<div style="margin-bottom:16px">' + (filas || '<div style="color:#9ca3af;font-style:italic;text-align:center;padding:12px">Sin campos que mostrar</div>') + '</div>' +
@@ -159,10 +203,47 @@ function mostrarRevision(titulo, respuestasLog) {
       '</div>';
 
     document.body.appendChild(div);
-    document.getElementById('ap-rev-confirm').onclick = () => { div.remove(); resolve('confirm'); };
+
+    // Contador de caracteres en vivo
+    div.querySelectorAll('.ap-rev-textarea').forEach(ta => {
+      ta.addEventListener('input', () => {
+        const counter = div.querySelector('.ap-rev-counter[data-idx="' + ta.dataset.idx + '"]');
+        if (counter) counter.textContent = ta.value.length + ' / ' + ta.maxLength;
+      });
+    });
+
+    function aplicarEdiciones() {
+      div.querySelectorAll('.ap-rev-textarea').forEach(ta => {
+        const idx = +ta.dataset.idx;
+        const entry = respuestasLog[idx];
+        if (!entry) return;
+        const val = limitarTexto(ta.value, entry.el);
+        if (entry.el) setVal(entry.el, val);
+        entry.respuesta = val;
+        entry.vacia = !val;
+      });
+      div.querySelectorAll('.ap-rev-select').forEach(sel => {
+        const idx = +sel.dataset.idx;
+        const entry = respuestasLog[idx];
+        if (!entry) return;
+        const oi = +sel.value;
+        if (oi >= 0 && entry.opciones && entry.opciones[oi]) {
+          const nueva = entry.opciones[oi];
+          if (nueva.el !== entry.elegidoEl) seleccionarOpcion(nueva.el);
+          entry.elegidoEl = nueva.el;
+          entry.respuesta = nueva.texto;
+          entry.vacia = false;
+        } else {
+          entry.vacia = true;
+          entry.respuesta = '';
+        }
+      });
+    }
+
+    document.getElementById('ap-rev-confirm').onclick = () => { aplicarEdiciones(); div.remove(); resolve('confirm'); };
     document.getElementById('ap-rev-skip').onclick    = () => { div.remove(); resolve('skip'); };
-    // Auto-confirmar tras 90 segundos
-    setTimeout(() => { if (document.getElementById('ap-revision-panel')) { div.remove(); resolve('confirm'); } }, 90000);
+    // Auto-confirmar tras 90 segundos (aplicando lo que se haya editado hasta ese momento)
+    setTimeout(() => { if (document.getElementById('ap-revision-panel')) { aplicarEdiciones(); div.remove(); resolve('confirm'); } }, 90000);
   });
 }
 
@@ -196,6 +277,20 @@ function setVal(el, val) {
   } catch(e) { el.value = val; }
   el.dispatchEvent(new Event('input', {bubbles:true}));
   el.dispatchEvent(new Event('change', {bubbles:true}));
+}
+
+// Computrabajo suele limitar respuestas largas a 500 caracteres. Si el campo trae su propio
+// maxlength lo respetamos; si no, usamos 500 por defecto. Cortamos en el último espacio para
+// no partir una palabra a la mitad.
+function limitarTexto(val, el) {
+  if (!val) return val;
+  let max = 500;
+  if (el && el.maxLength && el.maxLength > 0 && el.maxLength < 10000) max = el.maxLength;
+  if (val.length <= max) return val;
+  const cortado = val.slice(0, max);
+  const ultimoEspacio = cortado.lastIndexOf(' ');
+  const final = (ultimoEspacio > max * 0.6 ? cortado.slice(0, ultimoEspacio) : cortado).trim();
+  return final;
 }
 
 // ── Módulo opciones (del repo GitHub — robusto) ───────────────
@@ -272,32 +367,19 @@ function textoPreguntaContenedor(contenedor) {
   return '';
 }
 
-function calcularRespuesta(preguntaTexto, opciones, perfil, qa) {
+// Reglas universales que NO dependen de datos personales del candidato (por eso no requieren IA ni "info").
+// Todo lo demás (vehículo, herramientas, discapacidad, experiencia específica, etc.) se resuelve con IA + perfil + info adicional.
+function calcularRespuesta(preguntaTexto, opciones, perfil) {
   const p = n(preguntaTexto);
   const textos = opciones.map(o => ({ ...o, t: n(o.texto) }));
-  if (qa && qa.length) {
-    const palabras = p.split(' ').filter(w => w.length > 3);
-    const encontrada = qa.find(q => !q.isAI && palabras.some(w => n(q.question).includes(w)));
-    if (encontrada) {
-      const resp = n(encontrada.answer || '');
-      const mejor = textos.find(o => o.t && (resp.includes(o.t) || o.t.includes(resp)));
-      if (mejor) return mejor;
-    }
-  }
   const esSi = t => /^(si|sí|yes|verdadero|true|acepto)\b/.test(t);
   const esNo = t => /^(no|not|false|falso)\b/.test(t);
   const opSi = textos.find(o => esSi(o.t));
   const opNo = textos.find(o => esNo(o.t));
   if (opSi || opNo) {
-    if (p.includes('disponib') || p.includes('part time') || p.includes('horario')) return opSi || null;
-    if (p.includes('experiencia') && (p.includes('retail') || p.includes('venta') || p.includes('caja') || p.includes('atencion'))) return opSi || null;
     if (p.includes('mayor') && p.includes('18')) return opSi || null;
-    if (p.includes('enseñanza') || p.includes('ensenanza') || p.includes('educacion') || p.includes('estudios completados')) return opSi || null;
-    if (p.includes('vehiculo') || p.includes('auto propio') || p.includes('licencia de conducir') || p.includes('moto')) return opNo || null;
-    if (p.includes('zapato') || p.includes('uniforme') || p.includes('herramienta') || p.includes('equipo propio')) return opNo || null;
     if (p.includes('acepto') || p.includes('termin') || p.includes('politica') || p.includes('autoriz') || p.includes('privacidad')) return opSi || null;
-    if (p.includes('discapacidad')) return opNo || null;
-    // Para preguntas ambiguas NO asumir Sí — dejar null para que la IA responda
+    // Para todo lo demás, no asumir — dejar null para que la IA (con perfil + info) decida
     return null;
   }
   const camposPerfil = [perfil.disp, perfil.nivelEducacion, perfil.modalidad, perfil.jornada].filter(Boolean).map(n);
@@ -330,9 +412,8 @@ function seleccionarOpcion(el) {
   } catch(e) { return false; }
 }
 
-async function manejarGruposDeOpciones(perfil, cfg, respuestasLog) {
+async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
   let interacciones = 0;
-  const qa = (cfg && cfg.qa) || [];
   await esperarOpciones(SELECTOR_OPCIONES, { timeout:2500 });
 
   // Radios nativos
@@ -349,10 +430,10 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog) {
     if (!grupo.length) continue;
     const opciones = grupo.map(r => ({ el:r, texto:textoDeOpcion(r) }));
     const pregunta = getLabel(radio) || textoPreguntaContenedor(hallarContenedorPregunta(radio));
-    let elegida = calcularRespuesta(pregunta, opciones, perfil, qa);
-    // Si no hay match y hay IA, preguntarle
+    let elegida = calcularRespuesta(pregunta, opciones, perfil);
+    // Si no hay match universal y hay IA, que la IA elija entre las opciones usando perfil + info adicional
     if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
-      const respIA = await aiResponde(pregunta, '');
+      const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto));
       if (respIA) {
         const rNorm = n(respIA);
         elegida = opciones.find(o => rNorm.includes(n(o.texto)) || n(o.texto).length < 4 && rNorm.startsWith(n(o.texto)));
@@ -360,10 +441,10 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog) {
     }
     if (elegida && seleccionarOpcion(elegida.el)) {
       interacciones++;
-      respuestasLog.push({ pregunta, respuesta: elegida.texto });
+      respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       await sleep(300);
     } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true });
+      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null });
     }
   }
 
@@ -382,11 +463,20 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog) {
       const grupo = [...document.querySelectorAll('input[type=checkbox][name="' + CSS.escape(nombre) + '"]')].filter(esVisible);
       const opciones = grupo.map(c => ({ el:c, texto:textoDeOpcion(c) }));
       const pregunta = getLabel(cb) || textoPreguntaContenedor(hallarContenedorPregunta(cb));
-      const elegida = calcularRespuesta(pregunta, opciones, perfil, qa);
+      let elegida = calcularRespuesta(pregunta, opciones, perfil);
+      if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
+        const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto));
+        if (respIA) {
+          const rNorm = n(respIA);
+          elegida = opciones.find(o => rNorm.includes(n(o.texto)));
+        }
+      }
       if (elegida && !elegida.el.checked && seleccionarOpcion(elegida.el)) {
         interacciones++;
-        respuestasLog.push({ pregunta, respuesta: elegida.texto });
+        respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
         await sleep(200);
+      } else if (pregunta && !elegida) {
+        respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null });
       }
     }
   }
@@ -403,11 +493,20 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog) {
     if (!grupo.length) continue;
     const opciones = grupo.map(el => ({ el, texto:textoDeOpcion(el) }));
     const pregunta = textoPreguntaContenedor(contenedor);
-    const elegida = calcularRespuesta(pregunta, opciones, perfil, qa);
+    let elegida = calcularRespuesta(pregunta, opciones, perfil);
+    if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
+      const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto));
+      if (respIA) {
+        const rNorm = n(respIA);
+        elegida = opciones.find(o => rNorm.includes(n(o.texto)));
+      }
+    }
     if (elegida && seleccionarOpcion(elegida.el)) {
       interacciones++;
-      respuestasLog.push({ pregunta, respuesta: elegida.texto });
+      respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       await sleep(300);
+    } else if (pregunta) {
+      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null });
     }
   }
 
@@ -423,7 +522,7 @@ async function rellenar(contexto) {
   const respuestasLog = [];
 
   // Opciones (radios, checkboxes, widgets)
-  n2 += await manejarGruposDeOpciones(p, cfg, respuestasLog);
+  n2 += await manejarGruposDeOpciones(p, cfg, respuestasLog, contexto);
 
   // Textareas e inputs
   for (const el of document.querySelectorAll('textarea:not([style*="display:none"]),input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=file]):not([type=radio]):not([type=checkbox])')) {
@@ -433,10 +532,16 @@ async function rellenar(contexto) {
     let val = null;
     let fueIA = false;
 
-    if      (lbl.includes('renta')||lbl.includes('sueldo')||lbl.includes('pretension')||lbl.includes('expectativa')) val = p.renta;
-    else if (lbl.includes('contacto')||lbl.includes('numero')) val = (p.tel||'') + ' / ' + (p.email||'');
-    else if ((lbl.includes('disponib')||lbl.includes('horario')||lbl.includes('modalidad')) && !lbl.includes('discapacidad') && !lbl.includes('identifica') && !lbl.includes('identificas')) val = p.disp;
-    else if (lbl.includes('discapacidad')||lbl.includes('identifica')&&lbl.includes('discapacidad')) {
+    // clave(): coincide solo si el término aparece como inicio de palabra (con límite \b),
+    // para no confundir p.ej. "posición" con "reposición" (que la contiene como substring).
+    const clave = (...terms) => terms.some(t => new RegExp('\\b' + t).test(lbl));
+
+    // Solo quedan como "predeterminados" los datos objetivos de contacto — todo lo demás
+    // (renta, disponibilidad, cargo, presentación, comuna, experiencia, etc.) se responde con IA
+    // usando perfil + CV + información adicional + el aviso completo, para que la respuesta
+    // sea específica a la pregunta y al aviso, no un texto de perfil pegado tal cual.
+    if      (clave('contacto','numero') && (clave('correo','email') || clave('telefono','celular'))) val = (p.tel||'') + ' / ' + (p.email||'');
+    else if (clave('discapacidad') || (clave('identifica') && clave('discapacidad'))) {
       // Preguntas de discapacidad — responder con IA si está disponible, sino "No"
       if (cfg && cfg.apiKey) {
         msg('IA respondiendo…', '#7C3AED');
@@ -447,33 +552,27 @@ async function rellenar(contexto) {
         val = 'No';
       }
     }
-    else if (lbl.includes('presentac')||lbl.includes('carta')||lbl.includes('sobre ti')) val = p.bio;
-    else if (lbl.includes('email')||lbl.includes('correo')) val = p.email;
-    else if (lbl.includes('telefono')||lbl.includes('celular')) val = p.tel;
-    else if (lbl.includes('nombre')&&!lbl.includes('empresa')) val = p.nombre;
-    else if (lbl.includes('cargo')||lbl.includes('categoria')||lbl.includes('puesto')||lbl.includes('posicion')) val = p.cargo || 'Asistente de Ventas / Retail';
-    else if (lbl.includes('comuna')||lbl.includes('ciudad')||lbl.includes('region')||lbl.includes('residencia')) val = 'Las Condes';
-    else {
-      const qa = (cfg && cfg.qa) || [];
-      const found = qa.find(q => !q.isAI && n(q.question).split(' ').filter(w=>w.length>3).some(w=>lbl.includes(w)));
-      if (found) val = found.answer;
-      // Usar IA para cualquier campo sin respuesta (textarea O input de texto con label largo)
-      if (!val && cfg && cfg.apiKey && labelRaw.length > 5) {
-        msg('IA respondiendo…', '#7C3AED');
-        val = await aiResponde(labelRaw, contexto);
-        fueIA = !!val;
-        await sleep(200);
-      }
+    else if (clave('email','correo')) val = p.email;
+    else if (clave('telefono','celular')) val = p.tel;
+    else if (clave('nombre') && !clave('empresa')) val = p.nombre;
+    else if (cfg && cfg.apiKey && labelRaw.length > 5) {
+      // Cualquier campo no cubierto por los datos objetivos de arriba se resuelve con IA,
+      // usando el perfil, el CV, la "información adicional" y el aviso completo (no respuestas fijas).
+      msg('IA respondiendo…', '#7C3AED');
+      val = await aiResponde(labelRaw, contexto);
+      fueIA = !!val;
+      await sleep(200);
     }
 
     if (val) {
+      val = limitarTexto(val, el);
       el.scrollIntoView({block:'nearest'});
       setVal(el, val);
       n2++;
-      respuestasLog.push({ pregunta: labelRaw, respuesta: val, fueIA });
+      respuestasLog.push({ pregunta: labelRaw, respuesta: val, fueIA, tipo:'texto', el });
       await sleep(500);
     } else if (labelRaw.length > 5) {
-      respuestasLog.push({ pregunta: labelRaw, respuesta: '', vacia: true });
+      respuestasLog.push({ pregunta: labelRaw, respuesta: '', vacia: true, tipo:'texto', el });
     }
   }
 
@@ -518,7 +617,7 @@ async function postular(url, id, titulo) {
 
   if (hayForm) {
     msg('Rellenando formulario…', '#D97706');
-    const contexto = document.body.innerText.slice(0,1500);
+    const contexto = extraerTextoAviso();
     const { n2, respuestasLog } = await rellenar(contexto);
     await sleep(1000);
 
@@ -544,10 +643,12 @@ async function postular(url, id, titulo) {
       btnEnviar.click();
       await sleep(2000);
       // Log con resumen de respuestas
-      const resumen = respuestasLog.filter(r => r.respuesta).map(r => r.pregunta.slice(0,30) + ': ' + r.respuesta.slice(0,40)).join(' | ');
+      // Quitar referencias al DOM (el, elegidoEl, opciones) antes de guardar — no son serializables
+      const respuestasParaLog = respuestasLog.map(r => ({ pregunta:r.pregunta, respuesta:r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
+      const resumen = respuestasParaLog.filter(r => r.respuesta).map(r => r.pregunta.slice(0,30) + ': ' + r.respuesta.slice(0,40)).join(' | ');
       addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id,
         reason:'Enviado (' + n2 + ' campos)',
-        respuestas: respuestasLog
+        respuestas: respuestasParaLog
       });
       msg('✓ ' + titulo.slice(0,40), '#16A34A');
       return true;

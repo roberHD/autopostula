@@ -7,7 +7,7 @@
 let incTags = [];
 let excTags = [];
 let jornadaSel = new Set(['part time','fines de semana','turno rotativo']);
-let qaList = [];   // [{id, question, answer, isAI}]
+let infoItems = [];   // [{id, texto}] — datos libres del candidato para que la IA los use como contexto
 
 // ── Defaults precargados con el perfil de Roberto ──────────────
 const DEFAULTS = {
@@ -15,7 +15,7 @@ const DEFAULTS = {
   excTags: [],
   jornada: ['part time'],
   perfil: { nombre:'', email:'', tel:'', cargo:'', renta:'', disp:'', bio:'' },
-  qa: []
+  info: []
 };
 
 // ── DOM ────────────────────────────────────────────────────────
@@ -37,13 +37,9 @@ const excBtn        = $('exc-btn');
 const jornadaChips  = $('jornada-chips');
 const toggleProfile = $('toggle-profile');
 const profileBody   = $('profile-body');
-const qaListEl      = $('qa-list');
-const qaAddToggle   = $('qa-add-toggle');
-const qaForm        = $('qa-form');
-const qaQ           = $('qa-q');
-const qaA           = $('qa-a');
-const qaSaveBtn     = $('qa-save-btn');
-const qaCancelBtn   = $('qa-cancel-btn');
+const infoListEl    = $('info-list');
+const infoInput     = $('info-input');
+const infoBtn       = $('info-btn');
 const apiKeyEl      = $('api-key');
 const apiEye        = $('api-eye');
 const apiTestBtn    = $('api-test-btn');
@@ -119,72 +115,42 @@ toggleProfile.addEventListener('click', () => {
   toggleProfile.textContent = hidden ? 'Ocultar' : 'Mostrar';
 });
 
-// ── Preguntas personalizadas ───────────────────────────────────
-function renderQA() {
-  if (!qaList.length) {
-    qaListEl.innerHTML = '<div style="font-size:11px;color:var(--text-3);padding:4px 0;">Sin respuestas guardadas — la IA manejará todos los formularios.</div>';
+// ── Información adicional ───────────────────────────────────────
+function renderInfo() {
+  if (!infoItems.length) {
+    infoListEl.innerHTML = '<div class="info-empty">Sin datos adicionales — agrega hechos sobre ti para que la IA los use al responder.</div>';
     return;
   }
-  qaListEl.innerHTML = '';
-  qaList.forEach((item) => {
+  infoListEl.innerHTML = '';
+  infoItems.forEach((item) => {
     const div = document.createElement('div');
-    div.className = 'qa-item';
-    const badge = item.isAI
-      ? `<span class="qa-badge ai">IA responde</span>`
-      : `<span class="qa-badge manual">Manual</span>`;
-    const answerText = item.isAI
-      ? '<span style="color:var(--text-3);font-style:italic;">La IA generará una respuesta contextual al aviso</span>'
-      : item.answer;
+    div.className = 'info-item';
     div.innerHTML = `
-      <div class="qa-item-head">
-        <span class="qa-question">${item.question}</span>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-          ${badge}
-          <button class="tag-x qa-del" data-id="${item.id}" title="Eliminar">×</button>
-        </div>
-      </div>
-      <div class="qa-item-body">
-        <div class="qa-answer">${answerText}</div>
-      </div>
+      <span class="info-item-text">${item.texto}</span>
+      <button class="tag-x info-del" data-id="${item.id}" title="Eliminar">×</button>
     `;
-    qaListEl.appendChild(div);
+    infoListEl.appendChild(div);
   });
 }
 
 document.addEventListener('click', e => {
-  const del = e.target.closest('.qa-del');
+  const del = e.target.closest('.info-del');
   if (!del) return;
-  qaList = qaList.filter(q => q.id != del.dataset.id);
-  renderQA();
+  infoItems = infoItems.filter(it => it.id != del.dataset.id);
+  renderInfo();
 });
 
-qaAddToggle.addEventListener('click', () => {
-  qaForm.classList.toggle('hidden');
-  if (!qaForm.classList.contains('hidden')) {
-    qaQ.focus();
-    qaAddToggle.textContent = '− Cancelar';
-  } else {
-    qaAddToggle.textContent = '+ Nueva';
-  }
-});
+function addInfoItem() {
+  const texto = infoInput.value.trim();
+  if (!texto) { infoInput.focus(); return; }
+  infoItems.push({ id: uid(), texto });
+  infoInput.value = '';
+  renderInfo();
+  toast('✓ Dato agregado');
+}
 
-qaSaveBtn.addEventListener('click', () => {
-  const q = qaQ.value.trim();
-  if (!q) { qaQ.focus(); return; }
-  const a = qaA.value.trim();
-  qaList.push({ id: uid(), question: q, answer: a, isAI: !a });
-  qaQ.value = ''; qaA.value = '';
-  qaForm.classList.add('hidden');
-  qaAddToggle.textContent = '+ Nueva';
-  renderQA();
-  toast('✓ Respuesta guardada');
-});
-
-qaCancelBtn.addEventListener('click', () => {
-  qaForm.classList.add('hidden');
-  qaAddToggle.textContent = '+ Nueva';
-  qaQ.value = ''; qaA.value = '';
-});
+infoBtn.addEventListener('click', addInfoItem);
+infoInput.addEventListener('keydown', e => { if (e.key === 'Enter') addInfoItem(); });
 
 // ── API Key ────────────────────────────────────────────────────
 let apiVisible = false;
@@ -293,7 +259,7 @@ function renderLog(entries) {
     const pendientesHtml = e.camposPendientes?.length
       ? `<div class="log-reason" style="color:#D97706">
            ⚠ Sin respuesta para: ${e.camposPendientes.map(c=>`"${c.slice(0,40)}"`).join(', ')}
-           <br><span style="font-size:9px;color:#9CA3AF">→ Agrégala en "Respuestas a preguntas"</span>
+           <br><span style="font-size:9px;color:#9CA3AF">→ Agrega el dato en "Información adicional"</span>
          </div>`
       : '';
 
@@ -331,7 +297,7 @@ saveBtn.addEventListener('click', () => {
     incTags,
     excTags,
     jornada: [...jornadaSel],
-    qa: qaList,
+    info: infoItems,
     apiKey: apiKeyEl.value.trim().replace(/\s+/g, ''),
     modoRevision: document.getElementById('toggle-revision')?.checked || false,
     usarIAFiltros: document.getElementById('toggle-ia-filtros')?.checked || false,
@@ -374,7 +340,7 @@ document.getElementById('scan-now-btn')?.addEventListener('click', () => {
       incTags,
       excTags,
       jornada: [...jornadaSel],
-      qa: qaList,
+      info: infoItems,
       apiKey: apiKeyEl.value.trim().replace(/\s+/g, ''),
       modoRevision: document.getElementById('toggle-revision')?.checked || false,
       usarIAFiltros: document.getElementById('toggle-ia-filtros')?.checked || false,
@@ -439,7 +405,14 @@ function loadState() {
       chip.classList.toggle('selected', jornadaSel.has(chip.dataset.val));
     });
 
-    qaList = cfg.qa || DEFAULTS.qa;
+    if (cfg.info) {
+      infoItems = cfg.info;
+    } else if (cfg.qa && cfg.qa.length) {
+      // Migración desde el formato antiguo de "preguntas y respuestas"
+      infoItems = cfg.qa.filter(q => !q.isAI && q.answer).map(q => ({ id: uid(), texto: q.question + ': ' + q.answer }));
+    } else {
+      infoItems = DEFAULTS.info;
+    }
 
     const p = cfg.perfil || {};
     $('p-nombre').value = p.nombre || '';
@@ -465,7 +438,7 @@ function loadState() {
     setActiveUI(active);
 
     renderTags();
-    renderQA();
+    renderInfo();
     renderLog(data.log || []);
   });
 }

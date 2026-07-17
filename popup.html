@@ -246,45 +246,23 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 }
 textarea.field { resize: vertical; min-height: 56px; }
 
-/* ── Preguntas personalizadas ─────────────────────────────── */
-.qa-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.qa-item {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.qa-item-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
+/* ── Información adicional ────────────────────────────────── */
+.info-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.info-item {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
   padding: 8px 10px;
   background: var(--bg);
-  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
-.qa-question {
-  font-size: 11px; font-weight: 600; color: var(--text-1);
+.info-item-text {
+  font-size: 11px; color: var(--text-1);
   flex: 1; line-height: 1.4;
 }
-.qa-item-body {
-  padding: 6px 10px 8px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
+.info-empty {
+  font-size: 11px; color: var(--text-3);
+  padding: 4px 0; font-style: italic;
 }
-.qa-answer { font-size: 11px; color: var(--text-2); line-height: 1.4; }
-.qa-badge {
-  font-size: 9px; font-weight: 700;
-  padding: 2px 6px; border-radius: 10px;
-  white-space: nowrap; flex-shrink: 0;
-}
-.qa-badge.manual { background: var(--accent-s); color: var(--accent); }
-.qa-badge.ai     { background: #F3E8FF; color: #7C3AED; }
-
-.qa-add-form {
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  padding: 10px;
-  display: flex; flex-direction: column; gap: 6px;
-}
-.qa-add-form.hidden { display: none; }
-.qa-add-row { display: flex; gap: 6px; }
 
 /* ── API key ──────────────────────────────────────────────── */
 .apikey-row { display: flex; gap: 6px; align-items: center; }
@@ -489,29 +467,19 @@ textarea.field { resize: vertical; min-height: 56px; }
   </div>
 </div>
 
-<!-- PREGUNTAS PERSONALIZADAS -->
+<!-- INFORMACIÓN ADICIONAL -->
 <div class="section">
   <div class="section-head">
-    <span class="section-title">Respuestas a preguntas</span>
-    <span class="section-action" id="qa-add-toggle">+ Nueva</span>
+    <span class="section-title">Información adicional para la IA</span>
   </div>
-
-  <div class="qa-list" id="qa-list"></div>
-
-  <!-- Formulario para agregar pregunta -->
-  <div class="qa-add-form hidden" id="qa-form">
-    <div class="field-group">
-      <span class="field-label">Pregunta del formulario</span>
-      <input class="field" id="qa-q" placeholder="ej: ¿Tienes experiencia en caja?">
-    </div>
-    <div class="field-group">
-      <span class="field-label">Tu respuesta (déjalo vacío para que la IA responda sola)</span>
-      <textarea class="field" id="qa-a" rows="2" placeholder="ej: Sí, tengo 3 años manejando caja en retail…"></textarea>
-    </div>
-    <div class="qa-add-row">
-      <button class="btn btn-primary" id="qa-save-btn">Guardar respuesta</button>
-      <button class="btn btn-ghost" id="qa-cancel-btn">Cancelar</button>
-    </div>
+  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;">
+    Agrega datos sobre ti — no respuestas fijas. La IA usa esto junto a tu perfil y CV para responder cualquier pregunta del formulario en el momento.
+    Ej: "No tengo vehículo propio", "Curso de manipulación de alimentos vigente", "Disponible para viajar: no".
+  </p>
+  <div class="info-list" id="info-list"></div>
+  <div class="input-row">
+    <input class="field" id="info-input" placeholder="ej: Tengo experiencia usando caja registradora">
+    <button class="btn btn-primary" id="info-btn">+ Agregar</button>
   </div>
 </div>
 
