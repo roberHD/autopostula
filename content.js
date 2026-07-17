@@ -100,12 +100,18 @@ async function aiResponde(pregunta, contexto, opciones) {
       '1. Usa solo información real del CV, perfil o datos adicionales entregados abajo. Nunca inventes datos concretos (años, empresas, certificaciones) que no estén ahí.\n' +
       '3. Para preguntas sobre experiencia, motivación o habilidades, usa el CV y perfil para dar una respuesta real y específica.\n' +
       '5. MUY IMPORTANTE: personaliza la respuesta según el AVISO DE TRABAJO específico de abajo (rubro, productos, marca, tareas mencionadas). Si el aviso es de venta de zapatillas, tu respuesta debe conectar con calzado/retail de zapatillas; si es de una cafetería, con café y atención en cafeterías; etc. No des una respuesta genérica que serviría igual para cualquier aviso — debe notarse que leíste este aviso en particular.\n' +
+      '6. Responde en TEXTO PLANO, como si lo escribieras directo en un formulario web. NUNCA uses formato markdown (nada de #, ##, **, -, listas ni títulos). NUNCA repitas ni cites la pregunta antes de responder. NUNCA agregues introducciones tipo "Respuesta:" o comillas envolviendo el texto — ve directo a la respuesta, en oraciones normales.\n' +
+      '7. Si la pregunta pide VARIOS datos a la vez (ej: "indique su comuna y teléfono", "nombre y correo"), responde TODOS los datos pedidos, no solo el primero.\n' +
       (bloqueOpciones
         ? '2. Si la pregunta es sobre algo que NO está en tu información y no puedes inferirlo razonablemente, responde: SINRESPUESTA\n' +
           '4. Debes elegir una de las opciones dadas textualmente, o SINRESPUESTA si ninguna aplica.\n'
         : '2. Si no tienes el dato exacto que pide la pregunta, NUNCA respondas SINRESPUESTA ni dejes el campo vacío: responde con honestidad, reconociendo que no tienes esa experiencia específica, pero conectándolo con la experiencia real más cercana que sí tengas (ej: "No cuento con experiencia directa en ese rubro, pero tengo experiencia en atención al cliente y ventas retail que me permite adaptarme rápido"). Solo usa SINRESPUESTA si la pregunta es completamente irrelevante para un postulante a empleo.\n') +
       '\n' +
       'Perfil: ' + (p.bio||'Sin información de perfil aún') + '\n' +
+      'Nombre: ' + (p.nombre||'') + '\n' +
+      'Email: ' + (p.email||'') + '\n' +
+      'Teléfono: ' + (p.tel||'') + '\n' +
+      'Comuna de residencia: ' + (p.comuna||'') + '\n' +
       'Cargo buscado: ' + (p.cargo||'') + '\n' +
       'Renta esperada: ' + (p.renta||'') + '\n' +
       'Disponibilidad: ' + (p.disp||'') + '\n' +
@@ -138,15 +144,29 @@ async function aiResponde(pregunta, contexto, opciones) {
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 150, messages })
     });
     const data = await res.json();
-    const respuesta = data.content && data.content[0] && data.content[0].text && data.content[0].text.trim() || '';
+    let respuesta = data.content && data.content[0] && data.content[0].text && data.content[0].text.trim() || '';
+    respuesta = limpiarRespuestaIA(respuesta);
     // Si la IA dice que no sabe, retornar null (dejar vacío)
     if (!respuesta || respuesta.includes('SINRESPUESTA') || respuesta.toLowerCase().includes('sin respuesta')) return null;
     return respuesta;
   } catch(e) { return null; }
 }
 
+// Red de seguridad: por si el modelo igual agrega formato markdown o repite la pregunta.
+function limpiarRespuestaIA(txt) {
+  if (!txt) return txt;
+  let t = txt;
+  t = t.replace(/^\s*#+\s*/gm, '');                 // encabezados markdown (#, ##, ###…)
+  t = t.replace(/^\s*[-*•]\s+/gm, '');               // viñetas al inicio de línea
+  t = t.replace(/\*\*(.*?)\*\*/g, '$1');             // **negrita**
+  t = t.replace(/(^|\n)\s*(Respuesta|Pregunta)\s*:\s*/gi, '$1'); // prefijos tipo "Respuesta:"
+  t = t.trim();
+  t = t.replace(/^["“'](.+)["”']$/s, '$1');          // comillas envolviendo todo el texto
+  return t.trim();
+}
+
 // ── Panel de revisión antes de enviar (editable) ─────────────
-function mostrarRevision(titulo, respuestasLog) {
+function mostrarRevision(titulo, respuestasLog, contexto) {
   return new Promise(resolve => {
     document.getElementById('ap-revision-panel')?.remove();
     const div = document.createElement('div');
@@ -154,27 +174,27 @@ function mostrarRevision(titulo, respuestasLog) {
     Object.assign(div.style, {
       position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
       zIndex:'2147483648', background:'#fff', border:'1px solid #e4e7ef',
-      borderRadius:'12px', padding:'20px', width:'520px', maxWidth:'92vw',
-      maxHeight:'80vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,.2)',
-      fontFamily:'system-ui,sans-serif'
+      borderRadius:'12px', padding:'0', width:'640px', maxWidth:'94vw',
+      maxHeight:'86vh', display:'flex', flexDirection:'column',
+      boxShadow:'0 20px 60px rgba(0,0,0,.25)', fontFamily:'system-ui,sans-serif'
     });
 
     const filas = respuestasLog.map((r, idx) => {
       const color = r.vacia ? '#DC2626' : '#16A34A';
-      const icon = r.vacia ? '⚠️' : '✅';
+      const icon = r.vacia ? 'ADVERTENCIA' : 'OK';
       const cabecera =
         '<div style="font-size:11px;font-weight:700;color:#4b5563;margin-bottom:5px">' + (r.pregunta||'').slice(0,90) + '</div>' +
-        '<div style="font-size:10px;color:' + color + ';margin-bottom:5px">' + icon + (r.vacia ? ' Sin respuesta — puedes completarla' : (r.fueIA ? ' Generada por IA — puedes editarla' : '')) + '</div>';
+        '<div style="font-size:10px;color:' + color + ';margin-bottom:5px">' + icon + (r.vacia ? ' Sin respuesta - puedes completarla' : (r.fueIA ? ' Generada por IA - puedes editarla' : '')) + '</div>';
 
       if (r.tipo === 'opcion') {
         const opts = (r.opciones||[]).map((o, oi) => {
           const sel = r.elegidoEl && o.el === r.elegidoEl ? ' selected' : '';
-          return '<option value="' + oi + '"' + sel + '>' + (o.texto||'(opción sin texto)').slice(0,80) + '</option>';
+          return '<option value="' + oi + '"' + sel + '>' + (o.texto||'(opcion sin texto)').slice(0,80) + '</option>';
         }).join('');
         return '<div class="ap-rev-item" data-idx="' + idx + '" data-tipo="opcion" style="margin-bottom:12px;padding:8px 10px;background:#f8f9fc;border-radius:8px;border:1px solid #e4e7ef">' +
           cabecera +
           '<select class="ap-rev-select" data-idx="' + idx + '" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;font-family:inherit">' +
-            '<option value="-1"' + (r.elegidoEl ? '' : ' selected') + '>— Sin selección —</option>' + opts +
+            '<option value="-1"' + (r.elegidoEl ? '' : ' selected') + '>-- Sin seleccion --</option>' + opts +
           '</select>' +
         '</div>';
       }
@@ -190,19 +210,71 @@ function mostrarRevision(titulo, respuestasLog) {
       '</div>';
     }).join('');
 
+    const avisoEsc = (contexto||'Sin texto del aviso disponible.').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
     div.innerHTML =
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
-        '<span style="font-size:20px">👀</span>' +
-        '<div><div style="font-weight:700;font-size:14px">Revisar y editar antes de enviar</div>' +
-        '<div style="font-size:11px;color:#6b7280">' + titulo.slice(0,60) + '</div></div>' +
+      // Cabecera arrastrable
+      '<div id="ap-rev-header" style="cursor:move;user-select:none;display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #e4e7ef">' +
+        '<span style="font-size:20px">*</span>' +
+        '<div style="flex:1"><div style="font-weight:700;font-size:14px">Revisar antes de enviar</div>' +
+        '<div style="font-size:11px;color:#6b7280">' + titulo.slice(0,60) + ' - arrastra desde aqui para mover</div></div>' +
       '</div>' +
-      '<div style="margin-bottom:16px">' + (filas || '<div style="color:#9ca3af;font-style:italic;text-align:center;padding:12px">Sin campos que mostrar</div>') + '</div>' +
-      '<div style="display:flex;gap:8px">' +
-        '<button id="ap-rev-confirm" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">✓ Confirmar y enviar</button>' +
+      // Pestanas
+      '<div style="display:flex;gap:4px;padding:10px 20px 0">' +
+        '<button class="ap-tab-btn" data-tab="aviso" style="padding:8px 14px;border:none;border-radius:8px 8px 0 0;background:#2563eb;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Aviso completo</button>' +
+        '<button class="ap-tab-btn" data-tab="respuestas" style="padding:8px 14px;border:none;border-radius:8px 8px 0 0;background:#f3f4f6;color:#4b5563;font-size:12px;font-weight:700;cursor:pointer">Preguntas y respuestas (' + respuestasLog.length + ')</button>' +
+      '</div>' +
+      '<div style="flex:1;overflow-y:auto;padding:16px 20px">' +
+        '<div class="ap-tab-content" data-tab-content="aviso" style="white-space:pre-wrap;font-size:12px;line-height:1.6;color:#374151">' + avisoEsc + '</div>' +
+        '<div class="ap-tab-content" data-tab-content="respuestas" style="display:none">' +
+          (filas || '<div style="color:#9ca3af;font-style:italic;text-align:center;padding:12px">Sin campos que mostrar</div>') +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;padding:16px 20px;border-top:1px solid #e4e7ef">' +
+        '<button id="ap-rev-confirm" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">Confirmar y enviar</button>' +
         '<button id="ap-rev-skip" style="background:#f3f4f6;color:#4b5563;border:1px solid #e4e7ef;border-radius:8px;padding:10px 16px;font-size:13px;cursor:pointer">Saltar</button>' +
       '</div>';
 
     document.body.appendChild(div);
+
+    // -- Pestanas: alternar entre "Aviso completo" y "Preguntas y respuestas" --
+    div.querySelectorAll('.ap-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        div.querySelectorAll('.ap-tab-btn').forEach(b => {
+          b.style.background = '#f3f4f6'; b.style.color = '#4b5563';
+        });
+        btn.style.background = '#2563eb'; btn.style.color = '#fff';
+        div.querySelectorAll('.ap-tab-content').forEach(c => {
+          c.style.display = (c.dataset.tabContent === btn.dataset.tab) ? '' : 'none';
+        });
+      });
+    });
+
+    // -- Arrastrar el panel desde la cabecera --
+    const header = div.querySelector('#ap-rev-header');
+    let arrastrando = false, offX = 0, offY = 0;
+    const onMouseMove = e => {
+      if (!arrastrando) return;
+      div.style.left = (e.clientX - offX) + 'px';
+      div.style.top  = (e.clientY - offY) + 'px';
+    };
+    const onMouseUp = () => { arrastrando = false; };
+    header.addEventListener('mousedown', e => {
+      arrastrando = true;
+      const rect = div.getBoundingClientRect();
+      div.style.transform = 'none';
+      div.style.left = rect.left + 'px';
+      div.style.top  = rect.top + 'px';
+      offX = e.clientX - rect.left;
+      offY = e.clientY - rect.top;
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    function limpiarListeners() {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    }
 
     // Contador de caracteres en vivo
     div.querySelectorAll('.ap-rev-textarea').forEach(ta => {
@@ -240,10 +312,11 @@ function mostrarRevision(titulo, respuestasLog) {
       });
     }
 
-    document.getElementById('ap-rev-confirm').onclick = () => { aplicarEdiciones(); div.remove(); resolve('confirm'); };
-    document.getElementById('ap-rev-skip').onclick    = () => { div.remove(); resolve('skip'); };
-    // Auto-confirmar tras 90 segundos (aplicando lo que se haya editado hasta ese momento)
-    setTimeout(() => { if (document.getElementById('ap-revision-panel')) { aplicarEdiciones(); div.remove(); resolve('confirm'); } }, 90000);
+    document.getElementById('ap-rev-confirm').onclick = () => { limpiarListeners(); aplicarEdiciones(); div.remove(); resolve('confirm'); };
+    document.getElementById('ap-rev-skip').onclick    = () => { limpiarListeners(); div.remove(); resolve('skip'); };
+    // Auto-confirmar tras 3 minutos (aplicando lo que se haya editado hasta ese momento) --
+    // se amplio el tiempo porque ahora tambien hay que leer el aviso completo antes de decidir.
+    setTimeout(() => { if (document.getElementById('ap-revision-panel')) { limpiarListeners(); aplicarEdiciones(); div.remove(); resolve('confirm'); } }, 180000);
   });
 }
 
@@ -536,11 +609,14 @@ async function rellenar(contexto) {
     // para no confundir p.ej. "posición" con "reposición" (que la contiene como substring).
     const clave = (...terms) => terms.some(t => new RegExp('\\b' + t).test(lbl));
 
-    // Solo quedan como "predeterminados" los datos objetivos de contacto — todo lo demás
-    // (renta, disponibilidad, cargo, presentación, comuna, experiencia, etc.) se responde con IA
-    // usando perfil + CV + información adicional + el aviso completo, para que la respuesta
-    // sea específica a la pregunta y al aviso, no un texto de perfil pegado tal cual.
-    if      (clave('contacto','numero') && (clave('correo','email') || clave('telefono','celular'))) val = (p.tel||'') + ' / ' + (p.email||'');
+    // Solo quedan como "predeterminados" los que se basan en el TIPO real del input (confiable,
+    // no en adivinar por texto), porque cualquier atajo por palabras clave se rompe apenas la
+    // pregunta pide dos cosas a la vez (ej: "indique su comuna y número de teléfono" terminaba
+    // respondiendo solo el teléfono e ignorando la comuna). Todo lo demás —incluidas preguntas
+    // compuestas de contacto, comuna, renta, disponibilidad, cargo, presentación, experiencia—
+    // se responde con IA, que ya tiene tus datos de contacto y perfil como contexto.
+    if      (el.type === 'email' && p.email) val = p.email;
+    else if (el.type === 'tel' && p.tel) val = p.tel;
     else if (clave('discapacidad') || (clave('identifica') && clave('discapacidad'))) {
       // Preguntas de discapacidad — responder con IA si está disponible, sino "No"
       if (cfg && cfg.apiKey) {
@@ -552,9 +628,6 @@ async function rellenar(contexto) {
         val = 'No';
       }
     }
-    else if (clave('email','correo')) val = p.email;
-    else if (clave('telefono','celular')) val = p.tel;
-    else if (clave('nombre') && !clave('empresa')) val = p.nombre;
     else if (cfg && cfg.apiKey && labelRaw.length > 5) {
       // Cualquier campo no cubierto por los datos objetivos de arriba se resuelve con IA,
       // usando el perfil, el CV, la "información adicional" y el aviso completo (no respuestas fijas).
@@ -608,6 +681,12 @@ async function postular(url, id, titulo) {
   }
 
   if (!activo) return false;
+
+  // IMPORTANTE: leer el aviso ANTES de hacer clic en "Postularme". Computrabajo puede
+  // reemplazar este mismo panel con el formulario de preguntas adicionales al hacer clic,
+  // así que si se lee después, se corre el riesgo de capturar el formulario en vez del aviso.
+  const contexto = extraerTextoAviso();
+
   btn.scrollIntoView({behavior:'smooth', block:'center'});
   await sleep(400);
   btn.click();
@@ -617,14 +696,13 @@ async function postular(url, id, titulo) {
 
   if (hayForm) {
     msg('Rellenando formulario…', '#D97706');
-    const contexto = extraerTextoAviso();
     const { n2, respuestasLog } = await rellenar(contexto);
     await sleep(1000);
 
     // Modo revisión: pausar y mostrar respuestas al usuario
     if (cfg && cfg.modoRevision) {
       msg('⏸ Revisión pendiente…', '#2563EB');
-      const decision = await mostrarRevision(titulo, respuestasLog);
+      const decision = await mostrarRevision(titulo, respuestasLog, contexto);
       if (decision === 'skip') {
         addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
         return false;

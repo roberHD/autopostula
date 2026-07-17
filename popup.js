@@ -14,7 +14,7 @@ const DEFAULTS = {
   incTags: [],
   excTags: [],
   jornada: ['part time'],
-  perfil: { nombre:'', email:'', tel:'', cargo:'', renta:'', disp:'', bio:'' },
+  perfil: { nombre:'', email:'', tel:'', comuna:'', cargo:'', renta:'', disp:'', bio:'' },
   info: []
 };
 
@@ -305,6 +305,7 @@ saveBtn.addEventListener('click', () => {
       nombre: $('p-nombre').value,
       email:  $('p-email').value,
       tel:    $('p-tel').value,
+      comuna: $('p-comuna').value,
       cargo:  $('p-cargo').value,
       renta:  $('p-renta').value,
       disp:   $('p-disp').value,
@@ -313,11 +314,10 @@ saveBtn.addEventListener('click', () => {
   };
 
   chrome.storage.local.set({ config }, () => {
-    // Notificar al content script con la nueva config
-    chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-      if (tabs[0]?.url?.includes('computrabajo.cl')) {
-        chrome.tabs.sendMessage(tabs[0].id, { type: 'CONFIG_UPDATED', config }).catch(() => {});
-      }
+    // Notificar a TODAS las pestañas de Computrabajo abiertas con la nueva config
+    // (antes solo comprobaba 'computrabajo.cl', que no matcheaba con cl.computrabajo.com)
+    chrome.tabs.query({ url: ['*://*.computrabajo.com/*', '*://*.computrabajo.cl/*'] }, tabs => {
+      tabs.forEach(t => chrome.tabs.sendMessage(t.id, { type: 'CONFIG_UPDATED', config }).catch(() => {}));
     });
     toast('✓ Cambios guardados');
   });
@@ -348,6 +348,7 @@ document.getElementById('scan-now-btn')?.addEventListener('click', () => {
         nombre: $('p-nombre').value,
         email:  $('p-email').value,
         tel:    $('p-tel').value,
+        comuna: $('p-comuna').value,
         cargo:  $('p-cargo').value,
         renta:  $('p-renta').value,
         disp:   $('p-disp').value,
@@ -418,6 +419,7 @@ function loadState() {
     $('p-nombre').value = p.nombre || '';
     $('p-email').value  = p.email  || '';
     $('p-tel').value    = p.tel    || '';
+    $('p-comuna').value = p.comuna || '';
     $('p-cargo').value  = p.cargo  || '';
     $('p-renta').value  = p.renta  || '';
     $('p-disp').value   = p.disp   || '';
@@ -519,10 +521,11 @@ async function extraerDatosCV(base64, key) {
             { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
             { type: 'text', text:
               'Extrae la información de este CV y responde SOLO con un JSON válido con estos campos exactos:\n' +
-              '{"nombre":"","email":"","tel":"","cargo":"","bio":""}\n' +
+              '{"nombre":"","email":"","tel":"","comuna":"","cargo":"","bio":""}\n' +
               '- nombre: nombre completo de la persona\n' +
               '- email: email de contacto\n' +
               '- tel: teléfono de contacto\n' +
+              '- comuna: comuna o ciudad de residencia si aparece\n' +
               '- cargo: último cargo o cargo objetivo que busca\n' +
               '- bio: resumen profesional de 2-3 oraciones en primera persona\n' +
               'Si no encuentras algún dato, deja el campo vacío. Responde SOLO el JSON, sin texto adicional.'
@@ -543,6 +546,7 @@ async function extraerDatosCV(base64, key) {
     if (perfil.nombre && !$('p-nombre').value) $('p-nombre').value = perfil.nombre;
     if (perfil.email  && !$('p-email').value)  $('p-email').value  = perfil.email;
     if (perfil.tel    && !$('p-tel').value)    $('p-tel').value    = perfil.tel;
+    if (perfil.comuna && !$('p-comuna').value) $('p-comuna').value = perfil.comuna;
     if (perfil.cargo  && !$('p-cargo').value)  $('p-cargo').value  = perfil.cargo;
     if (perfil.bio    && !$('p-bio').value)    $('p-bio').value    = perfil.bio;
 
