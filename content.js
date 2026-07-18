@@ -427,7 +427,17 @@ function hallarContenedorPregunta(el) {
 function textoPreguntaContenedor(contenedor) {
   try {
     const clon = contenedor.cloneNode(true);
-    clon.querySelectorAll(SELECTOR_OPCIONES).forEach(e => e.remove());
+    // No basta con quitar el <input>: hay que quitar también su <label> (el texto visible
+    // de la alternativa, ej. "Si", "No", "En curso"), si no queda pegado a la pregunta.
+    clon.querySelectorAll(SELECTOR_OPCIONES).forEach(e => {
+      const lbl = e.closest('label');
+      if (lbl) { lbl.remove(); return; }
+      if (e.id) {
+        const lf = clon.querySelector('label[for="' + CSS.escape(e.id) + '"]');
+        if (lf) { lf.remove(); }
+      }
+      e.remove();
+    });
     const t = (clon.textContent || '').trim().replace(/\s+/g,' ');
     if (t && t.length > 3 && t.length < 300) return t;
   } catch(e) {}
@@ -502,7 +512,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
       : [radio];
     if (!grupo.length) continue;
     const opciones = grupo.map(r => ({ el:r, texto:textoDeOpcion(r) }));
-    const pregunta = getLabel(radio) || textoPreguntaContenedor(hallarContenedorPregunta(radio));
+    const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(radio)) || getLabel(radio);
     let elegida = calcularRespuesta(pregunta, opciones, perfil);
     // Si no hay match universal y hay IA, que la IA elija entre las opciones usando perfil + info adicional
     if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
@@ -535,7 +545,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
       gruposCbVistos.add(nombre);
       const grupo = [...document.querySelectorAll('input[type=checkbox][name="' + CSS.escape(nombre) + '"]')].filter(esVisible);
       const opciones = grupo.map(c => ({ el:c, texto:textoDeOpcion(c) }));
-      const pregunta = getLabel(cb) || textoPreguntaContenedor(hallarContenedorPregunta(cb));
+      const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(cb)) || getLabel(cb);
       let elegida = calcularRespuesta(pregunta, opciones, perfil);
       if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
         const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto));
