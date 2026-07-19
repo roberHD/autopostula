@@ -74,10 +74,62 @@ function pasa(tarjeta) {
   return true;
 }
 
-// ── IA: responder pregunta de formulario ──────────────────────
-// REGLA: Solo responde si la info está en el CV, perfil o datos adicionales. Si no sabe → null.
-// Si se pasa `opciones` (array de strings), la IA debe elegir UNA opción textual exacta en vez de redactar libremente.
-async function aiResponde(pregunta, contexto, opciones) {
+// -- IA: analisis previo de la oferta (UNA sola vez por postulacion) --
+// Analiza cargo, empresa, que prioriza la empresa, que fortalezas del candidato calzan mejor,
+// y que tono usar -- para no repetir ese analisis en cada una de las preguntas del formulario.
+async function analizarOferta(contexto) {
+  const key = cfg && cfg.apiKey;
+  if (!key || !contexto) return null;
+  const p = (cfg && cfg.perfil) || {};
+  const info = (cfg && cfg.info || []).map(it => '- ' + it.texto).join('\n');
+  try {
+    const cvData = await new Promise(resolve => {
+      try { chrome.storage.local.get(['cvBase64'], d => resolve(d.cvBase64 || null)); }
+      catch(e) { resolve(null); }
+    });
+    const instruccion =
+      'Analiza este aviso de trabajo junto al perfil del candidato. Responde SOLO con un JSON valido, sin texto adicional, sin markdown, con exactamente esta forma:\n' +
+      '{"cargo":"","empresa":"","prioridades":"","fortalezas":"","tono":""}\n' +
+      '- cargo: nombre exacto del puesto al que se postula, tal como aparece en el aviso\n' +
+      '- empresa: nombre de la empresa que publica el aviso (si no aparece claramente, deja el string vacio)\n' +
+      '- prioridades: en una frase corta, que es lo mas importante que busca esta empresa en el candidato segun el aviso (rubro, tareas clave, requisitos)\n' +
+      '- fortalezas: en una frase corta, que fortalezas REALES del candidato (solo las que esten en su CV/perfil/datos adicionales) conectan mejor con este aviso especifico\n' +
+      '- tono: como deberia sonar el candidato al responder preguntas de este formulario (ej: "cercano y directo", "formal y profesional", "entusiasta pero breve"), segun como este redactado el aviso -- un aviso informal pide un tono mas cercano, uno corporativo uno mas formal\n\n' +
+      'Perfil: ' + (p.bio||'Sin informacion de perfil aun') + '\n' +
+      'Datos adicionales del candidato:\n' + (info||'Ninguno') + '\n\n' +
+      'AVISO:\n' + contexto.slice(0,3000);
+
+    let messages;
+    if (cvData) {
+      messages = [{ role: 'user', content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: cvData } },
+        { type: 'text', text: instruccion }
+      ]}];
+    } else {
+      messages = [{ role: 'user', content: instruccion }];
+    }
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 300, messages })
+    });
+    const data = await res.json();
+    let texto = data.content && data.content[0] && data.content[0].text && data.content[0].text.trim() || '';
+    texto = texto.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(texto);
+    return parsed;
+  } catch(e) { return null; }
+}
+
+// -- IA: responder pregunta de formulario --
+// REGLA: Solo responde si la info esta en el CV, perfil o datos adicionales. Si no sabe -> null.
+// Si se pasa `opciones` (array de strings), la IA debe elegir UNA opcion textual exacta en vez de redactar libremente.
+async function aiResponde(pregunta, contexto, opciones, analisis) {
   const key = cfg && cfg.apiKey;
   if (!key) return null;
   const p = (cfg && cfg.perfil) || {};
@@ -90,38 +142,50 @@ async function aiResponde(pregunta, contexto, opciones) {
     });
 
     const bloqueOpciones = (opciones && opciones.length)
-      ? '\nOpciones disponibles (debes responder EXACTAMENTE con el texto de una de estas, sin agregar nada más):\n' +
+      ? '\nOpciones disponibles (debes responder EXACTAMENTE con el texto de una de estas, sin agregar nada mas):\n' +
         opciones.map(o => '- "' + o + '"').join('\n') + '\n'
+      : '';
+
+    const bloqueAnalisis = analisis
+      ? 'Analisis previo de esta oferta (ya hecho, usalo, no lo repitas en la respuesta):\n' +
+        '- Cargo: ' + (analisis.cargo||'') + '\n' +
+        '- Empresa: ' + (analisis.empresa||'') + '\n' +
+        '- Que prioriza la empresa: ' + (analisis.prioridades||'') + '\n' +
+        '- Tus fortalezas mas relevantes para ESTA oferta: ' + (analisis.fortalezas||'') + '\n' +
+        '- Tono a usar en las respuestas: ' + (analisis.tono||'') + '\n\n'
       : '';
 
     const instruccion =
       'Eres un asistente que ayuda a ' + (p.nombre||'el candidato') + ' a postular empleos.\n' +
       'REGLAS:\n' +
-      '1. Usa solo información real del CV, perfil o datos adicionales entregados abajo. Nunca inventes datos concretos (años, empresas, certificaciones) que no estén ahí.\n' +
-      '3. Para preguntas sobre experiencia, motivación o habilidades, usa el CV y perfil para dar una respuesta real y específica.\n' +
-      '5. MUY IMPORTANTE: personaliza la respuesta según el AVISO DE TRABAJO específico de abajo (rubro, productos, marca, tareas mencionadas). Si el aviso es de venta de zapatillas, tu respuesta debe conectar con calzado/retail de zapatillas; si es de una cafetería, con café y atención en cafeterías; etc. No des una respuesta genérica que serviría igual para cualquier aviso — debe notarse que leíste este aviso en particular.\n' +
-      '6. Responde en TEXTO PLANO, como si lo escribieras directo en un formulario web. NUNCA uses formato markdown (nada de #, ##, **, -, listas ni títulos). NUNCA repitas ni cites la pregunta antes de responder. NUNCA agregues introducciones tipo "Respuesta:" o comillas envolviendo el texto — ve directo a la respuesta, en oraciones normales.\n' +
-      '7. Si la pregunta pide VARIOS datos a la vez (ej: "indique su comuna y teléfono", "nombre y correo"), responde TODOS los datos pedidos, no solo el primero.\n' +
+      '1. Usa solo informacion real del CV, perfil o datos adicionales entregados abajo. Nunca inventes datos concretos (anios, empresas, certificaciones) que no esten ahi.\n' +
+      '3. Para preguntas sobre experiencia, motivacion o habilidades, usa el CV y perfil para dar una respuesta real y especifica.\n' +
+      '5. MUY IMPORTANTE: personaliza la respuesta segun el AVISO DE TRABAJO especifico de abajo (rubro, productos, marca, tareas mencionadas). Si el aviso es de venta de zapatillas, tu respuesta debe conectar con calzado/retail de zapatillas; si es de una cafeteria, con cafe y atencion en cafeterias; etc. No des una respuesta generica que serviria igual para cualquier aviso -- debe notarse que leiste este aviso en particular.\n' +
+      '6. Responde en TEXTO PLANO, como si lo escribieras directo en un formulario web. NUNCA uses formato markdown (nada de #, ##, **, -, listas ni titulos). NUNCA repitas ni cites la pregunta antes de responder. NUNCA agregues introducciones tipo "Respuesta:" o comillas envolviendo el texto -- ve directo a la respuesta, en oraciones normales.\n' +
+      '7. Si la pregunta pide VARIOS datos a la vez (ej: "indique su comuna y telefono", "nombre y correo"), responde TODOS los datos pedidos, no solo el primero.\n' +
+      '8. SE CONCISO Y EVITA REDUNDANCIA: no digas la misma idea dos veces con distintas palabras. Si una oracion ya cubrio el punto, no agregues otra oracion que repita lo mismo de forma mas "elegante" o formal. Prefiere una respuesta corta y directa antes que una larga que da vueltas. Usa el tono indicado en el analisis previo (si lo hay) en vez de sonar siempre igual de formal o acartonado en todas las respuestas.\n' +
       (bloqueOpciones
-        ? '2. Si la pregunta es sobre algo que NO está en tu información y no puedes inferirlo razonablemente, responde: SINRESPUESTA\n' +
+        ? '2. Si la pregunta es sobre algo que NO esta en tu informacion y no puedes inferirlo razonablemente, responde: SINRESPUESTA\n' +
           '4. Debes elegir una de las opciones dadas textualmente, o SINRESPUESTA si ninguna aplica.\n'
-        : '2. Si no tienes el dato exacto que pide la pregunta, NUNCA respondas SINRESPUESTA ni dejes el campo vacío: responde con honestidad, reconociendo que no tienes esa experiencia específica, pero conectándolo con la experiencia real más cercana que sí tengas (ej: "No cuento con experiencia directa en ese rubro, pero tengo experiencia en atención al cliente y ventas retail que me permite adaptarme rápido"). Solo usa SINRESPUESTA si la pregunta es completamente irrelevante para un postulante a empleo.\n') +
+        : '2. Si no tienes el dato exacto que pide la pregunta, NUNCA respondas SINRESPUESTA ni dejes el campo vacio: responde con honestidad, reconociendo que no tienes esa experiencia especifica, pero conectandolo con la experiencia real mas cercana que si tengas (ej: "No cuento con experiencia directa en ese rubro, pero tengo experiencia en atencion al cliente y ventas retail que me permite adaptarme rapido"). Solo usa SINRESPUESTA si la pregunta es completamente irrelevante para un postulante a empleo.\n') +
       '\n' +
-      'Perfil: ' + (p.bio||'Sin información de perfil aún') + '\n' +
+      bloqueAnalisis +
+      'Perfil: ' + (p.bio||'Sin informacion de perfil aun') + '\n' +
       'Nombre: ' + (p.nombre||'') + '\n' +
       'Email: ' + (p.email||'') + '\n' +
-      'Teléfono: ' + (p.tel||'') + '\n' +
+      'Telefono: ' + (p.tel||'') + '\n' +
       'Comuna de residencia: ' + (p.comuna||'') + '\n' +
       'Cargo buscado: ' + (p.cargo||'') + '\n' +
       'Renta esperada: ' + (p.renta||'') + '\n' +
       'Disponibilidad: ' + (p.disp||'') + '\n' +
       'Datos adicionales del candidato:\n' + (info||'Ninguno') + '\n' +
-      'AVISO DE TRABAJO (léelo completo y usa sus detalles específicos):\n' + (contexto||'').slice(0,2500) + '\n' +
+      'AVISO DE TRABAJO (leelo completo y usa sus detalles especificos):\n' + (contexto||'').slice(0,2500) + '\n' +
       bloqueOpciones +
       '\nPregunta del formulario: "' + pregunta + '"\n' +
       (opciones && opciones.length
-        ? 'Responde solo con el texto exacto de la opción elegida, o SINRESPUESTA.'
-        : 'Responde en primera persona, máx 2 oraciones, siempre con una respuesta honesta, útil y personalizada al aviso de arriba (nunca la dejes en blanco ni la hagas genérica).');
+        ? 'Responde solo con el texto exacto de la opcion elegida, o SINRESPUESTA.'
+        : 'Responde en primera persona, max 2 oraciones, siempre con una respuesta honesta, util, breve y personalizada al aviso de arriba (nunca la dejes en blanco ni la hagas generica ni redundante).');
+
 
     let messages;
     if (cvData) {
@@ -495,20 +559,23 @@ function seleccionarOpcion(el) {
   } catch(e) { return false; }
 }
 
-async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
+async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, analisis) {
   let interacciones = 0;
   await esperarOpciones(SELECTOR_OPCIONES, { timeout:2500 });
+  // Acotado al panel real del formulario — evita interferir con radios/checkboxes de otras
+  // partes de la página (filtros, ordenar por, etc.)
+  const panelForm = document.querySelector('.box_detail,[data-offers-grid-box-detail]') || document;
 
   // Radios nativos
   const gruposRadioVistos = new Set();
-  for (const radio of document.querySelectorAll('input[type=radio]')) {
+  for (const radio of panelForm.querySelectorAll('input[type=radio]')) {
     if (!esVisible(radio)) continue;
     const nombre = radio.name || '';
     const clave = nombre || radio;
     if (gruposRadioVistos.has(clave)) continue;
     gruposRadioVistos.add(clave);
     const grupo = nombre
-      ? [...document.querySelectorAll('input[type=radio][name="' + CSS.escape(nombre) + '"]')].filter(esVisible)
+      ? [...panelForm.querySelectorAll('input[type=radio][name="' + CSS.escape(nombre) + '"]')].filter(esVisible)
       : [radio];
     if (!grupo.length) continue;
     const opciones = grupo.map(r => ({ el:r, texto:textoDeOpcion(r) }));
@@ -516,7 +583,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
     let elegida = calcularRespuesta(pregunta, opciones, perfil);
     // Si no hay match universal y hay IA, que la IA elija entre las opciones usando perfil + info adicional
     if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
-      const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto));
+      const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
       if (respIA) {
         const rNorm = n(respIA);
         elegida = opciones.find(o => rNorm.includes(n(o.texto)) || n(o.texto).length < 4 && rNorm.startsWith(n(o.texto)));
@@ -533,7 +600,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
 
   // Checkboxes
   const gruposCbVistos = new Set();
-  for (const cb of document.querySelectorAll('input[type=checkbox]')) {
+  for (const cb of panelForm.querySelectorAll('input[type=checkbox]')) {
     if (!esVisible(cb)) continue;
     const textoCb = n(textoDeOpcion(cb) || (cb.closest('label,div') && cb.closest('label,div').textContent) || '');
     if (textoCb.includes('acepto') || textoCb.includes('terminos') || textoCb.includes('politica') || textoCb.includes('autorizo')) {
@@ -543,12 +610,12 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
     const nombre = cb.name || '';
     if (nombre && !gruposCbVistos.has(nombre)) {
       gruposCbVistos.add(nombre);
-      const grupo = [...document.querySelectorAll('input[type=checkbox][name="' + CSS.escape(nombre) + '"]')].filter(esVisible);
+      const grupo = [...panelForm.querySelectorAll('input[type=checkbox][name="' + CSS.escape(nombre) + '"]')].filter(esVisible);
       const opciones = grupo.map(c => ({ el:c, texto:textoDeOpcion(c) }));
       const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(cb)) || getLabel(cb);
       let elegida = calcularRespuesta(pregunta, opciones, perfil);
       if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
-        const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto));
+        const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
         if (respIA) {
           const rNorm = n(respIA);
           elegida = opciones.find(o => rNorm.includes(n(o.texto)));
@@ -565,7 +632,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
   }
 
   // Widgets interactivos
-  const widgets = [...document.querySelectorAll('[role="radio"],[role="option"],[aria-checked]:not(input)')]
+  const widgets = [...panelForm.querySelectorAll('[role="radio"],[role="option"],[aria-checked]:not(input)')]
     .filter(el => el.tagName !== 'INPUT' && esVisible(el));
   const gruposWidgetVistos = new Set();
   for (const widget of widgets) {
@@ -578,7 +645,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
     const pregunta = textoPreguntaContenedor(contenedor);
     let elegida = calcularRespuesta(pregunta, opciones, perfil);
     if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
-      const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto));
+      const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
       if (respIA) {
         const rNorm = n(respIA);
         elegida = opciones.find(o => rNorm.includes(n(o.texto)));
@@ -597,7 +664,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto) {
 }
 
 // ── Rellenar formulario ───────────────────────────────────────
-async function rellenar(contexto) {
+async function rellenar(contexto, analisis) {
   await sleep(1000);
   if (!activo) return { n2:0, respuestasLog:[] };
   const p = (cfg && cfg.perfil) || {};
@@ -605,10 +672,12 @@ async function rellenar(contexto) {
   const respuestasLog = [];
 
   // Opciones (radios, checkboxes, widgets)
-  n2 += await manejarGruposDeOpciones(p, cfg, respuestasLog, contexto);
+  n2 += await manejarGruposDeOpciones(p, cfg, respuestasLog, contexto, analisis);
 
-  // Textareas e inputs
-  for (const el of document.querySelectorAll('textarea:not([style*="display:none"]),input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=file]):not([type=radio]):not([type=checkbox])')) {
+  // Textareas e inputs — acotado al panel real del formulario, para no tocar el buscador de arriba
+  // ni ningún otro campo de texto que esté fuera de las preguntas de postulación.
+  const panelForm = document.querySelector('.box_detail,[data-offers-grid-box-detail]') || document;
+  for (const el of panelForm.querySelectorAll('textarea:not([style*="display:none"]),input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=file]):not([type=radio]):not([type=checkbox])')) {
     if (!el.offsetParent) continue;
     const labelRaw = getLabel(el);
     const lbl = n(labelRaw);
@@ -631,7 +700,7 @@ async function rellenar(contexto) {
       // Preguntas de discapacidad — responder con IA si está disponible, sino "No"
       if (cfg && cfg.apiKey) {
         msg('IA respondiendo…', '#7C3AED');
-        val = await aiResponde(labelRaw, contexto);
+        val = await aiResponde(labelRaw, contexto, null, analisis);
         fueIA = !!val;
         await sleep(200);
       } else {
@@ -642,7 +711,7 @@ async function rellenar(contexto) {
       // Cualquier campo no cubierto por los datos objetivos de arriba se resuelve con IA,
       // usando el perfil, el CV, la "información adicional" y el aviso completo (no respuestas fijas).
       msg('IA respondiendo…', '#7C3AED');
-      val = await aiResponde(labelRaw, contexto);
+      val = await aiResponde(labelRaw, contexto, null, analisis);
       fueIA = !!val;
       await sleep(200);
     }
@@ -702,11 +771,14 @@ async function postular(url, id, titulo) {
   btn.click();
   await sleep(2000);
 
-  const hayForm = [...document.querySelectorAll('textarea,input[type=radio]')].some(el => el.offsetParent && !el.closest('.hide'));
+  const panelPostForm = document.querySelector('.box_detail,[data-offers-grid-box-detail]') || document;
+  const hayForm = [...panelPostForm.querySelectorAll('textarea,input[type=radio]')].some(el => el.offsetParent && !el.closest('.hide'));
 
   if (hayForm) {
+    msg('Analizando aviso…', '#7C3AED');
+    const analisis = await analizarOferta(contexto);
     msg('Rellenando formulario…', '#D97706');
-    const { n2, respuestasLog } = await rellenar(contexto);
+    const { n2, respuestasLog } = await rellenar(contexto, analisis);
     await sleep(1000);
 
     // Modo revisión: pausar y mostrar respuestas al usuario
