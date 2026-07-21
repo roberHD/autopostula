@@ -263,18 +263,30 @@ function renderLog(entries) {
          </div>`
       : '';
 
+    const tieneRespuestas = e.status === 'ok' && Array.isArray(e.respuestas) && e.respuestas.length > 0;
+
     div.innerHTML = `
       <span class="log-icon">${cfg.icon}</span>
       <div class="log-text">
         <div class="log-title" style="display:flex;align-items:center;gap:5px;">
           ${e.title || 'Oferta'}
           <span style="font-size:9px;font-weight:700;color:${cfg.color};background:${cfg.color}18;padding:1px 5px;border-radius:8px;">${cfg.label}</span>
+          ${tieneRespuestas ? `<span class="log-expand-hint">Ver respuestas (${e.respuestas.length}) ↗</span>` : ''}
         </div>
         ${e.reason ? `<div class="log-reason">${e.reason}</div>` : ''}
         ${pendientesHtml}
       </div>
       <span class="log-time">${time}</span>
     `;
+
+    if (tieneRespuestas) {
+      div.classList.add('expandible');
+      div.addEventListener('click', () => {
+        const url = chrome.runtime.getURL('historial.html') + '?uid=' + encodeURIComponent(e.uid || '');
+        chrome.tabs.create({ url });
+      });
+    }
+
     logListEl.appendChild(div);
   });
 

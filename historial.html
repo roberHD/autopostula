@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title>AutoPostula — Historial</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #F8F9FC;
+  --surface:  #FFFFFF;
+  --border:   #E4E7EF;
+  --accent:   #2563EB;
+  --accent-h: #1D4ED8;
+  --accent-s: #EFF4FF;
+  --danger:   #DC2626;
+  --danger-s: #FEF2F2;
+  --success:  #16A34A;
+  --success-s:#F0FDF4;
+  --warn:     #D97706;
+  --text-1:   #111827;
+  --text-2:   #4B5563;
+  --text-3:   #9CA3AF;
+  --radius:   10px;
+  --shadow:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+}
+
+html { font-size: 15px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text-1);
+  min-height: 100vh;
+}
+
+.wrap { max-width: 720px; margin: 0 auto; padding: 32px 24px 60px; }
+
+.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text-2); text-decoration: none;
+  margin-bottom: 20px; cursor: pointer; background: none; border: none;
+}
+.back-link:hover { color: var(--accent); }
+
+.header-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow);
+}
+.header-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.header-meta { font-size: 12px; color: var(--text-3); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.status-pill {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+}
+.header-link { font-size: 12px; color: var(--accent); text-decoration: none; }
+.header-link:hover { text-decoration: underline; }
+
+.qa-item {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; margin-bottom: 10px;
+}
+.qa-q { font-size: 13px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
+.qa-a { font-size: 14px; color: var(--text-1); line-height: 1.5; white-space: pre-wrap; }
+.qa-a.vacia { color: var(--text-3); font-style: italic; }
+
+.empty-state {
+  text-align: center; color: var(--text-3); font-size: 13px; padding: 40px 0;
+}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <button class="back-link" onclick="window.close()">← Cerrar</button>
+    <div id="content"><div class="empty-state">Cargando…</div></div>
+  </div>
+  <script src="historial.js"></script>
+</body>
+</html>
