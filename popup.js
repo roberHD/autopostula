@@ -466,16 +466,20 @@ const cvStatus    = document.getElementById('cv-status');
 const cvExtractBtn = document.getElementById('cv-extract-btn');
 const cvClearBtn  = document.getElementById('cv-clear');
 
-function setCVStatus(nombre, size) {
+function setCVStatus(nombre, size, tieneTexto) {
   const kb = Math.round((size || 0) / 1024);
-  if (cvStatus) cvStatus.innerHTML = '✅ <strong>' + nombre + '</strong> (' + kb + ' KB) — listo para usar con IA';
+  if (cvStatus) {
+    cvStatus.innerHTML = tieneTexto
+      ? '✅ <strong>' + nombre + '</strong> (' + kb + ' KB) — en texto plano, listo (ahorra tokens)'
+      : '✅ <strong>' + nombre + '</strong> (' + kb + ' KB) — listo para usar con IA (aún en PDF, extrae los datos para ahorrar tokens)';
+  }
   if (cvDropZone) { cvDropZone.style.borderColor = 'var(--success)'; cvDropZone.style.background = 'var(--success-s)'; }
   if (cvExtractBtn) cvExtractBtn.style.display = 'flex';
   if (cvClearBtn) cvClearBtn.style.display = 'block';
 }
 
 function clearCV() {
-  chrome.storage.local.remove(['cvBase64','cvNombre','cvSize'], () => {
+  chrome.storage.local.remove(['cvBase64','cvNombre','cvSize','cvTexto'], () => {
     if (cvStatus) cvStatus.innerHTML = '📄 Sube tu CV en PDF — la IA leerá tu información';
     if (cvDropZone) { cvDropZone.style.borderColor = ''; cvDropZone.style.background = ''; }
     if (cvExtractBtn) cvExtractBtn.style.display = 'none';
@@ -526,20 +530,21 @@ async function extraerDatosCV(base64, key) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 500,
+        max_tokens: 2000,
         messages: [{
           role: 'user',
           content: [
             { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
             { type: 'text', text:
               'Extrae la información de este CV y responde SOLO con un JSON válido con estos campos exactos:\n' +
-              '{"nombre":"","email":"","tel":"","comuna":"","cargo":"","bio":""}\n' +
+              '{"nombre":"","email":"","tel":"","comuna":"","cargo":"","bio":"","cvTexto":""}\n' +
               '- nombre: nombre completo de la persona\n' +
               '- email: email de contacto\n' +
               '- tel: teléfono de contacto\n' +
               '- comuna: comuna o ciudad de residencia si aparece\n' +
               '- cargo: último cargo o cargo objetivo que busca\n' +
               '- bio: resumen profesional de 2-3 oraciones en primera persona\n' +
+              '- cvTexto: transcribe en texto plano TODO el contenido relevante del CV para usarlo después en vez del PDF — experiencia laboral (empresa, cargo, período, funciones principales), educación, habilidades, certificaciones e idiomas. Usa \\n para separar líneas dentro del string. Sé completo pero no copies literalmente el diseño del PDF, solo el contenido en texto corrido.\n' +
               'Si no encuentras algún dato, deja el campo vacío. Responde SOLO el JSON, sin texto adicional.'
             }
           ]
@@ -562,14 +567,20 @@ async function extraerDatosCV(base64, key) {
     if (perfil.cargo  && !$('p-cargo').value)  $('p-cargo').value  = perfil.cargo;
     if (perfil.bio    && !$('p-bio').value)    $('p-bio').value    = perfil.bio;
 
+    // Guardar el CV en texto plano — desde ahora la IA usa esto en vez de re-adjuntar el PDF
+    // completo en cada pregunta del formulario (mucho más barato en tokens).
+    if (perfil.cvTexto) {
+      chrome.storage.local.set({ cvTexto: perfil.cvTexto });
+    }
+
     chrome.storage.local.get(['cvNombre','cvSize'], d => {
-      setCVStatus(d.cvNombre || 'CV.pdf', d.cvSize || 0);
+      setCVStatus(d.cvNombre || 'CV.pdf', d.cvSize || 0, !!perfil.cvTexto);
     });
-    toast('✨ Datos extraídos del CV — revisa y guarda');
+    toast(perfil.cvTexto ? '✨ Datos extraídos y CV guardado en texto (ahorra tokens)' : '✨ Datos extraídos del CV — revisa y guarda');
 
   } catch(e) {
-    chrome.storage.local.get(['cvNombre','cvSize'], d => {
-      setCVStatus(d.cvNombre || 'CV.pdf', d.cvSize || 0);
+    chrome.storage.local.get(['cvNombre','cvSize','cvTexto'], d => {
+      setCVStatus(d.cvNombre || 'CV.pdf', d.cvSize || 0, !!d.cvTexto);
     });
     toast('⚠ No se pudieron extraer los datos automáticamente');
   }
@@ -600,6 +611,6 @@ if (cvExtractBtn) cvExtractBtn.addEventListener('click', e => {
 });
 
 // Cargar CV guardado al abrir popup
-chrome.storage.local.get(['cvBase64','cvNombre','cvSize'], data => {
-  if (data.cvBase64) setCVStatus(data.cvNombre || 'CV.pdf', data.cvSize || 0);
+chrome.storage.local.get(['cvBase64','cvNombre','cvSize','cvTexto'], data => {
+  if (data.cvBase64) setCVStatus(data.cvNombre || 'CV.pdf', data.cvSize || 0, !!data.cvTexto);
 });

@@ -74,6 +74,33 @@ function pasa(tarjeta) {
   return true;
 }
 
+// -- CV: cargar la version en texto plano si ya fue extraida (barato), o el PDF crudo como
+// respaldo si el usuario aun no la ha generado (mas caro, se reprocesa el documento cada vez).
+function cargarCV() {
+  return new Promise(resolve => {
+    try {
+      chrome.storage.local.get(['cvTexto', 'cvBase64'], d => {
+        resolve({ texto: d.cvTexto || null, base64: d.cvBase64 || null });
+      });
+    } catch (e) { resolve({ texto: null, base64: null }); }
+  });
+}
+
+// Arma el array de mensajes para la API: si hay texto del CV ya extraido, se manda como texto
+// plano (barato, no requiere que el modelo reprocese el PDF). Si no, se adjunta el PDF (respaldo).
+function construirMensajesCV(instruccion, cv) {
+  if (cv && cv.texto) {
+    return [{ role: 'user', content: 'CV del candidato (texto extraido previamente):\n' + cv.texto + '\n\n' + instruccion }];
+  }
+  if (cv && cv.base64) {
+    return [{ role: 'user', content: [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: cv.base64 } },
+      { type: 'text', text: instruccion }
+    ]}];
+  }
+  return [{ role: 'user', content: instruccion }];
+}
+
 // -- IA: analisis previo de la oferta (UNA sola vez por postulacion) --
 // Analiza cargo, empresa, que prioriza la empresa, que fortalezas del candidato calzan mejor,
 // y que tono usar -- para no repetir ese analisis en cada una de las preguntas del formulario.
@@ -83,10 +110,7 @@ async function analizarOferta(contexto) {
   const p = (cfg && cfg.perfil) || {};
   const info = (cfg && cfg.info || []).map(it => '- ' + it.texto).join('\n');
   try {
-    const cvData = await new Promise(resolve => {
-      try { chrome.storage.local.get(['cvBase64'], d => resolve(d.cvBase64 || null)); }
-      catch(e) { resolve(null); }
-    });
+    const cv = await cargarCV();
     const instruccion =
       'Analiza este aviso de trabajo junto al perfil del candidato. Responde SOLO con un JSON valido, sin texto adicional, sin markdown, con exactamente esta forma:\n' +
       '{"cargo":"","empresa":"","prioridades":"","fortalezas":"","tono":""}\n' +
@@ -99,15 +123,7 @@ async function analizarOferta(contexto) {
       'Datos adicionales del candidato:\n' + (info||'Ninguno') + '\n\n' +
       'AVISO:\n' + contexto.slice(0,3000);
 
-    let messages;
-    if (cvData) {
-      messages = [{ role: 'user', content: [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: cvData } },
-        { type: 'text', text: instruccion }
-      ]}];
-    } else {
-      messages = [{ role: 'user', content: instruccion }];
-    }
+    const messages = construirMensajesCV(instruccion, cv);
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -136,10 +152,7 @@ async function aiResponde(pregunta, contexto, opciones, analisis) {
   const info = (cfg && cfg.info || []).map(it => '- ' + it.texto).join('\n');
 
   try {
-    const cvData = await new Promise(resolve => {
-      try { chrome.storage.local.get(['cvBase64'], d => resolve(d.cvBase64 || null)); }
-      catch(e) { resolve(null); }
-    });
+    const cv = await cargarCV();
 
     const bloqueOpciones = (opciones && opciones.length)
       ? '\nOpciones disponibles (debes responder EXACTAMENTE con el texto de una de estas, sin agregar nada mas):\n' +
@@ -187,15 +200,7 @@ async function aiResponde(pregunta, contexto, opciones, analisis) {
         : 'Responde en primera persona, max 2 oraciones, siempre con una respuesta honesta, util, breve y personalizada al aviso de arriba (nunca la dejes en blanco ni la hagas generica ni redundante).');
 
 
-    let messages;
-    if (cvData) {
-      messages = [{ role: 'user', content: [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: cvData } },
-        { type: 'text', text: instruccion }
-      ]}];
-    } else {
-      messages = [{ role: 'user', content: instruccion }];
-    }
+    const messages = construirMensajesCV(instruccion, cv);
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
