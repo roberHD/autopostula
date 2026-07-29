@@ -101,6 +101,16 @@ function construirMensajesCV(instruccion, cv) {
   return [{ role: 'user', content: instruccion }];
 }
 
+// Carga el "perfil de estilo profesional" generado en la conversacion del popup (como comunica,
+// fortalezas a destacar, objetivos, motivaciones) -- se guarda aparte de cfg.config.
+function cargarEstiloProfesional() {
+  return new Promise(resolve => {
+    try {
+      chrome.storage.local.get(['estiloProfesional'], d => resolve(d.estiloProfesional || null));
+    } catch (e) { resolve(null); }
+  });
+}
+
 // -- IA: analisis previo de la oferta (UNA sola vez por postulacion) --
 // Analiza cargo, empresa, que prioriza la empresa, que fortalezas del candidato calzan mejor,
 // y que tono usar -- para no repetir ese analisis en cada una de las preguntas del formulario.
@@ -153,6 +163,7 @@ async function aiResponde(pregunta, contexto, opciones, analisis) {
 
   try {
     const cv = await cargarCV();
+    const estilo = await cargarEstiloProfesional();
 
     const bloqueOpciones = (opciones && opciones.length)
       ? '\nOpciones disponibles (debes responder EXACTAMENTE con el texto de una de estas, sin agregar nada mas):\n' +
@@ -166,6 +177,15 @@ async function aiResponde(pregunta, contexto, opciones, analisis) {
         '- Que prioriza la empresa: ' + (analisis.prioridades||'') + '\n' +
         '- Tus fortalezas mas relevantes para ESTA oferta: ' + (analisis.fortalezas||'') + '\n' +
         '- Tono a usar en las respuestas: ' + (analisis.tono||'') + '\n\n'
+      : '';
+
+    const bloqueEstilo = (estilo && estilo.confirmado)
+      ? 'Perfil de estilo del candidato (de como el mismo se comunica -- esta es su voz autentica, uselo como base para TODAS las respuestas, ajustandolo levemente si el tono sugerido arriba para esta oferta lo amerita):\n' +
+        '- Resumen: ' + (estilo.resumen||'') + '\n' +
+        '- Fortalezas que quiere destacar: ' + ((estilo.fortalezas||[]).join(', ')) + '\n' +
+        '- Objetivo laboral: ' + (estilo.objetivos||'') + '\n' +
+        '- Motivaciones: ' + (estilo.motivaciones||'') + '\n' +
+        '- Como escribe -- formalidad: ' + (estilo.estilo?.formalidad||'') + ', longitud preferida: ' + (estilo.estilo?.longitud||'') + ', cercania: ' + (estilo.estilo?.cercania||'') + ', nivel tecnico: ' + (estilo.estilo?.nivelTecnico||'') + ', seguridad al responder: ' + (estilo.estilo?.seguridad||'') + '\n\n'
       : '';
 
     const instruccion =
@@ -183,6 +203,7 @@ async function aiResponde(pregunta, contexto, opciones, analisis) {
         : '2. Si no tienes el dato exacto que pide la pregunta, NUNCA respondas SINRESPUESTA ni dejes el campo vacio: responde con honestidad, reconociendo que no tienes esa experiencia especifica, pero conectandolo con la experiencia real mas cercana que si tengas (ej: "No cuento con experiencia directa en ese rubro, pero tengo experiencia en atencion al cliente y ventas retail que me permite adaptarme rapido"). Solo usa SINRESPUESTA si la pregunta es completamente irrelevante para un postulante a empleo.\n') +
       '\n' +
       bloqueAnalisis +
+      bloqueEstilo +
       'Perfil: ' + (p.bio||'Sin informacion de perfil aun') + '\n' +
       'Nombre: ' + (p.nombre||'') + '\n' +
       'Email: ' + (p.email||'') + '\n' +

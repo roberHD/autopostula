@@ -614,3 +614,259 @@ if (cvExtractBtn) cvExtractBtn.addEventListener('click', e => {
 chrome.storage.local.get(['cvBase64','cvNombre','cvSize','cvTexto'], data => {
   if (data.cvBase64) setCVStatus(data.cvNombre || 'CV.pdf', data.cvSize || 0, !!data.cvTexto);
 });
+
+// ═══════════════════════════════════════════════════════════════
+//  TU ESTILO PROFESIONAL — conversación + perfil profesional
+// ═══════════════════════════════════════════════════════════════
+const MAX_PREGUNTAS_ESTILO = 8;
+
+const elInvitacion   = $('estilo-invitacion');
+const elResumenBox   = $('estilo-resumen');
+const elResumenTexto = $('estilo-resumen-texto');
+const elChat         = $('estilo-chat');
+const elMensajes     = $('estilo-mensajes');
+const elProgreso     = $('estilo-progreso');
+const elInputChat    = $('estilo-input');
+const elTarjeta      = $('estilo-tarjeta');
+const elEstrellas    = $('estilo-estrellas');
+const elModificarBox = $('estilo-modificar-box');
+
+let conversacionEstilo = [];   // [{role:'ia'|'user', texto}]
+let perfilEstiloActual = null; // JSON generado, pendiente de confirmar
+let estrellasElegidas = 0;
+
+function estiloApiKey() {
+  return apiKeyEl?.value?.trim() || '';
+}
+
+async function llamarClaudeTexto(prompt, maxTokens) {
+  const key = estiloApiKey();
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: maxTokens || 400,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  const data = await res.json();
+  const texto = data.content && data.content[0] && data.content[0].text || '';
+  const jsonMatch = texto.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Sin JSON en respuesta');
+  return JSON.parse(jsonMatch[0]);
+}
+
+function transcriptEstilo() {
+  return conversacionEstilo.map(m => (m.role === 'ia' ? 'IA: ' : 'Candidato: ') + m.texto).join('\n');
+}
+
+function agregarMensajeChat(role, texto) {
+  conversacionEstilo.push({ role, texto });
+  const div = document.createElement('div');
+  div.className = 'estilo-msg ' + (role === 'ia' ? 'ia' : 'user');
+  div.textContent = texto;
+  elMensajes.appendChild(div);
+  elMensajes.scrollTop = elMensajes.scrollHeight;
+}
+
+function mostrarEstado(nombre) {
+  [elInvitacion, elResumenBox, elChat, elTarjeta].forEach(el => el && el.classList.add('hidden'));
+  const map = { invitacion: elInvitacion, resumen: elResumenBox, chat: elChat, tarjeta: elTarjeta };
+  if (map[nombre]) map[nombre].classList.remove('hidden');
+}
+
+async function iniciarConversacionEstilo() {
+  if (!estiloApiKey()) { toast('⚠ Necesitas una API key para esta conversación'); return; }
+  conversacionEstilo = [];
+  elMensajes.innerHTML = '';
+  mostrarEstado('chat');
+  await pedirSiguientePregunta();
+}
+
+async function pedirSiguientePregunta() {
+  const numPreguntas = conversacionEstilo.filter(m => m.role === 'ia').length;
+  elProgreso.textContent = 'Pregunta ' + Math.min(numPreguntas + 1, MAX_PREGUNTAS_ESTILO) + ' de ~' + MAX_PREGUNTAS_ESTILO;
+
+  if (numPreguntas >= MAX_PREGUNTAS_ESTILO) {
+    await generarPerfilProfesional();
+    return;
+  }
+
+  elInputChat.disabled = true;
+  const prompt =
+    'Estas en una conversacion breve con un candidato para armar su "perfil profesional", que se usara despues para escribir respuestas de postulaciones de trabajo que suenen como si el mismo las hubiera escrito.\n\n' +
+    'Objetivo de la conversacion (guiate por esto, nunca se lo digas explicitamente al candidato):\n' +
+    '1. Informacion profesional: que ha hecho, que sabe hacer, que busca.\n' +
+    '2. Identidad profesional: que valora, como trabaja, que lo motiva.\n' +
+    '3. Estilo de comunicacion -- esto NO se pregunta directamente, se OBSERVA en como escribe sus respuestas: si es breve o extenso, si da contexto antes de responder, si usa ejemplos concretos, si es formal o cercano, si usa lenguaje tecnico, si escribe con seguridad.\n\n' +
+    'Reglas:\n' +
+    '- Nunca hagas una pregunta que no vaya a cambiar como se redactaria una respuesta de postulacion (nada de test de personalidad, nada de "color favorito").\n' +
+    '- Adapta la pregunta segun lo que ya sabes: si parece estudiante, pregunta distinto que si tiene anios de experiencia.\n' +
+    '- Una pregunta a la vez, natural y conversacional -- no debe sentirse como llenar un formulario.\n' +
+    '- Maximo ' + MAX_PREGUNTAS_ESTILO + ' preguntas en total. Si ya tienes suficiente informacion de las 3 dimensiones antes de llegar al maximo, marca terminado:true.\n\n' +
+    (numPreguntas === 0
+      ? 'Esta es la primera pregunta. Se calida y directa, algo como "que tipo de trabajo estas buscando ahora mismo".\n\n'
+      : 'Historial de la conversacion hasta ahora:\n' + transcriptEstilo() + '\n\n') +
+    'Responde SOLO JSON valido, sin texto adicional, sin markdown: {"pregunta":"","terminado":false}';
+
+  try {
+    const r = await llamarClaudeTexto(prompt, 300);
+    if (r.terminado) {
+      await generarPerfilProfesional();
+    } else {
+      agregarMensajeChat('ia', r.pregunta || '¿Puedes contarme un poco más sobre tu experiencia?');
+      elInputChat.disabled = false;
+      elInputChat.focus();
+    }
+  } catch (e) {
+    agregarMensajeChat('ia', '⚠ Tuve un problema para seguir la conversación. Intenta de nuevo.');
+    elInputChat.disabled = false;
+  }
+}
+
+async function enviarRespuestaUsuario() {
+  const texto = elInputChat.value.trim();
+  if (!texto) return;
+  agregarMensajeChat('user', texto);
+  elInputChat.value = '';
+  elInputChat.disabled = true;
+  await pedirSiguientePregunta();
+}
+
+async function generarPerfilProfesional() {
+  elProgreso.textContent = 'Armando tu perfil…';
+  elInputChat.disabled = true;
+  const prompt =
+    'Con base en esta conversacion completa, arma el "Perfil Profesional" del candidato para usarlo despues al redactar respuestas de postulaciones laborales.\n\n' +
+    'MUY IMPORTANTE: nunca digas "el candidato ES tal cosa". Describe siempre como vamos a REFLEJAR o TRANSMITIR estas caracteristicas en las respuestas -- es una lectura para efectos laborales, no una definicion de quien es la persona.\n\n' +
+    'Conversacion completa:\n' + transcriptEstilo() + '\n\n' +
+    'Responde SOLO con JSON valido, sin texto adicional, sin markdown, con esta forma exacta:\n' +
+    '{"resumen":"","fortalezas":["",""],"objetivos":"","motivaciones":"","estilo":{"formalidad":"","longitud":"","cercania":"","nivelTecnico":"","seguridad":""},"confianza":80}\n' +
+    '- resumen: 1-2 oraciones sobre su perfil profesional (experiencia principal, area)\n' +
+    '- fortalezas: 3 a 5 fortalezas concretas que destacaremos en las postulaciones\n' +
+    '- objetivos: su objetivo laboral en una frase\n' +
+    '- motivaciones: que lo motiva profesionalmente, en una frase\n' +
+    '- estilo.formalidad/cercania/seguridad: "Alta", "Media" o "Baja"\n' +
+    '- estilo.longitud: "Corta", "Media" o "Larga"\n' +
+    '- estilo.nivelTecnico: "Alto", "Medio" o "Bajo"\n' +
+    '- confianza: numero de 0 a 100, que tan segura esta la lectura segun cuanta informacion real dio el candidato en la conversacion';
+
+  try {
+    const perfil = await llamarClaudeTexto(prompt, 500);
+    perfilEstiloActual = perfil;
+    mostrarTarjetaPerfil(perfil);
+  } catch (e) {
+    toast('⚠ No se pudo generar tu perfil. Intenta de nuevo.');
+    mostrarEstado('invitacion');
+  }
+}
+
+function mostrarTarjetaPerfil(perfil) {
+  $('ec-resumen').textContent = perfil.resumen || '—';
+  $('ec-fortalezas').innerHTML = (perfil.fortalezas || []).map(f => '<span class="estilo-chip">' + f + '</span>').join('');
+  $('ec-objetivos').textContent = perfil.objetivos || '—';
+  const e = perfil.estilo || {};
+  $('ec-estilo').textContent =
+    'Formalidad: ' + (e.formalidad||'—') + ' · Longitud: ' + (e.longitud||'—') + ' · Cercanía: ' + (e.cercania||'—') +
+    ' · Nivel técnico: ' + (e.nivelTecnico||'—') + ' · Seguridad: ' + (e.seguridad||'—');
+  $('ec-confianza').textContent = (perfil.confianza != null ? perfil.confianza : '—') + '%';
+
+  estrellasElegidas = 0;
+  renderEstrellas();
+  elModificarBox.classList.add('hidden');
+  mostrarEstado('tarjeta');
+}
+
+function renderEstrellas() {
+  elEstrellas.innerHTML = '';
+  for (let i = 1; i <= 5; i++) {
+    const s = document.createElement('span');
+    s.textContent = '★';
+    if (i <= estrellasElegidas) s.classList.add('on');
+    s.addEventListener('click', () => { estrellasElegidas = i; renderEstrellas(); });
+    elEstrellas.appendChild(s);
+  }
+}
+
+function mostrarResumenGuardado(perfil) {
+  const e = perfil.estilo || {};
+  elResumenTexto.innerHTML =
+    '<strong>' + (perfil.resumen || '') + '</strong><br>' +
+    (perfil.fortalezas || []).map(f => '<span class="estilo-chip">' + f + '</span>').join('') + '<br>' +
+    'Tono: ' + (e.formalidad||'—') + ' / ' + (e.cercania||'—') + ' · Confianza: ' + (perfil.confianza != null ? perfil.confianza : '—') + '%';
+  mostrarEstado('resumen');
+}
+
+function guardarPerfilConfirmado(perfil, confirmado) {
+  const registro = { ...perfil, confirmado, calificacion: estrellasElegidas, fecha: Date.now() };
+  chrome.storage.local.set({ estiloProfesional: registro }, () => {
+    perfilEstiloActual = registro;
+    if (confirmado) {
+      toast('✅ Perfil guardado — la IA lo usará en tus postulaciones');
+      mostrarResumenGuardado(registro);
+    }
+  });
+}
+
+// Eventos
+$('estilo-empezar-btn')?.addEventListener('click', iniciarConversacionEstilo);
+$('estilo-editar-btn')?.addEventListener('click', () => {
+  if (perfilEstiloActual) mostrarTarjetaPerfil(perfilEstiloActual);
+  else iniciarConversacionEstilo();
+});
+$('estilo-send-btn')?.addEventListener('click', enviarRespuestaUsuario);
+elInputChat?.addEventListener('keydown', e => { if (e.key === 'Enter' && !elInputChat.disabled) enviarRespuestaUsuario(); });
+
+$('estilo-ok-btn')?.addEventListener('click', () => guardarPerfilConfirmado(perfilEstiloActual, true));
+
+$('estilo-modificar-btn')?.addEventListener('click', () => {
+  elModificarBox.classList.remove('hidden');
+  $('estilo-modificar-input')?.focus();
+});
+
+$('estilo-modificar-send')?.addEventListener('click', async () => {
+  const correccion = $('estilo-modificar-input').value.trim();
+  if (!correccion) return;
+  toast('Actualizando tu perfil…');
+  const prompt =
+    'Este es el perfil profesional actual generado para un candidato, para usarlo al redactar respuestas de postulaciones laborales:\n' +
+    JSON.stringify(perfilEstiloActual) + '\n\n' +
+    'El candidato dice que quiere cambiar lo siguiente: "' + correccion + '"\n\n' +
+    'Genera una version actualizada del mismo JSON (misma forma exacta), incorporando ese cambio. ' +
+    'Recuerda: nunca digas "el candidato ES tal cosa", describe como se va a REFLEJAR en las respuestas. ' +
+    'Responde SOLO JSON valido, sin texto adicional, sin markdown.';
+  try {
+    const actualizado = await llamarClaudeTexto(prompt, 500);
+    perfilEstiloActual = actualizado;
+    $('estilo-modificar-input').value = '';
+    mostrarTarjetaPerfil(actualizado);
+  } catch (e) {
+    toast('⚠ No se pudo actualizar el perfil');
+  }
+});
+
+$('estilo-rehacer-btn')?.addEventListener('click', () => {
+  if (confirm('¿Quieres volver a hacer la conversación desde el principio?')) {
+    iniciarConversacionEstilo();
+  }
+});
+
+// Cargar estado guardado al abrir el popup
+chrome.storage.local.get(['estiloProfesional'], data => {
+  const p = data.estiloProfesional;
+  if (p && p.confirmado) {
+    perfilEstiloActual = p;
+    mostrarResumenGuardado(p);
+  } else if (p) {
+    perfilEstiloActual = p;
+    mostrarTarjetaPerfil(p);
+  } else {
+    mostrarEstado('invitacion');
+  }
+});

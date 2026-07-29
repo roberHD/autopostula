@@ -305,14 +305,6 @@ textarea.field { resize: vertical; min-height: 56px; }
 .log-reason { color: var(--text-3); font-size: 10px; }
 .log-time { font-size: 10px; color: var(--text-3); flex-shrink: 0; }
 .log-expand-hint { font-size: 9px; color: var(--accent); margin-left: auto; flex-shrink: 0; white-space: nowrap; }
-.log-detail { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
-.log-detail-item {
-  padding: 6px 8px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.log-detail-q { font-size: 10px; font-weight: 700; color: var(--text-2); margin-bottom: 2px; }
-.log-detail-a { font-size: 11px; color: var(--text-1); line-height: 1.4; white-space: pre-wrap; }
-.log-detail-a.vacia { color: var(--text-3); font-style: italic; }
 
 /* ── Footer ───────────────────────────────────────────────── */
 .footer {
@@ -338,6 +330,39 @@ textarea.field { resize: vertical; min-height: 56px; }
 
 /* ── Divider helper ──────────────────────────────────────── */
 .spacer { height: 6px; background: var(--bg); }
+/* ── Tu estilo profesional (chat + tarjeta) ──────────────────── */
+.hidden { display: none !important; }
+
+.estilo-mensajes {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 260px; overflow-y: auto;
+  padding: 8px; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border);
+}
+.estilo-msg {
+  max-width: 85%; padding: 7px 10px; border-radius: 10px; font-size: 12px; line-height: 1.4;
+}
+.estilo-msg.ia   { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); color: var(--text-1); }
+.estilo-msg.user { align-self: flex-end;   background: var(--accent);  color: #fff; }
+
+.estilo-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; box-shadow: var(--shadow);
+}
+.estilo-card-title { font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+.estilo-card-row { margin-bottom: 9px; }
+.estilo-card-label { font-size: 10px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .02em; }
+.estilo-card-row > div { font-size: 12px; color: var(--text-1); margin-top: 2px; line-height: 1.45; }
+.estilo-card-footer {
+  font-size: 10px; color: var(--text-3); font-style: italic; line-height: 1.5;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.estilo-chip {
+  display: inline-block; font-size: 10px; font-weight: 600; color: var(--accent);
+  background: var(--accent-s); padding: 2px 8px; border-radius: 10px; margin: 2px 4px 2px 0;
+}
+.estilo-estrellas { display: flex; justify-content: center; gap: 6px; font-size: 22px; }
+.estilo-estrellas span { cursor: pointer; color: var(--border); }
+.estilo-estrellas span.on { color: var(--warn); }
 </style>
 </head>
 <body>
@@ -444,6 +469,15 @@ textarea.field { resize: vertical; min-height: 56px; }
       <button class="btn btn-ghost" id="cv-clear" style="display:none;color:var(--danger);font-size:11px;">🗑 Eliminar CV</button>
     </div>
 
+    <!-- Texto del CV ya extraído: se usa en vez del PDF en cada pregunta, para ahorrar costo -->
+    <div id="cv-texto-wrap" style="display:none;margin-bottom:12px;">
+      <div class="field-group">
+        <span class="field-label">Texto de tu CV (extraído una vez — revísalo y corrígelo si hace falta)</span>
+        <textarea class="field" id="cv-texto" rows="6" style="font-size:11px;" placeholder="Experiencia, educación, habilidades…"></textarea>
+        <span style="font-size:10px;color:var(--text-3);margin-top:4px;display:block;">Esto reemplaza al PDF en cada respuesta de la IA — más rápido y más barato que mandar el archivo completo cada vez.</span>
+      </div>
+    </div>
+
     <!-- Campos del perfil — vacíos por defecto para cualquier usuario -->
     <div class="profile-grid">
       <div class="field-group">
@@ -481,6 +515,65 @@ textarea.field { resize: vertical; min-height: 56px; }
     </div>
   </div>
 </div>
+
+<!-- TU ESTILO PROFESIONAL -->
+<div class="section" id="estilo-section">
+  <div class="section-head">
+    <span class="section-title">Tu estilo profesional</span>
+  </div>
+
+  <!-- Estado 1: invitación inicial (sin perfil generado aún) -->
+  <div id="estilo-invitacion">
+    <p style="font-size:11px;color:var(--text-3);margin-bottom:10px;line-height:1.5;">
+      Una conversación corta (7-8 preguntas) para que la IA entienda cómo comunicas tu experiencia —
+      no solo qué dices, sino cómo lo dices — y escriba postulaciones que suenen a ti.
+    </p>
+    <button class="btn btn-primary" id="estilo-empezar-btn" style="width:100%">💬 Empezar conversación (2 min)</button>
+  </div>
+
+  <!-- Estado 2: resumen compacto (ya hay un perfil confirmado) -->
+  <div id="estilo-resumen" class="hidden">
+    <div id="estilo-resumen-texto" style="font-size:11px;color:var(--text-2);line-height:1.5;margin-bottom:8px;"></div>
+    <button class="btn btn-ghost" id="estilo-editar-btn" style="width:100%">Ver / rehacer conversación</button>
+  </div>
+
+  <!-- Estado 3: chat activo -->
+  <div id="estilo-chat" class="hidden">
+    <div id="estilo-progreso" style="font-size:10px;color:var(--text-3);margin-bottom:6px;"></div>
+    <div id="estilo-mensajes" class="estilo-mensajes"></div>
+    <div class="input-row" style="margin-top:8px;">
+      <input class="field" id="estilo-input" placeholder="Escribe tu respuesta…">
+      <button class="btn btn-primary" id="estilo-send-btn">Enviar</button>
+    </div>
+  </div>
+
+  <!-- Estado 4: tarjeta de perfil generado, pendiente de confirmar -->
+  <div id="estilo-tarjeta" class="hidden">
+    <div class="estilo-card">
+      <div class="estilo-card-title">Así entendimos tu perfil</div>
+      <div class="estilo-card-row"><span class="estilo-card-label">Resumen</span><div id="ec-resumen"></div></div>
+      <div class="estilo-card-row"><span class="estilo-card-label">Fortalezas que destacaremos</span><div id="ec-fortalezas"></div></div>
+      <div class="estilo-card-row"><span class="estilo-card-label">Objetivo laboral</span><div id="ec-objetivos"></div></div>
+      <div class="estilo-card-row"><span class="estilo-card-label">Estilo de comunicación</span><div id="ec-estilo"></div></div>
+      <div class="estilo-card-row"><span class="estilo-card-label">Confianza de esta lectura</span><div id="ec-confianza"></div></div>
+      <div class="estilo-card-footer">Este perfil no intenta definir quién eres. Solo resume lo que usaremos para escribir postulaciones que se parezcan a cómo tú mismo las escribirías. Puedes modificarlo cuando quieras.</div>
+    </div>
+    <div style="text-align:center;margin:10px 0 6px;font-size:12px;color:var(--text-2);">¿Qué tan bien te representa?</div>
+    <div id="estilo-estrellas" class="estilo-estrellas"></div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
+      <button class="btn btn-primary" id="estilo-ok-btn">🟢 Sí, está bien</button>
+      <button class="btn btn-ghost" id="estilo-modificar-btn">🟡 Quiero modificar algo</button>
+      <button class="btn btn-ghost" id="estilo-rehacer-btn">🔵 Quiero volver a responder</button>
+    </div>
+    <!-- Caja para "¿qué cambiarías?" tras elegir modificar -->
+    <div id="estilo-modificar-box" class="hidden" style="margin-top:8px;">
+      <textarea class="field" id="estilo-modificar-input" rows="2" placeholder="¿Qué cambiarías de esta lectura?"></textarea>
+      <button class="btn btn-primary" id="estilo-modificar-send" style="width:100%;margin-top:6px;">Actualizar perfil</button>
+    </div>
+  </div>
+</div>
+
+<div class="spacer"></div>
 
 <!-- INFORMACIÓN ADICIONAL -->
 <div class="section">
