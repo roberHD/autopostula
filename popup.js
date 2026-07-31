@@ -666,13 +666,44 @@ function transcriptEstilo() {
   return conversacionEstilo.map(m => (m.role === 'ia' ? 'IA: ' : 'Candidato: ') + m.texto).join('\n');
 }
 
-function agregarMensajeChat(role, texto) {
-  conversacionEstilo.push({ role, texto });
+function sleepPopup(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Solo pinta la burbuja (no la agrega al transcript) — usado para saludos, cierres y la
+// "reacción" que se muestra por separado antes de la pregunta.
+function agregarBurbuja(role, texto) {
   const div = document.createElement('div');
   div.className = 'estilo-msg ' + (role === 'ia' ? 'ia' : 'user');
   div.textContent = texto;
   elMensajes.appendChild(div);
   elMensajes.scrollTop = elMensajes.scrollHeight;
+  return div;
+}
+
+// Agrega Y guarda en el transcript — usado para lo que realmente forma parte de la conversación.
+function agregarMensajeChat(role, texto) {
+  conversacionEstilo.push({ role, texto });
+  agregarBurbuja(role, texto);
+}
+
+// Muestra un turno completo de la IA: primero la reacción a lo que el candidato acaba de contar
+// (si hay), con una pequeña pausa, y después la pregunta — se siente como que la IA escuchó,
+// no como un formulario que dispara la siguiente pregunta de inmediato.
+async function mostrarTurnoIA(reaccion, pregunta) {
+  const textoCompleto = (reaccion ? reaccion + ' ' : '') + pregunta;
+  conversacionEstilo.push({ role: 'ia', texto: textoCompleto });
+  if (reaccion) {
+    agregarBurbuja('ia', reaccion);
+    await sleepPopup(700);
+  }
+  agregarBurbuja('ia', pregunta);
+}
+
+function textoProgreso(numPreguntas) {
+  const restantes = MAX_PREGUNTAS_ESTILO - numPreguntas;
+  if (numPreguntas === 0) return 'Conociendo tu perfil…';
+  if (restantes <= 1) return 'Última pregunta…';
+  if (restantes <= 2) return 'Ya casi terminamos…';
+  return 'Vamos avanzando bien…';
 }
 
 function mostrarEstado(nombre) {
@@ -686,46 +717,49 @@ async function iniciarConversacionEstilo() {
   conversacionEstilo = [];
   elMensajes.innerHTML = '';
   mostrarEstado('chat');
+  elProgreso.textContent = textoProgreso(0);
+  agregarBurbuja('ia', 'Hola 👋 Antes de empezar a postular por ti, me gustaría conocerte un poco mejor para que las respuestas realmente suenen como si las hubieras escrito tú.');
+  await sleepPopup(600);
   await pedirSiguientePregunta();
 }
 
 async function pedirSiguientePregunta() {
   const numPreguntas = conversacionEstilo.filter(m => m.role === 'ia').length;
-  elProgreso.textContent = 'Pregunta ' + Math.min(numPreguntas + 1, MAX_PREGUNTAS_ESTILO) + ' de ~' + MAX_PREGUNTAS_ESTILO;
+  elProgreso.textContent = textoProgreso(numPreguntas);
 
   if (numPreguntas >= MAX_PREGUNTAS_ESTILO) {
-    await generarPerfilProfesional();
+    await cerrarConversacionYGenerar();
     return;
   }
 
   elInputChat.disabled = true;
   const prompt =
-    'Estas en una conversacion breve con un candidato para armar su "perfil profesional", que se usara despues para escribir respuestas de postulaciones de trabajo que suenen como si el mismo las hubiera escrito.\n\n' +
-    'Objetivo de la conversacion (guiate por esto, nunca se lo digas explicitamente al candidato):\n' +
-    '1. Informacion profesional: que ha hecho, que sabe hacer, que busca.\n' +
-    '2. Identidad profesional: que valora, como trabaja, que lo motiva.\n' +
-    '3. Estilo de comunicacion -- esto NO se pregunta directamente, se OBSERVA en como escribe sus respuestas: si es breve o extenso, si da contexto antes de responder, si usa ejemplos concretos, si es formal o cercano, si usa lenguaje tecnico, si escribe con seguridad.\n\n' +
-    'Reglas:\n' +
+    'Estas conversando con un candidato para armar su "perfil profesional", que se usara despues para escribir respuestas de postulaciones de trabajo que suenen como si el mismo las hubiera escrito.\n\n' +
+    'Tienes DOS objetivos, igual de importantes:\n' +
+    '1. Conocer lo suficiente sobre el candidato para poder escribir como si fuera el mismo (informacion profesional: que ha hecho, que sabe, que busca; identidad profesional: que valora, como trabaja, que lo motiva; y estilo de comunicacion, que NO se pregunta directo, se OBSERVA en como escribe: breve o extenso, si da contexto, si usa ejemplos, formal o cercano, nivel tecnico, seguridad al responder).\n' +
+    '2. Que la persona disfrute la conversacion -- que sienta que la estas escuchando de verdad, no rellenando un formulario.\n\n' +
+    'Como lograr el objetivo 2 (esto es lo mas importante de este prompt):\n' +
+    '- Antes de cada pregunta nueva, escribe una "reaccion" de UNA frase corta que reconozca o conecte con lo que la persona acaba de contar (ej: si dijo que trabajo 3 anios en retail, reacciona algo como "Tres anios en retail te da bastante experiencia con clientes." antes de preguntar lo siguiente). En la primera pregunta no hay reaccion (deja el campo vacio), porque el candidato aun no ha dicho nada.\n' +
+    '- Cada pregunta debe conectarse con la respuesta anterior, no ser generica e independiente. Ejemplo: si dijo que estudia Ingenieria Civil Informatica, la siguiente pregunta podria ser "Como estas estudiando Ingenieria Civil Informatica, buscas algo relacionado con tu carrera o que te permita compatibilizar con los estudios?" en vez de una pregunta generica de plantilla.\n' +
     '- Nunca hagas una pregunta que no vaya a cambiar como se redactaria una respuesta de postulacion (nada de test de personalidad, nada de "color favorito").\n' +
-    '- Adapta la pregunta segun lo que ya sabes: si parece estudiante, pregunta distinto que si tiene anios de experiencia.\n' +
     '- Una pregunta a la vez, natural y conversacional -- no debe sentirse como llenar un formulario.\n' +
     '- Maximo ' + MAX_PREGUNTAS_ESTILO + ' preguntas en total. Si ya tienes suficiente informacion de las 3 dimensiones antes de llegar al maximo, marca terminado:true.\n\n' +
     (numPreguntas === 0
-      ? 'Esta es la primera pregunta. Se calida y directa, algo como "que tipo de trabajo estas buscando ahora mismo".\n\n'
+      ? 'Esta es la primera pregunta. Se calida y directa, algo como "que tipo de trabajo estas buscando ahora mismo". Reaccion vacia.\n\n'
       : 'Historial de la conversacion hasta ahora:\n' + transcriptEstilo() + '\n\n') +
-    'Responde SOLO JSON valido, sin texto adicional, sin markdown: {"pregunta":"","terminado":false}';
+    'Responde SOLO JSON valido, sin texto adicional, sin markdown: {"reaccion":"","pregunta":"","terminado":false}';
 
   try {
-    const r = await llamarClaudeTexto(prompt, 300);
+    const r = await llamarClaudeTexto(prompt, 350);
     if (r.terminado) {
-      await generarPerfilProfesional();
+      await cerrarConversacionYGenerar(r.reaccion);
     } else {
-      agregarMensajeChat('ia', r.pregunta || '¿Puedes contarme un poco más sobre tu experiencia?');
+      await mostrarTurnoIA(r.reaccion, r.pregunta || '¿Puedes contarme un poco más sobre tu experiencia?');
       elInputChat.disabled = false;
       elInputChat.focus();
     }
   } catch (e) {
-    agregarMensajeChat('ia', '⚠ Tuve un problema para seguir la conversación. Intenta de nuevo.');
+    agregarBurbuja('ia', '⚠ Tuve un problema para seguir la conversación. Intenta de nuevo.');
     elInputChat.disabled = false;
   }
 }
@@ -739,29 +773,48 @@ async function enviarRespuestaUsuario() {
   await pedirSiguientePregunta();
 }
 
+async function cerrarConversacionYGenerar(reaccionFinal) {
+  if (reaccionFinal) { agregarBurbuja('ia', reaccionFinal); await sleepPopup(600); }
+  agregarBurbuja('ia', 'Gracias por contarme todo esto — con esto ya puedo armar tu perfil. Dame un segundo 🙂');
+  await sleepPopup(500);
+  await generarPerfilProfesional();
+}
+
 async function generarPerfilProfesional() {
-  elProgreso.textContent = 'Armando tu perfil…';
   elInputChat.disabled = true;
+  const pasos = ['Analizando conversación…', '✓ Detectando fortalezas…', '✓ Identificando estilo de comunicación…', '✓ Construyendo tu perfil…'];
+  let paso = 0;
+  elProgreso.textContent = pasos[0];
+  const animInterval = setInterval(() => {
+    paso++;
+    if (paso < pasos.length) elProgreso.textContent = pasos[paso];
+  }, 650);
+  const duracionMinima = new Promise(r => setTimeout(r, pasos.length * 650));
+
   const prompt =
     'Con base en esta conversacion completa, arma el "Perfil Profesional" del candidato para usarlo despues al redactar respuestas de postulaciones laborales.\n\n' +
     'MUY IMPORTANTE: nunca digas "el candidato ES tal cosa". Describe siempre como vamos a REFLEJAR o TRANSMITIR estas caracteristicas en las respuestas -- es una lectura para efectos laborales, no una definicion de quien es la persona.\n\n' +
+    'MUY IMPORTANTE sobre las fortalezas: NO uses adjetivos genericos que sirven para cualquier persona (mal ejemplo: "Excelente capacidad de atencion al cliente", "Habilidad para comunicarse", "Actitud alegre" -- todo eso suena a texto generado automaticamente y no dice nada especifico). En vez de eso, ancla cada fortaleza a un HECHO CONCRETO que la persona realmente menciono en la conversacion (buen ejemplo: "Destacaremos tu experiencia atendiendo clientes durante tres anios en SPID, especialmente en situaciones de venta y asesoria."). Si no hay suficiente detalle concreto para una fortaleza, mejor pon menos fortalezas (2-3) pero todas especificas, antes que 5 genericas.\n\n' +
     'Conversacion completa:\n' + transcriptEstilo() + '\n\n' +
     'Responde SOLO con JSON valido, sin texto adicional, sin markdown, con esta forma exacta:\n' +
-    '{"resumen":"","fortalezas":["",""],"objetivos":"","motivaciones":"","estilo":{"formalidad":"","longitud":"","cercania":"","nivelTecnico":"","seguridad":""},"confianza":80}\n' +
+    '{"resumen":"","fortalezas":["",""],"objetivos":"","motivaciones":"","estilo":{"formalidad":"","longitud":"","cercania":"","nivelTecnico":"","seguridad":""},"estiloResumen":"","confianza":80}\n' +
     '- resumen: 1-2 oraciones sobre su perfil profesional (experiencia principal, area)\n' +
-    '- fortalezas: 3 a 5 fortalezas concretas que destacaremos en las postulaciones\n' +
+    '- fortalezas: 2 a 5 fortalezas ESPECIFICAS y ancladas a hechos concretos mencionados (ver regla arriba)\n' +
     '- objetivos: su objetivo laboral en una frase\n' +
     '- motivaciones: que lo motiva profesionalmente, en una frase\n' +
     '- estilo.formalidad/cercania/seguridad: "Alta", "Media" o "Baja"\n' +
     '- estilo.longitud: "Corta", "Media" o "Larga"\n' +
     '- estilo.nivelTecnico: "Alto", "Medio" o "Bajo"\n' +
+    '- estiloResumen: UNA frase en lenguaje simple, sin jerga, que traduzca el estilo para cualquier persona (ej: "Tus respuestas sonaran profesionales y cercanas, con ejemplos concretos cuando sea util."), no menciones los nombres tecnicos como "formalidad media"\n' +
     '- confianza: numero de 0 a 100, que tan segura esta la lectura segun cuanta informacion real dio el candidato en la conversacion';
 
   try {
-    const perfil = await llamarClaudeTexto(prompt, 500);
+    const [perfil] = await Promise.all([llamarClaudeTexto(prompt, 600), duracionMinima]);
+    clearInterval(animInterval);
     perfilEstiloActual = perfil;
     mostrarTarjetaPerfil(perfil);
   } catch (e) {
+    clearInterval(animInterval);
     toast('⚠ No se pudo generar tu perfil. Intenta de nuevo.');
     mostrarEstado('invitacion');
   }
@@ -769,12 +822,14 @@ async function generarPerfilProfesional() {
 
 function mostrarTarjetaPerfil(perfil) {
   $('ec-resumen').textContent = perfil.resumen || '—';
-  $('ec-fortalezas').innerHTML = (perfil.fortalezas || []).map(f => '<span class="estilo-chip">' + f + '</span>').join('');
+  $('ec-fortalezas').innerHTML = (perfil.fortalezas || []).map(f => '<div class="estilo-fortaleza-item">✔ ' + f + '</div>').join('');
   $('ec-objetivos').textContent = perfil.objetivos || '—';
   const e = perfil.estilo || {};
-  $('ec-estilo').textContent =
+  $('ec-estilo').innerHTML =
+    '<div>' + (perfil.estiloResumen || 'Sin descripción de estilo.') + '</div>' +
+    '<div style="font-size:10px;color:var(--text-3);margin-top:4px;">' +
     'Formalidad: ' + (e.formalidad||'—') + ' · Longitud: ' + (e.longitud||'—') + ' · Cercanía: ' + (e.cercania||'—') +
-    ' · Nivel técnico: ' + (e.nivelTecnico||'—') + ' · Seguridad: ' + (e.seguridad||'—');
+    ' · Nivel técnico: ' + (e.nivelTecnico||'—') + ' · Seguridad: ' + (e.seguridad||'—') + '</div>';
   $('ec-confianza').textContent = (perfil.confianza != null ? perfil.confianza : '—') + '%';
 
   estrellasElegidas = 0;
@@ -798,8 +853,8 @@ function mostrarResumenGuardado(perfil) {
   const e = perfil.estilo || {};
   elResumenTexto.innerHTML =
     '<strong>' + (perfil.resumen || '') + '</strong><br>' +
-    (perfil.fortalezas || []).map(f => '<span class="estilo-chip">' + f + '</span>').join('') + '<br>' +
-    'Tono: ' + (e.formalidad||'—') + ' / ' + (e.cercania||'—') + ' · Confianza: ' + (perfil.confianza != null ? perfil.confianza : '—') + '%';
+    '<span style="color:var(--text-3)">' + (perfil.estiloResumen || '') + '</span><br>' +
+    'Confianza: ' + (perfil.confianza != null ? perfil.confianza : '—') + '%';
   mostrarEstado('resumen');
 }
 
