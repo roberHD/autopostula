@@ -111,6 +111,48 @@ function cargarEstiloProfesional() {
   });
 }
 
+// De donde sacamos "que cargo le interesa al candidato" para el filtro inteligente de ofertas:
+// primero el objetivo laboral que salio en la conversacion de estilo, si no existe, el campo
+// "Cargo objetivo" del perfil.
+async function obtenerObjetivoLaboral() {
+  const estilo = await cargarEstiloProfesional();
+  if (estilo && estilo.objetivos) return estilo.objetivos;
+  if (cfg && cfg.perfil && cfg.perfil.cargo) return cfg.perfil.cargo;
+  return null;
+}
+
+// Filtro inteligente de ofertas: UNA sola llamada por escaneo (no una por oferta) que revisa
+// todos los titulos a la vez y decide cuales son relevantes para el objetivo laboral del
+// candidato -- entiende sinonimos y categorias relacionadas, a diferencia del filtro de
+// palabras clave literal.
+async function clasificarOfertasIA(titulos, objetivo) {
+  const key = cfg && cfg.apiKey;
+  if (!key || !titulos.length) return null;
+  try {
+    const lista = titulos.map((t, i) => (i + 1) + '. ' + t).join('\n');
+    const instruccion =
+      'El candidato busca trabajo relacionado con: "' + objetivo + '"\n\n' +
+      'Aqui hay una lista numerada de titulos de ofertas de trabajo reales. Para cada una, decide si es razonablemente relevante para lo que el candidato busca -- entiende sinonimos y categorias relacionadas (ej: si busca "vendedor", "asesor comercial" o "ejecutivo de ventas" SI son relevantes; "auxiliar de aseo" o "conductor" normalmente NO lo son, salvo que el objetivo lo mencione explicitamente).\n\n' +
+      'Lista:\n' + lista + '\n\n' +
+      'Responde SOLO un JSON valido, sin texto adicional, sin markdown: {"relevantes":[1,3,5]} -- solo los numeros (segun la lista) de las ofertas relevantes.';
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: instruccion }] })
+    });
+    const data = await res.json();
+    let texto = data.content && data.content[0] && data.content[0].text && data.content[0].text.trim() || '';
+    texto = texto.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(texto);
+    return new Set(parsed.relevantes || []);
+  } catch (e) { return null; }
+}
+
 // -- IA: analisis previo de la oferta (UNA sola vez por postulacion) --
 // Analiza cargo, empresa, que prioriza la empresa, que fortalezas del candidato calzan mejor,
 // y que tono usar -- para no repetir ese analisis en cada una de las preguntas del formulario.
@@ -876,24 +918,41 @@ async function escanear() {
   const tarjetas = [...document.querySelectorAll('article.box_offer')];
   if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en CT', '#9CA3AF'); return; }
 
-  const pendientes = [];
+  let pendientes = [];
   tarjetas.forEach((t, idx) => {
     const id = getId(t, idx);
     if (vistos.has(id)) return;
     const badge = t.querySelector('.postulated:not(.hide), .applied-offer-tag:not(.hide)');
     if (badge && badge.offsetParent !== null) { vistos.add(id); return; }
-    if (pasa(t)) pendientes.push({t, id, idx});
+    if (pasa(t)) {
+      const titulo = (t.querySelector('h2') && t.querySelector('h2').textContent.trim()) || 'Oferta';
+      pendientes.push({t, id, idx, titulo});
+    }
   });
+
+  // Filtro inteligente con IA: descarta ofertas que no calzan con el cargo que busca el
+  // candidato aunque el titulo no comparta ninguna palabra clave literal con los tags.
+  if (cfg.usarIAFiltros && cfg.apiKey && pendientes.length) {
+    const objetivo = await obtenerObjetivoLaboral();
+    if (objetivo) {
+      msg('IA filtrando ' + pendientes.length + ' ofertas…', '#7C3AED');
+      const relevantes = await clasificarOfertasIA(pendientes.map(p => p.titulo), objetivo);
+      if (relevantes) {
+        const descartadas = pendientes.filter((p, i) => !relevantes.has(i + 1));
+        descartadas.forEach(p => { vistos.add(p.id); addLog({ts:Date.now(), status:'skip', title:p.titulo, url:'', uid:p.id, reason:'Descartada por filtro IA (no calza con tu objetivo laboral)'}); });
+        pendientes = pendientes.filter((p, i) => relevantes.has(i + 1));
+      }
+    }
+  }
 
   msg(pendientes.length + ' de ' + tarjetas.length + ' coinciden', '#16A34A');
   if (!pendientes.length) return;
 
   procesando = true;
-  for (const {t, id} of pendientes) {
+  for (const {t, id, titulo} of pendientes) {
     if (!activo) break;
     const a = t.querySelector('h2 a, a[href*="oferta"], a[href*="trabajo"]') || t.querySelector('a');
     const url = a && a.href.split('#')[0] || '';
-    const titulo = (t.querySelector('h2') && t.querySelector('h2').textContent.trim()) || 'Oferta';
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
     if (btn) await postular(url, id, titulo);
