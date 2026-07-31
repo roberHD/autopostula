@@ -227,7 +227,12 @@ async function aiResponde(pregunta, contexto, opciones, analisis) {
         '- Fortalezas que quiere destacar: ' + ((estilo.fortalezas||[]).join(', ')) + '\n' +
         '- Objetivo laboral: ' + (estilo.objetivos||'') + '\n' +
         '- Motivaciones: ' + (estilo.motivaciones||'') + '\n' +
-        '- Como escribe -- formalidad: ' + (estilo.estilo?.formalidad||'') + ', longitud preferida: ' + (estilo.estilo?.longitud||'') + ', cercania: ' + (estilo.estilo?.cercania||'') + ', nivel tecnico: ' + (estilo.estilo?.nivelTecnico||'') + ', seguridad al responder: ' + (estilo.estilo?.seguridad||'') + '\n\n'
+        '- Como escribe -- formalidad: ' + (estilo.estilo?.formalidad||'') + ', longitud preferida: ' + (estilo.estilo?.longitud||'') + ', cercania: ' + (estilo.estilo?.cercania||'') + ', nivel tecnico: ' + (estilo.estilo?.nivelTecnico||'') + ', seguridad al responder: ' + (estilo.estilo?.seguridad||'') + '\n' +
+        ((estilo.manualEscritura && estilo.manualEscritura.length)
+          ? '- Manual de escritura de este candidato (sigue esto al pie de la letra, es la guia mas importante de como debe sonar):\n' +
+            estilo.manualEscritura.map(m => '  * ' + m).join('\n') + '\n'
+          : '') +
+        '- Filosofia: no intentes hacer que el candidato suene "mejor" -- intenta hacer que suene como el mismo, expresando sus ideas con claridad.\n\n'
       : '';
 
     const instruccion =

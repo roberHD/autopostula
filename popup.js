@@ -735,22 +735,23 @@ async function pedirSiguientePregunta() {
   elInputChat.disabled = true;
   const prompt =
     'Estas conversando con un candidato para armar su "perfil profesional", que se usara despues para escribir respuestas de postulaciones de trabajo que suenen como si el mismo las hubiera escrito.\n\n' +
-    'Tienes DOS objetivos, igual de importantes:\n' +
-    '1. Conocer lo suficiente sobre el candidato para poder escribir como si fuera el mismo (informacion profesional: que ha hecho, que sabe, que busca; identidad profesional: que valora, como trabaja, que lo motiva; y estilo de comunicacion, que NO se pregunta directo, se OBSERVA en como escribe: breve o extenso, si da contexto, si usa ejemplos, formal o cercano, nivel tecnico, seguridad al responder).\n' +
-    '2. Que la persona disfrute la conversacion -- que sienta que la estas escuchando de verdad, no rellenando un formulario.\n\n' +
-    'Como lograr el objetivo 2 (esto es lo mas importante de este prompt):\n' +
-    '- Antes de cada pregunta nueva, escribe una "reaccion" de UNA frase corta que reconozca o conecte con lo que la persona acaba de contar (ej: si dijo que trabajo 3 anios en retail, reacciona algo como "Tres anios en retail te da bastante experiencia con clientes." antes de preguntar lo siguiente). En la primera pregunta no hay reaccion (deja el campo vacio), porque el candidato aun no ha dicho nada.\n' +
+    'Tu mision NO es terminar las ' + MAX_PREGUNTAS_ESTILO + ' preguntas. Tu mision es que la persona sienta que de verdad trataste de entender como piensa y como se comunica -- no que estas rellenando un formulario disfrazado de chat. Si una respuesta abre un tema interesante, profundiza un poco en ESE tema antes de seguir a otro.\n\n' +
+    'REGLAS DE RITMO Y TONO (esto es lo mas importante de este prompt):\n' +
+    '- NO valides absolutamente todo lo que dice la persona. Alterna: a veces reacciona brevemente, a veces simplemente pregunta sin comentar nada antes (reaccion vacia), a veces profundiza en lo mismo que acaba de decir en vez de cambiar de tema. Que no se sienta repetitivo el patron "comentario + pregunta nueva" cada vez.\n' +
+    '- Cuando reacciones, que sea MUY CORTO -- media frase o una frase, nunca mas. NUNCA le expliques a la persona algo que ella ya sabe (ej: si dice que le gustan Adidas y Lacoste, NO expliques que son marcas distintas -- ella ya lo sabe, tu solo tomaste nota). No te comportes como profesor validando cada respuesta ("Perfecto, eso habla de...", "Muy bien", "Interesante, eso demuestra..."). Usa reacciones minimas y variadas, como hablaria una persona real: "Entiendo.", "Tiene sentido.", "Ya veo.", "Me quedo claro.", o directamente ninguna.\n' +
+    '- Si la persona dice algo que revela COMO PIENSA o COMO DECIDE (no solo que hizo), sigue la curiosidad real: profundiza con una pregunta de seguimiento sobre eso especificamente, en vez de saltar al siguiente tema de la lista. Ejemplo: si dice "primero me fijaba en la edad del cliente", la siguiente pregunta deberia ser algo como "¿por que partias por la edad?" -- eso vale mucho mas que seguir con una pregunta generica de la lista.\n' +
+    '- De vez en cuando (1-2 veces en toda la conversacion) puedes hacer una pregunta tipo anecdota en vez de una pregunta directa de trabajo, ej: "cuentame de una venta que todavia recuerdes" o "¿algun cliente te sorprendio alguna vez?" -- esas respuestas son mucho mas ricas que las preguntas directas.\n' +
     '- Cada pregunta debe conectarse con la respuesta anterior, no ser generica e independiente. Ejemplo: si dijo que estudia Ingenieria Civil Informatica, la siguiente pregunta podria ser "Como estas estudiando Ingenieria Civil Informatica, buscas algo relacionado con tu carrera o que te permita compatibilizar con los estudios?" en vez de una pregunta generica de plantilla.\n' +
     '- Nunca hagas una pregunta que no vaya a cambiar como se redactaria una respuesta de postulacion (nada de test de personalidad, nada de "color favorito").\n' +
-    '- Una pregunta a la vez, natural y conversacional -- no debe sentirse como llenar un formulario.\n' +
-    '- Maximo ' + MAX_PREGUNTAS_ESTILO + ' preguntas en total. Si ya tienes suficiente informacion de las 3 dimensiones antes de llegar al maximo, marca terminado:true.\n\n' +
+    '- Maximo ' + MAX_PREGUNTAS_ESTILO + ' preguntas en total. Si ya tienes suficiente informacion antes de llegar al maximo, marca terminado:true.\n\n' +
+    'Que informacion te interesa obtener (para guiarte, no para preguntar literalmente esto): informacion profesional (que ha hecho, que sabe, que busca), identidad profesional (que valora, como trabaja, que lo motiva), y sobre todo PATRON DE COMUNICACION -- esto se observa, no se pregunta directo: si justifica sus respuestas con contexto o va directo al grano, si da ejemplos espontaneamente, si habla con seguridad o con cautela, si destaca logros/resultados o tareas, que prioriza al contar una experiencia (cliente, equipo, resultados, aprendizaje), que tan concreto es (numeros y detalles vs generalidades).\n\n' +
     (numPreguntas === 0
       ? 'Esta es la primera pregunta. Se calida y directa, algo como "que tipo de trabajo estas buscando ahora mismo". Reaccion vacia.\n\n'
       : 'Historial de la conversacion hasta ahora:\n' + transcriptEstilo() + '\n\n') +
     'Responde SOLO JSON valido, sin texto adicional, sin markdown: {"reaccion":"","pregunta":"","terminado":false}';
 
   try {
-    const r = await llamarClaudeTexto(prompt, 350);
+    const r = await llamarClaudeTexto(prompt, 300);
     if (r.terminado) {
       await cerrarConversacionYGenerar(r.reaccion);
     } else {
@@ -794,10 +795,13 @@ async function generarPerfilProfesional() {
   const prompt =
     'Con base en esta conversacion completa, arma el "Perfil Profesional" del candidato para usarlo despues al redactar respuestas de postulaciones laborales.\n\n' +
     'MUY IMPORTANTE: nunca digas "el candidato ES tal cosa". Describe siempre como vamos a REFLEJAR o TRANSMITIR estas caracteristicas en las respuestas -- es una lectura para efectos laborales, no una definicion de quien es la persona.\n\n' +
+    'FILOSOFIA GUIA: no intentes hacer que el candidato suene "mejor". Intenta hacer que suene como el mismo, pero expresando sus ideas con claridad.\n\n' +
     'MUY IMPORTANTE sobre las fortalezas: NO uses adjetivos genericos que sirven para cualquier persona (mal ejemplo: "Excelente capacidad de atencion al cliente", "Habilidad para comunicarse", "Actitud alegre" -- todo eso suena a texto generado automaticamente y no dice nada especifico). En vez de eso, ancla cada fortaleza a un HECHO CONCRETO que la persona realmente menciono en la conversacion (buen ejemplo: "Destacaremos tu experiencia atendiendo clientes durante tres anios en SPID, especialmente en situaciones de venta y asesoria."). Si no hay suficiente detalle concreto para una fortaleza, mejor pon menos fortalezas (2-3) pero todas especificas, antes que 5 genericas.\n\n' +
+    'ADEMAS del estilo superficial (formalidad, largo, etc.) analiza el PATRON DE COMUNICACION -- no como escribe, sino como PIENSA y construye una respuesta. Fijate en cosas como: si justifica sus respuestas con contexto o va directo al grano; si da ejemplos espontaneamente; si habla con seguridad ("estoy seguro", "siempre hago") o con cautela ("creo que", "me parece"); si destaca logros y resultados o tareas y responsabilidades; que prioriza al contar una experiencia (el cliente, el equipo, los resultados, el aprendizaje); que tan concreto es (numeros y detalles vs generalidades); como estructura una explicacion.\n\n' +
+    'Con todo eso, genera tambien un "manual de escritura": una lista de 5 a 8 instrucciones cortas, en imperativo, que le dirian a alguien exactamente como escribir para sonar como este candidato. Ejemplo de buen manual: ["Justifica las respuestas con contexto real cuando sea posible", "Usa ejemplos concretos, no generalidades", "Prefiere explicar antes que responder con una sola palabra", "Manten un tono profesional pero cercano", "Destaca el aprendizaje obtenido en cada experiencia"]. Este manual es lo mas importante de todo el perfil -- va a ser la guia principal para escribir las respuestas.\n\n' +
     'Conversacion completa:\n' + transcriptEstilo() + '\n\n' +
     'Responde SOLO con JSON valido, sin texto adicional, sin markdown, con esta forma exacta:\n' +
-    '{"resumen":"","fortalezas":["",""],"objetivos":"","motivaciones":"","estilo":{"formalidad":"","longitud":"","cercania":"","nivelTecnico":"","seguridad":""},"estiloResumen":"","confianza":80}\n' +
+    '{"resumen":"","fortalezas":["",""],"objetivos":"","motivaciones":"","estilo":{"formalidad":"","longitud":"","cercania":"","nivelTecnico":"","seguridad":""},"estiloResumen":"","manualEscritura":["",""],"confianza":80}\n' +
     '- resumen: 1-2 oraciones sobre su perfil profesional (experiencia principal, area)\n' +
     '- fortalezas: 2 a 5 fortalezas ESPECIFICAS y ancladas a hechos concretos mencionados (ver regla arriba)\n' +
     '- objetivos: su objetivo laboral en una frase\n' +
@@ -806,10 +810,11 @@ async function generarPerfilProfesional() {
     '- estilo.longitud: "Corta", "Media" o "Larga"\n' +
     '- estilo.nivelTecnico: "Alto", "Medio" o "Bajo"\n' +
     '- estiloResumen: UNA frase en lenguaje simple, sin jerga, que traduzca el estilo para cualquier persona (ej: "Tus respuestas sonaran profesionales y cercanas, con ejemplos concretos cuando sea util."), no menciones los nombres tecnicos como "formalidad media"\n' +
+    '- manualEscritura: 5 a 8 instrucciones en imperativo (ver regla arriba)\n' +
     '- confianza: numero de 0 a 100, que tan segura esta la lectura segun cuanta informacion real dio el candidato en la conversacion';
 
   try {
-    const [perfil] = await Promise.all([llamarClaudeTexto(prompt, 600), duracionMinima]);
+    const [perfil] = await Promise.all([llamarClaudeTexto(prompt, 900), duracionMinima]);
     clearInterval(animInterval);
     perfilEstiloActual = perfil;
     mostrarTarjetaPerfil(perfil);
@@ -825,12 +830,29 @@ function mostrarTarjetaPerfil(perfil) {
   $('ec-fortalezas').innerHTML = (perfil.fortalezas || []).map(f => '<div class="estilo-fortaleza-item">✔ ' + f + '</div>').join('');
   $('ec-objetivos').textContent = perfil.objetivos || '—';
   const e = perfil.estilo || {};
+  const manual = perfil.manualEscritura || [];
   $('ec-estilo').innerHTML =
     '<div>' + (perfil.estiloResumen || 'Sin descripción de estilo.') + '</div>' +
     '<div style="font-size:10px;color:var(--text-3);margin-top:4px;">' +
     'Formalidad: ' + (e.formalidad||'—') + ' · Longitud: ' + (e.longitud||'—') + ' · Cercanía: ' + (e.cercania||'—') +
-    ' · Nivel técnico: ' + (e.nivelTecnico||'—') + ' · Seguridad: ' + (e.seguridad||'—') + '</div>';
+    ' · Nivel técnico: ' + (e.nivelTecnico||'—') + ' · Seguridad: ' + (e.seguridad||'—') + '</div>' +
+    (manual.length
+      ? '<div style="margin-top:6px;font-size:10px;color:var(--accent);cursor:pointer;" id="ec-manual-toggle">▸ Ver manual de escritura (' + manual.length + ')</div>' +
+        '<div id="ec-manual-lista" class="hidden" style="margin-top:4px;">' +
+          manual.map(m => '<div style="font-size:11px;color:var(--text-2);margin-bottom:2px;">• ' + m + '</div>').join('') +
+        '</div>'
+      : '');
   $('ec-confianza').textContent = (perfil.confianza != null ? perfil.confianza : '—') + '%';
+
+  const toggleManual = $('ec-manual-toggle');
+  if (toggleManual) {
+    toggleManual.addEventListener('click', () => {
+      const lista = $('ec-manual-lista');
+      const abierto = !lista.classList.contains('hidden');
+      lista.classList.toggle('hidden');
+      toggleManual.textContent = (abierto ? '▸' : '▾') + ' Ver manual de escritura (' + manual.length + ')';
+    });
+  }
 
   estrellasElegidas = 0;
   renderEstrellas();
