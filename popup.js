@@ -6,6 +6,7 @@
 // ── Estado ─────────────────────────────────────────────────────
 let incTags = [];
 let excTags = [];
+let locTags = [];
 let jornadaSel = new Set(['part time','fines de semana','turno rotativo']);
 let infoItems = [];   // [{id, texto}] — datos libres del candidato para que la IA los use como contexto
 
@@ -13,6 +14,7 @@ let infoItems = [];   // [{id, texto}] — datos libres del candidato para que l
 const DEFAULTS = {
   incTags: [],
   excTags: [],
+  locTags: [],
   jornada: ['part time'],
   perfil: { nombre:'', email:'', tel:'', comuna:'', cargo:'', renta:'', disp:'', bio:'' },
   info: []
@@ -30,10 +32,14 @@ const statHoy       = $('stat-hoy');
 const statOk        = $('stat-ok');
 const incTagsEl     = $('inc-tags');
 const excTagsEl     = $('exc-tags');
+const locTagsEl     = $('loc-tags');
 const incInput      = $('inc-input');
 const excInput      = $('exc-input');
+const locInput      = $('loc-input');
 const incBtn        = $('inc-btn');
 const excBtn        = $('exc-btn');
+const locBtn        = $('loc-btn');
+const locUsarComunaBtn = $('loc-usar-comuna-btn');
 const jornadaChips  = $('jornada-chips');
 const toggleProfile = $('toggle-profile');
 const profileBody   = $('profile-body');
@@ -65,6 +71,7 @@ function uid() { return Date.now() + Math.random().toString(36).slice(2,6); }
 function renderTags() {
   renderTagsInto(incTagsEl, incTags, 'inc');
   renderTagsInto(excTagsEl, excTags, 'exc');
+  renderTagsInto(locTagsEl, locTags, 'loc');
 }
 
 function renderTagsInto(container, list, type) {
@@ -82,6 +89,7 @@ function addTag(type, val) {
   if (!v) return;
   if (type === 'inc' && !incTags.includes(v)) { incTags.push(v); incInput.value = ''; }
   if (type === 'exc' && !excTags.includes(v)) { excTags.push(v); excInput.value = ''; }
+  if (type === 'loc' && !locTags.includes(v)) { locTags.push(v); locInput.value = ''; }
   renderTags();
 }
 
@@ -89,14 +97,22 @@ document.addEventListener('click', e => {
   if (!e.target.classList.contains('tag-x')) return;
   const i = +e.target.dataset.i, type = e.target.dataset.type;
   if (type === 'inc') incTags.splice(i, 1);
+  else if (type === 'loc') locTags.splice(i, 1);
   else excTags.splice(i, 1);
   renderTags();
 });
 
 incBtn.addEventListener('click', () => addTag('inc', incInput.value));
 excBtn.addEventListener('click', () => addTag('exc', excInput.value));
+locBtn.addEventListener('click', () => addTag('loc', locInput.value));
 incInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTag('inc', incInput.value); });
 excInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTag('exc', excInput.value); });
+locInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTag('loc', locInput.value); });
+locUsarComunaBtn?.addEventListener('click', () => {
+  const comuna = $('p-comuna').value.trim();
+  if (!comuna) { toast('Primero completa tu comuna en el perfil'); return; }
+  addTag('loc', comuna);
+});
 
 // ── Chips jornada ──────────────────────────────────────────────
 jornadaChips.addEventListener('click', e => {
@@ -308,6 +324,7 @@ saveBtn.addEventListener('click', () => {
     active: toggleMain.checked,
     incTags,
     excTags,
+    locTags,
     jornada: [...jornadaSel],
     info: infoItems,
     apiKey: apiKeyEl.value.trim().replace(/\s+/g, ''),
@@ -351,6 +368,7 @@ document.getElementById('scan-now-btn')?.addEventListener('click', () => {
       active: true,
       incTags,
       excTags,
+      locTags,
       jornada: [...jornadaSel],
       info: infoItems,
       apiKey: apiKeyEl.value.trim().replace(/\s+/g, ''),
@@ -412,6 +430,7 @@ function loadState() {
 
     incTags = cfg.incTags || DEFAULTS.incTags;
     excTags = cfg.excTags || DEFAULTS.excTags;
+    locTags = cfg.locTags || DEFAULTS.locTags;
 
     jornadaSel = new Set(cfg.jornada || DEFAULTS.jornada);
     document.querySelectorAll('.chip').forEach(chip => {

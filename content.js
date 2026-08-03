@@ -60,6 +60,24 @@ function getId(tarjeta, idx) {
   return 'idx-' + idx;
 }
 
+// ── Ubicación de una tarjeta (comuna/ciudad) ───────────────────
+// Intenta leer el elemento específico de ubicación de la tarjeta con los
+// selectores que suele usar Computrabajo; si ninguno calza, cae de vuelta
+// a todo el texto de la tarjeta (menos preciso, pero nunca deja de filtrar).
+function extraerUbicacion(tarjeta) {
+  const candidatos = [
+    '.fs16.fc_base',
+    '[class*="location"]',
+    'p.fs16.t_ellipsis',
+    '.list_icons li'
+  ];
+  for (const sel of candidatos) {
+    const el = tarjeta.querySelector(sel);
+    if (el && el.textContent && el.textContent.trim().length > 1) return n(el.textContent);
+  }
+  return n(tarjeta.innerText || '');
+}
+
 // ── Filtrar tarjeta ───────────────────────────────────────────
 function pasa(tarjeta) {
   if (!cfg) return false;
@@ -70,6 +88,12 @@ function pasa(tarjeta) {
   if (cfg.incTags && cfg.incTags.length) {
     const expandido = t.replace(/\bpt\b/g,'part time').replace(/\(a\)/g,'a').replace(/\/a\b/g,'a');
     if (!cfg.incTags.some(tag => expandido.includes(n(tag)))) return false;
+  }
+  // Filtro de ubicación: si el usuario definió comunas/ciudades permitidas,
+  // solo pasan las ofertas cuya ubicación coincida con alguna de ellas.
+  if (cfg.locTags && cfg.locTags.length) {
+    const ubicacion = extraerUbicacion(tarjeta);
+    if (!cfg.locTags.some(tag => ubicacion.includes(n(tag)))) return false;
   }
   return true;
 }
