@@ -179,7 +179,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   font-size: 11px; font-weight: 500;
   cursor: default;
 }
-.tag.inc { background: var(--accent-s); color: var(--accent); border: 1px solid #BFDBFE; }
+.tag.inc, .tag.loc { background: var(--accent-s); color: var(--accent); border: 1px solid #BFDBFE; }
 .tag.exc { background: var(--danger-s); color: var(--danger); border: 1px solid #FECACA; }
 .tag-x {
   background: none; border: none; cursor: pointer;
@@ -448,6 +448,24 @@ textarea.field { resize: vertical; min-height: 56px; }
     <div class="chip selected" data-val="turno rotativo">Turno rotativo</div>
     <div class="chip" data-val="teletrabajo">Teletrabajo</div>
   </div>
+</div>
+
+<div class="spacer"></div>
+
+<!-- FILTROS: UBICACIÓN -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">Ubicación (comuna / ciudad)</span>
+  </div>
+  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;">
+    Si agregas al menos una comuna o ciudad, solo se postulará a ofertas ubicadas ahí. Déjalo vacío para no filtrar por ubicación.
+  </p>
+  <div class="tags" id="loc-tags"></div>
+  <div class="input-row">
+    <input class="field" id="loc-input" placeholder="ej: Las Condes, Providencia, Santiago Centro…">
+    <button class="btn btn-primary" id="loc-btn">+ Agregar</button>
+  </div>
+  <button class="btn btn-ghost" id="loc-usar-comuna-btn" style="margin-top:6px;width:100%;font-size:11px;">📍 Usar mi comuna de residencia</button>
 </div>
 
 <div class="spacer"></div>
