@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: autopostula-db
+    restart: always
+    environment:
+      POSTGRES_USER: autopostula
+      POSTGRES_PASSWORD: autopostula
+      POSTGRES_DB: autopostula
+    ports:
+      - "5432:5432"
+    volumes:
+      - autopostula_data:/var/lib/postgresql/data
+
+volumes:
+  autopostula_data:

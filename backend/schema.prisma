@@ -1,0 +1,316 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────
+
+enum Rol {
+  USUARIO
+  ADMIN
+  STAFF
+}
+
+enum TipoPlan {
+  FREE
+  PREMIUM
+}
+
+enum NivelAnaliticas {
+  BASICO
+  AVANZADO
+}
+
+enum EstadoSuscripcion {
+  ACTIVA
+  CANCELADA
+  VENCIDA
+}
+
+enum EstadoPago {
+  PAGADO
+  FALLIDO
+  REEMBOLSADO
+}
+
+enum OrigenOferta {
+  MANUAL
+  AUTOMATICO
+}
+
+enum EstadoPostulacion {
+  ENVIADO
+  VISTO
+  EN_PROCESO
+  FINALIZADO
+  RECHAZADO
+}
+
+enum TipoCalibracion {
+  FRASE
+  HISTORIA
+  COMPARACION
+  VOCABULARIO
+  FORMALIDAD
+  PRIORIDAD
+  ESCRITURA
+}
+
+enum EstadoRefinamiento {
+  PENDIENTE
+  RESPONDIDA
+}
+
+// ─────────────────────────────────────────
+// Cuentas y planes
+// ─────────────────────────────────────────
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  passwordHash    String?  @map("password_hash")
+  oauthProvider   String?  @map("oauth_provider")
+  nombre          String?
+  rol             Rol      @default(USUARIO)
+  creadoEn        DateTime @default(now()) @map("creado_en")
+
+  subscriptions    Subscription[]
+  platformAccounts PlatformAccount[]
+  cvProfile        CvProfile?
+  styleProfiles    StyleProfile[]
+  applications     Application[]
+  adminProfile     AdminProfile?
+
+  @@map("users")
+}
+
+model Plan {
+  id                       String           @id @default(uuid())
+  tipo                     TipoPlan
+  nombre                   String
+  precioMensual            Float            @map("precio_mensual")
+  maxPlataformasActivas    Int?             @map("max_plataformas_activas")
+  limitePostulacionesMes   Int?             @map("limite_postulaciones_mes")
+  busquedaAutomatica       Boolean          @default(false) @map("busqueda_automatica")
+  muestraAnuncios          Boolean          @default(true) @map("muestra_anuncios")
+  guardaConversacionesIa   Boolean          @default(false) @map("guarda_conversaciones_ia")
+  perfilDinamico           Boolean          @default(false) @map("perfil_dinamico")
+  nivelAnaliticas          NivelAnaliticas  @default(BASICO) @map("nivel_analiticas")
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                     String            @id @default(uuid())
+  userId                 String            @map("user_id")
+  planId                 String            @map("plan_id")
+  estado                 EstadoSuscripcion @default(ACTIVA)
+  stripeSubscriptionId   String?           @map("stripe_subscription_id")
+  periodoInicio          DateTime?         @map("periodo_inicio")
+  periodoFin             DateTime?         @map("periodo_fin")
+
+  user     User      @relation(fields: [userId], references: [id])
+  plan     Plan      @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id              String     @id @default(uuid())
+  subscriptionId  String     @map("subscription_id")
+  stripePaymentId String?    @map("stripe_payment_id")
+  monto           Float
+  estado          EstadoPago @default(PAGADO)
+  fecha           DateTime   @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@map("payments")
+}
+
+// ─────────────────────────────────────────
+// Portales y conexiones
+// ─────────────────────────────────────────
+
+model JobPlatform {
+  id              String @id @default(uuid())
+  nombre          String @unique
+  urlBase         String @map("url_base")
+  adapterVersion  String @map("adapter_version")
+
+  platformAccounts PlatformAccount[]
+  jobOffers        JobOffer[]
+
+  @@map("job_platforms")
+}
+
+model PlatformAccount {
+  id                    String   @id @default(uuid())
+  userId                String   @map("user_id")
+  platformId            String   @map("platform_id")
+  credencialesCifradas  String?  @map("credenciales_cifradas")
+  activa                Boolean  @default(true)
+  conectadaEn           DateTime @default(now()) @map("conectada_en")
+
+  user         User          @relation(fields: [userId], references: [id])
+  platform     JobPlatform   @relation(fields: [platformId], references: [id])
+  applications Application[]
+
+  @@unique([userId, platformId])
+  @@map("platform_accounts")
+}
+
+// ─────────────────────────────────────────
+// Perfiles del usuario
+// ─────────────────────────────────────────
+
+model CvProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique @map("user_id")
+  nombreArchivo  String   @map("nombre_archivo")
+  textoExtraido  String?  @db.Text @map("texto_extraido")
+  subidoEn       DateTime @default(now()) @map("subido_en")
+
+  user         User          @relation(fields: [userId], references: [id])
+  applications Application[]
+
+  @@map("cv_profiles")
+}
+
+model StyleProfile {
+  id                   String   @id @default(uuid())
+  userId               String   @map("user_id")
+  nombrePerfil         String?  @map("nombre_perfil")
+  tono                 String?
+  objetivo             String?
+  conversacion         Json?
+  confianzaPorcentaje  Int      @default(0) @map("confianza_porcentaje")
+  fuentesCompletadas   Json?    @map("fuentes_completadas")
+  creadoEn             DateTime @default(now()) @map("creado_en")
+
+  user               User                     @relation(fields: [userId], references: [id])
+  applications       Application[]
+  calibrationAnswers StyleCalibrationAnswer[]
+  refinements        StyleRefinement[]
+
+  @@map("style_profiles")
+}
+
+model AdminProfile {
+  id           String @id @default(uuid())
+  userId       String @unique @map("user_id")
+  nivelAcceso  String @map("nivel_acceso")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("admin_profiles")
+}
+
+// ─────────────────────────────────────────
+// Postulaciones
+// ─────────────────────────────────────────
+
+model JobOffer {
+  id            String        @id @default(uuid())
+  platformId    String        @map("platform_id")
+  externalId    String        @map("external_id")
+  titulo        String
+  empresa       String?
+  origen        OrigenOferta  @default(MANUAL)
+  relevanciaAi  Float?        @map("relevancia_ai")
+  publicadaEn   DateTime?     @map("publicada_en")
+  cacheadaEn    DateTime      @default(now()) @map("cacheada_en")
+
+  platform     JobPlatform   @relation(fields: [platformId], references: [id])
+  applications Application[]
+
+  @@unique([platformId, externalId])
+  @@map("job_offers")
+}
+
+model Application {
+  id                  String            @id @default(uuid())
+  userId              String            @map("user_id")
+  jobOfferId          String            @map("job_offer_id")
+  platformAccountId   String            @map("platform_account_id")
+  cvProfileId         String            @map("cv_profile_id")
+  styleProfileId      String?           @map("style_profile_id")
+  estadoActual        EstadoPostulacion @default(ENVIADO) @map("estado_actual")
+  enviadaEn           DateTime          @default(now()) @map("enviada_en")
+
+  user             User                       @relation(fields: [userId], references: [id])
+  jobOffer         JobOffer                   @relation(fields: [jobOfferId], references: [id])
+  platformAccount  PlatformAccount            @relation(fields: [platformAccountId], references: [id])
+  cvProfile        CvProfile                  @relation(fields: [cvProfileId], references: [id])
+  styleProfile     StyleProfile?              @relation(fields: [styleProfileId], references: [id])
+  statusHistory    ApplicationStatusHistory[]
+  answers          ApplicationAnswer[]
+
+  @@map("applications")
+}
+
+model ApplicationStatusHistory {
+  id             String            @id @default(uuid())
+  applicationId  String            @map("application_id")
+  estado         EstadoPostulacion
+  cambiadoEn     DateTime          @default(now()) @map("cambiado_en")
+
+  application Application @relation(fields: [applicationId], references: [id])
+
+  @@map("application_status_history")
+}
+
+// ─────────────────────────────────────────
+// Perfil dinámico (premium)
+// ─────────────────────────────────────────
+
+model StyleCalibrationAnswer {
+  id               String          @id @default(uuid())
+  styleProfileId   String          @map("style_profile_id")
+  tipo             TipoCalibracion
+  pregunta         String          @db.Text
+  opcionElegida    String          @db.Text @map("opcion_elegida")
+  respondidoEn     DateTime        @default(now()) @map("respondido_en")
+
+  styleProfile StyleProfile @relation(fields: [styleProfileId], references: [id])
+
+  @@map("style_calibration_answers")
+}
+
+model ApplicationAnswer {
+  id             String   @id @default(uuid())
+  applicationId  String   @map("application_id")
+  pregunta       String   @db.Text
+  respuestaIa    String   @db.Text @map("respuesta_ia")
+  respuestaFinal String   @db.Text @map("respuesta_final")
+  fueEditada     Boolean  @default(false) @map("fue_editada")
+  tema           String?
+  respondidoEn   DateTime @default(now()) @map("respondido_en")
+
+  application Application @relation(fields: [applicationId], references: [id])
+
+  @@map("application_answers")
+}
+
+model StyleRefinement {
+  id                String             @id @default(uuid())
+  styleProfileId    String             @map("style_profile_id")
+  patronDetectado   String             @db.Text @map("patron_detectado")
+  preguntaGenerada  String             @db.Text @map("pregunta_generada")
+  opcionesJson      Json               @map("opciones_json")
+  respuestaElegida  String?            @db.Text @map("respuesta_elegida")
+  estado            EstadoRefinamiento @default(PENDIENTE)
+  creadoEn          DateTime           @default(now()) @map("creado_en")
+
+  styleProfile StyleProfile @relation(fields: [styleProfileId], references: [id])
+
+  @@map("style_refinements")
+}
