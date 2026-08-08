@@ -13,6 +13,10 @@ export default async function DashboardPage() {
       <h1>Hola, {session.user.name ?? session.user.email}</h1>
       <p>Sesión activa. Rol: {(session.user as any).rol ?? "usuario"}</p>
 
+      <p style={{ marginBottom: 16 }}>
+        <a href="/dashboard/cv">Subir / actualizar mi CV</a>
+      </p>
+
       <form
         action={async () => {
           "use server";
