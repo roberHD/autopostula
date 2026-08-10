@@ -14,7 +14,8 @@
     "https://cl.computrabajo.com/*",
     "https://computrabajo.cl/*",
     "https://computrabajo.com/*",
-    "https://api.anthropic.com/*"
+    "https://api.anthropic.com/*",
+    "http://localhost:3000/*"
   ],
   "background": {
     "service_worker": "background.js"

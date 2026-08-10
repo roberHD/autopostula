@@ -47,11 +47,49 @@ function applyInTab(url, titulo) {
   });
 }
 
+// ── Reportar postulación al backend de AutoPostula (web) ───────
+// Corre en el background porque acá sí hay privilegios de extensión —
+// un fetch hecho desde content.js (contexto de la página) lo bloquea CORS.
+async function reportarPostulacionBackend(oferta) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+
+  if (!autopostulaToken) {
+    console.warn('[AP] Sin token de AutoPostula configurado — no se reportó al backend');
+    return;
+  }
+
+  try {
+    const res = await fetch('http://localhost:3000/api/applications', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + autopostulaToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        platformNombre: 'Computrabajo',
+        externalId: oferta.id,
+        titulo: oferta.titulo,
+        empresa: oferta.empresa || null,
+        origen: 'MANUAL'
+      })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('[AP] Backend rechazó la postulación:', data.error || res.status);
+    }
+  } catch (e) {
+    console.warn('[AP] Error de red reportando al backend:', e);
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   if (msg.type === 'OPEN_AND_APPLY') {
     queue.push({ url: msg.url, titulo: msg.titulo });
     processQueue();
     sendResponse({ queued: true });
+  }
+  if (msg.type === 'REPORTAR_POSTULACION') {
+    reportarPostulacionBackend(msg.oferta);
   }
   return false;
 });

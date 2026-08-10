@@ -17,6 +17,14 @@ export default async function DashboardPage() {
         <a href="/dashboard/cv">Subir / actualizar mi CV</a>
       </p>
 
+      <p style={{ marginBottom: 16 }}>
+        <a href="/dashboard/portales">Conectar portales / token de extensión</a>
+      </p>
+
+      <p style={{ marginBottom: 16 }}>
+        <a href="/dashboard/historial">Ver historial de postulaciones</a>
+      </p>
+
       <form
         action={async () => {
           "use server";

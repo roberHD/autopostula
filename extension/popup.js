@@ -215,6 +215,42 @@ apiTestBtn.addEventListener('click', async () => {
   apiTestBtn.disabled = false;
 });
 
+// ── Token de AutoPostula (web) ────────────────────────────────
+// Agregar esto en popup.js, junto a donde ya manejas la API key de Claude.
+(function () {
+  const input = document.getElementById('ap-token');
+  const eye = document.getElementById('ap-token-eye');
+  const saveBtn = document.getElementById('ap-token-save');
+  const dot = document.getElementById('ap-token-dot');
+  const statusText = document.getElementById('ap-token-status-text');
+
+  function actualizarEstado(hayToken) {
+    dot.style.background = hayToken ? 'var(--success)' : 'var(--text-3)';
+    statusText.textContent = hayToken
+      ? 'Conectado — tus postulaciones se guardan en la web'
+      : 'Sin configurar — no se guardará el historial en la web';
+  }
+
+  chrome.storage.sync.get('autopostulaToken', (d) => {
+    if (d.autopostulaToken) {
+      input.value = d.autopostulaToken;
+      actualizarEstado(true);
+    }
+  });
+
+  eye.addEventListener('click', () => {
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+
+  saveBtn.addEventListener('click', () => {
+    const valor = input.value.trim();
+    chrome.storage.sync.set({ autopostulaToken: valor || null }, () => {
+      actualizarEstado(!!valor);
+    });
+  });
+})();
+
+
 // ── Toggle ON/OFF ──────────────────────────────────────────────
 toggleMain.addEventListener('change', () => {
   const active = toggleMain.checked;

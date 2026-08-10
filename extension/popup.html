@@ -656,6 +656,27 @@ textarea.field { resize: vertical; min-height: 56px; }
   </div>
 </div>
 
+<!-- TOKEN AUTOPOSTULA WEB -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-title">Cuenta web de AutoPostula</span>
+  </div>
+  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;">
+    Conecta la extensión con tu cuenta en la web para que cada postulación quede guardada en tu historial. Genera el token desde <b>Portales conectados</b> en el dashboard.
+  </p>
+  <div class="apikey-row">
+    <div class="apikey-input-wrap">
+      <input class="field" type="password" id="ap-token" placeholder="Pega tu token aquí">
+      <button class="apikey-eye" id="ap-token-eye" title="Mostrar/ocultar">👁</button>
+    </div>
+    <button class="btn btn-ghost" id="ap-token-save">Guardar</button>
+  </div>
+  <div class="apikey-status" id="ap-token-status">
+    <div class="dot" id="ap-token-dot"></div>
+    <span id="ap-token-status-text">Sin configurar — no se guardará el historial en la web</span>
+  </div>
+</div>
+
 <div class="spacer"></div>
 
 <!-- LOG DE ACTIVIDAD -->

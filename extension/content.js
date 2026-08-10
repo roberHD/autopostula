@@ -48,6 +48,19 @@ function addLog(entry) {
   safeSend({ type:'LOG_UPDATED', log });
 }
 
+// ── Reportar postulación al backend de AutoPostula (web) ───────
+// El fetch NO se hace aquí: content.js corre en el contexto de la página
+// de Computrabajo, así que CORS lo bloquea igual que si fuera la propia
+// página quien llamara. Se le avisa al background, que sí tiene privilegios
+// de extensión para hacer la llamada sin que CORS se meta.
+function reportarPostulacion(oferta) {
+  try {
+    chrome.runtime.sendMessage({ type: 'REPORTAR_POSTULACION', oferta: oferta });
+  } catch (e) {
+    console.warn('[AP] No se pudo avisar al background:', e);
+  }
+}
+
 // ── ID único de tarjeta ───────────────────────────────────────
 function getId(tarjeta, idx) {
   const did = tarjeta.getAttribute('data-id') || tarjeta.getAttribute('data-blind') || '';
@@ -907,6 +920,7 @@ async function postular(url, id, titulo) {
         reason:'Enviado (' + n2 + ' campos)',
         respuestas: respuestasParaLog
       });
+      reportarPostulacion({ id, titulo });
       msg('✓ ' + titulo.slice(0,40), '#16A34A');
       return true;
     } else {
@@ -915,6 +929,7 @@ async function postular(url, id, titulo) {
     }
   } else {
     addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
+    reportarPostulacion({ id, titulo });
     msg('✓ ' + titulo.slice(0,40), '#2563EB');
     return true;
   }
