@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import ThemeToggle from "./ThemeToggle";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Resumen", icon: "M4 4h7v7H4V4zm9 0h7v4h-7V4zm0 6h7v10h-7V10zM4 13h7v7H4v-7z" },
@@ -49,6 +50,7 @@ export default function Sidebar({ userName }: { userName: string }) {
           <div className="ap-user-avatar">{userName.slice(0, 1).toUpperCase()}</div>
           <div className="ap-user-name">{userName}</div>
         </div>
+        <ThemeToggle />
         <button className="ap-signout" onClick={() => signOut({ callbackUrl: "/login" })}>
           Cerrar sesión
         </button>
