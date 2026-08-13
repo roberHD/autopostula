@@ -4,6 +4,7 @@
 
 const DELAY = 3000;
 let cfg = null;
+let iaDisponible = false; // true si hay token de AutoPostula configurado (reemplaza a cfg.apiKey)
 let activo = false;
 let procesando = false;
 let vistos = new Set();
@@ -158,172 +159,56 @@ async function obtenerObjetivoLaboral() {
   return null;
 }
 
+// ── Llamadas a la IA: ahora van al backend, no directo a Anthropic ─────
+// Ya no se usa cfg.apiKey ni fetch directo aca. content.js corre en el contexto de la
+// pagina de Computrabajo, asi que un fetch hacia nuestro backend chocaria con CORS
+// (mismo problema que tuvimos con reportarPostulacion) -- por eso esto solo le pide
+// al background que haga la llamada, y espera la respuesta por mensaje.
+function llamarBackendIA(tipo, payload) {
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({ type: 'AI_CALL', tipo, payload }, (respuesta) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        resolve(respuesta || null);
+      });
+    } catch (e) { resolve(null); }
+  });
+}
+
 // Filtro inteligente de ofertas: UNA sola llamada por escaneo (no una por oferta) que revisa
 // todos los titulos a la vez y decide cuales son relevantes para el objetivo laboral del
 // candidato -- entiende sinonimos y categorias relacionadas, a diferencia del filtro de
 // palabras clave literal.
 async function clasificarOfertasIA(titulos, objetivo) {
-  const key = cfg && cfg.apiKey;
-  if (!key || !titulos.length) return null;
-  try {
-    const lista = titulos.map((t, i) => (i + 1) + '. ' + t).join('\n');
-    const instruccion =
-      'El candidato busca trabajo relacionado con: "' + objetivo + '"\n\n' +
-      'Aqui hay una lista numerada de titulos de ofertas de trabajo reales. Para cada una, decide si es razonablemente relevante para lo que el candidato busca -- entiende sinonimos y categorias relacionadas (ej: si busca "vendedor", "asesor comercial" o "ejecutivo de ventas" SI son relevantes; "auxiliar de aseo" o "conductor" normalmente NO lo son, salvo que el objetivo lo mencione explicitamente).\n\n' +
-      'Lista:\n' + lista + '\n\n' +
-      'Responde SOLO un JSON valido, sin texto adicional, sin markdown: {"relevantes":[1,3,5]} -- solo los numeros (segun la lista) de las ofertas relevantes.';
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: instruccion }] })
-    });
-    const data = await res.json();
-    let texto = data.content && data.content[0] && data.content[0].text && data.content[0].text.trim() || '';
-    texto = texto.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(texto);
-    return new Set(parsed.relevantes || []);
-  } catch (e) { return null; }
+  if (!titulos.length) return null;
+  const data = await llamarBackendIA('clasificar_ofertas', { titulos, objetivo });
+  if (!data || !data.relevantes) return null;
+  return new Set(data.relevantes);
 }
 
 // -- IA: analisis previo de la oferta (UNA sola vez por postulacion) --
 // Analiza cargo, empresa, que prioriza la empresa, que fortalezas del candidato calzan mejor,
 // y que tono usar -- para no repetir ese analisis en cada una de las preguntas del formulario.
+// El CV ya no se manda desde aca -- el backend lo saca directo de CvProfile en la base de datos.
 async function analizarOferta(contexto) {
-  const key = cfg && cfg.apiKey;
-  if (!key || !contexto) return null;
+  if (!contexto) return null;
   const p = (cfg && cfg.perfil) || {};
-  const info = (cfg && cfg.info || []).map(it => '- ' + it.texto).join('\n');
-  try {
-    const cv = await cargarCV();
-    const instruccion =
-      'Analiza este aviso de trabajo junto al perfil del candidato. Responde SOLO con un JSON valido, sin texto adicional, sin markdown, con exactamente esta forma:\n' +
-      '{"cargo":"","empresa":"","prioridades":"","fortalezas":"","tono":""}\n' +
-      '- cargo: nombre exacto del puesto al que se postula, tal como aparece en el aviso\n' +
-      '- empresa: nombre de la empresa que publica el aviso (si no aparece claramente, deja el string vacio)\n' +
-      '- prioridades: en una frase corta, que es lo mas importante que busca esta empresa en el candidato segun el aviso (rubro, tareas clave, requisitos)\n' +
-      '- fortalezas: en una frase corta, que fortalezas REALES del candidato (solo las que esten en su CV/perfil/datos adicionales) conectan mejor con este aviso especifico\n' +
-      '- tono: como deberia sonar el candidato al responder preguntas de este formulario (ej: "cercano y directo", "formal y profesional", "entusiasta pero breve"), segun como este redactado el aviso -- un aviso informal pide un tono mas cercano, uno corporativo uno mas formal\n\n' +
-      'Perfil: ' + (p.bio||'Sin informacion de perfil aun') + '\n' +
-      'Datos adicionales del candidato:\n' + (info||'Ninguno') + '\n\n' +
-      'AVISO:\n' + contexto.slice(0,3000);
-
-    const messages = construirMensajesCV(instruccion, cv);
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 300, messages })
-    });
-    const data = await res.json();
-    let texto = data.content && data.content[0] && data.content[0].text && data.content[0].text.trim() || '';
-    texto = texto.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(texto);
-    return parsed;
-  } catch(e) { return null; }
+  const info = (cfg && cfg.info || []).map(it => it.texto);
+  const data = await llamarBackendIA('analizar_oferta', { contexto, perfil: p, info });
+  return data && !data.error ? data : null;
 }
 
 // -- IA: responder pregunta de formulario --
 // REGLA: Solo responde si la info esta en el CV, perfil o datos adicionales. Si no sabe -> null.
 // Si se pasa `opciones` (array de strings), la IA debe elegir UNA opcion textual exacta en vez de redactar libremente.
 async function aiResponde(pregunta, contexto, opciones, analisis) {
-  const key = cfg && cfg.apiKey;
-  if (!key) return null;
   const p = (cfg && cfg.perfil) || {};
-  const info = (cfg && cfg.info || []).map(it => '- ' + it.texto).join('\n');
-
-  try {
-    const cv = await cargarCV();
-    const estilo = await cargarEstiloProfesional();
-
-    const bloqueOpciones = (opciones && opciones.length)
-      ? '\nOpciones disponibles (debes responder EXACTAMENTE con el texto de una de estas, sin agregar nada mas):\n' +
-        opciones.map(o => '- "' + o + '"').join('\n') + '\n'
-      : '';
-
-    const bloqueAnalisis = analisis
-      ? 'Analisis previo de esta oferta (ya hecho, usalo, no lo repitas en la respuesta):\n' +
-        '- Cargo: ' + (analisis.cargo||'') + '\n' +
-        '- Empresa: ' + (analisis.empresa||'') + '\n' +
-        '- Que prioriza la empresa: ' + (analisis.prioridades||'') + '\n' +
-        '- Tus fortalezas mas relevantes para ESTA oferta: ' + (analisis.fortalezas||'') + '\n' +
-        '- Tono a usar en las respuestas: ' + (analisis.tono||'') + '\n\n'
-      : '';
-
-    const bloqueEstilo = (estilo && estilo.confirmado)
-      ? 'Perfil de estilo del candidato (de como el mismo se comunica -- esta es su voz autentica, uselo como base para TODAS las respuestas, ajustandolo levemente si el tono sugerido arriba para esta oferta lo amerita):\n' +
-        '- Resumen: ' + (estilo.resumen||'') + '\n' +
-        '- Fortalezas que quiere destacar: ' + ((estilo.fortalezas||[]).join(', ')) + '\n' +
-        '- Objetivo laboral: ' + (estilo.objetivos||'') + '\n' +
-        '- Motivaciones: ' + (estilo.motivaciones||'') + '\n' +
-        '- Como escribe -- formalidad: ' + (estilo.estilo?.formalidad||'') + ', longitud preferida: ' + (estilo.estilo?.longitud||'') + ', cercania: ' + (estilo.estilo?.cercania||'') + ', nivel tecnico: ' + (estilo.estilo?.nivelTecnico||'') + ', seguridad al responder: ' + (estilo.estilo?.seguridad||'') + '\n' +
-        ((estilo.manualEscritura && estilo.manualEscritura.length)
-          ? '- Manual de escritura de este candidato (sigue esto al pie de la letra, es la guia mas importante de como debe sonar):\n' +
-            estilo.manualEscritura.map(m => '  * ' + m).join('\n') + '\n'
-          : '') +
-        '- Filosofia: no intentes hacer que el candidato suene "mejor" -- intenta hacer que suene como el mismo, expresando sus ideas con claridad.\n\n'
-      : '';
-
-    const instruccion =
-      'Eres un asistente que ayuda a ' + (p.nombre||'el candidato') + ' a postular empleos.\n' +
-      'REGLAS:\n' +
-      '1. Usa solo informacion real del CV, perfil o datos adicionales entregados abajo. Nunca inventes datos concretos (anios, empresas, certificaciones) que no esten ahi.\n' +
-      '3. Para preguntas sobre experiencia, motivacion o habilidades, usa el CV y perfil para dar una respuesta real y especifica.\n' +
-      '5. MUY IMPORTANTE: personaliza la respuesta segun el AVISO DE TRABAJO especifico de abajo (rubro, productos, marca, tareas mencionadas). Si el aviso es de venta de zapatillas, tu respuesta debe conectar con calzado/retail de zapatillas; si es de una cafeteria, con cafe y atencion en cafeterias; etc. No des una respuesta generica que serviria igual para cualquier aviso -- debe notarse que leiste este aviso en particular.\n' +
-      '6. Responde en TEXTO PLANO, como si lo escribieras directo en un formulario web. NUNCA uses formato markdown (nada de #, ##, **, -, listas ni titulos). NUNCA repitas ni cites la pregunta antes de responder. NUNCA agregues introducciones tipo "Respuesta:" o comillas envolviendo el texto -- ve directo a la respuesta, en oraciones normales.\n' +
-      '7. Si la pregunta pide VARIOS datos a la vez (ej: "indique su comuna y telefono", "nombre y correo"), responde TODOS los datos pedidos, no solo el primero.\n' +
-      '8. SE CONCISO Y EVITA REDUNDANCIA: no digas la misma idea dos veces con distintas palabras. Si una oracion ya cubrio el punto, no agregues otra oracion que repita lo mismo de forma mas "elegante" o formal. Prefiere una respuesta corta y directa antes que una larga que da vueltas. Usa el tono indicado en el analisis previo (si lo hay) en vez de sonar siempre igual de formal o acartonado en todas las respuestas.\n' +
-      (bloqueOpciones
-        ? '2. Si la pregunta es sobre algo que NO esta en tu informacion y no puedes inferirlo razonablemente, responde: SINRESPUESTA\n' +
-          '4. Debes elegir una de las opciones dadas textualmente, o SINRESPUESTA si ninguna aplica.\n'
-        : '2. Si no tienes el dato exacto que pide la pregunta, NUNCA respondas SINRESPUESTA ni dejes el campo vacio: responde con honestidad, reconociendo que no tienes esa experiencia especifica, pero conectandolo con la experiencia real mas cercana que si tengas (ej: "No cuento con experiencia directa en ese rubro, pero tengo experiencia en atencion al cliente y ventas retail que me permite adaptarme rapido"). Solo usa SINRESPUESTA si la pregunta es completamente irrelevante para un postulante a empleo.\n') +
-      '\n' +
-      bloqueAnalisis +
-      bloqueEstilo +
-      'Perfil: ' + (p.bio||'Sin informacion de perfil aun') + '\n' +
-      'Nombre: ' + (p.nombre||'') + '\n' +
-      'Email: ' + (p.email||'') + '\n' +
-      'Telefono: ' + (p.tel||'') + '\n' +
-      'Comuna de residencia: ' + (p.comuna||'') + '\n' +
-      'Cargo buscado: ' + (p.cargo||'') + '\n' +
-      'Renta esperada: ' + (p.renta||'') + '\n' +
-      'Disponibilidad: ' + (p.disp||'') + '\n' +
-      'Datos adicionales del candidato:\n' + (info||'Ninguno') + '\n' +
-      'AVISO DE TRABAJO (leelo completo y usa sus detalles especificos):\n' + (contexto||'').slice(0,2500) + '\n' +
-      bloqueOpciones +
-      '\nPregunta del formulario: "' + pregunta + '"\n' +
-      (opciones && opciones.length
-        ? 'Responde solo con el texto exacto de la opcion elegida, o SINRESPUESTA.'
-        : 'Responde en primera persona, max 2 oraciones, siempre con una respuesta honesta, util, breve y personalizada al aviso de arriba (nunca la dejes en blanco ni la hagas generica ni redundante).');
-
-
-    const messages = construirMensajesCV(instruccion, cv);
-
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 150, messages })
-    });
-    const data = await res.json();
-    let respuesta = data.content && data.content[0] && data.content[0].text && data.content[0].text.trim() || '';
-    respuesta = limpiarRespuestaIA(respuesta);
-    // Si la IA dice que no sabe, retornar null (dejar vacío)
-    if (!respuesta || respuesta.includes('SINRESPUESTA') || respuesta.toLowerCase().includes('sin respuesta')) return null;
-    return respuesta;
-  } catch(e) { return null; }
+  const info = (cfg && cfg.info || []).map(it => it.texto);
+  const estilo = await cargarEstiloProfesional();
+  const data = await llamarBackendIA('responder_pregunta', {
+    pregunta, contexto, opciones, analisis, perfil: p, info, estilo
+  });
+  return data && !data.error ? data.respuesta : null;
 }
 
 // Red de seguridad: por si el modelo igual agrega formato markdown o repite la pregunta.
@@ -692,7 +577,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, ana
     const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(radio)) || getLabel(radio);
     let elegida = calcularRespuesta(pregunta, opciones, perfil);
     // Si no hay match universal y hay IA, que la IA elija entre las opciones usando perfil + info adicional
-    if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
+    if (!elegida && iaDisponible && pregunta.length > 5) {
       const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
       if (respIA) {
         const rNorm = n(respIA);
@@ -724,7 +609,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, ana
       const opciones = grupo.map(c => ({ el:c, texto:textoDeOpcion(c) }));
       const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(cb)) || getLabel(cb);
       let elegida = calcularRespuesta(pregunta, opciones, perfil);
-      if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
+      if (!elegida && iaDisponible && pregunta.length > 5) {
         const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
         if (respIA) {
           const rNorm = n(respIA);
@@ -754,7 +639,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, ana
     const opciones = grupo.map(el => ({ el, texto:textoDeOpcion(el) }));
     const pregunta = textoPreguntaContenedor(contenedor);
     let elegida = calcularRespuesta(pregunta, opciones, perfil);
-    if (!elegida && cfg && cfg.apiKey && pregunta.length > 5) {
+    if (!elegida && iaDisponible && pregunta.length > 5) {
       const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
       if (respIA) {
         const rNorm = n(respIA);
@@ -808,7 +693,7 @@ async function rellenar(contexto, analisis) {
     else if (el.type === 'tel' && p.tel) val = p.tel;
     else if (clave('discapacidad') || (clave('identifica') && clave('discapacidad'))) {
       // Preguntas de discapacidad — responder con IA si está disponible, sino "No"
-      if (cfg && cfg.apiKey) {
+      if (iaDisponible) {
         msg('IA respondiendo…', '#7C3AED');
         val = await aiResponde(labelRaw, contexto, null, analisis);
         fueIA = !!val;
@@ -817,7 +702,7 @@ async function rellenar(contexto, analisis) {
         val = 'No';
       }
     }
-    else if (cfg && cfg.apiKey && labelRaw.length > 5) {
+    else if (iaDisponible && labelRaw.length > 5) {
       // Cualquier campo no cubierto por los datos objetivos de arriba se resuelve con IA,
       // usando el perfil, el CV, la "información adicional" y el aviso completo (no respuestas fijas).
       msg('IA respondiendo…', '#7C3AED');
@@ -976,7 +861,7 @@ async function escanear() {
 
   // Filtro inteligente con IA: descarta ofertas que no calzan con el cargo que busca el
   // candidato aunque el titulo no comparta ninguna palabra clave literal con los tags.
-  if (cfg.usarIAFiltros && cfg.apiKey && pendientes.length) {
+  if (cfg.usarIAFiltros && iaDisponible && pendientes.length) {
     const objetivo = await obtenerObjetivoLaboral();
     if (objetivo) {
       msg('IA filtrando ' + pendientes.length + ' ofertas…', '#7C3AED');
@@ -1028,10 +913,22 @@ try {
     activo = !!(data.active || (cfg && cfg.active));
     log = data.log || [];
     vistos = new Set();
-    console.log('[AP v4] config:', !!cfg, 'activo:', activo, 'incTags:', cfg && cfg.incTags && cfg.incTags.length, 'modoRevision:', cfg && cfg.modoRevision, 'apiKey:', !!(cfg && cfg.apiKey));
+    chrome.storage.sync.get('autopostulaToken', function(d) {
+      iaDisponible = !!d.autopostulaToken;
+      console.log('[AP v4] config:', !!cfg, 'activo:', activo, 'incTags:', cfg && cfg.incTags && cfg.incTags.length, 'modoRevision:', cfg && cfg.modoRevision, 'IA (token AutoPostula):', iaDisponible);
+    });
     if (activo) { msg('Activado — escaneando…','#16A34A'); setTimeout(escanear, 1800); }
   });
 } catch(e) { console.error('[AP v4] init error:', e); }
+
+// Si el usuario pega/regenera el token mientras la pestaña ya está abierta, no hace falta recargar.
+try {
+  chrome.storage.onChanged.addListener(function(changes, area) {
+    if (area === 'sync' && changes.autopostulaToken) {
+      iaDisponible = !!changes.autopostulaToken.newValue;
+    }
+  });
+} catch (e) {}
 
 document.addEventListener('autopostula-scan', function() {
   try {

@@ -47,6 +47,49 @@ function applyInTab(url, titulo) {
   });
 }
 
+// ── Llamadas a la IA del backend (con nuestra key, no la del usuario) ──
+// Mismo motivo que reportarPostulacionBackend: corre acá porque el background
+// tiene privilegios de extensión y no lo bloquea CORS.
+const RUTA_POR_TIPO = {
+  clasificar_ofertas: '/api/ai/clasificar-ofertas',
+  analizar_oferta: '/api/ai/analizar-oferta',
+  responder_pregunta: '/api/ai/responder-pregunta'
+};
+
+async function llamarIABackend(tipo, payload) {
+  const ruta = RUTA_POR_TIPO[tipo];
+  if (!ruta) return null;
+
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) {
+    console.warn('[AP] Sin token de AutoPostula configurado — la IA no está disponible');
+    return null;
+  }
+
+  try {
+    const res = await fetch('http://localhost:3000' + ruta, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + autopostulaToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      console.warn('[AP] IA rechazada por el backend (' + tipo + '):', data.error || res.status);
+      return { error: data.error || ('Error ' + res.status) };
+    }
+
+    return data;
+  } catch (e) {
+    console.warn('[AP] Error de red llamando a la IA del backend (' + tipo + '):', e);
+    return null;
+  }
+}
+
 // ── Reportar postulación al backend de AutoPostula (web) ───────
 // Corre en el background porque acá sí hay privilegios de extensión —
 // un fetch hecho desde content.js (contexto de la página) lo bloquea CORS.
@@ -90,6 +133,10 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   }
   if (msg.type === 'REPORTAR_POSTULACION') {
     reportarPostulacionBackend(msg.oferta);
+  }
+  if (msg.type === 'AI_CALL') {
+    llamarIABackend(msg.tipo, msg.payload).then(sendResponse);
+    return true; // mantiene el canal abierto — la respuesta llega async
   }
   return false;
 });

@@ -86,6 +86,7 @@ model User {
   styleProfiles    StyleProfile[]
   applications     Application[]
   adminProfile     AdminProfile?
+  aiUsageLogs      AiUsageLog[]
 
   @@map("users")
 }
@@ -101,6 +102,7 @@ model Plan {
   muestraAnuncios          Boolean          @default(true) @map("muestra_anuncios")
   guardaConversacionesIa   Boolean          @default(false) @map("guarda_conversaciones_ia")
   perfilDinamico           Boolean          @default(false) @map("perfil_dinamico")
+  limiteLlamadasIaMes      Int?             @map("limite_llamadas_ia_mes")
   nivelAnaliticas          NivelAnaliticas  @default(BASICO) @map("nivel_analiticas")
 
   subscriptions Subscription[]
@@ -195,6 +197,10 @@ model StyleProfile {
   conversacion         Json?
   confianzaPorcentaje  Int      @default(0) @map("confianza_porcentaje")
   fuentesCompletadas   Json?    @map("fuentes_completadas")
+  longitudRespuesta    String   @default("media") @map("longitud_respuesta")
+  instrucciones        String?  @db.Text
+  usarPerfil           Boolean  @default(true) @map("usar_perfil")
+  evitarRepetidas      Boolean  @default(true) @map("evitar_repetidas")
   creadoEn             DateTime @default(now()) @map("creado_en")
 
   user               User                     @relation(fields: [userId], references: [id])
@@ -267,6 +273,17 @@ model ApplicationStatusHistory {
   application Application @relation(fields: [applicationId], references: [id])
 
   @@map("application_status_history")
+}
+
+model AiUsageLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tipo      String
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("ai_usage_logs")
 }
 
 // ─────────────────────────────────────────
