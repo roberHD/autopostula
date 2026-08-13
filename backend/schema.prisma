@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "./lib/generated/prisma"
 }
 
 datasource db {
@@ -77,7 +78,6 @@ model User {
   oauthProvider   String?  @map("oauth_provider")
   nombre          String?
   rol             Rol      @default(USUARIO)
-  apiToken        String?  @unique @map("api_token")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions    Subscription[]
@@ -178,9 +178,19 @@ model PlatformAccount {
 model CvProfile {
   id             String   @id @default(uuid())
   userId         String   @unique @map("user_id")
-  nombreArchivo  String   @map("nombre_archivo")
+  nombreArchivo  String?  @map("nombre_archivo")
   textoExtraido  String?  @db.Text @map("texto_extraido")
   subidoEn       DateTime @default(now()) @map("subido_en")
+
+  // ── Datos del perfil del candidato ──
+  nombre              String?
+  email               String?
+  telefono            String?
+  comuna              String?
+  cargoObjetivo       String?  @map("cargo_objetivo")
+  expectativaRenta    String?  @map("expectativa_renta")
+  disponibilidad      String?
+  resumenProfesional  String?  @db.Text @map("resumen_profesional")
 
   user         User          @relation(fields: [userId], references: [id])
   applications Application[]
