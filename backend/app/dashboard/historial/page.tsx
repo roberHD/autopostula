@@ -16,6 +16,7 @@ const FILTROS = [
   { valor: "ENVIADO", etiqueta: "Enviada" },
   { valor: "VISTO", etiqueta: "Vista" },
   { valor: "EN_PROCESO", etiqueta: "En proceso" },
+  { valor: "FINALISTA", etiqueta: "Finalista" },
   { valor: "FINALIZADO", etiqueta: "Finalizada" },
   { valor: "RECHAZADO", etiqueta: "Rechazada" },
 ];
@@ -24,6 +25,7 @@ const COLOR_ESTADO: Record<string, string> = {
   ENVIADO: "var(--status-enviado)",
   VISTO: "var(--status-visto)",
   EN_PROCESO: "var(--status-en-proceso)",
+  FINALISTA: "#8b5cf6",
   FINALIZADO: "var(--status-finalizado)",
   RECHAZADO: "var(--status-rechazado)",
 };
@@ -32,6 +34,7 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   ENVIADO: "Enviada",
   VISTO: "Vista",
   EN_PROCESO: "En proceso",
+  FINALISTA: "Finalista",
   FINALIZADO: "Finalizada",
   RECHAZADO: "Rechazada",
 };
@@ -138,7 +141,11 @@ export default function HistorialPage() {
             </thead>
             <tbody>
               {filtradas.map((a) => (
-                <tr key={a.id}>
+                <tr
+                  key={a.id}
+                  onClick={() => (window.location.href = `/dashboard/historial/${a.id}`)}
+                  style={{ cursor: "pointer" }}
+                >
                   <td>
                     <div className="ap-cargo">{a.titulo}</div>
                     <div className="ap-empresa">{a.empresa ?? "Empresa no especificada"}</div>

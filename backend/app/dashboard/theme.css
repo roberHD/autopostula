@@ -525,3 +525,57 @@
   color: var(--text);
   line-height: 1.5;
 }
+
+/* ── Inputs genéricos, dropzone ──────────────────────────── */
+
+.ap-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+
+.ap-input {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.ap-input::placeholder,
+.ap-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.ap-field {
+  margin-bottom: 14px;
+}
+
+.ap-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated-2);
+  cursor: pointer;
+  text-align: center;
+  margin-bottom: 16px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ap-dropzone-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated-2));
+}

@@ -52,6 +52,7 @@ export async function POST(request: Request) {
       empresa,
       origen = "MANUAL", // MANUAL | AUTOMATICO
       styleProfileId,
+      respuestas, // [{ pregunta, respuesta, vacia, fueIA }] — opcional
     } = body;
 
     if (!platformNombre || !externalId || !titulo) {
@@ -106,6 +107,22 @@ export async function POST(request: Request) {
     await prisma.applicationStatusHistory.create({
       data: { applicationId: application.id, estado: "ENVIADO" },
     });
+
+    if (Array.isArray(respuestas) && respuestas.length) {
+      await prisma.applicationAnswer.createMany({
+        data: respuestas
+          .filter((r: any) => r?.pregunta)
+          .map((r: any) => ({
+            applicationId: application.id,
+            pregunta: r.pregunta,
+            // Por ahora respuestaIa y respuestaFinal son iguales — todavía no
+            // capturamos el valor antes/después de la edición en el panel de revisión.
+            respuestaIa: r.respuesta || "",
+            respuestaFinal: r.respuesta || "",
+            fueEditada: false,
+          })),
+      });
+    }
 
     return NextResponse.json({ id: application.id });
   } catch (err) {

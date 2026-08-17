@@ -31,7 +31,6 @@ const CAMPOS: { key: keyof Perfil; label: string; placeholder: string; textarea?
 ];
 
 export default function PerfilCv() {
-  const [abierto, setAbierto] = useState(true);
   const [perfil, setPerfil] = useState<Perfil>({});
   const [cargando, setCargando] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
@@ -65,7 +64,8 @@ export default function PerfilCv() {
       setPerfil(p => ({ ...p, nombreArchivo: data.nombreArchivo }));
 
       setAnalizando(true);
-      const resAI = await fetch("/api/cv/analizar", { method: "POST" });
+      // El endpoint real vive en /api/cv/upload/analizar (route.ts está en app/api/cv/upload/analizar/)
+      const resAI = await fetch("/api/cv/upload/analizar", { method: "POST" });
       const dataAI = await resAI.json();
       if (resAI.ok && dataAI.disponible && dataAI.datos) {
         setPerfil(p => ({
@@ -76,7 +76,7 @@ export default function PerfilCv() {
         }));
         setMensaje("CV leído — revisa los datos que completó la IA antes de guardar");
       } else {
-        setMensaje("CV subido. Completa tus datos manualmente.");
+        setMensaje(dataAI.error || "CV subido. Completa tus datos manualmente.");
       }
     } catch {
       setMensaje("Error al subir el CV. Intenta de nuevo.");
@@ -105,85 +105,72 @@ export default function PerfilCv() {
   }
 
   return (
-    <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-bold tracking-wide text-gray-900">MI CV Y PERFIL</h2>
-        <button onClick={() => setAbierto(a => !a)} className="text-xs font-medium text-blue-600 hover:underline">
-          {abierto ? "Ocultar" : "Mostrar"}
-        </button>
+    <div className="ap-section" style={{ maxWidth: 480 }}>
+      <div
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setArrastrando(true); }}
+        onDragLeave={() => setArrastrando(false)}
+        onDrop={e => {
+          e.preventDefault();
+          setArrastrando(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) subirCv(file);
+        }}
+        className={"ap-dropzone" + (arrastrando ? " ap-dropzone-active" : "")}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) subirCv(f); }}
+        />
+        <span style={{ fontSize: 20 }}>📄</span>
+        <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          {subiendo ? "Subiendo y leyendo tu CV…"
+            : analizando ? "🤖 La IA está leyendo tu información…"
+            : perfil.nombreArchivo ? `${perfil.nombreArchivo} — toca para reemplazar`
+            : "Sube tu CV en PDF — la IA leerá tu información"}
+        </span>
       </div>
 
-      {abierto && (
-        <>
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={e => { e.preventDefault(); setArrastrando(true); }}
-            onDragLeave={() => setArrastrando(false)}
-            onDrop={e => {
-              e.preventDefault();
-              setArrastrando(false);
-              const file = e.dataTransfer.files?.[0];
-              if (file) subirCv(file);
-            }}
-            className={`mb-5 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-5 text-center transition-colors ${
-              arrastrando ? "border-blue-400 bg-blue-50" : "border-gray-300 bg-gray-50"
-            }`}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) subirCv(f); }}
-            />
-            <span className="text-sm text-gray-500">
-              {subiendo ? "📄 Subiendo y leyendo tu CV…"
-                : analizando ? "🤖 La IA está leyendo tu información…"
-                : perfil.nombreArchivo ? `📄 ${perfil.nombreArchivo} — toca para reemplazar`
-                : "📄 Sube tu CV en PDF — la IA leerá tu información"}
-            </span>
-          </div>
-
-          {cargando ? (
-            <p className="text-sm text-gray-400">Cargando tu perfil…</p>
-          ) : (
-            <div className="space-y-4">
-              {CAMPOS.map(campo => (
-                <div key={campo.key}>
-                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                    {campo.label}
-                  </label>
-                  {campo.textarea ? (
-                    <textarea
-                      value={perfil[campo.key] || ""}
-                      onChange={e => setPerfil(p => ({ ...p, [campo.key]: e.target.value }))}
-                      placeholder={campo.placeholder}
-                      rows={3}
-                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white"
-                    />
-                  ) : (
-                    <input
-                      value={perfil[campo.key] || ""}
-                      onChange={e => setPerfil(p => ({ ...p, [campo.key]: e.target.value }))}
-                      placeholder={campo.placeholder}
-                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white"
-                    />
-                  )}
-                </div>
-              ))}
-
-              <button
-                onClick={guardar}
-                disabled={guardando}
-                className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
-              >
-                {guardando ? "Guardando…" : "Guardar perfil"}
-              </button>
-
-              {mensaje && <p className="text-center text-xs text-gray-500">{mensaje}</p>}
+      {cargando ? (
+        <p className="ap-section-sub">Cargando tu perfil…</p>
+      ) : (
+        <div>
+          {CAMPOS.map(campo => (
+            <div key={campo.key} className="ap-field">
+              <label className="ap-label">{campo.label}</label>
+              {campo.textarea ? (
+                <textarea
+                  value={perfil[campo.key] || ""}
+                  onChange={e => setPerfil(p => ({ ...p, [campo.key]: e.target.value }))}
+                  placeholder={campo.placeholder}
+                  rows={3}
+                  className="ap-textarea"
+                />
+              ) : (
+                <input
+                  value={perfil[campo.key] || ""}
+                  onChange={e => setPerfil(p => ({ ...p, [campo.key]: e.target.value }))}
+                  placeholder={campo.placeholder}
+                  className="ap-input"
+                />
+              )}
             </div>
+          ))}
+
+          <button onClick={guardar} disabled={guardando} className="ap-button" style={{ width: "100%" }}>
+            {guardando ? "Guardando…" : "Guardar perfil"}
+          </button>
+
+          {mensaje && (
+            <p style={{ marginTop: 10, fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>
+              {mensaje}
+            </p>
           )}
-        </>
+        </div>
       )}
     </div>
   );

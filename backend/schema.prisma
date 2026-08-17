@@ -48,6 +48,7 @@ enum EstadoPostulacion {
   ENVIADO
   VISTO
   EN_PROCESO
+  FINALISTA
   FINALIZADO
   RECHAZADO
 }
@@ -78,6 +79,8 @@ model User {
   oauthProvider   String?  @map("oauth_provider")
   nombre          String?
   rol             Rol      @default(USUARIO)
+  apiToken        String?  @unique @map("api_token")
+  usarFiltroIA    Boolean  @default(true) @map("usar_filtro_ia")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions    Subscription[]
@@ -211,6 +214,12 @@ model StyleProfile {
   instrucciones        String?  @db.Text
   usarPerfil           Boolean  @default(true) @map("usar_perfil")
   evitarRepetidas      Boolean  @default(true) @map("evitar_repetidas")
+  resumen              String?  @db.Text
+  fortalezas           Json?
+  motivaciones         String?  @db.Text
+  estiloDetalle        Json?    @map("estilo_detalle")
+  manualEscritura      Json?    @map("manual_escritura")
+  confirmado           Boolean  @default(false)
   creadoEn             DateTime @default(now()) @map("creado_en")
 
   user               User                     @relation(fields: [userId], references: [id])

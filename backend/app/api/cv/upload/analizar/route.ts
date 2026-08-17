@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { checkAndLogAiUsage } from "@/lib/ai-usage";
 
 export async function POST() {
   const session = await auth();
@@ -15,6 +16,14 @@ export async function POST() {
   const cv = await prisma.cvProfile.findUnique({ where: { userId } });
   if (!cv?.textoExtraido) {
     return NextResponse.json({ error: "Primero sube tu CV" }, { status: 400 });
+  }
+
+  const uso = await checkAndLogAiUsage(userId, "analizar_cv");
+  if (!uso.permitido) {
+    return NextResponse.json(
+      { error: `Alcanzaste el límite de llamadas de IA de tu plan este mes (${uso.limite}).` },
+      { status: 403 }
+    );
   }
 
   try {

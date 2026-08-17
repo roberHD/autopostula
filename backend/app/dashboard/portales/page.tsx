@@ -92,50 +92,70 @@ export default function PortalesPage() {
   const activasCount = cuentas.filter((c) => c.activa).length;
 
   return (
-    <div style={{ maxWidth: 560, margin: "80px auto" }}>
-      <h1>Portales conectados</h1>
-      <p>
-        {activasCount} activo(s)
-        {maxActivas ? ` de ${maxActivas} permitidos en tu plan` : " (ilimitado)"}
-      </p>
+    <>
+      <div className="ap-page-header">
+        <h1 className="ap-page-title">Portales conectados</h1>
+        <p className="ap-page-sub">
+          {activasCount} activo(s){maxActivas ? ` de ${maxActivas} permitidos en tu plan` : " (ilimitado)"}
+        </p>
+      </div>
 
-      {mensaje && <p style={{ color: "red" }}>{mensaje}</p>}
+      {mensaje && (
+        <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>{mensaje}</p>
+      )}
 
-      <ul style={{ padding: 0, listStyle: "none" }}>
+      <div className="ap-section">
+        <p className="ap-section-title">Portales disponibles</p>
+        <p className="ap-section-sub">Conecta los portales donde quieres que la extensión postule por ti</p>
+
         {plataformas.map((p) => {
           const cuenta = cuentas.find((c) => c.platformId === p.id);
           return (
-            <li key={p.id} style={{ marginBottom: 8 }}>
-              {p.nombre} —{" "}
+            <div key={p.id} className="ap-toggle-row">
+              <div>
+                <div className="ap-toggle-label" style={{ fontWeight: 600 }}>{p.nombre}</div>
+                <div className="ap-toggle-desc">
+                  {cuenta?.activa ? "Conectado" : "No conectado"}
+                </div>
+              </div>
               {cuenta?.activa ? (
-                <button onClick={() => desconectar(p.id)}>Desconectar</button>
+                <button className="ap-button-ghost" onClick={() => desconectar(p.id)}>
+                  Desconectar
+                </button>
               ) : (
-                <button onClick={() => conectar(p.id)}>Conectar</button>
+                <button className="ap-button" onClick={() => conectar(p.id)}>
+                  Conectar
+                </button>
               )}
-            </li>
+            </div>
           );
         })}
-      </ul>
+      </div>
 
-      <h2 style={{ marginTop: 32 }}>Token de la extensión</h2>
-      <p>Copia este token en la configuración de la extensión para que pueda enviar tus postulaciones.</p>
-      <code
-        style={{
-          display: "block",
-          padding: 12,
-          background: "#eee",
-          wordBreak: "break-all",
-        }}
-      >
-        {token ?? "Todavía no tienes un token"}
-      </code>
-      <button onClick={regenerarToken} style={{ marginTop: 8, padding: 8 }}>
-        {token ? "Regenerar token" : "Generar token"}
-      </button>
-
-      <p style={{ marginTop: 24 }}>
-        <a href="/dashboard">Volver al dashboard</a>
-      </p>
-    </div>
+      <div className="ap-section">
+        <p className="ap-section-title">Token de la extensión</p>
+        <p className="ap-section-sub">
+          Copia este token en la configuración de la extensión para habilitar la IA y el historial.
+        </p>
+        <code
+          style={{
+            display: "block",
+            padding: "12px 14px",
+            background: "var(--bg-elevated-2)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            wordBreak: "break-all",
+            fontSize: 12.5,
+            color: "var(--text)",
+            marginBottom: 12,
+          }}
+        >
+          {token ?? "Todavía no tienes un token"}
+        </code>
+        <button className="ap-button" onClick={regenerarToken}>
+          {token ? "Regenerar token" : "Generar token"}
+        </button>
+      </div>
+    </>
   );
 }

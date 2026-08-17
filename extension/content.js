@@ -204,9 +204,10 @@ async function analizarOferta(contexto) {
 async function aiResponde(pregunta, contexto, opciones, analisis) {
   const p = (cfg && cfg.perfil) || {};
   const info = (cfg && cfg.info || []).map(it => it.texto);
-  const estilo = await cargarEstiloProfesional();
+  // El estilo ya no se manda desde acá — el backend lo lee de StyleProfile
+  // (la conversación inteligente ahora vive en el dashboard, no en la extensión).
   const data = await llamarBackendIA('responder_pregunta', {
-    pregunta, contexto, opciones, analisis, perfil: p, info, estilo
+    pregunta, contexto, opciones, analisis, perfil: p, info
   });
   return data && !data.error ? data.respuesta : null;
 }
@@ -805,7 +806,7 @@ async function postular(url, id, titulo) {
         reason:'Enviado (' + n2 + ' campos)',
         respuestas: respuestasParaLog
       });
-      reportarPostulacion({ id, titulo });
+      reportarPostulacion({ id, titulo, respuestas: respuestasParaLog });
       msg('✓ ' + titulo.slice(0,40), '#16A34A');
       return true;
     } else {
@@ -895,6 +896,69 @@ async function escanear() {
   msg('Escaneo completo', '#16A34A');
 }
 
+// ── Seguimiento de estados en "Mis postulaciones" ───────────────
+const MAPA_ESTADO_COMPUTRABAJO = {
+  'postulado': 'ENVIADO',
+  'cv visto': 'VISTO',
+  'en proceso': 'EN_PROCESO',
+  'finalista': 'FINALISTA',
+  'proceso finalizado': 'FINALIZADO'
+};
+
+function extraerHashOferta(url) {
+  if (!url) return null;
+  const m = url.match(/([A-Fa-f0-9]{32})(?:$|[?#])/);
+  return m ? m[1].toUpperCase() : null;
+}
+
+function actualizarEstadoPostulacion(datos) {
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({ type: 'ACTUALIZAR_ESTADO', datos: datos }, (respuesta) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        resolve(respuesta || null);
+      });
+    } catch (e) { resolve(null); }
+  });
+}
+
+async function escanearMisPostulaciones() {
+  const boxes = document.querySelectorAll('[match-div-offers] .box[data-match]');
+  if (!boxes.length) return;
+
+  msg('Revisando estados de postulaciones…', '#7C3AED');
+  let actualizadas = 0;
+
+  for (const box of boxes) {
+    const linkAviso = box.querySelector('[data-shortcut-see-offer]');
+    const url = linkAviso ? linkAviso.getAttribute('data-shortcut-see-offer') : null;
+    const externalId = extraerHashOferta(url);
+    if (!externalId) continue;
+
+    const estadoTexto = (box.querySelector('.fc_link')?.textContent || '').trim().toLowerCase();
+    const estado = MAPA_ESTADO_COMPUTRABAJO[estadoTexto];
+    if (!estado) continue;
+
+    const resultado = await actualizarEstadoPostulacion({
+      platformNombre: 'Computrabajo',
+      externalId: externalId,
+      estado: estado
+    });
+    if (resultado && !resultado.error && !resultado.sinCambios) actualizadas++;
+  }
+
+  msg(actualizadas ? '✓ ' + actualizadas + ' estado(s) actualizado(s)' : 'Estados al día', '#16A34A');
+}
+
+// ── Escaneo disparado por la búsqueda automática (background) ──
+// No depende del toggle "activo" — el punto de esto es que corra solo.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'AUTO_SCAN') {
+    escanear();
+    sendResponse({ ok: true });
+  }
+});
+
 // ── Mensajes ──────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((m, _, res) => {
   if (m.type === 'TOGGLE') {
@@ -917,7 +981,11 @@ try {
       iaDisponible = !!d.autopostulaToken;
       console.log('[AP v4] config:', !!cfg, 'activo:', activo, 'incTags:', cfg && cfg.incTags && cfg.incTags.length, 'modoRevision:', cfg && cfg.modoRevision, 'IA (token AutoPostula):', iaDisponible);
     });
-    if (activo) { msg('Activado — escaneando…','#16A34A'); setTimeout(escanear, 1800); }
+    if (location.pathname.indexOf('/candidate/match') !== -1) {
+      setTimeout(escanearMisPostulaciones, 1500);
+    } else if (activo) {
+      msg('Activado — escaneando…','#16A34A'); setTimeout(escanear, 1800);
+    }
   });
 } catch(e) { console.error('[AP v4] init error:', e); }
 

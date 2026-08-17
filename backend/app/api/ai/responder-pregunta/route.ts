@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
     }
 
-    const { pregunta, contexto, opciones, analisis, perfil, info, estilo } = await request.json();
+    const { pregunta, contexto, opciones, analisis, perfil, info } = await request.json();
     if (!pregunta) {
       return NextResponse.json({ error: "Falta pregunta" }, { status: 400 });
     }
@@ -45,6 +45,24 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
+
+    // El estilo ya no lo manda la extensión — se lee de StyleProfile, que es la fuente
+    // de verdad ahora que la conversación inteligente vive en la web.
+    const styleProfile = await prisma.styleProfile.findFirst({
+      where: { userId: user.id },
+      orderBy: { creadoEn: "desc" },
+    });
+    const estilo = styleProfile?.confirmado
+      ? {
+          confirmado: true,
+          resumen: styleProfile.resumen,
+          fortalezas: styleProfile.fortalezas as string[] | null,
+          objetivos: styleProfile.objetivo,
+          motivaciones: styleProfile.motivaciones,
+          estilo: styleProfile.estiloDetalle as any,
+          manualEscritura: styleProfile.manualEscritura as string[] | null,
+        }
+      : null;
 
     const p = perfil || {};
     const infoTexto = (info || []).map((t: string) => "- " + t).join("\n");
