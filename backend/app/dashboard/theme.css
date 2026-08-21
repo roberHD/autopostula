@@ -1,17 +1,23 @@
 .ap-shell {
-  --bg: #0b0f17;
-  --bg-elevated: #121826;
-  --bg-elevated-2: #1a2233;
-  --border: #232b3d;
-  --text: #e6e9ef;
-  --text-muted: #8b93a7;
-  --accent: #22d3a6;
-  --accent-contrast: #06251d;
-  --status-enviado: #6b7280;
-  --status-visto: #3b82f6;
-  --status-en-proceso: #f59e0b;
-  --status-finalizado: #22c55e;
-  --status-rechazado: #ef4444;
+  --bg: oklch(0.145 0.006 275);
+  --bg-elevated: oklch(0.205 0.008 275);
+  --bg-elevated-2: oklch(0.255 0.01 275);
+  --border: oklch(1 0 0 / 10%);
+  --text: oklch(0.96 0.005 275);
+  --text-muted: oklch(0.66 0.02 275);
+  --accent: oklch(0.65 0.19 280);
+  --accent-contrast: oklch(0.99 0.005 280);
+  --status-enviado: oklch(0.66 0.02 275);
+  --status-visto: oklch(0.65 0.19 280);
+  --status-en-proceso: oklch(0.75 0.14 85);
+  --status-finalista: oklch(0.75 0.15 150);
+  --status-finalizado: oklch(0.72 0.13 180);
+  --status-rechazado: oklch(0.7 0.19 25);
+  --chart-1: oklch(0.65 0.19 280);
+  --chart-2: oklch(0.72 0.15 300);
+  --chart-3: oklch(0.75 0.13 200);
+  --chart-4: oklch(0.78 0.15 145);
+  --chart-5: oklch(0.75 0.16 55);
   --radius: 10px;
 
   display: flex;
@@ -22,19 +28,31 @@
 }
 
 .ap-shell[data-theme="light"] {
-  --bg: #f5f6f8;
-  --bg-elevated: #ffffff;
-  --bg-elevated-2: #f0f1f4;
-  --border: #e2e4e9;
-  --text: #16181d;
-  --text-muted: #6b7280;
-  --accent: #6366f1;
-  --accent-contrast: #ffffff;
-  --status-enviado: #6b7280;
-  --status-visto: #3b82f6;
-  --status-en-proceso: #d97706;
-  --status-finalizado: #16a34a;
-  --status-rechazado: #dc2626;
+  --bg: oklch(0.985 0.003 275);
+  --bg-elevated: oklch(1 0 0);
+  --bg-elevated-2: oklch(0.96 0.008 275);
+  --border: oklch(0.91 0.008 275);
+  --text: oklch(0.21 0.02 275);
+  --text-muted: oklch(0.52 0.02 275);
+  --accent: oklch(0.53 0.2 280);
+  --accent-contrast: oklch(0.99 0.005 280);
+  --status-enviado: oklch(0.52 0.02 275);
+  --status-visto: oklch(0.35 0.12 285);
+  --status-en-proceso: oklch(0.45 0.15 85);
+  --status-finalista: oklch(0.42 0.12 150);
+  --status-finalizado: oklch(0.4 0.1 180);
+  --status-rechazado: oklch(0.5 0.18 25);
+  --chart-1: oklch(0.53 0.2 280);
+  --chart-2: oklch(0.66 0.16 300);
+  --chart-3: oklch(0.72 0.13 200);
+  --chart-4: oklch(0.75 0.15 145);
+  --chart-5: oklch(0.7 0.16 55);
+}
+
+/* Fondos suaves para los badges de estado — versión clara y translúcida
+   de cada color, independiente del tema (el color de arriba ya cambia solo). */
+.ap-shell[data-theme="light"] .ap-badge {
+  --badge-bg-opacity: 12%;
 }
 
 /* ── Sidebar ────────────────────────────────────────────── */
@@ -194,7 +212,8 @@
 .ap-main {
   flex: 1;
   padding: 32px 40px;
-  max-width: 1100px;
+  max-width: 1800px;
+  width: 100%;
 }
 
 .ap-page-header {
@@ -578,4 +597,174 @@
 .ap-dropzone-active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated-2));
+}
+
+/* ── Inicio: stats, gráficos, listas ────────────────────── */
+
+.ap-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ap-stat-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.ap-stat-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.ap-stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.ap-stat-value {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.ap-stat-change {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ap-stat-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.ap-charts-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 800px) {
+  .ap-charts-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ap-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  padding: 6px 0;
+}
+
+.ap-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.ap-recent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.ap-recent-item:last-child {
+  border-bottom: none;
+}
+
+.ap-assistant-card {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+/* ── Animación de entrada, reutilizable en cualquier módulo ──
+   Uso: className="ap-animate-in" + style={{ animationDelay: `${i * 0.05}s` }}
+   en cada tarjeta/fila que quieras que aparezca escalonada al cargar. */
+
+@keyframes ap-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ap-animate-in {
+  animation: ap-fade-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes ap-draw-line {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.ap-line-draw {
+  stroke-dasharray: 1;
+  animation: ap-draw-line 0.9s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+@keyframes ap-fade-in-simple {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ap-area-fade {
+  animation: ap-fade-in-simple 0.7s ease 0.25s both;
+}
+
+.ap-dot-pop {
+  animation: ap-fade-in-simple 0.25s ease both;
+  transform-origin: center;
+}
+
+@keyframes ap-donut-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8) rotate(-90deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-90deg);
+  }
+}
+
+.ap-donut-draw {
+  animation: ap-donut-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ap-animate-in,
+  .ap-line-draw,
+  .ap-area-fade,
+  .ap-dot-pop,
+  .ap-donut-draw {
+    animation: none;
+  }
 }

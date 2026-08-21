@@ -33,7 +33,7 @@ const COLOR_ESTADO: Record<string, string> = {
   ENVIADO: "var(--status-enviado)",
   VISTO: "var(--status-visto)",
   EN_PROCESO: "var(--status-en-proceso)",
-  FINALISTA: "#8b5cf6",
+  FINALISTA: "var(--status-finalista)",
   FINALIZADO: "var(--status-finalizado)",
   RECHAZADO: "var(--status-rechazado)",
 };

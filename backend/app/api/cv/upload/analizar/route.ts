@@ -36,13 +36,17 @@ export async function POST() {
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 600,
+        max_tokens: 900,
         messages: [{
           role: "user",
           content:
-            'Extrae del siguiente CV los datos pedidos. Responde SOLO con un JSON válido, sin texto extra, con exactamente estas claves (usa "" si no encuentras el dato): ' +
-            '{"nombre":"","email":"","telefono":"","comuna":"","cargoObjetivo":"","expectativaRenta":"","disponibilidad":"","resumenProfesional":""}\n\n' +
-            "resumenProfesional: máximo 3 líneas, en primera persona.\n\nCV:\n" + cv.textoExtraido.slice(0, 12000),
+            'Extrae del siguiente CV los datos pedidos. Responde SOLO con un JSON válido, sin texto extra, con exactamente estas claves (usa "" o [] si no encuentras el dato): ' +
+            '{"nombre":"","email":"","telefono":"","comuna":"","cargoObjetivo":"","expectativaRenta":"","disponibilidad":"","modalidad":"","resumenProfesional":"","experiencia":[{"cargo":"","empresa":"","periodo":""}],"habilidades":[]}\n\n' +
+            "resumenProfesional: máximo 3 líneas, en primera persona.\n" +
+            "modalidad: presencial, híbrido o remoto, según lo que se infiera del CV (vacío si no hay indicio).\n" +
+            "experiencia: máximo 4 cargos más recientes, periodo como texto corto (ej. \"2023 — Presente\").\n" +
+            "habilidades: máximo 8, palabras o frases cortas (herramientas, tecnologías, competencias).\n\n" +
+            "CV:\n" + cv.textoExtraido.slice(0, 12000),
         }],
       }),
     });

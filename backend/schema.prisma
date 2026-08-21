@@ -190,10 +190,14 @@ model CvProfile {
   email               String?
   telefono            String?
   comuna              String?
+  rut                 String?
   cargoObjetivo       String?  @map("cargo_objetivo")
   expectativaRenta    String?  @map("expectativa_renta")
   disponibilidad      String?
+  modalidad           String?
   resumenProfesional  String?  @db.Text @map("resumen_profesional")
+  experiencia         Json?
+  habilidades         Json?
 
   user         User          @relation(fields: [userId], references: [id])
   applications Application[]
