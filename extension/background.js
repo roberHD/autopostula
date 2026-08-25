@@ -3,6 +3,8 @@
 // ═══════════════════════════════════════════════════════════════
 'use strict';
 
+console.log('[AP] background.js cargado', new Date().toLocaleTimeString());
+
 let queue = [];
 let busy  = false;
 
@@ -66,6 +68,9 @@ async function llamarIABackend(tipo, payload) {
     return null;
   }
 
+  const controlador = new AbortController();
+  const timeoutId = setTimeout(() => controlador.abort(), 25000);
+
   try {
     const res = await fetch('http://localhost:3000' + ruta, {
       method: 'POST',
@@ -73,8 +78,11 @@ async function llamarIABackend(tipo, payload) {
         'Authorization': 'Bearer ' + autopostulaToken,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controlador.signal
     });
+
+    clearTimeout(timeoutId);
 
     const data = await res.json().catch(() => ({}));
 
@@ -85,8 +93,13 @@ async function llamarIABackend(tipo, payload) {
 
     return data;
   } catch (e) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      console.warn('[AP] Timeout de 25s llamando a la IA del backend (' + tipo + ') — el service worker probablemente se durmió o la petición nunca llegó al servidor.');
+      return { error: 'La IA no respondió a tiempo (timeout)' };
+    }
     console.warn('[AP] Error de red llamando a la IA del backend (' + tipo + '):', e);
-    return null;
+    return { error: 'Error de red: ' + e.message };
   }
 }
 
@@ -127,7 +140,14 @@ async function actualizarEstadoBackend(datos) {
 const NOMBRE_ALARMA_AUTOMATICA = 'autopostula-scan';
 const INTERVALO_MINUTOS = 120; // cada 2 horas
 
-chrome.alarms.create(NOMBRE_ALARMA_AUTOMATICA, { periodInMinutes: INTERVALO_MINUTOS });
+// Envuelto en try/catch: si el permiso "alarms" llegara a faltar en el manifest,
+// esto no debe tumbar el resto del script (y con eso, dejar de registrar los
+// listeners de mensajes más abajo, como AI_CALL).
+try {
+  chrome.alarms.create(NOMBRE_ALARMA_AUTOMATICA, { periodInMinutes: INTERVALO_MINUTOS });
+} catch (e) {
+  console.error('[AP] No se pudo crear la alarma de búsqueda automática (¿falta el permiso "alarms"?):', e);
+}
 
 function normalizarParaUrl(texto) {
   return (texto || '')
@@ -187,11 +207,15 @@ async function escanearAutomatico() {
   });
 }
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === NOMBRE_ALARMA_AUTOMATICA) {
-    escanearAutomatico();
-  }
-});
+try {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === NOMBRE_ALARMA_AUTOMATICA) {
+      escanearAutomatico();
+    }
+  });
+} catch (e) {
+  console.error('[AP] No se pudo registrar el listener de alarmas:', e);
+}
 
 // ── Reportar postulación al backend de AutoPostula (web) ───────
 // Corre en el background porque acá sí hay privilegios de extensión —
@@ -238,13 +262,13 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   if (msg.type === 'REPORTAR_POSTULACION') {
     reportarPostulacionBackend(msg.oferta);
   }
-  if (msg.type === 'AI_CALL') {
-    llamarIABackend(msg.tipo, msg.payload).then(sendResponse);
-    return true; // mantiene el canal abierto — la respuesta llega async
-  }
   if (msg.type === 'ACTUALIZAR_ESTADO') {
     actualizarEstadoBackend(msg.datos).then(sendResponse);
     return true;
+  }
+  if (msg.type === 'AI_CALL') {
+    llamarIABackend(msg.tipo, msg.payload).then(sendResponse);
+    return true; // mantiene el canal abierto — la respuesta llega async
   }
   return false;
 });

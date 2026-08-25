@@ -81,6 +81,7 @@ model User {
   rol             Rol      @default(USUARIO)
   apiToken        String?  @unique @map("api_token")
   usarFiltroIA    Boolean  @default(true) @map("usar_filtro_ia")
+  onboardingCompletado Boolean @default(false) @map("onboarding_completado")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions    Subscription[]

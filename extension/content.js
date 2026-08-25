@@ -166,12 +166,39 @@ async function obtenerObjetivoLaboral() {
 // al background que haga la llamada, y espera la respuesta por mensaje.
 function llamarBackendIA(tipo, payload) {
   return new Promise(resolve => {
+    let resuelto = false;
+    const terminar = (valor) => {
+      if (resuelto) return;
+      resuelto = true;
+      resolve(valor);
+    };
+
+    const timeoutId = setTimeout(() => {
+      console.warn('[AP] Timeout de 30s esperando al background (' + tipo + ')');
+      msg('⚠ IA sin respuesta (timeout) — ' + tipo, '#DC2626');
+      terminar({ error: 'Sin respuesta del background (timeout)' });
+    }, 30000);
+
     try {
       chrome.runtime.sendMessage({ type: 'AI_CALL', tipo, payload }, (respuesta) => {
-        if (chrome.runtime.lastError) { resolve(null); return; }
-        resolve(respuesta || null);
+        clearTimeout(timeoutId);
+        if (chrome.runtime.lastError) {
+          console.warn('[AP] runtime.lastError en AI_CALL (' + tipo + '):', chrome.runtime.lastError.message);
+          msg('⚠ Error de conexión con la extensión: ' + chrome.runtime.lastError.message, '#DC2626');
+          terminar(null);
+          return;
+        }
+        if (respuesta && respuesta.error) {
+          msg('⚠ IA: ' + respuesta.error, '#DC2626');
+        }
+        terminar(respuesta || null);
       });
-    } catch (e) { resolve(null); }
+    } catch (e) {
+      clearTimeout(timeoutId);
+      console.warn('[AP] Excepción llamando a AI_CALL (' + tipo + '):', e);
+      msg('⚠ Excepción llamando a la extensión: ' + e.message, '#DC2626');
+      terminar(null);
+    }
   });
 }
 
@@ -209,7 +236,11 @@ async function aiResponde(pregunta, contexto, opciones, analisis) {
   const data = await llamarBackendIA('responder_pregunta', {
     pregunta, contexto, opciones, analisis, perfil: p, info
   });
-  return data && !data.error ? data.respuesta : null;
+  // Se devuelve el error explícitamente (no solo null) para que quien llama pueda
+  // distinguir "el modelo no tenía el dato" de "la llamada falló" (límite del plan,
+  // timeout, red, etc.) y mostrarlo distinto en el panel de revisión.
+  if (data && data.error) return { respuesta: null, error: data.error };
+  return { respuesta: data ? data.respuesta : null, error: null };
 }
 
 // Red de seguridad: por si el modelo igual agrega formato markdown o repite la pregunta.
@@ -240,11 +271,20 @@ function mostrarRevision(titulo, respuestasLog, contexto) {
     });
 
     const filas = respuestasLog.map((r, idx) => {
-      const color = r.vacia ? '#DC2626' : '#16A34A';
-      const icon = r.vacia ? 'ADVERTENCIA' : 'OK';
+      // r.errorIA solo viene seteado cuando la llamada a la IA falló (límite del plan,
+      // timeout, red, etc.) -- se distingue de r.vacia sin errorIA, que es cuando la IA
+      // sí respondió pero no tenía el dato pedido.
+      const esLimite = r.errorIA && /l[ií]mite/i.test(r.errorIA);
+      const color = esLimite ? '#D97706' : (r.vacia ? '#DC2626' : '#16A34A');
+      const icon = esLimite ? 'LÍMITE' : (r.vacia ? 'ADVERTENCIA' : 'OK');
+      let leyenda = '';
+      if (esLimite) leyenda = ' Límite mensual de IA alcanzado — complétala manualmente';
+      else if (r.errorIA) leyenda = ' Error de IA (' + r.errorIA + ') - puedes completarla';
+      else if (r.vacia) leyenda = ' Sin respuesta - puedes completarla';
+      else if (r.fueIA) leyenda = ' Generada por IA - puedes editarla';
       const cabecera =
         '<div style="font-size:11px;font-weight:700;color:#4b5563;margin-bottom:5px">' + (r.pregunta||'').slice(0,90) + '</div>' +
-        '<div style="font-size:10px;color:' + color + ';margin-bottom:5px">' + icon + (r.vacia ? ' Sin respuesta - puedes completarla' : (r.fueIA ? ' Generada por IA - puedes editarla' : '')) + '</div>';
+        '<div style="font-size:10px;color:' + color + ';margin-bottom:5px">' + icon + leyenda + '</div>';
 
       if (r.tipo === 'opcion') {
         const opts = (r.opciones||[]).map((o, oi) => {
@@ -577,9 +617,11 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, ana
     const opciones = grupo.map(r => ({ el:r, texto:textoDeOpcion(r) }));
     const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(radio)) || getLabel(radio);
     let elegida = calcularRespuesta(pregunta, opciones, perfil);
+    let errorIA = null;
     // Si no hay match universal y hay IA, que la IA elija entre las opciones usando perfil + info adicional
     if (!elegida && iaDisponible && pregunta.length > 5) {
-      const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
+      const { respuesta: respIA, error } = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
+      errorIA = error;
       if (respIA) {
         const rNorm = n(respIA);
         elegida = opciones.find(o => rNorm.includes(n(o.texto)) || n(o.texto).length < 4 && rNorm.startsWith(n(o.texto)));
@@ -590,7 +632,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, ana
       respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       await sleep(300);
     } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null });
+      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA });
     }
   }
 
@@ -610,8 +652,10 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, ana
       const opciones = grupo.map(c => ({ el:c, texto:textoDeOpcion(c) }));
       const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(cb)) || getLabel(cb);
       let elegida = calcularRespuesta(pregunta, opciones, perfil);
+      let errorIA = null;
       if (!elegida && iaDisponible && pregunta.length > 5) {
-        const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
+        const { respuesta: respIA, error } = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
+        errorIA = error;
         if (respIA) {
           const rNorm = n(respIA);
           elegida = opciones.find(o => rNorm.includes(n(o.texto)));
@@ -622,7 +666,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, ana
         respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
         await sleep(200);
       } else if (pregunta && !elegida) {
-        respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null });
+        respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA });
       }
     }
   }
@@ -640,8 +684,10 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, ana
     const opciones = grupo.map(el => ({ el, texto:textoDeOpcion(el) }));
     const pregunta = textoPreguntaContenedor(contenedor);
     let elegida = calcularRespuesta(pregunta, opciones, perfil);
+    let errorIA = null;
     if (!elegida && iaDisponible && pregunta.length > 5) {
-      const respIA = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
+      const { respuesta: respIA, error } = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
+      errorIA = error;
       if (respIA) {
         const rNorm = n(respIA);
         elegida = opciones.find(o => rNorm.includes(n(o.texto)));
@@ -652,7 +698,7 @@ async function manejarGruposDeOpciones(perfil, cfg, respuestasLog, contexto, ana
       respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       await sleep(300);
     } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null });
+      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA });
     }
   }
 
@@ -679,6 +725,7 @@ async function rellenar(contexto, analisis) {
     const lbl = n(labelRaw);
     let val = null;
     let fueIA = false;
+    let errorIA = null;
 
     // clave(): coincide solo si el término aparece como inicio de palabra (con límite \b),
     // para no confundir p.ej. "posición" con "reposición" (que la contiene como substring).
@@ -696,7 +743,8 @@ async function rellenar(contexto, analisis) {
       // Preguntas de discapacidad — responder con IA si está disponible, sino "No"
       if (iaDisponible) {
         msg('IA respondiendo…', '#7C3AED');
-        val = await aiResponde(labelRaw, contexto, null, analisis);
+        const r = await aiResponde(labelRaw, contexto, null, analisis);
+        val = r.respuesta; errorIA = r.error;
         fueIA = !!val;
         await sleep(200);
       } else {
@@ -707,7 +755,8 @@ async function rellenar(contexto, analisis) {
       // Cualquier campo no cubierto por los datos objetivos de arriba se resuelve con IA,
       // usando el perfil, el CV, la "información adicional" y el aviso completo (no respuestas fijas).
       msg('IA respondiendo…', '#7C3AED');
-      val = await aiResponde(labelRaw, contexto, null, analisis);
+      const r = await aiResponde(labelRaw, contexto, null, analisis);
+      val = r.respuesta; errorIA = r.error;
       fueIA = !!val;
       await sleep(200);
     }
@@ -720,7 +769,7 @@ async function rellenar(contexto, analisis) {
       respuestasLog.push({ pregunta: labelRaw, respuesta: val, fueIA, tipo:'texto', el });
       await sleep(500);
     } else if (labelRaw.length > 5) {
-      respuestasLog.push({ pregunta: labelRaw, respuesta: '', vacia: true, tipo:'texto', el });
+      respuestasLog.push({ pregunta: labelRaw, respuesta: '', vacia: true, tipo:'texto', el, errorIA });
     }
   }
 
