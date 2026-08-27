@@ -11,9 +11,12 @@
   --bg:       #F8F9FC;
   --surface:  #FFFFFF;
   --border:   #E4E7EF;
-  --accent:   #2563EB;
-  --accent-h: #1D4ED8;
-  --accent-s: #EFF4FF;
+  /* Mismo violeta que usa el resto del producto (login/registro/onboarding
+     y el color "IA respondiendo…" de content.js) — antes era azul (#2563EB),
+     sin relación con la identidad de la marca. */
+  --accent:   #7C3AED;
+  --accent-h: #6D28D9;
+  --accent-s: #F3EEFF;
   --danger:   #DC2626;
   --danger-s: #FEF2F2;
   --success:  #16A34A;
@@ -57,11 +60,14 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .header-logo {
   width: 34px; height: 34px;
   background: var(--accent);
+  color: #fff;
   border-radius: 9px;
   display: grid; place-items: center;
-  font-size: 17px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.2px;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(37,99,235,.3);
+  box-shadow: 0 2px 8px rgba(124,58,237,.3);
 }
 .header-info { flex: 1; min-width: 0; }
 .header-title {
@@ -168,6 +174,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .section-action {
   font-size: 11px; color: var(--accent);
   cursor: pointer; font-weight: 500;
+  background: none; border: none;
 }
 .section-action:hover { text-decoration: underline; }
 
@@ -179,7 +186,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   font-size: 11px; font-weight: 500;
   cursor: default;
 }
-.tag.inc, .tag.loc { background: var(--accent-s); color: var(--accent); border: 1px solid #BFDBFE; }
+.tag.inc, .tag.loc { background: var(--accent-s); color: var(--accent); border: 1px solid #DDD1FB; }
 .tag.exc { background: var(--danger-s); color: var(--danger); border: 1px solid #FECACA; }
 .tag-x {
   background: none; border: none; cursor: pointer;
@@ -213,6 +220,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   transition: background .15s, opacity .15s;
   white-space: nowrap;
 }
+.btn:disabled { opacity: .55; cursor: default; }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-h); }
 .btn-ghost { background: var(--bg); color: var(--text-2); border: 1px solid var(--border); }
@@ -233,18 +241,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   transition: all .15s;
   user-select: none;
 }
-.chip.selected { background: var(--accent-s); color: var(--accent); border-color: #BFDBFE; }
-
-/* ── Perfil ───────────────────────────────────────────────── */
-.profile-grid { display: flex; flex-direction: column; gap: 8px; }
-.field-group { display: flex; flex-direction: column; gap: 3px; }
-.field-label {
-  font-size: 10px; font-weight: 600;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: .5px;
-}
-textarea.field { resize: vertical; min-height: 56px; }
+.chip.selected { background: var(--accent-s); color: var(--accent); border-color: #DDD1FB; }
 
 /* ── Información adicional ────────────────────────────────── */
 .info-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
@@ -264,47 +261,37 @@ textarea.field { resize: vertical; min-height: 56px; }
   padding: 4px 0; font-style: italic;
 }
 
-/* ── API key ──────────────────────────────────────────────── */
-.apikey-row { display: flex; gap: 6px; align-items: center; }
-.apikey-input-wrap { flex: 1; position: relative; }
-.apikey-input-wrap .field { width: 100%; padding-right: 36px; }
-.apikey-eye {
+/* ── Estado con punto de color (perfil / cuenta web) ──────── */
+.status-row { display: flex; gap: 6px; align-items: center; }
+.status-input-wrap { flex: 1; position: relative; }
+.status-input-wrap .field { width: 100%; padding-right: 36px; }
+.status-eye {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   background: none; border: none; cursor: pointer;
   font-size: 14px; color: var(--text-3); line-height: 1;
 }
-.apikey-eye:hover { color: var(--text-1); }
-.apikey-status {
+.status-eye:hover { color: var(--text-1); }
+.status-line {
   font-size: 10px; margin-top: 4px;
   display: flex; align-items: center; gap: 4px;
 }
-.apikey-status .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
-.apikey-status .dot.ok { background: var(--success); }
-.apikey-status .dot.err { background: var(--danger); }
+.status-line .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; }
+.status-line .dot.ok  { background: var(--success); }
+.status-line .dot.err { background: var(--danger); }
 
-/* ── Log ──────────────────────────────────────────────────── */
-.log-list {
-  display: flex; flex-direction: column; gap: 4px;
-  max-height: 140px; overflow-y: auto;
+/* ── Tarjeta de perfil (solo lectura, viene de la web) ────── */
+.perfil-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.6;
+  margin-bottom: 8px;
 }
-.log-list::-webkit-scrollbar { width: 3px; }
-.log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-.log-empty {
-  font-size: 11px; color: var(--text-3);
-  text-align: center; padding: 16px 0; font-style: italic;
-}
-.log-entry {
-  display: flex; gap: 8px; align-items: flex-start;
-  padding: 5px 8px; border-radius: 6px; background: var(--bg);
-}
-.log-entry.expandible { cursor: pointer; }
-.log-entry.expandible:hover { background: var(--surface); }
-.log-icon { font-size: 11px; margin-top: 1px; flex-shrink: 0; }
-.log-text { flex: 1; font-size: 11px; color: var(--text-2); line-height: 1.3; min-width: 0; }
-.log-title { font-weight: 500; color: var(--text-1); }
-.log-reason { color: var(--text-3); font-size: 10px; }
-.log-time { font-size: 10px; color: var(--text-3); flex-shrink: 0; }
-.log-expand-hint { font-size: 9px; color: var(--accent); margin-left: auto; flex-shrink: 0; white-space: nowrap; }
+.perfil-card b { color: var(--text-1); }
+.perfil-card .vacio { color: var(--text-3); font-style: italic; }
 
 /* ── Footer ───────────────────────────────────────────────── */
 .footer {
@@ -330,50 +317,17 @@ textarea.field { resize: vertical; min-height: 56px; }
 
 /* ── Divider helper ──────────────────────────────────────── */
 .spacer { height: 6px; background: var(--bg); }
-/* ── Tu estilo profesional (chat + tarjeta) ──────────────────── */
 .hidden { display: none !important; }
-
-.estilo-mensajes {
-  display: flex; flex-direction: column; gap: 8px;
-  max-height: 260px; overflow-y: auto;
-  padding: 8px; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border);
-}
-.estilo-msg {
-  max-width: 85%; padding: 7px 10px; border-radius: 10px; font-size: 12px; line-height: 1.4;
-}
-.estilo-msg.ia   { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); color: var(--text-1); }
-.estilo-msg.user { align-self: flex-end;   background: var(--accent);  color: #fff; }
-
-.estilo-card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 14px; box-shadow: var(--shadow);
-}
-.estilo-card-title { font-weight: 700; font-size: 13px; margin-bottom: 10px; }
-.estilo-card-row { margin-bottom: 9px; }
-.estilo-card-label { font-size: 10px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .02em; }
-.estilo-card-row > div { font-size: 12px; color: var(--text-1); margin-top: 2px; line-height: 1.45; }
-.estilo-card-footer {
-  font-size: 10px; color: var(--text-3); font-style: italic; line-height: 1.5;
-  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
-}
-.estilo-chip {
-  display: inline-block; font-size: 10px; font-weight: 600; color: var(--accent);
-  background: var(--accent-s); padding: 2px 8px; border-radius: 10px; margin: 2px 4px 2px 0;
-}
-.estilo-fortaleza-item { font-size: 12px; color: var(--text-1); line-height: 1.5; margin-bottom: 4px; }
-.estilo-estrellas { display: flex; justify-content: center; gap: 6px; font-size: 22px; }
-.estilo-estrellas span { cursor: pointer; color: var(--border); }
-.estilo-estrellas span.on { color: var(--warn); }
 </style>
 </head>
 <body>
 
 <!-- HEADER -->
 <div class="header">
-  <div class="header-logo">🤖</div>
+  <div class="header-logo">AP</div>
   <div class="header-info">
     <div class="header-title">AutoPostula</div>
-    <div class="header-sub">Roberto Hidalgo · Computrabajo</div>
+    <div class="header-sub" id="header-sub">Automatización para Computrabajo</div>
   </div>
   <div class="pulse-wrap">
     <div class="pulse" id="pulse"></div>
@@ -470,126 +424,19 @@ textarea.field { resize: vertical; min-height: 56px; }
 
 <div class="spacer"></div>
 
-<!-- CV + PERFIL integrados -->
+<!-- PERFIL (solo lectura — se trae automáticamente desde tu cuenta web) -->
 <div class="section">
   <div class="section-head">
-    <span class="section-title">Mi CV y Perfil</span>
-    <span class="section-action" id="toggle-profile">Ocultar</span>
+    <span class="section-title">Tu perfil</span>
+    <button class="section-action" id="perfil-refresh-btn">Actualizar</button>
   </div>
-  <div id="profile-body">
-
-    <!-- Subida de CV -->
-    <div id="cv-drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:14px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:8px;">
-      <div id="cv-status" style="font-size:12px;color:var(--text-3);">📄 Sube tu CV en PDF — la IA leerá tu información</div>
-    </div>
-    <input type="file" id="cv-file-input" accept=".pdf" style="display:none">
-    <div style="display:flex;gap:6px;margin-bottom:12px;">
-      <button class="btn btn-primary" id="cv-extract-btn" style="flex:1;display:none;font-size:11px;">✨ Extraer datos del CV automáticamente</button>
-      <button class="btn btn-ghost" id="cv-clear" style="display:none;color:var(--danger);font-size:11px;">🗑 Eliminar CV</button>
-    </div>
-
-    <!-- Texto del CV ya extraído: se usa en vez del PDF en cada pregunta, para ahorrar costo -->
-    <div id="cv-texto-wrap" style="display:none;margin-bottom:12px;">
-      <div class="field-group">
-        <span class="field-label">Texto de tu CV (extraído una vez — revísalo y corrígelo si hace falta)</span>
-        <textarea class="field" id="cv-texto" rows="6" style="font-size:11px;" placeholder="Experiencia, educación, habilidades…"></textarea>
-        <span style="font-size:10px;color:var(--text-3);margin-top:4px;display:block;">Esto reemplaza al PDF en cada respuesta de la IA — más rápido y más barato que mandar el archivo completo cada vez.</span>
-      </div>
-    </div>
-
-    <!-- Campos del perfil — vacíos por defecto para cualquier usuario -->
-    <div class="profile-grid">
-      <div class="field-group">
-        <span class="field-label">Nombre completo</span>
-        <input class="field" id="p-nombre" placeholder="Ej: Juan Pérez González">
-      </div>
-      <div class="field-group">
-        <span class="field-label">Email</span>
-        <input class="field" id="p-email" placeholder="tu@email.com">
-      </div>
-      <div class="field-group">
-        <span class="field-label">Teléfono</span>
-        <input class="field" id="p-tel" placeholder="+56 9 1234 5678">
-      </div>
-      <div class="field-group">
-        <span class="field-label">Comuna de residencia</span>
-        <input class="field" id="p-comuna" placeholder="Ej: Las Condes">
-      </div>
-      <div class="field-group">
-        <span class="field-label">Cargo objetivo</span>
-        <input class="field" id="p-cargo" placeholder="Ej: Vendedor / Retail">
-      </div>
-      <div class="field-group">
-        <span class="field-label">Expectativa de renta</span>
-        <input class="field" id="p-renta" placeholder="Ej: $500.000 - $600.000">
-      </div>
-      <div class="field-group">
-        <span class="field-label">Disponibilidad horaria</span>
-        <input class="field" id="p-disp" placeholder="Ej: Part time, tardes y fines de semana">
-      </div>
-      <div class="field-group">
-        <span class="field-label">Resumen profesional</span>
-        <textarea class="field" id="p-bio" rows="3" placeholder="Breve descripción de tu experiencia y perfil. Si subes tu CV, esto se completa automáticamente."></textarea>
-      </div>
-    </div>
+  <div class="perfil-card" id="perfil-card">
+    <span class="vacio">Conecta tu cuenta más abajo para traer tu perfil automáticamente.</span>
   </div>
-</div>
-
-<!-- TU ESTILO PROFESIONAL -->
-<div class="section" id="estilo-section">
-  <div class="section-head">
-    <span class="section-title">Tu estilo profesional</span>
-  </div>
-
-  <!-- Estado 1: invitación inicial (sin perfil generado aún) -->
-  <div id="estilo-invitacion">
-    <p style="font-size:11px;color:var(--text-3);margin-bottom:10px;line-height:1.5;">
-      Una conversación corta (7-8 preguntas) para que la IA entienda cómo comunicas tu experiencia —
-      no solo qué dices, sino cómo lo dices — y escriba postulaciones que suenen a ti.
-    </p>
-    <button class="btn btn-primary" id="estilo-empezar-btn" style="width:100%">💬 Empezar conversación (2 min)</button>
-  </div>
-
-  <!-- Estado 2: resumen compacto (ya hay un perfil confirmado) -->
-  <div id="estilo-resumen" class="hidden">
-    <div id="estilo-resumen-texto" style="font-size:11px;color:var(--text-2);line-height:1.5;margin-bottom:8px;"></div>
-    <button class="btn btn-ghost" id="estilo-editar-btn" style="width:100%">Ver / rehacer conversación</button>
-  </div>
-
-  <!-- Estado 3: chat activo -->
-  <div id="estilo-chat" class="hidden">
-    <div id="estilo-progreso" style="font-size:10px;color:var(--text-3);margin-bottom:6px;"></div>
-    <div id="estilo-mensajes" class="estilo-mensajes"></div>
-    <div class="input-row" style="margin-top:8px;">
-      <input class="field" id="estilo-input" placeholder="Escribe tu respuesta…">
-      <button class="btn btn-primary" id="estilo-send-btn">Enviar</button>
-    </div>
-  </div>
-
-  <!-- Estado 4: tarjeta de perfil generado, pendiente de confirmar -->
-  <div id="estilo-tarjeta" class="hidden">
-    <div class="estilo-card">
-      <div class="estilo-card-title">Así entendimos tu perfil</div>
-      <div class="estilo-card-row"><span class="estilo-card-label">Resumen</span><div id="ec-resumen"></div></div>
-      <div class="estilo-card-row"><span class="estilo-card-label">Fortalezas que destacaremos</span><div id="ec-fortalezas"></div></div>
-      <div class="estilo-card-row"><span class="estilo-card-label">Objetivo laboral</span><div id="ec-objetivos"></div></div>
-      <div class="estilo-card-row"><span class="estilo-card-label">Estilo de comunicación</span><div id="ec-estilo"></div></div>
-      <div class="estilo-card-row"><span class="estilo-card-label">Confianza de esta lectura</span><div id="ec-confianza"></div></div>
-      <div class="estilo-card-footer">Este perfil no intenta definir quién eres. Solo resume lo que usaremos para escribir postulaciones que se parezcan a cómo tú mismo las escribirías. Puedes modificarlo cuando quieras.</div>
-    </div>
-    <div style="text-align:center;margin:10px 0 6px;font-size:12px;color:var(--text-2);">¿Qué tan bien te representa?</div>
-    <div id="estilo-estrellas" class="estilo-estrellas"></div>
-    <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
-      <button class="btn btn-primary" id="estilo-ok-btn">🟢 Sí, está bien</button>
-      <button class="btn btn-ghost" id="estilo-modificar-btn">🟡 Quiero modificar algo</button>
-      <button class="btn btn-ghost" id="estilo-rehacer-btn">🔵 Quiero volver a responder</button>
-    </div>
-    <!-- Caja para "¿qué cambiarías?" tras elegir modificar -->
-    <div id="estilo-modificar-box" class="hidden" style="margin-top:8px;">
-      <textarea class="field" id="estilo-modificar-input" rows="2" placeholder="¿Qué cambiarías de esta lectura?"></textarea>
-      <button class="btn btn-primary" id="estilo-modificar-send" style="width:100%;margin-top:6px;">Actualizar perfil</button>
-    </div>
-  </div>
+  <p style="font-size:10.5px;color:var(--text-3);">
+    Tu perfil y tu CV se administran en la web — acá solo se usan para postular.
+    <a href="#" id="perfil-editar-link" target="_blank" style="color:var(--accent);font-weight:600;text-decoration:none;">Editar en la web ↗</a>
+  </p>
 </div>
 
 <div class="spacer"></div>
@@ -635,60 +482,31 @@ textarea.field { resize: vertical; min-height: 56px; }
   </div>
 </div>
 
-<!-- API KEY CLAUDE -->
-<div class="section">
-  <div class="section-head">
-    <span class="section-title">IA para formularios</span>
-  </div>
-  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;">
-    La IA lee el aviso completo y responde preguntas del formulario usando tu perfil. Necesitas una API key de Anthropic (gratis para empezar).
-  </p>
-  <div class="apikey-row">
-    <div class="apikey-input-wrap">
-      <input class="field" type="password" id="api-key" placeholder="sk-ant-…">
-      <button class="apikey-eye" id="api-eye" title="Mostrar/ocultar">👁</button>
-    </div>
-    <button class="btn btn-ghost" id="api-test-btn">Probar</button>
-  </div>
-  <div class="apikey-status" id="apikey-status">
-    <div class="dot" id="api-dot"></div>
-    <span id="api-status-text">Sin configurar — la IA no estará disponible</span>
-  </div>
-</div>
-
-<!-- TOKEN AUTOPOSTULA WEB -->
+<!-- CUENTA WEB DE AUTOPOSTULA -->
 <div class="section">
   <div class="section-head">
     <span class="section-title">Cuenta web de AutoPostula</span>
   </div>
-  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;">
-    Conecta la extensión con tu cuenta en la web para que cada postulación quede guardada en tu historial. Genera el token desde <b>Portales conectados</b> en el dashboard.
+  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;" id="ap-token-desc">
+    Se conecta sola desde el onboarding de la web — normalmente no tienes que hacer nada acá.
   </p>
-  <div class="apikey-row">
-    <div class="apikey-input-wrap">
-      <input class="field" type="password" id="ap-token" placeholder="Pega tu token aquí">
-      <button class="apikey-eye" id="ap-token-eye" title="Mostrar/ocultar">👁</button>
-    </div>
-    <button class="btn btn-ghost" id="ap-token-save">Guardar</button>
-  </div>
-  <div class="apikey-status" id="ap-token-status">
+  <div class="status-line" id="ap-token-status" style="margin-bottom:8px;">
     <div class="dot" id="ap-token-dot"></div>
-    <span id="ap-token-status-text">Sin configurar — no se guardará el historial en la web</span>
+    <span id="ap-token-status-text">Sin configurar</span>
+  </div>
+  <button class="section-action" id="ap-token-mostrar-manual" style="padding:0;">¿Problemas para conectar? Pega el token manualmente</button>
+  <div id="ap-token-manual" class="hidden" style="margin-top:8px;">
+    <div class="status-row">
+      <div class="status-input-wrap">
+        <input class="field" type="password" id="ap-token" placeholder="Pega tu token aquí">
+        <button class="status-eye" id="ap-token-eye" title="Mostrar/ocultar">👁</button>
+      </div>
+      <button class="btn btn-ghost" id="ap-token-save">Guardar</button>
+    </div>
   </div>
 </div>
 
 <div class="spacer"></div>
-
-<!-- LOG DE ACTIVIDAD -->
-<div class="section">
-  <div class="section-head">
-    <span class="section-title">Actividad reciente</span>
-    <span class="section-action" id="clear-log">Limpiar</span>
-  </div>
-  <div class="log-list" id="log-list">
-    <div class="log-empty">Aún no hay postulaciones registradas.</div>
-  </div>
-</div>
 
 <!-- FOOTER -->
 <div class="footer">

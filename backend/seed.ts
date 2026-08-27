@@ -12,6 +12,16 @@ async function main() {
     },
   });
 
+  await prisma.jobPlatform.upsert({
+    where: { nombre: "Laborum" },
+    update: {},
+    create: {
+      nombre: "Laborum",
+      urlBase: "https://www.laborum.cl",
+      adapterVersion: "v1",
+    },
+  });
+
   console.log("Portales sembrados.");
 }
 

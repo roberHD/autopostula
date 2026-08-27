@@ -37,13 +37,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Falta platformId" }, { status: 400 });
   }
 
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { rol: true } });
+
   const subscripcion = await prisma.subscription.findFirst({
     where: { userId, estado: "ACTIVA" },
     include: { plan: true },
   });
 
-  // Sin suscripción activa, se trata como free (1 portal)
-  const limite = subscripcion?.plan.maxPlataformasActivas ?? 1;
+  // Sin suscripción activa, se trata como free (1 portal) — salvo cuentas ADMIN,
+  // que no tienen límite (mismo criterio que checkAndLogAiUsage).
+  const limite = user?.rol === "ADMIN" ? null : (subscripcion?.plan.maxPlataformasActivas ?? 1);
 
   const activasActuales = await prisma.platformAccount.count({
     where: { userId, activa: true },

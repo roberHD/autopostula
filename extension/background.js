@@ -236,7 +236,7 @@ async function reportarPostulacionBackend(oferta) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        platformNombre: 'Computrabajo',
+        platformNombre: oferta.plataforma || 'Computrabajo',
         externalId: oferta.id,
         titulo: oferta.titulo,
         empresa: oferta.empresa || null,
@@ -269,6 +269,23 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   if (msg.type === 'AI_CALL') {
     llamarIABackend(msg.tipo, msg.payload).then(sendResponse);
     return true; // mantiene el canal abierto — la respuesta llega async
+  }
+  if (msg.type === 'GUARDAR_TOKEN') {
+    // Llega desde bridge.js, inyectado solo en la pestaña de la propia web de
+    // AutoPostula — es el handshake de "conectar extensión automáticamente".
+    if (!msg.token) {
+      sendResponse({ ok: false, error: 'Token vacío' });
+      return false;
+    }
+    chrome.storage.sync.set({ autopostulaToken: msg.token }, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+      } else {
+        console.log('[AP] Token conectado automáticamente desde la web.');
+        sendResponse({ ok: true });
+      }
+    });
+    return true; // async
   }
   return false;
 });

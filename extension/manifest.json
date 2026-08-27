@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AutoPostula",
   "version": "2.6.0",
-  "description": "Postulaci\u00f3n autom\u00e1tica inteligente para Computrabajo. Powered by IA.",
+  "description": "Postulaci\u00f3n autom\u00e1tica inteligente para Computrabajo y Laborum. Powered by IA.",
   "permissions": [
     "storage",
     "tabs",
@@ -15,7 +15,7 @@
     "https://cl.computrabajo.com/*",
     "https://computrabajo.cl/*",
     "https://computrabajo.com/*",
-    "https://api.anthropic.com/*",
+    "https://www.laborum.cl/*",
     "http://localhost:3000/*"
   ],
   "background": {
@@ -30,7 +30,27 @@
         "https://computrabajo.com/*"
       ],
       "js": [
-        "content.js"
+        "core.js",
+        "adapters/computrabajo.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.laborum.cl/*"
+      ],
+      "js": [
+        "core.js",
+        "adapters/laborum.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*"
+      ],
+      "js": [
+        "bridge.js"
       ],
       "run_at": "document_idle"
     }
