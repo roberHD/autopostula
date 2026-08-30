@@ -24,6 +24,7 @@ export async function GET() {
       empresa: a.jobOffer.empresa,
       portal: a.jobOffer.platform.nombre,
       estado: a.estadoActual,
+      notaAtencion: a.notaAtencion,
       enviadaEn: a.enviadaEn,
     })),
   });
@@ -50,9 +51,12 @@ export async function POST(request: Request) {
       externalId, // id de la oferta en el portal
       titulo,
       empresa,
+      url, // link a la oferta original — útil sobre todo cuando queda incompleta
       origen = "MANUAL", // MANUAL | AUTOMATICO
       styleProfileId,
       respuestas, // [{ pregunta, respuesta, vacia, fueIA }] — opcional
+      incompleta = false, // true: la extensión no pudo terminar la postulación sola
+      nota, // por qué quedó incompleta (solo aplica si incompleta = true)
     } = body;
 
     if (!platformNombre || !externalId || !titulo) {
@@ -81,8 +85,8 @@ export async function POST(request: Request) {
 
     const jobOffer = await prisma.jobOffer.upsert({
       where: { platformId_externalId: { platformId: platform.id, externalId } },
-      update: {},
-      create: { platformId: platform.id, externalId, titulo, empresa, origen },
+      update: url ? { url } : {},
+      create: { platformId: platform.id, externalId, titulo, empresa, url, origen },
     });
 
     const cv = await prisma.cvProfile.findUnique({ where: { userId: user.id } });
@@ -93,6 +97,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const estadoInicial = incompleta ? "INCOMPLETA" : "ENVIADO";
+
     const application = await prisma.application.create({
       data: {
         userId: user.id,
@@ -100,12 +106,13 @@ export async function POST(request: Request) {
         platformAccountId: platformAccount.id,
         cvProfileId: cv.id,
         styleProfileId: styleProfileId ?? null,
-        estadoActual: "ENVIADO",
+        estadoActual: estadoInicial,
+        notaAtencion: incompleta ? (nota || "No se pudo completar automáticamente") : null,
       },
     });
 
     await prisma.applicationStatusHistory.create({
-      data: { applicationId: application.id, estado: "ENVIADO" },
+      data: { applicationId: application.id, estado: estadoInicial },
     });
 
     if (Array.isArray(respuestas) && respuestas.length) {

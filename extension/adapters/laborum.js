@@ -237,6 +237,14 @@ async function rellenarYEnviarPreguntas(contexto) {
   return { respuestasLog };
 }
 
+// Un 'err' de verdad (no un 'skip' esperable como "ya estaba postulada") también
+// se reporta al backend como postulación incompleta, para que quede visible en
+// el dashboard con la razón — antes esto se perdía en el log local nomás.
+function marcarIncompleta(id, titulo, url, razon, respuestas) {
+  addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: razon, respuestas });
+  reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, incompleta: true, nota: razon, respuestas: respuestas || [] });
+}
+
 // ── Postular a una oferta ya abierta ──────────────────────────────
 async function postularEnPagina(id, titulo, url) {
   if (yaPostulado()) {
@@ -253,7 +261,7 @@ async function postularEnPagina(id, titulo, url) {
     });
 
   if (!btn) {
-    addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: 'No se encontró el botón para postular' });
+    marcarIncompleta(id, titulo, url, 'No se encontró el botón para postular');
     return false;
   }
 
@@ -271,7 +279,7 @@ async function postularEnPagina(id, titulo, url) {
     const resultado = await rellenarYEnviarPreguntas(contexto);
 
     if (!resultado) {
-      addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: 'El modal de preguntas desapareció antes de poder llenarlo' });
+      marcarIncompleta(id, titulo, url, 'El modal de preguntas desapareció antes de poder llenarlo');
       return false;
     }
     if (resultado.saltada) {
@@ -279,7 +287,8 @@ async function postularEnPagina(id, titulo, url) {
       return false;
     }
     if (resultado.errorEnvio) {
-      addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: resultado.errorEnvio, respuestas: resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia })) });
+      const respuestasParaLog = resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia }));
+      marcarIncompleta(id, titulo, url, resultado.errorEnvio, respuestasParaLog);
       return false;
     }
 
@@ -287,11 +296,11 @@ async function postularEnPagina(id, titulo, url) {
     if (ok) {
       const respuestasParaLog = resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia, fueIA: r.fueIA }));
       addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación con preguntas enviada', respuestas: respuestasParaLog });
-      reportarPostulacion({ id, titulo, plataforma: 'Laborum', respuestas: respuestasParaLog });
+      reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, respuestas: respuestasParaLog });
       msg('✓ ' + titulo.slice(0, 40), '#16A34A');
       return true;
     }
-    addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: 'Se envió el formulario pero no se detectó confirmación' });
+    marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia })));
     return false;
   }
 
@@ -299,12 +308,12 @@ async function postularEnPagina(id, titulo, url) {
   const ok = await esperarConfirmacion();
   if (ok) {
     addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación rápida enviada' });
-    reportarPostulacion({ id, titulo, plataforma: 'Laborum' });
+    reportarPostulacion({ id, titulo, plataforma: 'Laborum', url });
     msg('✓ ' + titulo.slice(0, 40), '#16A34A');
     return true;
   }
 
-  addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: 'Se hizo clic pero no se detectó confirmación' });
+  marcarIncompleta(id, titulo, url, 'Se hizo clic pero no se detectó confirmación — puede que haya redirigido a un portal externo');
   return false;
 }
 

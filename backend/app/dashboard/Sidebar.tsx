@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -11,22 +12,33 @@ import {
   Globe,
   Sparkles,
   Settings,
+  ChevronDown,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Inicio", Icon: LayoutDashboard },
-  { href: "/dashboard/historial", label: "Historial", Icon: FileText },
+  { href: "/dashboard", label: "Resumen", Icon: LayoutDashboard },
+  { href: "/dashboard/historial", label: "Postulaciones", Icon: FileText },
   { href: "/dashboard/perfil", label: "Perfil", Icon: UserRound },
   { href: "/dashboard/perfil/conversacion", label: "Conversación IA", Icon: MessageSquare },
   { href: "/dashboard/portales", label: "Portales", Icon: Globe },
-  { href: "/dashboard/perfil/calibracion", label: "Calibración", Icon: Sparkles },
-  { href: "/dashboard/perfil/entrenar", label: "Entrenar IA", Icon: Sparkles },
-  { href: "/dashboard/ajustes", label: "Ajustes", Icon: Settings },
 ];
+
+// Calibración y Entrenar IA quedan agrupadas en un solo módulo (antes eran dos
+// items sueltos) — se expande para elegir entre las dos.
+const GRUPO_ENTRENAR = {
+  label: "Entrenar IA",
+  Icon: Sparkles,
+  items: [
+    { href: "/dashboard/perfil/calibracion", label: "Calibración" },
+    { href: "/dashboard/perfil/entrenar", label: "Entrenar IA" },
+  ],
+};
 
 export default function Sidebar({ userName }: { userName: string }) {
   const pathname = usePathname();
+  const grupoActivo = GRUPO_ENTRENAR.items.some((i) => i.href === pathname);
+  const [grupoAbierto, setGrupoAbierto] = useState(grupoActivo);
 
   return (
     <aside className="ap-sidebar">
@@ -52,6 +64,45 @@ export default function Sidebar({ userName }: { userName: string }) {
             </Link>
           );
         })}
+
+        <button
+          type="button"
+          onClick={() => setGrupoAbierto((v) => !v)}
+          className={"ap-nav-item" + (grupoActivo && !grupoAbierto ? " ap-nav-item-active" : "")}
+          style={{ width: "100%", background: "none", border: "none", cursor: "pointer", font: "inherit", textAlign: "left" }}
+        >
+          <GRUPO_ENTRENAR.Icon size={17} strokeWidth={1.8} style={{ width: 17, height: 17, flexShrink: 0 }} />
+          {GRUPO_ENTRENAR.label}
+          <ChevronDown
+            size={14}
+            style={{ marginLeft: "auto", transform: grupoAbierto ? "rotate(180deg)" : "none", transition: "transform .15s" }}
+          />
+        </button>
+        {grupoAbierto && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginLeft: 14, paddingLeft: 13, borderLeft: "1px solid var(--border)" }}>
+            {GRUPO_ENTRENAR.items.map(({ href, label }) => {
+              const activo = pathname === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={"ap-nav-item" + (activo ? " ap-nav-item-active" : "")}
+                  style={{ fontSize: 13 }}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
+        <Link
+          href="/dashboard/ajustes"
+          className={"ap-nav-item" + (pathname === "/dashboard/ajustes" ? " ap-nav-item-active" : "")}
+        >
+          <Settings size={17} strokeWidth={1.8} style={{ width: 17, height: 17, flexShrink: 0 }} />
+          Ajustes
+        </Link>
       </nav>
 
       <div className="ap-sidebar-footer">

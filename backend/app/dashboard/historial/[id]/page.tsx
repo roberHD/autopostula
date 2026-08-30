@@ -8,7 +8,9 @@ type Detalle = {
   titulo: string;
   empresa: string | null;
   portal: string;
+  url: string | null;
   estadoActual: string;
+  notaAtencion: string | null;
   enviadaEn: string;
   historial: { estado: string; cambiadoEn: string }[];
   respuestas: {
@@ -27,6 +29,7 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   FINALISTA: "Finalista",
   FINALIZADO: "Finalizada",
   RECHAZADO: "Rechazada",
+  INCOMPLETA: "Necesita tu atención",
 };
 
 const COLOR_ESTADO: Record<string, string> = {
@@ -36,6 +39,7 @@ const COLOR_ESTADO: Record<string, string> = {
   FINALISTA: "var(--status-finalista)",
   FINALIZADO: "var(--status-finalizado)",
   RECHAZADO: "var(--status-rechazado)",
+  INCOMPLETA: "#D97706",
 };
 
 export default function DetalleAplicacionPage() {
@@ -84,6 +88,33 @@ export default function DetalleAplicacionPage() {
           {detalle.empresa ?? "Empresa no especificada"} · {detalle.portal}
         </p>
       </div>
+
+      {detalle.estadoActual === "INCOMPLETA" && (
+        <div
+          className="ap-section"
+          style={{
+            background: "rgba(217,119,6,0.08)",
+            border: "1px solid rgba(217,119,6,0.35)",
+          }}
+        >
+          <p style={{ fontSize: 13, fontWeight: 700, color: "#D97706", marginBottom: 4 }}>
+            Necesita tu atención
+          </p>
+          <p style={{ fontSize: 13, color: "var(--text)", marginBottom: detalle.url ? 10 : 0 }}>
+            {detalle.notaAtencion ?? "No se pudo completar automáticamente."}
+          </p>
+          {detalle.url && (
+            <a
+              href={detalle.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 12.5, fontWeight: 600, color: "#D97706" }}
+            >
+              Terminar en {detalle.portal} ↗
+            </a>
+          )}
+        </div>
+      )}
 
       <div className="ap-section">
         <p className="ap-section-title">Estado</p>

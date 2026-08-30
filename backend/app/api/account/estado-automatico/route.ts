@@ -22,8 +22,13 @@ export async function GET(request: Request) {
     prisma.cvProfile.findUnique({ where: { userId: user.id } }),
   ]);
 
+  // Mismo criterio que checkAndLogAiUsage y platform-accounts: las cuentas ADMIN
+  // no dependen de tener un plan con el beneficio activo (útil para probar sin
+  // tener que armar un Plan+Subscription real todavía).
+  const busquedaAutomatica = user.rol === "ADMIN" ? true : (subscripcion?.plan.busquedaAutomatica ?? false);
+
   return NextResponse.json({
-    busquedaAutomatica: subscripcion?.plan.busquedaAutomatica ?? false,
+    busquedaAutomatica,
     cargoObjetivo: cv?.cargoObjetivo ?? null,
   });
 }

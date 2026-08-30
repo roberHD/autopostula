@@ -240,8 +240,11 @@ async function reportarPostulacionBackend(oferta) {
         externalId: oferta.id,
         titulo: oferta.titulo,
         empresa: oferta.empresa || null,
+        url: oferta.url || null,
         origen: 'MANUAL',
-        respuestas: oferta.respuestas || []
+        respuestas: oferta.respuestas || [],
+        incompleta: !!oferta.incompleta,
+        nota: oferta.nota || null
       })
     });
     if (!res.ok) {

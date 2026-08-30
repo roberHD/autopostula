@@ -51,6 +51,11 @@ enum EstadoPostulacion {
   FINALISTA
   FINALIZADO
   RECHAZADO
+  // No es un estado de avance como los de arriba — significa que el intento de
+  // postulación automática no se pudo terminar (ej: el portal redirige a un sitio
+  // externo de la empresa, o quedó una pregunta obligatoria sin responder). Queda
+  // marcada para que la persona la termine a mano; ver Application.notaAtencion.
+  INCOMPLETA
 }
 
 enum TipoCalibracion {
@@ -255,6 +260,7 @@ model JobOffer {
   externalId    String        @map("external_id")
   titulo        String
   empresa       String?
+  url           String?
   origen        OrigenOferta  @default(MANUAL)
   relevanciaAi  Float?        @map("relevancia_ai")
   publicadaEn   DateTime?     @map("publicada_en")
@@ -275,6 +281,9 @@ model Application {
   cvProfileId         String            @map("cv_profile_id")
   styleProfileId      String?           @map("style_profile_id")
   estadoActual        EstadoPostulacion @default(ENVIADO) @map("estado_actual")
+  // Solo se usa cuando estadoActual = INCOMPLETA — explica por qué no se pudo
+  // terminar sola (ej: "Redirige al portal externo de la empresa para continuar").
+  notaAtencion        String?           @map("nota_atencion")
   enviadaEn           DateTime          @default(now()) @map("enviada_en")
 
   user             User                       @relation(fields: [userId], references: [id])

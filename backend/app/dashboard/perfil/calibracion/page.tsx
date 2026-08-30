@@ -123,6 +123,26 @@ export default function CalibracionPage() {
         <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>{mensaje}</p>
       )}
 
+      {!cargando && totalPreguntas > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 6, flex: 1 }}>
+            {Array.from({ length: totalPreguntas }).map((_, i) => (
+              <span
+                key={i}
+                style={{
+                  height: 6, flex: 1, borderRadius: 999,
+                  background: i < respondidas ? "var(--accent)" : "var(--border)",
+                  transition: "background .3s",
+                }}
+              />
+            ))}
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", flexShrink: 0 }}>
+            {respondidas} / {totalPreguntas}
+          </span>
+        </div>
+      )}
+
       <div style={{ display: "grid", gap: 20, gridTemplateColumns: "2fr 1fr" }} className="ap-charts-row">
         <div>
           {!cargando && preguntaActual && (
@@ -146,35 +166,82 @@ export default function CalibracionPage() {
                 {preguntaActual.texto}
               </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {preguntaActual.opciones.map((op, i) => {
-                  const activa = seleccionada === op;
-                  return (
-                    <button
-                      key={i}
-                      disabled={enviando}
-                      onClick={() => responder(preguntaActual.id, op)}
-                      className="ap-option-card"
-                      style={{
-                        textAlign: "left",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        borderColor: activa ? "var(--accent)" : undefined,
-                        background: activa
-                          ? "color-mix(in oklch, var(--accent) 14%, var(--bg-elevated-2))"
-                          : undefined,
-                        opacity: enviando && !activa ? 0.5 : 1,
-                        transition: "background 0.2s, border-color 0.2s, opacity 0.2s",
-                      }}
-                    >
-                      <span>{op}</span>
-                      {activa && <CheckCircle2 size={16} color="var(--accent)" style={{ flexShrink: 0 }} />}
-                    </button>
-                  );
-                })}
-              </div>
+              {preguntaActual.opciones.length === 2 ? (
+                // Exactamente 2 opciones (típico de "comparación") — tarjetas A/B lado a
+                // lado, como en la maqueta. Con más o menos opciones no calza este layout,
+                // así que esas siguen con la lista vertical de abajo.
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  {preguntaActual.opciones.map((op, i) => {
+                    const activa = seleccionada === op;
+                    return (
+                      <button
+                        key={i}
+                        disabled={enviando}
+                        onClick={() => responder(preguntaActual.id, op)}
+                        style={{
+                          textAlign: "left",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
+                          padding: 16,
+                          borderRadius: "var(--radius)",
+                          border: "1px solid " + (activa ? "var(--accent)" : "var(--border)"),
+                          background: activa ? "color-mix(in oklch, var(--accent) 14%, var(--bg-elevated-2))" : "var(--bg-elevated)",
+                          opacity: enviando && !activa ? 0.5 : 1,
+                          cursor: enviando ? "default" : "pointer",
+                          transition: "background 0.2s, border-color 0.2s, opacity 0.2s",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span
+                            style={{
+                              width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                              background: activa ? "var(--accent)" : "var(--bg-elevated-2)",
+                              color: activa ? "var(--accent-contrast)" : "var(--text-muted)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 11, fontWeight: 700,
+                            }}
+                          >
+                            {i === 0 ? "A" : "B"}
+                          </span>
+                          {activa && <CheckCircle2 size={16} color="var(--accent)" style={{ flexShrink: 0 }} />}
+                        </div>
+                        <p style={{ fontSize: 13, lineHeight: 1.55, color: "var(--text)" }}>{op}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {preguntaActual.opciones.map((op, i) => {
+                    const activa = seleccionada === op;
+                    return (
+                      <button
+                        key={i}
+                        disabled={enviando}
+                        onClick={() => responder(preguntaActual.id, op)}
+                        className="ap-option-card"
+                        style={{
+                          textAlign: "left",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          borderColor: activa ? "var(--accent)" : undefined,
+                          background: activa
+                            ? "color-mix(in oklch, var(--accent) 14%, var(--bg-elevated-2))"
+                            : undefined,
+                          opacity: enviando && !activa ? 0.5 : 1,
+                          transition: "background 0.2s, border-color 0.2s, opacity 0.2s",
+                        }}
+                      >
+                        <span>{op}</span>
+                        {activa && <CheckCircle2 size={16} color="var(--accent)" style={{ flexShrink: 0 }} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

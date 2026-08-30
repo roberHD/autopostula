@@ -32,7 +32,9 @@ export async function GET(
     titulo: application.jobOffer.titulo,
     empresa: application.jobOffer.empresa,
     portal: application.jobOffer.platform.nombre,
+    url: application.jobOffer.url,
     estadoActual: application.estadoActual,
+    notaAtencion: application.notaAtencion,
     enviadaEn: application.enviadaEn,
     historial: application.statusHistory.map((h) => ({
       estado: h.estado,

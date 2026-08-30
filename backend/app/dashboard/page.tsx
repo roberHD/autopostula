@@ -40,6 +40,7 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   FINALISTA: "Finalista",
   FINALIZADO: "Finalizada",
   RECHAZADO: "Rechazada",
+  INCOMPLETA: "Necesita tu atención",
 };
 
 // Mismo criterio que StatusBadge del repomix: fondo suave + texto del color del estado.
@@ -50,6 +51,9 @@ const ESTILO_BADGE: Record<string, { bg: string; fg: string }> = {
   FINALISTA: { bg: "color-mix(in oklch, var(--status-finalista) 18%, transparent)", fg: "var(--status-finalista)" },
   FINALIZADO: { bg: "color-mix(in oklch, var(--status-finalizado) 18%, transparent)", fg: "var(--status-finalizado)" },
   RECHAZADO: { bg: "color-mix(in oklch, var(--status-rechazado) 15%, transparent)", fg: "var(--status-rechazado)" },
+  // Ámbar fijo (no una variable del theme) porque es un estado de advertencia,
+  // no un paso más del progreso normal de la postulación.
+  INCOMPLETA: { bg: "rgba(217,119,6,0.12)", fg: "#D97706" },
 };
 
 const PALETA_PORTALES = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
