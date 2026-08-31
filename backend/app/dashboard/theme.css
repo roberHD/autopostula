@@ -411,6 +411,7 @@
   cursor: pointer;
   background: var(--bg-elevated-2);
   text-align: left;
+  color: var(--text); /* FIX: los <button> no heredan color del padre; sin esto el título se veía negro en modo oscuro */
 }
 
 .ap-option-card-active {
