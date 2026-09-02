@@ -6,7 +6,7 @@ import { getUsuarioSesion } from "@/lib/auth-helpers";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT =
+const SYSTEM_PROMPT_BASE =
   "Eres un entrevistador cercano y curioso, no un formulario. Tu trabajo es conocer a esta " +
   "persona lo suficiente para poder escribir como ella en formularios de postulación laboral. " +
   "Haz UNA pregunta a la vez, corta y conversacional (nunca acartonada ni tipo encuesta). " +
@@ -15,7 +15,54 @@ const SYSTEM_PROMPT =
   "concretos, qué la motiva a trabajar, cómo prefiere que la describan, y pídele que cuente " +
   "algo con sus propias palabras para notar cómo se expresa naturalmente (frases que usa, si es " +
   "directa o da vueltas, formal o informal). No hagas resúmenes ni cierres tú misma la " +
-  "conversación — solo sigue preguntando, una cosa a la vez.";
+  "conversación — solo sigue preguntando, una cosa a la vez. Nunca preguntes por datos que ya " +
+  "aparecen en su CV (en qué trabaja o trabajó, qué estudia o estudió, sus cargos, empresas, " +
+  "habilidades, etc.) — si ya tienes esa información dala por sabida y ve directo a lo que el CV " +
+  "no puede contarte.";
+
+// Arma un resumen de lo que ya se sabe por el CV para que la IA no repregunte
+// datos que la persona ya entregó al subirlo.
+function resumirCvParaContexto(cv: {
+  nombre?: string | null;
+  cargoObjetivo?: string | null;
+  resumenProfesional?: string | null;
+  experiencia?: unknown;
+  habilidades?: unknown;
+  textoExtraido?: string | null;
+} | null) {
+  if (!cv) return null;
+
+  const partes: string[] = [];
+  if (cv.nombre) partes.push(`Nombre: ${cv.nombre}`);
+  if (cv.cargoObjetivo) partes.push(`Cargo objetivo: ${cv.cargoObjetivo}`);
+  if (cv.resumenProfesional) partes.push(`Resumen profesional: ${cv.resumenProfesional}`);
+  if (Array.isArray(cv.experiencia) && cv.experiencia.length) {
+    const experiencia = (cv.experiencia as { cargo?: string; empresa?: string; periodo?: string }[])
+      .map((e) => [e.cargo, e.empresa, e.periodo].filter(Boolean).join(" — "))
+      .join("; ");
+    if (experiencia) partes.push(`Experiencia laboral: ${experiencia}`);
+  }
+  if (Array.isArray(cv.habilidades) && cv.habilidades.length) {
+    partes.push(`Habilidades: ${(cv.habilidades as string[]).join(", ")}`);
+  }
+
+  // Si la IA todavía no había estructurado el CV (recién subido), al menos se
+  // le pasa el texto crudo en vez de no darle nada.
+  if (!partes.length && cv.textoExtraido) {
+    partes.push(cv.textoExtraido.slice(0, 2000));
+  }
+
+  return partes.length ? partes.join("\n") : null;
+}
+
+function construirSystemPrompt(contextoCv: string | null) {
+  if (!contextoCv) return SYSTEM_PROMPT_BASE;
+  return (
+    SYSTEM_PROMPT_BASE +
+    "\n\nEsto es lo que ya se sabe de esta persona por su CV — no se lo vuelvas a preguntar:\n" +
+    contextoCv
+  );
+}
 
 async function getOrCreateStyleProfile(userId: string) {
   const existente = await prisma.styleProfile.findFirst({
@@ -62,10 +109,13 @@ export async function POST(request: Request) {
     );
   }
 
+  const cv = await prisma.cvProfile.findUnique({ where: { userId } });
+  const systemPrompt = construirSystemPrompt(resumirCvParaContexto(cv));
+
   const respuesta = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 200,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: conversacion.length
       ? conversacion
       : [{ role: "user", content: "Hola, empecemos." }],
