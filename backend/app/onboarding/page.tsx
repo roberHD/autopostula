@@ -162,6 +162,7 @@ function PasoBienvenida({ onSiguiente, onOmitir }: { onSiguiente: () => void; on
 
 function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   const [subiendo, setSubiendo] = useState(false);
+  const [analizando, setAnalizando] = useState(false);
   const [cargandoEstado, setCargandoEstado] = useState(true);
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState("");
@@ -201,9 +202,31 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
       const data = await parsearRespuesta(res);
       if (!res.ok) { setMensaje(data.error || "No se pudo procesar el CV"); return; }
       setNombreArchivo(data.nombreArchivo);
-      fetch("/api/cv/upload/analizar", { method: "POST" }).catch(() => {});
-      setMensaje("Tu CV se subió correctamente. La IA lo está leyendo en segundo plano.");
       setSubidoOk(true);
+      setSubiendo(false);
+
+      setAnalizando(true);
+      try {
+        const resAI = await fetch("/api/cv/upload/analizar", { method: "POST" });
+        const dataAI = await parsearRespuesta(resAI);
+        if (resAI.ok && dataAI.disponible && dataAI.datos) {
+          // Guardamos de una vez lo que la IA extrajo para que "Mi perfil" no
+          // aparezca vacío después del onboarding — antes esta respuesta se
+          // descartaba y solo quedaba guardado el archivo, no los datos.
+          await fetch("/api/perfil", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(dataAI.datos),
+          });
+          setMensaje("Tu CV se subió y la IA completó tu perfil automáticamente.");
+        } else {
+          setMensaje(dataAI.error || "Tu CV se subió correctamente. Completa tus datos manualmente en tu perfil.");
+        }
+      } catch {
+        setMensaje("Tu CV se subió correctamente, pero la IA no pudo leerlo. Completa tus datos manualmente.");
+      } finally {
+        setAnalizando(false);
+      }
     } catch {
       setMensaje("Error al subir el CV. Intenta de nuevo.");
     } finally {
@@ -231,6 +254,8 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
             ? "Revisando..."
             : subiendo
             ? "Subiendo..."
+            : analizando
+            ? "🤖 La IA está leyendo tu información..."
             : nombreArchivo
             ? `✓ ${nombreArchivo} — toca para reemplazar`
             : "Haz clic para elegir tu CV en PDF"}
