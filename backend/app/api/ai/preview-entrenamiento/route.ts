@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { construirMensajesCV } from "@/lib/ai-messages";
+import { DESCRIPCION_TONO, DESCRIPCION_LONGITUD } from "@/lib/style-descriptions";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -11,18 +12,6 @@ const PREGUNTAS_EJEMPLO = [
   "¿Por qué quieres trabajar con nosotros?",
   "¿Cuál es tu pretensión de renta?",
 ];
-
-const DESCRIPCION_LONGITUD: Record<string, string> = {
-  corta: "una sola oración, directa",
-  media: "dos o tres oraciones",
-  detallada: "cuatro oraciones o más, con más contexto",
-};
-
-const DESCRIPCION_TONO: Record<string, string> = {
-  formal: "formal, serio y protocolar",
-  profesional_cercano: "profesional pero cercano, equilibrado y humano",
-  entusiasta: "entusiasta, enérgico y proactivo",
-};
 
 export async function POST(request: Request) {
   try {

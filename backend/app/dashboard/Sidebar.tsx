@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -13,6 +13,8 @@ import {
   Sparkles,
   Settings,
   ChevronDown,
+  Menu,
+  X,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
@@ -39,15 +41,52 @@ export default function Sidebar({ userName }: { userName: string }) {
   const pathname = usePathname();
   const grupoActivo = GRUPO_ENTRENAR.items.some((i) => i.href === pathname);
   const [grupoAbierto, setGrupoAbierto] = useState(grupoActivo);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+
+  // Cierra el drawer solo en mobile al navegar — en desktop nunca está "abierto"
+  // porque el botón que lo activa está oculto por CSS.
+  useEffect(() => {
+    setMenuAbierto(false);
+  }, [pathname]);
 
   return (
-    <aside className="ap-sidebar">
+    <>
+      <div className="ap-mobile-topbar">
+        <div className="ap-mobile-topbar-brand">
+          <div className="ap-brand-mark" style={{ width: 26, height: 26, fontSize: 11 }}>AP</div>
+          AutoPostula
+        </div>
+        <button
+          type="button"
+          className="ap-mobile-menu-btn"
+          onClick={() => setMenuAbierto(true)}
+          aria-label="Abrir menú"
+        >
+          <Menu size={18} />
+        </button>
+      </div>
+
+      <div
+        className={"ap-sidebar-overlay" + (menuAbierto ? " ap-sidebar-overlay-visible" : "")}
+        onClick={() => setMenuAbierto(false)}
+      />
+
+      <aside className={"ap-sidebar" + (menuAbierto ? " ap-sidebar-open" : "")}>
       <div className="ap-brand">
         <div className="ap-brand-mark">AP</div>
         <div>
           <div className="ap-brand-name">AutoPostula</div>
           <div className="ap-brand-sub">Chile</div>
         </div>
+        <button
+          type="button"
+          className="ap-mobile-menu-btn"
+          style={{ marginLeft: "auto" }}
+          onClick={() => setMenuAbierto(false)}
+          aria-label="Cerrar menú"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <nav className="ap-nav">
@@ -115,6 +154,7 @@ export default function Sidebar({ userName }: { userName: string }) {
           Cerrar sesión
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

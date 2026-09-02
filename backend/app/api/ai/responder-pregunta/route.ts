@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { construirMensajesCV } from "@/lib/ai-messages";
+import { DESCRIPCION_TONO, DESCRIPCION_LONGITUD } from "@/lib/style-descriptions";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -64,6 +65,12 @@ export async function POST(request: Request) {
         }
       : null;
 
+    const calibracion = styleProfile
+      ? await prisma.styleCalibrationAnswer.findMany({
+          where: { styleProfileId: styleProfile.id },
+        })
+      : [];
+
     const p = perfil || {};
     const infoTexto = (info || []).map((t: string) => "- " + t).join("\n");
 
@@ -98,6 +105,22 @@ export async function POST(request: Request) {
           '- Filosofia: no intentes hacer que el candidato suene "mejor" -- intenta hacer que suene como el mismo, expresando sus ideas con claridad.\n\n'
         : "";
 
+    const bloqueEntrenamiento = styleProfile
+      ? "Configuracion de tono y extension elegida por el candidato en 'Entrenar IA' (usala como base; ajustala levemente solo si el tono sugerido arriba para esta oferta especifica lo amerita):\n" +
+        "- Tono: " + (DESCRIPCION_TONO[styleProfile.tono || ""] || DESCRIPCION_TONO.profesional_cercano) + "\n" +
+        "- Extension de la respuesta: " + (DESCRIPCION_LONGITUD[styleProfile.longitudRespuesta] || DESCRIPCION_LONGITUD.media) + "\n" +
+        (styleProfile.instrucciones
+          ? "- Instrucciones adicionales del candidato: " + styleProfile.instrucciones + "\n"
+          : "") +
+        "\n"
+      : "";
+
+    const bloqueCalibracion = calibracion.length
+      ? "Respuestas de calibracion de estilo (el candidato eligio estas opciones entre varias -- son pistas reales de su personalidad y forma de reaccionar, no las repitas literalmente, usalas para inferir como es):\n" +
+        calibracion.map((c) => "- " + c.pregunta + " => Eligio: " + c.opcionElegida).join("\n") +
+        "\n\n"
+      : "";
+
     const instruccion =
       "Eres un asistente que ayuda a " + (p.nombre || "el candidato") + " a postular empleos.\n" +
       "REGLAS:\n" +
@@ -114,6 +137,8 @@ export async function POST(request: Request) {
       "\n" +
       bloqueAnalisis +
       bloqueEstilo +
+      bloqueEntrenamiento +
+      bloqueCalibracion +
       "Perfil: " + (p.bio || "Sin informacion de perfil aun") + "\n" +
       "Nombre: " + (p.nombre || "") + "\n" +
       "Email: " + (p.email || "") + "\n" +
@@ -128,7 +153,9 @@ export async function POST(request: Request) {
       '\nPregunta del formulario: "' + pregunta + '"\n' +
       (opciones && opciones.length
         ? "Responde solo con el texto exacto de la opcion elegida, o SINRESPUESTA."
-        : "Responde en primera persona, max 2 oraciones, siempre con una respuesta honesta, util, breve y personalizada al aviso de arriba (nunca la dejes en blanco ni la hagas generica ni redundante).");
+        : "Responde en primera persona, con una extension de " +
+          (DESCRIPCION_LONGITUD[styleProfile?.longitudRespuesta || "media"] || DESCRIPCION_LONGITUD.media) +
+          ", siempre con una respuesta honesta, util y personalizada al aviso de arriba (nunca la dejes en blanco ni la hagas generica ni redundante).");
 
     const messages = await construirMensajesCV(user.id, instruccion);
 
