@@ -29,15 +29,6 @@ const PASOS = [
   { titulo: "Listo", Icon: CheckCircle2 },
 ];
 
-// Guarda el paso más lejano al que ya llegaste en este navegador. Existe
-// porque el servidor no puede confirmar "ya conecté la extensión" ni "omití
-// este paso a propósito" (no hay campo en la base de datos para eso) — sin
-// esto, recargar la página (ej. el botón "verificar" de la extensión, que
-// hace location.reload()) te mandaba de vuelta al último paso que el
-// servidor SÍ puede confirmar (típicamente la conversación), sin importar
-// en qué paso estuvieras parado.
-const PASO_STORAGE_KEY = "ap-onboarding-paso-maximo";
-
 export default function OnboardingPage() {
   const router = useRouter();
   // null = todavía revisando desde dónde retomar. Evita el flash de "Bienvenida"
@@ -47,31 +38,27 @@ export default function OnboardingPage() {
   useEffect(() => {
     async function determinarInicio() {
       try {
-        const [perfilRes, conversacionRes, portalesRes] = await Promise.all([
+        const [perfilRes, conversacionRes, portalesRes, extensionRes] = await Promise.all([
           fetch("/api/perfil"),
           fetch("/api/style/onboarding/mensaje"),
           fetch("/api/platform-accounts"),
+          fetch("/api/account/extension-conectada"),
         ]);
         const perfil = perfilRes.ok ? await perfilRes.json() : null;
         const conversacion = conversacionRes.ok ? await conversacionRes.json() : null;
         const portales = portalesRes.ok ? await portalesRes.json() : null;
+        const extension = extensionRes.ok ? await extensionRes.json() : null;
 
         const cvListo = !!perfil?.nombreArchivo;
         const conversacionLista = !!conversacion?.confirmado;
+        const extensionLista = !!extension?.extensionConectada;
         const portalConectado = (portales?.cuentas || []).some((c: any) => c.activa);
 
-        let pasoServidor: number;
-        if (!cvListo) pasoServidor = 0;
-        else if (!conversacionLista) pasoServidor = 2;
-        else if (!portalConectado) pasoServidor = 3;
-        else pasoServidor = 5;
-
-        let pasoGuardado = 0;
-        try {
-          pasoGuardado = Number(localStorage.getItem(PASO_STORAGE_KEY)) || 0;
-        } catch {}
-
-        setPaso(Math.max(pasoServidor, Math.min(pasoGuardado, PASOS.length - 1)));
+        if (!cvListo) setPaso(0);
+        else if (!conversacionLista) setPaso(2);
+        else if (!extensionLista) setPaso(3);
+        else if (!portalConectado) setPaso(4);
+        else setPaso(5);
       } catch (e) {
         console.error("No se pudo determinar en qué paso del onboarding retomar:", e);
         setPaso(0);
@@ -80,23 +67,12 @@ export default function OnboardingPage() {
     determinarInicio();
   }, []);
 
-  // Persiste cada avance para que un reload no te mande para atrás.
-  useEffect(() => {
-    if (paso === null) return;
-    try {
-      localStorage.setItem(PASO_STORAGE_KEY, String(paso));
-    } catch {}
-  }, [paso]);
-
   async function terminar() {
     try {
       await fetch("/api/account/completar-onboarding", { method: "POST" });
     } catch (e) {
       console.error("No se pudo marcar el onboarding como completado:", e);
     }
-    try {
-      localStorage.removeItem(PASO_STORAGE_KEY);
-    } catch {}
     router.push("/dashboard");
   }
 
@@ -469,6 +445,11 @@ function PasoExtension({ onSiguiente }: { onSiguiente: () => void }) {
       setExtConectada(true);
       setConectandoExt(false);
       setErrorConexion(null);
+      // Avisa al servidor para que retomar el onboarding más tarde (o un
+      // reload en este mismo paso) no te mande de vuelta a un paso anterior.
+      fetch("/api/account/extension-conectada", { method: "POST" }).catch((e) => {
+        console.error("No se pudo guardar que la extensión quedó conectada:", e);
+      });
     }
     function onError(e: Event) {
       const detail = (e as CustomEvent).detail;

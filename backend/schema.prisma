@@ -90,6 +90,11 @@ model User {
   // deja pausar/reanudar la búsqueda automática sin perder el beneficio del plan.
   busquedaAutomaticaActiva Boolean @default(true) @map("busqueda_automatica_activa")
   onboardingCompletado Boolean @default(false) @map("onboarding_completado")
+  // El único paso del onboarding que la extensión confirma del lado del
+  // navegador, no del servidor — sin esto, retomar el onboarding (recargar
+  // la página, volver más tarde) no tenía forma de saber que ya se había
+  // conectado y mandaba a la persona de vuelta a un paso anterior.
+  extensionConectada Boolean @default(false) @map("extension_conectada")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
