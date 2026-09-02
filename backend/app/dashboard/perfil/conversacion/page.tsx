@@ -363,14 +363,14 @@ export default function ConversacionPage() {
               </form>
 
               {puedeFinalizar && (
-                <button
-                  className="ap-button-ghost"
-                  style={{ marginTop: 12 }}
-                  disabled={finalizando}
-                  onClick={finalizar}
-                >
-                  {finalizando ? "Generando tu perfil..." : "Finalizar y generar mi perfil"}
-                </button>
+                <div style={{ marginTop: 12 }}>
+                  <button className="ap-button" style={{ width: "100%" }} disabled={finalizando} onClick={finalizar}>
+                    {finalizando ? "Generando tu perfil..." : "✨ Ya tienes suficiente — Finalizar y generar mi perfil"}
+                  </button>
+                  <p style={{ fontSize: 11.5, color: "var(--text-muted)", textAlign: "center", marginTop: 6 }}>
+                    Puedes seguir conversando si quieres, pero ya puedes terminar cuando quieras.
+                  </p>
+                </div>
               )}
             </div>
           </div>

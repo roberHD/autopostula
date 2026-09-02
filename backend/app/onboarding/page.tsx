@@ -29,6 +29,15 @@ const PASOS = [
   { titulo: "Listo", Icon: CheckCircle2 },
 ];
 
+// Guarda el paso más lejano al que ya llegaste en este navegador. Existe
+// porque el servidor no puede confirmar "ya conecté la extensión" ni "omití
+// este paso a propósito" (no hay campo en la base de datos para eso) — sin
+// esto, recargar la página (ej. el botón "verificar" de la extensión, que
+// hace location.reload()) te mandaba de vuelta al último paso que el
+// servidor SÍ puede confirmar (típicamente la conversación), sin importar
+// en qué paso estuvieras parado.
+const PASO_STORAGE_KEY = "ap-onboarding-paso-maximo";
+
 export default function OnboardingPage() {
   const router = useRouter();
   // null = todavía revisando desde dónde retomar. Evita el flash de "Bienvenida"
@@ -51,13 +60,18 @@ export default function OnboardingPage() {
         const conversacionLista = !!conversacion?.confirmado;
         const portalConectado = (portales?.cuentas || []).some((c: any) => c.activa);
 
-        // La extensión (paso 3) no se puede confirmar desde el servidor — el
-        // propio paso ya detecta solo si ya estaba conectada y deja avanzar
-        // casi al toque, así que igual se muestra aunque el resto esté listo.
-        if (!cvListo) setPaso(0);
-        else if (!conversacionLista) setPaso(2);
-        else if (!portalConectado) setPaso(3);
-        else setPaso(5);
+        let pasoServidor: number;
+        if (!cvListo) pasoServidor = 0;
+        else if (!conversacionLista) pasoServidor = 2;
+        else if (!portalConectado) pasoServidor = 3;
+        else pasoServidor = 5;
+
+        let pasoGuardado = 0;
+        try {
+          pasoGuardado = Number(localStorage.getItem(PASO_STORAGE_KEY)) || 0;
+        } catch {}
+
+        setPaso(Math.max(pasoServidor, Math.min(pasoGuardado, PASOS.length - 1)));
       } catch (e) {
         console.error("No se pudo determinar en qué paso del onboarding retomar:", e);
         setPaso(0);
@@ -66,12 +80,23 @@ export default function OnboardingPage() {
     determinarInicio();
   }, []);
 
+  // Persiste cada avance para que un reload no te mande para atrás.
+  useEffect(() => {
+    if (paso === null) return;
+    try {
+      localStorage.setItem(PASO_STORAGE_KEY, String(paso));
+    } catch {}
+  }, [paso]);
+
   async function terminar() {
     try {
       await fetch("/api/account/completar-onboarding", { method: "POST" });
     } catch (e) {
       console.error("No se pudo marcar el onboarding como completado:", e);
     }
+    try {
+      localStorage.removeItem(PASO_STORAGE_KEY);
+    } catch {}
     router.push("/dashboard");
   }
 
@@ -288,11 +313,15 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
   );
 }
 
+const MINIMO_MENSAJES_PARA_FINALIZAR = 4;
+
 function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   const [conversacion, setConversacion] = useState<Mensaje[]>([]);
   const [input, setInput] = useState("");
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [finalizando, setFinalizando] = useState(false);
+  const [finalizado, setFinalizado] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
   // React 18 en desarrollo monta cada efecto dos veces a propósito (para pescar
   // efectos sin cleanup) -- sin este guard, la conversación vacía dispara dos
@@ -316,6 +345,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         } else {
           await enviar("");
         }
+        if (data.confirmado) setFinalizado(true);
       } finally {
         setCargando(false);
       }
@@ -343,6 +373,19 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
       setEnviando(false);
     }
   }
+
+  async function finalizar() {
+    setFinalizando(true);
+    try {
+      const res = await fetch("/api/style/onboarding/finalizar", { method: "POST" });
+      if (res.ok) setFinalizado(true);
+    } finally {
+      setFinalizando(false);
+    }
+  }
+
+  const mensajesUsuario = conversacion.filter((m) => m.role === "user").length;
+  const puedeFinalizar = mensajesUsuario >= MINIMO_MENSAJES_PARA_FINALIZAR;
 
   return (
     <>
@@ -379,6 +422,30 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         />
         <button className="ap-button" type="submit" disabled={enviando || !input.trim()}>Enviar</button>
       </form>
+
+      {finalizado ? (
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 13,
+            background: "color-mix(in oklch, var(--status-finalizado) 14%, transparent)",
+            color: "var(--status-finalizado)",
+          }}
+        >
+          <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+          Tu perfil de estilo quedó listo — la IA ya lo va a usar en tus postulaciones.
+        </div>
+      ) : puedeFinalizar ? (
+        <div style={{ marginTop: 12 }}>
+          <button className="ap-button" style={{ width: "100%" }} disabled={finalizando} onClick={finalizar}>
+            {finalizando ? "Generando tu perfil..." : "✨ Ya tienes suficiente — Finalizar y generar mi perfil"}
+          </button>
+          <p style={{ fontSize: 11.5, color: "var(--text-muted)", textAlign: "center", marginTop: 6 }}>
+            Puedes seguir conversando si quieres, pero ya puedes terminar cuando quieras.
+          </p>
+        </div>
+      ) : null}
+
       <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} />
     </>
   );
