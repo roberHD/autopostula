@@ -39,8 +39,15 @@ export default function ConversacionPage() {
   const [mensaje, setMensaje] = useState("");
   const [resultado, setResultado] = useState<PerfilExtraido | null>(null);
   const finRef = useRef<HTMLDivElement>(null);
+  // React 18 en desarrollo monta cada efecto dos veces a propósito (para pescar
+  // efectos sin cleanup) -- sin este guard, la conversación vacía dispara dos
+  // "enviarMensaje('')" en paralelo y quedan dos saludos de la IA duplicados.
+  const yaInicializado = useRef(false);
 
   useEffect(() => {
+    if (yaInicializado.current) return;
+    yaInicializado.current = true;
+
     async function cargar() {
       try {
         const res = await fetch("/api/style/onboarding/mensaje");

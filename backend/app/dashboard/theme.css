@@ -291,6 +291,51 @@
   }
 }
 
+/* ── Onboarding: siempre en claro, con más vida que el resto
+   del dashboard (fondo con degradé suave, marca y tarjeta con
+   sombra) — es la primera impresión de la app. ────────────── */
+
+.ap-onb-shell {
+  position: relative;
+  background:
+    radial-gradient(600px 400px at 15% -5%, color-mix(in oklch, var(--accent) 16%, transparent), transparent 60%),
+    radial-gradient(560px 420px at 105% 10%, color-mix(in oklch, var(--accent) 12%, transparent), transparent 55%),
+    var(--bg);
+  overflow: hidden;
+}
+
+.ap-onb-brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), color-mix(in oklch, var(--accent) 60%, #a78bfa));
+  color: var(--accent-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 4px 14px color-mix(in oklch, var(--accent) 35%, transparent);
+}
+
+.ap-onb-card {
+  position: relative;
+  box-shadow: 0 20px 50px -20px color-mix(in oklch, var(--accent) 25%, transparent), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ap-onb-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  margin: 0 auto 14px;
+  background: linear-gradient(135deg, var(--accent), color-mix(in oklch, var(--accent) 55%, #a78bfa));
+  color: var(--accent-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px -4px color-mix(in oklch, var(--accent) 45%, transparent);
+}
+
 /* ── Contenido principal ────────────────────────────────── */
 
 .ap-main {

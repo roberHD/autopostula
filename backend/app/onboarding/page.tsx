@@ -75,19 +75,28 @@ export default function OnboardingPage() {
     router.push("/dashboard");
   }
 
+  // El onboarding siempre se ve en claro — es lo primero que ve una persona
+  // recién registrada y no tiene relación con la preferencia oscuro/claro
+  // que se elige más adelante en el dashboard (esa sigue viviendo solo ahí).
   if (paso === null) {
     return (
-      <div className="ap-shell" style={{ alignItems: "center", justifyContent: "center" }}>
+      <div className="ap-shell ap-onb-shell" data-theme="light" style={{ alignItems: "center", justifyContent: "center" }}>
         <p style={{ color: "var(--text-muted)", fontSize: 13.5 }}>Cargando...</p>
       </div>
     );
   }
 
   return (
-    <div className="ap-shell" style={{ alignItems: "center", justifyContent: "center", padding: 24 }}>
+    <div className="ap-shell ap-onb-shell" data-theme="light" style={{ alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ width: "100%", maxWidth: 620 }}>
+        {/* Marca */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 28 }}>
+          <div className="ap-onb-brand-mark">AP</div>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>AutoPostula</span>
+        </div>
+
         {/* Indicador de pasos */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginBottom: 10 }}>
           {PASOS.map((p, i) => (
             <div
               key={p.titulo}
@@ -101,13 +110,16 @@ export default function OnboardingPage() {
             />
           ))}
         </div>
+        <p style={{ textAlign: "center", fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, marginBottom: 24 }}>
+          Paso {paso + 1} de {PASOS.length} · {PASOS[paso].titulo}
+        </p>
 
-        <div className="ap-card ap-animate-in" key={paso} style={{ padding: 32 }}>
-          {paso === 0 && <PasoBienvenida onSiguiente={() => setPaso(1)} onOmitir={terminar} />}
-          {paso === 1 && <PasoCV onSiguiente={() => setPaso(2)} onOmitir={terminar} />}
-          {paso === 2 && <PasoConversacion onSiguiente={() => setPaso(3)} onOmitir={terminar} />}
+        <div className="ap-card ap-onb-card ap-animate-in" key={paso} style={{ padding: 32 }}>
+          {paso === 0 && <PasoBienvenida onSiguiente={() => setPaso(1)} onOmitir={() => setPaso(1)} />}
+          {paso === 1 && <PasoCV onSiguiente={() => setPaso(2)} onOmitir={() => setPaso(2)} />}
+          {paso === 2 && <PasoConversacion onSiguiente={() => setPaso(3)} onOmitir={() => setPaso(3)} />}
           {paso === 3 && <PasoExtension onSiguiente={() => setPaso(4)} />}
-          {paso === 4 && <PasoPortal onSiguiente={() => setPaso(5)} onOmitir={terminar} />}
+          {paso === 4 && <PasoPortal onSiguiente={() => setPaso(5)} onOmitir={() => setPaso(5)} />}
           {paso === 5 && <PasoListo onTerminar={terminar} />}
         </div>
       </div>
@@ -118,13 +130,7 @@ export default function OnboardingPage() {
 function Header({ Icon, titulo, sub }: { Icon: typeof Sparkles; titulo: string; sub: string }) {
   return (
     <div style={{ textAlign: "center", marginBottom: 24 }}>
-      <div
-        style={{
-          width: 48, height: 48, borderRadius: "50%", margin: "0 auto 14px",
-          background: "var(--accent)", color: "var(--accent-contrast)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}
-      >
+      <div className="ap-onb-icon">
         <Icon size={22} />
       </div>
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>{titulo}</h1>
@@ -288,8 +294,15 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
+  // React 18 en desarrollo monta cada efecto dos veces a propósito (para pescar
+  // efectos sin cleanup) -- sin este guard, la conversación vacía dispara dos
+  // "enviar('')" en paralelo y quedan dos saludos de la IA duplicados.
+  const yaInicializado = useRef(false);
 
   useEffect(() => {
+    if (yaInicializado.current) return;
+    yaInicializado.current = true;
+
     async function cargar() {
       try {
         const res = await fetch("/api/style/onboarding/mensaje");

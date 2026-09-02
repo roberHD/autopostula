@@ -11,7 +11,10 @@ const BACKEND_URL = 'http://localhost:3000';
 let incTags = [];
 let excTags = [];
 let locTags = [];
-let jornadaSel = new Set(['part time','fines de semana','turno rotativo']);
+// Palabras clave, modalidad y jornada ya no se editan acá — vienen del dashboard
+// web (/dashboard/filtros) vía /api/extension/perfil, igual que el resto del
+// perfil. Esto es lo último que se trajo de ahí (o lo cacheado localmente).
+let filtrosBusquedaRemoto = { modalidad: 'cualquiera', jornada: 'cualquiera' };
 let infoItems = [];   // [{id, texto}] — datos libres del candidato para que la IA los use como contexto
 
 // Perfil traído automáticamente desde la cuenta web (vía token) — reemplaza
@@ -25,7 +28,6 @@ const DEFAULTS = {
   incTags: [],
   excTags: [],
   locTags: [],
-  jornada: ['part time'],
   info: []
 };
 
@@ -43,14 +45,12 @@ const statOk        = $('stat-ok');
 const incTagsEl     = $('inc-tags');
 const excTagsEl     = $('exc-tags');
 const locTagsEl     = $('loc-tags');
-const incInput      = $('inc-input');
-const excInput      = $('exc-input');
 const locInput      = $('loc-input');
-const incBtn        = $('inc-btn');
-const excBtn        = $('exc-btn');
 const locBtn        = $('loc-btn');
 const locUsarComunaBtn = $('loc-usar-comuna-btn');
-const jornadaChips  = $('jornada-chips');
+const filtroModalidadBadge = $('filtro-modalidad-badge');
+const filtroJornadaBadge   = $('filtro-jornada-badge');
+const filtrosEditarLink    = $('filtros-editar-link');
 const infoListEl    = $('info-list');
 const infoInput     = $('info-input');
 const infoBtn       = $('info-btn');
@@ -62,6 +62,15 @@ const openCtBtn     = $('open-ct-btn');
 const toastEl       = $('toast');
 
 perfilEditarLink.href = BACKEND_URL + '/dashboard/perfil';
+filtrosEditarLink.href = BACKEND_URL + '/dashboard/filtros';
+
+const ETIQUETAS_MODALIDAD = { cualquiera: 'Cualquiera', remoto: 'Remoto', hibrido: 'Híbrido', presencial: 'Presencial' };
+const ETIQUETAS_JORNADA = { cualquiera: 'Cualquiera', full_time: 'Full time', part_time: 'Part time' };
+
+function renderFiltrosBusqueda() {
+  filtroModalidadBadge.textContent = ETIQUETAS_MODALIDAD[filtrosBusquedaRemoto.modalidad] || 'Cualquiera';
+  filtroJornadaBadge.textContent = ETIQUETAS_JORNADA[filtrosBusquedaRemoto.jornada] || 'Cualquiera';
+}
 
 // ── Utilidades ─────────────────────────────────────────────────
 function toast(msg, duration = 2200) {
@@ -74,18 +83,22 @@ function toast(msg, duration = 2200) {
 function uid() { return Date.now() + Math.random().toString(36).slice(2,6); }
 
 // ── Tags ───────────────────────────────────────────────────────
+// inc/exc son de solo lectura acá (vienen del dashboard) — solo loc sigue
+// siendo editable directo desde el popup.
 function renderTags() {
-  renderTagsInto(incTagsEl, incTags, 'inc');
-  renderTagsInto(excTagsEl, excTags, 'exc');
-  renderTagsInto(locTagsEl, locTags, 'loc');
+  renderTagsInto(incTagsEl, incTags, 'inc', true);
+  renderTagsInto(excTagsEl, excTags, 'exc', true);
+  renderTagsInto(locTagsEl, locTags, 'loc', false);
 }
 
-function renderTagsInto(container, list, type) {
+function renderTagsInto(container, list, type, soloLectura) {
   container.innerHTML = '';
   list.forEach((tag, i) => {
     const span = document.createElement('span');
     span.className = `tag ${type}`;
-    span.innerHTML = `${tag} <button class="tag-x" data-i="${i}" data-type="${type}">×</button>`;
+    span.innerHTML = soloLectura
+      ? tag
+      : `${tag} <button class="tag-x" data-i="${i}">×</button>`;
     container.appendChild(span);
   });
 }
@@ -93,41 +106,22 @@ function renderTagsInto(container, list, type) {
 function addTag(type, val) {
   const v = val.trim().toLowerCase();
   if (!v) return;
-  if (type === 'inc' && !incTags.includes(v)) { incTags.push(v); incInput.value = ''; }
-  if (type === 'exc' && !excTags.includes(v)) { excTags.push(v); excInput.value = ''; }
   if (type === 'loc' && !locTags.includes(v)) { locTags.push(v); locInput.value = ''; }
   renderTags();
 }
 
 document.addEventListener('click', e => {
   if (!e.target.classList.contains('tag-x')) return;
-  const i = +e.target.dataset.i, type = e.target.dataset.type;
-  if (type === 'inc') incTags.splice(i, 1);
-  else if (type === 'loc') locTags.splice(i, 1);
-  else excTags.splice(i, 1);
+  locTags.splice(+e.target.dataset.i, 1);
   renderTags();
 });
 
-incBtn.addEventListener('click', () => addTag('inc', incInput.value));
-excBtn.addEventListener('click', () => addTag('exc', excInput.value));
 locBtn.addEventListener('click', () => addTag('loc', locInput.value));
-incInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTag('inc', incInput.value); });
-excInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTag('exc', excInput.value); });
 locInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTag('loc', locInput.value); });
 locUsarComunaBtn?.addEventListener('click', () => {
   const comuna = perfilRemoto?.comuna;
   if (!comuna) { toast('⚠ No tenemos tu comuna todavía — complétala en la web'); return; }
   addTag('loc', comuna);
-});
-
-// ── Chips jornada ──────────────────────────────────────────────
-jornadaChips.addEventListener('click', e => {
-  const chip = e.target.closest('.chip');
-  if (!chip) return;
-  const val = chip.dataset.val;
-  if (jornadaSel.has(val)) jornadaSel.delete(val);
-  else jornadaSel.add(val);
-  chip.classList.toggle('selected', jornadaSel.has(val));
 });
 
 // ── Información adicional ───────────────────────────────────────
@@ -212,8 +206,19 @@ async function cargarPerfilRemoto(mostrarToast) {
     if (cvTextoCache) chrome.storage.local.set({ cvTexto: cvTextoCache });
     else chrome.storage.local.remove('cvTexto');
 
+    if (data.filtrosBusqueda) {
+      incTags = data.filtrosBusqueda.palabrasIncluir || [];
+      excTags = data.filtrosBusqueda.palabrasExcluir || [];
+      filtrosBusquedaRemoto = {
+        modalidad: data.filtrosBusqueda.modalidad || 'cualquiera',
+        jornada: data.filtrosBusqueda.jornada || 'cualquiera',
+      };
+      renderTags();
+      renderFiltrosBusqueda();
+    }
+
     renderPerfilCard();
-    guardarConfigLocal(); // persiste el perfil recién traído para que content.js lo use ya mismo
+    guardarConfigLocal(); // persiste el perfil y los filtros recién traídos para que content.js los use ya mismo
     if (mostrarToast) toast('✓ Perfil actualizado desde la web');
   } catch (e) {
     // Sin conexión o backend caído: seguimos con lo último guardado localmente,
@@ -331,7 +336,7 @@ function construirConfig(activeOverride) {
     incTags,
     excTags,
     locTags,
-    jornada: [...jornadaSel],
+    filtrosBusqueda: filtrosBusquedaRemoto,
     info: infoItems,
     modoRevision: document.getElementById('toggle-revision')?.checked || false,
     usarIAFiltros: document.getElementById('toggle-ia-filtros')?.checked || false,
@@ -368,20 +373,12 @@ document.getElementById('scan-now-btn')?.addEventListener('click', () => {
     const config = construirConfig(true);
     await new Promise(r => chrome.storage.local.set({ config, active: true }, r));
 
-    // Disparar evento custom en el DOM — el content script lo escucha
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => {
-          if (window._apReset) window._apReset();
-          document.dispatchEvent(new CustomEvent('autopostula-scan'));
-        }
-      });
-      toast('🔍 Escaneando...');
-    } catch(e) {
-      chrome.tabs.sendMessage(tabId, { type: 'FORCE_SCAN' }, () => {});
-      toast('🔍 Escaneando...');
-    }
+    // Se avisa por chrome.runtime (canal privado de la extensión) en vez de un
+    // CustomEvent de DOM — un evento de DOM lo puede disparar cualquier script
+    // de la propia página (un aviso comprometido, un XSS del portal), lo que
+    // dejaba activar el escaneo/postulación real sin que la persona lo pidiera.
+    chrome.tabs.sendMessage(tabId, { type: 'FORCE_SCAN' }, () => {});
+    toast('🔍 Escaneando...');
   });
 });
 
@@ -409,11 +406,7 @@ function loadState() {
     incTags = cfg.incTags || DEFAULTS.incTags;
     excTags = cfg.excTags || DEFAULTS.excTags;
     locTags = cfg.locTags || DEFAULTS.locTags;
-
-    jornadaSel = new Set(cfg.jornada || DEFAULTS.jornada);
-    document.querySelectorAll('.chip').forEach(chip => {
-      chip.classList.toggle('selected', jornadaSel.has(chip.dataset.val));
-    });
+    filtrosBusquedaRemoto = cfg.filtrosBusqueda || { modalidad: 'cualquiera', jornada: 'cualquiera' };
 
     if (cfg.info) {
       infoItems = cfg.info;
@@ -442,6 +435,7 @@ function loadState() {
     setActiveUI(active);
 
     renderTags();
+    renderFiltrosBusqueda();
     renderInfo();
     renderPerfilCard();
     actualizarStats(data.log || []);

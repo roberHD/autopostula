@@ -92,13 +92,14 @@ model User {
   onboardingCompletado Boolean @default(false) @map("onboarding_completado")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
-  subscriptions    Subscription[]
-  platformAccounts PlatformAccount[]
-  cvProfile        CvProfile?
-  styleProfiles    StyleProfile[]
-  applications     Application[]
-  adminProfile     AdminProfile?
-  aiUsageLogs      AiUsageLog[]
+  subscriptions     Subscription[]
+  platformAccounts  PlatformAccount[]
+  cvProfile         CvProfile?
+  styleProfiles     StyleProfile[]
+  applications      Application[]
+  adminProfile      AdminProfile?
+  aiUsageLogs       AiUsageLog[]
+  searchPreferences SearchPreferences?
 
   @@map("users")
 }
@@ -241,6 +242,20 @@ model StyleProfile {
   refinements        StyleRefinement[]
 
   @@map("style_profiles")
+}
+
+model SearchPreferences {
+  id               String   @id @default(uuid())
+  userId           String   @unique @map("user_id")
+  palabrasIncluir  Json?    @map("palabras_incluir")
+  palabrasExcluir  Json?    @map("palabras_excluir")
+  modalidad        String   @default("cualquiera")
+  jornada          String   @default("cualquiera")
+  actualizadoEn    DateTime @updatedAt @map("actualizado_en")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("search_preferences")
 }
 
 model AdminProfile {

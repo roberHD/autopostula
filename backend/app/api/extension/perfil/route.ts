@@ -20,12 +20,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
   }
 
-  const perfil = await prisma.cvProfile.findUnique({ where: { userId: user.id } });
+  const [perfil, filtros] = await Promise.all([
+    prisma.cvProfile.findUnique({ where: { userId: user.id } }),
+    prisma.searchPreferences.findUnique({ where: { userId: user.id } }),
+  ]);
+
+  const filtrosBusqueda = {
+    palabrasIncluir: (filtros?.palabrasIncluir as string[] | null) ?? [],
+    palabrasExcluir: (filtros?.palabrasExcluir as string[] | null) ?? [],
+    modalidad: filtros?.modalidad ?? "cualquiera",
+    jornada: filtros?.jornada ?? "cualquiera",
+  };
+
   if (!perfil) {
     return NextResponse.json({
       nombre: null, email: null, telefono: null, comuna: null,
       cargoObjetivo: null, expectativaRenta: null, disponibilidad: null,
       resumenProfesional: null, textoExtraido: null,
+      filtrosBusqueda,
     });
   }
 
@@ -39,5 +51,6 @@ export async function GET(request: Request) {
     disponibilidad: perfil.disponibilidad,
     resumenProfesional: perfil.resumenProfesional,
     textoExtraido: perfil.textoExtraido,
+    filtrosBusqueda,
   });
 }

@@ -166,6 +166,35 @@ const URL_BUSQUEDA_POR_PORTAL = {
   'Laborum': (slug) => 'https://www.laborum.cl/empleos-busqueda-' + slug + '.html',
 };
 
+// Trae los filtros de búsqueda (palabras, modalidad, jornada) del dashboard y
+// los guarda en la config local, para que la búsqueda automática los use aunque
+// el popup nunca se haya abierto para refrescarlos.
+async function actualizarFiltrosDesdeBackend(token) {
+  try {
+    const res = await fetch('http://localhost:3000/api/extension/perfil', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.filtrosBusqueda) return;
+
+    const { config } = await chrome.storage.local.get('config');
+    await chrome.storage.local.set({
+      config: {
+        ...(config || {}),
+        incTags: data.filtrosBusqueda.palabrasIncluir || [],
+        excTags: data.filtrosBusqueda.palabrasExcluir || [],
+        filtrosBusqueda: {
+          modalidad: data.filtrosBusqueda.modalidad || 'cualquiera',
+          jornada: data.filtrosBusqueda.jornada || 'cualquiera',
+        },
+      }
+    });
+  } catch (e) {
+    console.warn('[AP] No se pudieron actualizar los filtros antes de la búsqueda automática:', e);
+  }
+}
+
 async function escanearAutomatico() {
   const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
   if (!autopostulaToken) return;
@@ -187,6 +216,12 @@ async function escanearAutomatico() {
 
   const slug = normalizarParaUrl(estado.cargoObjetivo);
   if (!slug) return;
+
+  // La búsqueda automática corre en background sin que nadie haya abierto el
+  // popup — si no se refresca acá, usaría los filtros de búsqueda que haya
+  // cacheados de la última vez (quizás desactualizados). Se actualiza antes
+  // de escanear para que siempre respete lo último guardado en la web.
+  await actualizarFiltrosDesdeBackend(autopostulaToken);
 
   const plataformas = estado.plataformasConectadas || [];
   for (const nombre of plataformas) {

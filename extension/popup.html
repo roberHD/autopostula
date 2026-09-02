@@ -366,41 +366,28 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 <div class="spacer"></div>
 
-<!-- FILTROS: PALABRAS CLAVE -->
+<!-- FILTROS DE BÚSQUEDA (solo lectura -- se editan en la web) -->
 <div class="section">
   <div class="section-head">
-    <span class="section-title">Buscar ofertas que contengan</span>
+    <span class="section-title">Filtros de búsqueda</span>
+    <a href="#" class="section-action" id="filtros-editar-link" target="_blank">Editar en la web ↗</a>
   </div>
+  <p style="font-size:10.5px;color:var(--text-3);margin-bottom:10px;line-height:1.5;">
+    Se administran desde el dashboard para que también los use la búsqueda automática — acá solo se muestran.
+  </p>
+  <p class="section-title" style="font-size:10px;margin-bottom:4px;">Incluir</p>
   <div class="tags" id="inc-tags"></div>
-  <div class="input-row">
-    <input class="field" id="inc-input" placeholder="ej: vendedor, retail, cajero…">
-    <button class="btn btn-primary" id="inc-btn">+ Agregar</button>
-  </div>
-</div>
-
-<!-- FILTROS: EXCLUIR -->
-<div class="section">
-  <div class="section-head">
-    <span class="section-title">Ignorar ofertas que digan</span>
-  </div>
+  <p class="section-title" style="font-size:10px;margin:6px 0 4px;">Excluir</p>
   <div class="tags" id="exc-tags"></div>
-  <div class="input-row">
-    <input class="field danger" id="exc-input" placeholder="ej: full time, 5 años experiencia…">
-    <button class="btn btn-danger-ghost" id="exc-btn">Excluir</button>
-  </div>
-</div>
-
-<!-- FILTROS: JORNADA -->
-<div class="section">
-  <div class="section-head">
-    <span class="section-title">Tipo de jornada</span>
-  </div>
-  <div class="chips" id="jornada-chips">
-    <div class="chip selected" data-val="part time">Part time</div>
-    <div class="chip" data-val="full time">Full time</div>
-    <div class="chip selected" data-val="fines de semana">Fines de semana</div>
-    <div class="chip selected" data-val="turno rotativo">Turno rotativo</div>
-    <div class="chip" data-val="teletrabajo">Teletrabajo</div>
+  <div style="display:flex;gap:20px;margin-top:6px;">
+    <div>
+      <p class="section-title" style="font-size:10px;margin-bottom:4px;">Modalidad</p>
+      <span class="tag inc" id="filtro-modalidad-badge">Cualquiera</span>
+    </div>
+    <div>
+      <p class="section-title" style="font-size:10px;margin-bottom:4px;">Jornada</p>
+      <span class="tag inc" id="filtro-jornada-badge">Cualquiera</span>
+    </div>
   </div>
 </div>
 

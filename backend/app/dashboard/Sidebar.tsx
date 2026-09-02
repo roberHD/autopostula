@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Menu,
   X,
+  Filter,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/perfil", label: "Perfil", Icon: UserRound },
   { href: "/dashboard/perfil/conversacion", label: "Conversación IA", Icon: MessageSquare },
   { href: "/dashboard/portales", label: "Portales", Icon: Globe },
+  { href: "/dashboard/filtros", label: "Filtros de búsqueda", Icon: Filter },
 ];
 
 // Calibración y Entrenar IA quedan agrupadas en un solo módulo (antes eran dos

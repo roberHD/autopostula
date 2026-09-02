@@ -88,7 +88,22 @@ AP.actualizarEstadoPostulacion = function (datos) {
   });
 };
 
-// ── Filtro de palabras clave / exclusión / ubicación ──────────────
+// Palabras que delatan modalidad/jornada en el texto de la oferta -- estas
+// dos solo se filtran "en positivo" (exigiendo que el aviso mencione alguna)
+// cuando el criterio es remoto/hibrido o full_time/part_time. "presencial" y
+// "cualquiera" no filtran nada: la mayoria de los avisos presenciales no se
+// molestan en decirlo explicitamente, y rechazarlos por la sola ausencia de
+// la palabra dejaria fuera ofertas validas.
+const AP_KEYWORDS_MODALIDAD = {
+  remoto: ['remoto', 'teletrabajo', 'home office', 'trabajo a distancia'],
+  hibrido: ['hibrido', 'semipresencial', 'semi presencial'],
+};
+const AP_KEYWORDS_JORNADA = {
+  full_time: ['full time', 'jornada completa', 'tiempo completo'],
+  part_time: ['part time', 'media jornada', 'jornada parcial', 'medio tiempo'],
+};
+
+// ── Filtro de palabras clave / exclusión / ubicación / modalidad / jornada ──
 // Portal-agnóstico a propósito: cada adaptador extrae su propio texto y
 // ubicación (la estructura del DOM cambia por sitio) y le pasa strings
 // planos acá. Devuelve true si la oferta pasa todos los filtros configurados.
@@ -108,6 +123,16 @@ AP.coincideFiltros = function (textoCompleto, ubicacion) {
     const ubic = AP.n(ubicacion || textoCompleto || '');
     if (!cfg.locTags.some(tag => ubic.includes(AP.n(tag)))) return false;
   }
+
+  const filtros = cfg.filtrosBusqueda;
+  if (filtros) {
+    const keywordsModalidad = AP_KEYWORDS_MODALIDAD[filtros.modalidad];
+    if (keywordsModalidad && !keywordsModalidad.some(k => t.includes(AP.n(k)))) return false;
+
+    const keywordsJornada = AP_KEYWORDS_JORNADA[filtros.jornada];
+    if (keywordsJornada && !keywordsJornada.some(k => t.includes(AP.n(k)))) return false;
+  }
+
   return true;
 };
 
@@ -460,18 +485,24 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
     else { AP.procesando = false; AP.limpiarOverlay(); }
   }
   if (m.type === 'CONFIG_UPDATED') { AP.cfg = m.config; AP.activo = m.config.active; }
-  if (m.type === 'FORCE_SCAN') { AP.procesando = false; if (AP.escanear) AP.escanear(); sendResponse({ ok: true }); }
-});
-
-document.addEventListener('autopostula-scan', function () {
-  try {
-    chrome.storage.local.get(['config', 'active'], function (data) {
+  if (m.type === 'FORCE_SCAN') {
+    // Recarga la config guardada (por si el popup la cambió justo antes de forzar
+    // el escaneo) y arranca — este es el ÚNICO camino para forzar un escaneo desde
+    // el popup. Antes existía también un CustomEvent de DOM ('autopostula-scan')
+    // para lo mismo, pero un evento de DOM es visible y disparable por CUALQUIER
+    // script corriendo en la página (un aviso comprometido, un XSS del propio
+    // portal) — eso dejaba que un tercero activara el escaneo/postulación real
+    // sin que la persona lo pidiera. chrome.runtime.onMessage, en cambio, solo lo
+    // puede usar la propia extensión.
+    chrome.storage.local.get(['config'], function (data) {
       if (data.config) AP.cfg = data.config;
-      AP.activo = true; AP.procesando = false;
+      AP.activo = true;
+      AP.procesando = false;
       AP.msg('Escaneando…', '#16A34A');
       if (AP.escanear) AP.escanear();
     });
-  } catch (e) {}
+    sendResponse({ ok: true });
+  }
 });
 
 new MutationObserver(function () {
