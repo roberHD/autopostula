@@ -158,6 +158,14 @@ function normalizarParaUrl(texto) {
     .replace(/\s+/g, '-');
 }
 
+// Un builder de URL por portal — mismo cargoObjetivo, distinta forma de armar
+// la búsqueda en cada sitio. Si sumas un portal nuevo más adelante, agrégalo
+// acá (y agrega su adaptador correspondiente en extension/adapters/).
+const URL_BUSQUEDA_POR_PORTAL = {
+  'Computrabajo': (slug) => 'https://cl.computrabajo.com/trabajo-de-' + slug,
+  'Laborum': (slug) => 'https://www.laborum.cl/empleos-busqueda-' + slug + '.html',
+};
+
 async function escanearAutomatico() {
   const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
   if (!autopostulaToken) return;
@@ -180,29 +188,48 @@ async function escanearAutomatico() {
   const slug = normalizarParaUrl(estado.cargoObjetivo);
   if (!slug) return;
 
-  const url = 'https://cl.computrabajo.com/trabajo-de-' + slug;
+  const plataformas = estado.plataformasConectadas || [];
+  for (const nombre of plataformas) {
+    const construirUrl = URL_BUSQUEDA_POR_PORTAL[nombre];
+    if (!construirUrl) continue; // portal conectado pero sin adaptador de búsqueda automática todavía
+    abrirYEscanear(construirUrl(slug));
+  }
+}
 
+// Abre una pestaña oculta en la URL de búsqueda, dispara el escaneo cuando
+// carga, y la cierra sola — mismo flujo sin importar el portal.
+function abrirYEscanear(url) {
   chrome.tabs.create({ url, active: false }, tab => {
     const id = tab.id;
+    // El flujo normal cierra la pestaña a los ~5 min, y aparte hay un timeout
+    // de seguridad a los 6 min por si nunca terminó de cargar. Sin este guard,
+    // si el primero ya la cerró, el segundo igual intenta cerrarla de nuevo un
+    // minuto después — y como el tab ya no existe, Chrome tira "No tab with id".
+    let manejado = false;
+    function cerrarTab() {
+      if (manejado) return;
+      manejado = true;
+      chrome.tabs.remove(id, () => { if (chrome.runtime.lastError) {} });
+    }
+
     const onUpdated = (tabId, info) => {
       if (tabId !== id || info.status !== 'complete') return;
       chrome.tabs.onUpdated.removeListener(onUpdated);
       setTimeout(() => {
+        if (manejado) return; // la pestaña ya se cerró (ej. por el timeout de seguridad)
         chrome.tabs.sendMessage(id, { type: 'AUTO_SCAN' }, () => {
           if (chrome.runtime.lastError) { /* pestaña cerrada o sin content script */ }
         });
         // El escaneo puede postular a varias ofertas seguidas — le damos tiempo
         // antes de cerrar la pestaña sola. Ajusta si ves que corta muy justo.
-        setTimeout(() => {
-          chrome.tabs.remove(id, () => { if (chrome.runtime.lastError) {} });
-        }, 5 * 60 * 1000);
+        setTimeout(cerrarTab, 5 * 60 * 1000);
       }, 2000);
     };
     chrome.tabs.onUpdated.addListener(onUpdated);
     // Timeout de seguridad, por si el tab nunca termina de cargar
     setTimeout(() => {
       chrome.tabs.onUpdated.removeListener(onUpdated);
-      chrome.tabs.remove(id, () => {});
+      cerrarTab();
     }, 6 * 60 * 1000);
   });
 }
@@ -244,7 +271,8 @@ async function reportarPostulacionBackend(oferta) {
         origen: 'MANUAL',
         respuestas: oferta.respuestas || [],
         incompleta: !!oferta.incompleta,
-        nota: oferta.nota || null
+        nota: oferta.nota || null,
+        matchScore: typeof oferta.matchScore === 'number' ? oferta.matchScore : null
       })
     });
     if (!res.ok) {

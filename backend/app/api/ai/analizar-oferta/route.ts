@@ -38,12 +38,13 @@ export async function POST(request: Request) {
 
     const instruccion =
       "Analiza este aviso de trabajo junto al perfil del candidato. Responde SOLO con un JSON valido, sin texto adicional, sin markdown, con exactamente esta forma:\n" +
-      '{"cargo":"","empresa":"","prioridades":"","fortalezas":"","tono":""}\n' +
+      '{"cargo":"","empresa":"","prioridades":"","fortalezas":"","tono":"","matchScore":0}\n' +
       "- cargo: nombre exacto del puesto al que se postula, tal como aparece en el aviso\n" +
       "- empresa: nombre de la empresa que publica el aviso (si no aparece claramente, deja el string vacio)\n" +
       "- prioridades: en una frase corta, que es lo mas importante que busca esta empresa en el candidato segun el aviso (rubro, tareas clave, requisitos)\n" +
       "- fortalezas: en una frase corta, que fortalezas REALES del candidato (solo las que esten en su CV/perfil/datos adicionales) conectan mejor con este aviso especifico\n" +
-      '- tono: como deberia sonar el candidato al responder preguntas de este formulario (ej: "cercano y directo", "formal y profesional", "entusiasta pero breve"), segun como este redactado el aviso -- un aviso informal pide un tono mas cercano, uno corporativo uno mas formal\n\n' +
+      '- tono: como deberia sonar el candidato al responder preguntas de este formulario (ej: "cercano y directo", "formal y profesional", "entusiasta pero breve"), segun como este redactado el aviso -- un aviso informal pide un tono mas cercano, uno corporativo uno mas formal\n' +
+      "- matchScore: numero entero de 0 a 100 que estima que tan bien calza el perfil/CV del candidato con ESTE aviso especifico (requisitos, rubro, experiencia pedida vs la real). 0 = no calza nada, 100 = calce casi perfecto. Se estricto: si falta informacion del candidato para evaluar bien, usa un puntaje moderado (40-60) en vez de uno alto\n\n" +
       "Perfil: " +
       (p.bio || "Sin informacion de perfil aun") +
       "\n" +
@@ -68,6 +69,14 @@ export async function POST(request: Request) {
       .trim();
     texto = texto.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(texto);
+
+    // Blindaje: si el modelo no manda matchScore, o manda algo raro, no se cae
+    // el análisis completo por eso — sencillamente queda sin puntaje.
+    if (typeof parsed.matchScore === "number") {
+      parsed.matchScore = Math.max(0, Math.min(100, Math.round(parsed.matchScore)));
+    } else {
+      parsed.matchScore = null;
+    }
 
     return NextResponse.json(parsed);
   } catch (err) {

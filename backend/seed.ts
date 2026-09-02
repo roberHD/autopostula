@@ -1,27 +1,12 @@
 import "dotenv/config";
 import { prisma } from "./lib/prisma";
+import { asegurarPlataformasBase } from "./lib/platforms";
 
+// Ya no es un paso obligatorio — /api/platform-accounts se auto-repara solo
+// con asegurarPlataformasBase(). Este script queda como atajo manual, por si
+// alguna vez quieres sembrarlos sin pasar por la API.
 async function main() {
-  await prisma.jobPlatform.upsert({
-    where: { nombre: "Computrabajo" },
-    update: {},
-    create: {
-      nombre: "Computrabajo",
-      urlBase: "https://www.computrabajo.cl",
-      adapterVersion: "v1",
-    },
-  });
-
-  await prisma.jobPlatform.upsert({
-    where: { nombre: "Laborum" },
-    update: {},
-    create: {
-      nombre: "Laborum",
-      urlBase: "https://www.laborum.cl",
-      adapterVersion: "v1",
-    },
-  });
-
+  await asegurarPlataformasBase();
   console.log("Portales sembrados.");
 }
 

@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       respuestas, // [{ pregunta, respuesta, vacia, fueIA }] — opcional
       incompleta = false, // true: la extensión no pudo terminar la postulación sola
       nota, // por qué quedó incompleta (solo aplica si incompleta = true)
+      matchScore, // 0-100 — viene de analizarOferta() en la extensión, si se llamó
     } = body;
 
     if (!platformNombre || !externalId || !titulo) {
@@ -83,10 +84,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const relevanciaAi = typeof matchScore === "number" ? Math.max(0, Math.min(100, Math.round(matchScore))) : undefined;
+
     const jobOffer = await prisma.jobOffer.upsert({
       where: { platformId_externalId: { platformId: platform.id, externalId } },
-      update: url ? { url } : {},
-      create: { platformId: platform.id, externalId, titulo, empresa, url, origen },
+      // No pisar un matchScore ya guardado con "undefined" si esta vez no vino —
+      // solo se actualiza cuando realmente se calculó uno nuevo.
+      update: { ...(url ? { url } : {}), ...(relevanciaAi !== undefined ? { relevanciaAi } : {}) },
+      create: { platformId: platform.id, externalId, titulo, empresa, url, origen, relevanciaAi },
     });
 
     const cv = await prisma.cvProfile.findUnique({ where: { userId: user.id } });

@@ -438,7 +438,7 @@ async function postular(url, id, titulo) {
         reason:'Enviado (' + n2 + ' campos)',
         respuestas: respuestasParaLog
       });
-      reportarPostulacion({ id, titulo, respuestas: respuestasParaLog });
+      reportarPostulacion({ id, titulo, url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog });
       msg('✓ ' + titulo.slice(0,40), '#16A34A');
       return true;
     } else {

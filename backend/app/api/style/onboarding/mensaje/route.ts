@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
+import { getUsuarioSesion } from "@/lib/auth-helpers";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -27,10 +27,9 @@ async function getOrCreateStyleProfile(userId: string) {
 }
 
 export async function GET() {
-  const session = await auth();
-  const userId = (session?.user as any)?.id;
+  const { userId, error } = await getUsuarioSesion();
   if (!userId) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    return NextResponse.json({ error }, { status: 401 });
   }
 
   const perfil = await getOrCreateStyleProfile(userId);
@@ -40,10 +39,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const userId = (session?.user as any)?.id;
+  const { userId, error } = await getUsuarioSesion();
   if (!userId) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    return NextResponse.json({ error }, { status: 401 });
   }
 
   const { mensaje } = await request.json();

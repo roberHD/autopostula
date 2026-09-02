@@ -5,11 +5,19 @@ import { useRouter } from "next/navigation";
 import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2 } from "lucide-react";
 import "../dashboard/theme.css";
 
-// TODO: reemplaza por el link real cuando publiques en la Chrome Web Store
-// (o por donde estés distribuyendo el .zip mientras tanto).
-const EXTENSION_DOWNLOAD_URL = "/descargas/autopostula-extension.zip";
-
 type Mensaje = { role: "user" | "assistant"; content: string };
+
+// Si el servidor revienta con un error no manejado (500 con body vacío o HTML
+// en vez de JSON), res.json() tira un SyntaxError que antes quedaba como
+// unhandledRejection en la consola sin ningún mensaje útil para la persona.
+// Esto lo atrapa y devuelve un error legible en su lugar.
+async function parsearRespuesta(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    return { error: `El servidor respondió con un error inesperado (${res.status}) — intenta de nuevo en un momento.` };
+  }
+}
 
 const PASOS = [
   { titulo: "Bienvenida", Icon: Sparkles },
@@ -22,7 +30,40 @@ const PASOS = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [paso, setPaso] = useState(0);
+  // null = todavía revisando desde dónde retomar. Evita el flash de "Bienvenida"
+  // antes de saltar al paso que realmente falta.
+  const [paso, setPaso] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function determinarInicio() {
+      try {
+        const [perfilRes, conversacionRes, portalesRes] = await Promise.all([
+          fetch("/api/perfil"),
+          fetch("/api/style/onboarding/mensaje"),
+          fetch("/api/platform-accounts"),
+        ]);
+        const perfil = perfilRes.ok ? await perfilRes.json() : null;
+        const conversacion = conversacionRes.ok ? await conversacionRes.json() : null;
+        const portales = portalesRes.ok ? await portalesRes.json() : null;
+
+        const cvListo = !!perfil?.nombreArchivo;
+        const conversacionLista = !!conversacion?.confirmado;
+        const portalConectado = (portales?.cuentas || []).some((c: any) => c.activa);
+
+        // La extensión (paso 3) no se puede confirmar desde el servidor — el
+        // propio paso ya detecta solo si ya estaba conectada y deja avanzar
+        // casi al toque, así que igual se muestra aunque el resto esté listo.
+        if (!cvListo) setPaso(0);
+        else if (!conversacionLista) setPaso(2);
+        else if (!portalConectado) setPaso(3);
+        else setPaso(5);
+      } catch (e) {
+        console.error("No se pudo determinar en qué paso del onboarding retomar:", e);
+        setPaso(0);
+      }
+    }
+    determinarInicio();
+  }, []);
 
   async function terminar() {
     try {
@@ -31,6 +72,14 @@ export default function OnboardingPage() {
       console.error("No se pudo marcar el onboarding como completado:", e);
     }
     router.push("/dashboard");
+  }
+
+  if (paso === null) {
+    return (
+      <div className="ap-shell" style={{ alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: "var(--text-muted)", fontSize: 13.5 }}>Cargando...</p>
+      </div>
+    );
   }
 
   return (
@@ -113,26 +162,48 @@ function PasoBienvenida({ onSiguiente, onOmitir }: { onSiguiente: () => void; on
 
 function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   const [subiendo, setSubiendo] = useState(false);
+  const [cargandoEstado, setCargandoEstado] = useState(true);
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState("");
+  const [subidoOk, setSubidoOk] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    async function revisarCvExistente() {
+      try {
+        const res = await fetch("/api/perfil");
+        if (res.ok) {
+          const data = await parsearRespuesta(res);
+          if (data?.nombreArchivo) setNombreArchivo(data.nombreArchivo);
+        }
+      } catch (e) {
+        console.error("No se pudo revisar si ya había un CV cargado:", e);
+      } finally {
+        setCargandoEstado(false);
+      }
+    }
+    revisarCvExistente();
+  }, []);
 
   async function subirCv(file: File) {
     if (file.type !== "application/pdf") {
       setMensaje("El archivo debe ser un PDF");
+      setSubidoOk(false);
       return;
     }
     setSubiendo(true);
     setMensaje("");
+    setSubidoOk(false);
     try {
       const formData = new FormData();
       formData.append("cv", file);
       const res = await fetch("/api/cv/upload", { method: "POST", body: formData });
-      const data = await res.json();
+      const data = await parsearRespuesta(res);
       if (!res.ok) { setMensaje(data.error || "No se pudo procesar el CV"); return; }
       setNombreArchivo(data.nombreArchivo);
       fetch("/api/cv/upload/analizar", { method: "POST" }).catch(() => {});
-      setMensaje("¡CV cargado! La IA lo está leyendo en segundo plano.");
+      setMensaje("Tu CV se subió correctamente. La IA lo está leyendo en segundo plano.");
+      setSubidoOk(true);
     } catch {
       setMensaje("Error al subir el CV. Intenta de nuevo.");
     } finally {
@@ -156,10 +227,30 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
         />
         <span style={{ fontSize: 20 }}>📄</span>
         <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-          {subiendo ? "Subiendo..." : nombreArchivo ? `${nombreArchivo} — toca para reemplazar` : "Haz clic para elegir tu CV en PDF"}
+          {cargandoEstado
+            ? "Revisando..."
+            : subiendo
+            ? "Subiendo..."
+            : nombreArchivo
+            ? `✓ ${nombreArchivo} — toca para reemplazar`
+            : "Haz clic para elegir tu CV en PDF"}
         </span>
       </div>
-      {mensaje && <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 10 }}>{mensaje}</p>}
+      {mensaje && (
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 13,
+            background: subidoOk
+              ? "color-mix(in oklch, var(--status-finalizado) 14%, transparent)"
+              : "color-mix(in oklch, var(--status-rechazado) 12%, transparent)",
+            color: subidoOk ? "var(--status-finalizado)" : "var(--status-rechazado)",
+          }}
+        >
+          {subidoOk && <CheckCircle2 size={16} style={{ flexShrink: 0 }} />}
+          {mensaje}
+        </div>
+      )}
       <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} />
     </>
   );
@@ -176,7 +267,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
     async function cargar() {
       try {
         const res = await fetch("/api/style/onboarding/mensaje");
-        const data = await res.json();
+        const data = await parsearRespuesta(res);
         if (data.conversacion?.length) {
           setConversacion(data.conversacion);
         } else {
@@ -203,7 +294,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mensaje: texto }),
       });
-      const data = await res.json();
+      const data = await parsearRespuesta(res);
       if (res.ok) setConversacion((prev) => [...prev, { role: "assistant", content: data.pregunta }]);
     } finally {
       setEnviando(false);
@@ -289,7 +380,7 @@ function PasoExtension({ onSiguiente }: { onSiguiente: () => void }) {
 
   async function generarToken(): Promise<string | null> {
     const res = await fetch("/api/account/token", { method: "POST" });
-    const data = await res.json();
+    const data = await parsearRespuesta(res);
     setToken(data.apiToken ?? null);
     return data.apiToken ?? null;
   }
@@ -339,21 +430,9 @@ function PasoExtension({ onSiguiente }: { onSiguiente: () => void }) {
       ) : (
         <div className="ap-section" style={{ marginBottom: 20 }}>
           <p className="ap-section-title">Todavía no la detectamos</p>
-          <p className="ap-section-sub">Instálala y luego recarga esta página.</p>
-          <a
-            href={EXTENSION_DOWNLOAD_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="ap-button"
-            style={{ display: "block", textDecoration: "none", textAlign: "center", marginBottom: 12 }}
-          >
-            Descargar extensión
-          </a>
-          <ol style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.7, paddingLeft: 18, marginBottom: 12 }}>
-            <li>Descomprime el archivo descargado.</li>
-            <li>Ve a <code>chrome://extensions</code> y activa "Modo de desarrollador".</li>
-            <li>Haz clic en "Cargar descomprimida" y selecciona la carpeta.</li>
-          </ol>
+          <p className="ap-section-sub">
+            Instala la extensión de AutoPostula en tu navegador y vuelve a intentar.
+          </p>
           <button className="ap-button-ghost" onClick={() => window.location.reload()}>
             Ya la instalé, verificar
           </button>
@@ -378,7 +457,7 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
     async function cargar() {
       try {
         const res = await fetch("/api/platform-accounts");
-        const data = await res.json();
+        const data = await parsearRespuesta(res);
         setPlataformas(data.plataformas ?? []);
         setConectada((data.cuentas ?? []).some((c: any) => c.activa));
       } finally {

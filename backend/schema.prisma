@@ -86,6 +86,9 @@ model User {
   rol             Rol      @default(USUARIO)
   apiToken        String?  @unique @map("api_token")
   usarFiltroIA    Boolean  @default(true) @map("usar_filtro_ia")
+  // Preferencia propia del usuario, independiente de si el plan lo permite —
+  // deja pausar/reanudar la búsqueda automática sin perder el beneficio del plan.
+  busquedaAutomaticaActiva Boolean @default(true) @map("busqueda_automatica_activa")
   onboardingCompletado Boolean @default(false) @map("onboarding_completado")
   creadoEn        DateTime @default(now()) @map("creado_en")
 

@@ -234,7 +234,7 @@ async function rellenarYEnviarPreguntas(contexto) {
   }
 
   btnEnviar.click();
-  return { respuestasLog };
+  return { respuestasLog, matchScore: analisis && analisis.matchScore };
 }
 
 // Un 'err' de verdad (no un 'skip' esperable como "ya estaba postulada") también
@@ -296,7 +296,7 @@ async function postularEnPagina(id, titulo, url) {
     if (ok) {
       const respuestasParaLog = resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia, fueIA: r.fueIA }));
       addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación con preguntas enviada', respuestas: respuestasParaLog });
-      reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, respuestas: respuestasParaLog });
+      reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, matchScore: resultado.matchScore, respuestas: respuestasParaLog });
       msg('✓ ' + titulo.slice(0, 40), '#16A34A');
       return true;
     }

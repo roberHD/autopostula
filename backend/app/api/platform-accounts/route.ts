@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { asegurarPlataformasBase } from "@/lib/platforms";
 
 export async function GET() {
   const session = await auth();
@@ -9,9 +10,17 @@ export async function GET() {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
+  // Se auto-repara acá en vez de depender de que alguien haya corrido
+  // `npx tsx seed.ts` a mano — así los portales conocidos siempre aparecen,
+  // tanto en local como recién desplegado en un ambiente nuevo.
+  await asegurarPlataformasBase();
+
   const [plataformas, cuentas, subscripcion] = await Promise.all([
     prisma.jobPlatform.findMany(),
-    prisma.platformAccount.findMany({ where: { userId } }),
+    prisma.platformAccount.findMany({
+      where: { userId },
+      include: { _count: { select: { applications: true } } },
+    }),
     prisma.subscription.findFirst({
       where: { userId, estado: "ACTIVA" },
       include: { plan: true },
@@ -20,8 +29,15 @@ export async function GET() {
 
   return NextResponse.json({
     plataformas,
-    cuentas,
+    cuentas: cuentas.map((c) => ({
+      id: c.id,
+      platformId: c.platformId,
+      activa: c.activa,
+      conectadaEn: c.conectadaEn,
+      postulaciones: c._count.applications,
+    })),
     maxPlataformasActivas: subscripcion?.plan.maxPlataformasActivas ?? 1,
+    planNombre: subscripcion?.plan.nombre ?? null,
   });
 }
 
