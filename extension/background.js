@@ -5,6 +5,10 @@
 
 console.log('[AP] background.js cargado', new Date().toLocaleTimeString());
 
+// TODO: cuando despliegues a producción, cambia esto por tu dominio real
+// (el mismo que agregues en manifest.json para bridge.js y host_permissions).
+const BACKEND_URL = 'http://localhost:3000';
+
 let queue = [];
 let busy  = false;
 
@@ -72,7 +76,7 @@ async function llamarIABackend(tipo, payload) {
   const timeoutId = setTimeout(() => controlador.abort(), 25000);
 
   try {
-    const res = await fetch('http://localhost:3000' + ruta, {
+    const res = await fetch(BACKEND_URL + ruta, {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + autopostulaToken,
@@ -112,7 +116,7 @@ async function actualizarEstadoBackend(datos) {
   }
 
   try {
-    const res = await fetch('http://localhost:3000/api/applications/status', {
+    const res = await fetch(BACKEND_URL + '/api/applications/status', {
       method: 'PATCH',
       headers: {
         'Authorization': 'Bearer ' + autopostulaToken,
@@ -171,7 +175,7 @@ const URL_BUSQUEDA_POR_PORTAL = {
 // el popup nunca se haya abierto para refrescarlos.
 async function actualizarFiltrosDesdeBackend(token) {
   try {
-    const res = await fetch('http://localhost:3000/api/extension/perfil', {
+    const res = await fetch(BACKEND_URL + '/api/extension/perfil', {
       headers: { 'Authorization': 'Bearer ' + token }
     });
     if (!res.ok) return;
@@ -201,7 +205,7 @@ async function escanearAutomatico() {
 
   let estado;
   try {
-    const res = await fetch('http://localhost:3000/api/account/estado-automatico', {
+    const res = await fetch(BACKEND_URL + '/api/account/estado-automatico', {
       headers: { 'Authorization': 'Bearer ' + autopostulaToken }
     });
     if (!res.ok) return;
@@ -291,7 +295,7 @@ async function reportarPostulacionBackend(oferta) {
   }
 
   try {
-    const res = await fetch('http://localhost:3000/api/applications', {
+    const res = await fetch(BACKEND_URL + '/api/applications', {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + autopostulaToken,

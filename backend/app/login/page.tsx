@@ -1,9 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Zap, FileText, LineChart } from "lucide-react";
+
+// useSearchParams() obliga a Next a renderizar esto dentro de un <Suspense> en
+// el build de producción (si no, "next build" falla al pre-renderizar /login)
+// — se aísla acá para no forzar eso sobre toda la página.
+function ErrorDesdeQuery({ onError }: { onError: (msg: string) => void }) {
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const errorParam = searchParams.get("error");
+    if (errorParam) {
+      console.error("Error de Auth.js:", errorParam);
+      onError(`Error: ${errorParam} — revisa la terminal donde corre "npm run dev"`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  return null;
+}
 
 const ACCENT = "oklch(0.53 0.2 280)";
 const BG_LEFT = "oklch(0.985 0.003 275)";
@@ -17,15 +35,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  useEffect(() => {
-    const errorParam = searchParams.get("error");
-    if (errorParam) {
-      console.error("Error de Auth.js:", errorParam);
-      setError(`Error: ${errorParam} — revisa la terminal donde corre "npm run dev"`);
-    }
-  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,6 +60,9 @@ export default function LoginPage() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      <Suspense fallback={null}>
+        <ErrorDesdeQuery onError={setError} />
+      </Suspense>
       <style>{`
         @media (max-width: 900px) {
           .ap-login-panel { display: none !important; }
