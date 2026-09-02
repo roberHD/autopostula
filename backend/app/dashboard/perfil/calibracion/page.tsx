@@ -264,11 +264,11 @@ export default function CalibracionPage() {
           )}
         </div>
 
-        <div className="ap-section" style={{ marginBottom: 0 }}>
+        <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.1s" }}>
           <p className="ap-section-title">Confianza del perfil</p>
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 4 }}>
             <div style={{ position: "relative", width: 76, height: 76, flexShrink: 0 }}>
-              <svg viewBox="0 0 36 36" width={76} height={76} style={{ transform: "rotate(-90deg)" }}>
+              <svg viewBox="0 0 36 36" width={76} height={76} className="ap-donut-draw">
                 <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--bg-elevated-2)" strokeWidth="4" />
                 <circle
                   cx="18" cy="18" r="15.5" fill="none"

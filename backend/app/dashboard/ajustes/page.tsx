@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Zap, Lock } from "lucide-react";
+import { Zap, Lock, Mail, BadgeCheck } from "lucide-react";
 
 export default function AjustesPage() {
   const [activa, setActiva] = useState(false);
   const [disponibleEnPlan, setDisponibleEnPlan] = useState(false);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState("");
@@ -19,6 +20,7 @@ export default function AjustesPage() {
       setActiva(data.activa);
       setDisponibleEnPlan(data.disponibleEnPlan);
       setPlanNombre(data.planNombre);
+      setEmail(data.email);
     } catch (err) {
       console.error("Error cargando ajustes:", err);
       setMensaje("No se pudo cargar — revisa la consola");
@@ -67,7 +69,47 @@ export default function AjustesPage() {
         <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>{mensaje}</p>
       )}
 
-      <div className="ap-section">
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0s" }}>
+        <p className="ap-section-title">Tu cuenta</p>
+        {cargando ? (
+          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Cargando...</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div
+                style={{
+                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                  background: "var(--bg-elevated-2)", color: "var(--text-muted)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Mail size={15} />
+              </div>
+              <div>
+                <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Correo</p>
+                <p style={{ fontSize: 13, fontWeight: 500 }}>{email ?? "—"}</p>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div
+                style={{
+                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                  background: "color-mix(in oklch, var(--accent) 14%, transparent)", color: "var(--accent)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <BadgeCheck size={15} />
+              </div>
+              <div>
+                <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Plan actual</p>
+                <p style={{ fontSize: 13, fontWeight: 500 }}>{planNombre ?? "Plan gratuito"}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.05s" }}>
         <p className="ap-section-title">Búsqueda automática</p>
 
         {cargando ? (

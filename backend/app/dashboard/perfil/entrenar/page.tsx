@@ -120,7 +120,7 @@ export default function EntrenarIAPage() {
 
       <div className="ap-two-col">
         <div>
-          <div className="ap-section">
+          <div className="ap-section ap-animate-in" style={{ animationDelay: "0s" }}>
             <p className="ap-section-title">Tono de las respuestas</p>
             <p className="ap-section-sub">Define cómo se expresa tu asistente al responder formularios</p>
             <div className="ap-option-group">
@@ -151,7 +151,7 @@ export default function EntrenarIAPage() {
             </div>
           </div>
 
-          <div className="ap-section">
+          <div className="ap-section ap-animate-in" style={{ animationDelay: "0.05s" }}>
             <p className="ap-section-title">Instrucciones personalizadas</p>
             <p className="ap-section-sub">Indícale a la IA cómo quieres que te represente</p>
             <textarea
@@ -172,7 +172,7 @@ export default function EntrenarIAPage() {
             </div>
           </div>
 
-          <div className="ap-section">
+          <div className="ap-section ap-animate-in" style={{ animationDelay: "0.1s" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <p className="ap-section-title" style={{ marginBottom: 0 }}>Respuestas de ejemplo</p>
@@ -192,7 +192,7 @@ export default function EntrenarIAPage() {
                 </p>
               )}
               {respuestas.map((r, i) => (
-                <div key={i} className="ap-preview-card">
+                <div key={i} className="ap-preview-card ap-animate-in" style={{ animationDelay: `${i * 0.08}s` }}>
                   <div className="ap-preview-q">{r.pregunta}</div>
                   <div className="ap-preview-a">{r.respuesta}</div>
                 </div>
@@ -202,7 +202,7 @@ export default function EntrenarIAPage() {
         </div>
 
         <div>
-          <div className="ap-section">
+          <div className="ap-section ap-animate-in" style={{ animationDelay: "0.15s" }}>
             <p className="ap-section-title">Cómo funciona</p>
             <p className="ap-section-sub" style={{ marginBottom: 0 }}>
               Tu asistente combina tu perfil, tu experiencia y estas instrucciones para redactar
@@ -210,7 +210,7 @@ export default function EntrenarIAPage() {
             </p>
           </div>
 
-          <div className="ap-section">
+          <div className="ap-section ap-animate-in" style={{ animationDelay: "0.2s" }}>
             <p className="ap-section-title">Fuentes de contexto</p>
             <div className="ap-toggle-row">
               <div>

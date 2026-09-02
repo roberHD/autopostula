@@ -9,7 +9,7 @@ export async function GET() {
   }
 
   const [user, subscripcion] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { rol: true, busquedaAutomaticaActiva: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { rol: true, email: true, busquedaAutomaticaActiva: true } }),
     prisma.subscription.findFirst({
       where: { userId, estado: "ACTIVA" },
       include: { plan: true },
@@ -22,6 +22,7 @@ export async function GET() {
     activa: user?.busquedaAutomaticaActiva ?? true,
     disponibleEnPlan,
     planNombre: subscripcion?.plan.nombre ?? null,
+    email: user?.email ?? null,
   });
 }
 

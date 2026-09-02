@@ -153,7 +153,7 @@ export default function InicioPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div className="ap-page-header" style={{ marginBottom: 0 }}>
         <h1 className="ap-page-title">Inicio</h1>
-        <p className="ap-page-sub" style={{ textTransform: "capitalize" }}>
+        <p className="ap-page-sub">
           Tu actividad de postulación de un vistazo · {hoy}
         </p>
       </div>

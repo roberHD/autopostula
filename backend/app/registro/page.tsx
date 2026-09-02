@@ -45,7 +45,7 @@ export default function RegistroPage() {
   }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" }}>
+    <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <style>{`
         @media (max-width: 900px) {
           .ap-registro-panel { display: none !important; }

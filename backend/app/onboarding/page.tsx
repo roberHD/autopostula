@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2 } from "lucide-react";
+import { quitarMarkdown } from "@/lib/text";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -294,7 +295,11 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         const res = await fetch("/api/style/onboarding/mensaje");
         const data = await parsearRespuesta(res);
         if (data.conversacion?.length) {
-          setConversacion(data.conversacion);
+          setConversacion(
+            data.conversacion.map((m: Mensaje) =>
+              m.role === "assistant" ? { ...m, content: quitarMarkdown(m.content) } : m
+            )
+          );
         } else {
           await enviar("");
         }
@@ -320,7 +325,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         body: JSON.stringify({ mensaje: texto }),
       });
       const data = await parsearRespuesta(res);
-      if (res.ok) setConversacion((prev) => [...prev, { role: "assistant", content: data.pregunta }]);
+      if (res.ok) setConversacion((prev) => [...prev, { role: "assistant", content: quitarMarkdown(data.pregunta) }]);
     } finally {
       setEnviando(false);
     }

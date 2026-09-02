@@ -18,7 +18,8 @@ const SYSTEM_PROMPT_BASE =
   "conversación — solo sigue preguntando, una cosa a la vez. Nunca preguntes por datos que ya " +
   "aparecen en su CV (en qué trabaja o trabajó, qué estudia o estudió, sus cargos, empresas, " +
   "habilidades, etc.) — si ya tienes esa información dala por sabida y ve directo a lo que el CV " +
-  "no puede contarte.";
+  "no puede contarte. Escribe en texto plano, como en un chat real: nunca uses markdown (nada de " +
+  "**negritas**, #títulos, guiones de lista, etc.).";
 
 // Arma un resumen de lo que ya se sabe por el CV para que la IA no repregunte
 // datos que la persona ya entregó al subirlo.
@@ -82,7 +83,21 @@ export async function GET() {
   const perfil = await getOrCreateStyleProfile(userId);
   const conversacion = (perfil.conversacion as any[]) || [];
 
-  return NextResponse.json({ conversacion, confirmado: perfil.confirmado });
+  // Si ya se finalizó antes, se devuelve también lo que la IA sintetizó —
+  // sin esto, al volver a esta página no había forma de ver de nuevo el
+  // resultado (quedaba guardado y en uso, pero invisible para la persona).
+  const resultado = perfil.confirmado
+    ? {
+        resumen: perfil.resumen,
+        fortalezas: perfil.fortalezas,
+        objetivo: perfil.objetivo,
+        motivaciones: perfil.motivaciones,
+        estiloDetalle: perfil.estiloDetalle,
+        manualEscritura: perfil.manualEscritura,
+      }
+    : null;
+
+  return NextResponse.json({ conversacion, confirmado: perfil.confirmado, resultado });
 }
 
 export async function POST(request: Request) {

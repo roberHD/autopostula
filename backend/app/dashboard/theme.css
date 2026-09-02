@@ -24,7 +24,7 @@
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .ap-shell[data-theme="light"] {
@@ -444,6 +444,42 @@
   font-size: 13px;
 }
 
+/* ── Estado vacío ilustrado (icono + título + texto) ────── */
+
+.ap-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.ap-empty-state-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  margin-bottom: 14px;
+  background: color-mix(in oklch, var(--accent) 14%, var(--bg-elevated-2));
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ap-empty-state-title {
+  font-weight: 600;
+  font-size: 14.5px;
+  margin-bottom: 6px;
+}
+
+.ap-empty-state-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  max-width: 360px;
+  line-height: 1.6;
+  margin-bottom: 0;
+}
+
 /* ── Entrenar IA: opciones, switches, preview ───────────── */
 
 .ap-two-col {
@@ -496,11 +532,26 @@
   background: var(--bg-elevated-2);
   text-align: left;
   color: var(--text); /* FIX: los <button> no heredan color del padre; sin esto el título se veía negro en modo oscuro */
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ap-option-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.ap-option-card:active {
+  transform: translateY(0);
 }
 
 .ap-option-card-active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated-2));
+}
+
+.ap-option-card-active:hover {
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .ap-option-title {
@@ -537,6 +588,16 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.ap-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.ap-button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .ap-button:disabled {
@@ -552,6 +613,13 @@
   border-radius: 8px;
   font-size: 12.5px;
   cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.ap-button-ghost:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-muted);
+  background: var(--bg-elevated-2);
 }
 
 .ap-toggle-row {

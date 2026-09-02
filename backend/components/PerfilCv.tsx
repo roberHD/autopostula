@@ -307,7 +307,7 @@ export default function PerfilCv() {
               <p className="ap-section-title">Completitud del perfil</p>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                 <div style={{ position: "relative", width: 80, height: 80, flexShrink: 0 }}>
-                  <svg viewBox="0 0 36 36" width={80} height={80} style={{ transform: "rotate(-90deg)" }}>
+                  <svg viewBox="0 0 36 36" width={80} height={80} className="ap-donut-draw">
                     <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--bg-elevated-2)" strokeWidth="4" />
                     <circle
                       cx="18" cy="18" r="15.5" fill="none"

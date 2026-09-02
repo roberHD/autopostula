@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, Check } from "lucide-react";
+import { Sparkles, Send, Check, MessageSquare, PenLine, Target, Heart } from "lucide-react";
+import { quitarMarkdown } from "@/lib/text";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
 
@@ -19,6 +20,14 @@ const MINIMO_MENSAJES_PARA_FINALIZAR = 4;
 // Atajos de respuesta rápida — no vienen del backend, son sugerencias fijas
 // para no tener que tipear todo (mismas 4 que ya usaba el popup de la extensión).
 const CHIPS_RESPUESTA_RAPIDA = ["Prefiero ir al grano", "Me gusta dar ejemplos", "Tono cercano", "Tono formal"];
+
+const ETIQUETAS_ESTILO: { key: string; label: string }[] = [
+  { key: "formalidad", label: "Formalidad" },
+  { key: "longitud", label: "Longitud" },
+  { key: "cercania", label: "Cercanía" },
+  { key: "nivelTecnico", label: "Nivel técnico" },
+  { key: "seguridad", label: "Seguridad" },
+];
 
 export default function ConversacionPage() {
   const [conversacion, setConversacion] = useState<Mensaje[]>([]);
@@ -40,9 +49,15 @@ export default function ConversacionPage() {
           setMensaje(data.error ?? `Error ${res.status}`);
           return;
         }
-        setConversacion(data.conversacion ?? []);
+        setConversacion(
+          (data.conversacion ?? []).map((m: Mensaje) =>
+            m.role === "assistant" ? { ...m, content: quitarMarkdown(m.content) } : m
+          )
+        );
         setConfirmado(data.confirmado ?? false);
-        if (!data.conversacion || data.conversacion.length === 0) {
+        if (data.resultado) {
+          setResultado(data.resultado);
+        } else if (!data.conversacion || data.conversacion.length === 0) {
           await enviarMensaje("");
         }
       } catch (err) {
@@ -77,7 +92,7 @@ export default function ConversacionPage() {
         setMensaje(data.error ?? `Error ${res.status}`);
         return;
       }
-      setConversacion((prev) => [...prev, { role: "assistant", content: data.pregunta }]);
+      setConversacion((prev) => [...prev, { role: "assistant", content: quitarMarkdown(data.pregunta) }]);
     } catch (err) {
       console.error("Error enviando mensaje:", err);
       setMensaje("No se pudo enviar — revisa la consola");
@@ -132,33 +147,109 @@ export default function ConversacionPage() {
       )}
 
       {resultado ? (
-        <div className="ap-section" style={{ maxWidth: 620 }}>
-          <p className="ap-section-title">Tu perfil quedó listo</p>
-          <p className="ap-section-sub" style={{ marginBottom: 16 }}>{resultado.resumen}</p>
-
-          <p className="ap-label">Fortalezas</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-            {resultado.fortalezas?.map((f, i) => (
-              <span
-                key={i}
-                className="ap-badge"
-                style={{ color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 15%, transparent)" }}
-              >
-                {f}
-              </span>
-            ))}
+        <div style={{ maxWidth: 920 }}>
+          <div
+            className="ap-assistant-card ap-animate-in"
+            style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 14 }}
+          >
+            <div
+              style={{
+                width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                background: "var(--accent)", color: "var(--accent-contrast)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <Check size={20} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: 15, fontWeight: 600 }}>Tu perfil de estilo está listo</h2>
+              <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
+                La IA ya está usando esto para redactar tus postulaciones — no necesitas hacer nada más.
+              </p>
+            </div>
           </div>
 
-          <p className="ap-label">Manual de escritura</p>
-          <ul style={{ margin: 0, paddingLeft: 18, color: "var(--text)", fontSize: 13, lineHeight: 1.7 }}>
-            {resultado.manualEscritura?.map((m, i) => (
-              <li key={i}>{m}</li>
-            ))}
-          </ul>
+          <div style={{ display: "grid", gap: 20, gridTemplateColumns: "2fr 1fr" }} className="ap-charts-row">
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.05s" }}>
+                <p className="ap-section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <MessageSquare size={15} /> Resumen
+                </p>
+                <p style={{ fontSize: 13.5, lineHeight: 1.6 }}>{resultado.resumen}</p>
+              </div>
+
+              {resultado.manualEscritura?.length > 0 && (
+                <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.1s" }}>
+                  <p className="ap-section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <PenLine size={15} /> Manual de escritura
+                  </p>
+                  <p className="ap-section-sub">Así es como la IA imita tu forma de escribir</p>
+                  <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 8 }}>
+                    {resultado.manualEscritura.map((m, i) => (
+                      <li key={i} style={{ fontSize: 13, lineHeight: 1.6 }}>{m}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {resultado.fortalezas?.length > 0 && (
+                <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.05s" }}>
+                  <p className="ap-section-title">Fortalezas que destaca</p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {resultado.fortalezas.map((f, i) => (
+                      <span
+                        key={i}
+                        className="ap-badge"
+                        style={{ color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 15%, transparent)" }}
+                      >
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {resultado.objetivo && (
+                <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.1s" }}>
+                  <p className="ap-section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Target size={15} /> Objetivo laboral
+                  </p>
+                  <p style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-muted)" }}>{resultado.objetivo}</p>
+                </div>
+              )}
+
+              {resultado.motivaciones && (
+                <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.15s" }}>
+                  <p className="ap-section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Heart size={15} /> Motivaciones
+                  </p>
+                  <p style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-muted)" }}>{resultado.motivaciones}</p>
+                </div>
+              )}
+
+              {resultado.estiloDetalle && (
+                <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.2s" }}>
+                  <p className="ap-section-title">Cómo escribe</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {ETIQUETAS_ESTILO.map(({ key, label }) =>
+                      resultado.estiloDetalle[key] ? (
+                        <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12.5 }}>
+                          <span style={{ color: "var(--text-muted)" }}>{label}</span>
+                          <span style={{ fontWeight: 500, textAlign: "right" }}>{resultado.estiloDetalle[key]}</span>
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
           <button
             className="ap-button-ghost"
-            style={{ marginTop: 18 }}
+            style={{ marginTop: 20 }}
             onClick={() => {
               setResultado(null);
               setConfirmado(false);

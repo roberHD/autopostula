@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Inbox, SearchX } from "lucide-react";
 
 type Application = {
   id: string;
@@ -91,7 +92,7 @@ export default function HistorialPage() {
     <>
       <div className="ap-page-header">
         <h1 className="ap-page-title">Mis postulaciones</h1>
-        <p className="ap-page-sub" style={{ textTransform: "capitalize" }}>
+        <p className="ap-page-sub">
           {hoy} · {applications.length} en total
         </p>
       </div>
@@ -124,10 +125,18 @@ export default function HistorialPage() {
         {cargando ? (
           <div className="ap-empty">Cargando...</div>
         ) : filtradas.length === 0 ? (
-          <div className="ap-empty">
-            {applications.length === 0
-              ? "Todavía no hay postulaciones registradas. En cuanto la extensión postule a una oferta, va a aparecer acá."
-              : "Ninguna postulación calza con ese filtro o búsqueda."}
+          <div className="ap-empty-state ap-animate-in">
+            <div className="ap-empty-state-icon">
+              {applications.length === 0 ? <Inbox size={20} /> : <SearchX size={20} />}
+            </div>
+            <p className="ap-empty-state-title">
+              {applications.length === 0 ? "Todavía no hay postulaciones" : "Sin resultados"}
+            </p>
+            <p className="ap-empty-state-sub">
+              {applications.length === 0
+                ? "En cuanto conectes un portal y la extensión postule a una oferta, va a aparecer acá."
+                : "Ninguna postulación calza con ese filtro o búsqueda — prueba con otro término."}
+            </p>
           </div>
         ) : (
           <table className="ap-table">
