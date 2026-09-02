@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import "@/lib/pdf-polyfills";
 import { PDFParse } from "pdf-parse";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
