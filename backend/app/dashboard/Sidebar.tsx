@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   Filter,
+  Crown,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
@@ -136,6 +137,15 @@ export default function Sidebar({ userName }: { userName: string }) {
             })}
           </div>
         )}
+
+        <Link
+          href="/dashboard/premium"
+          className={"ap-nav-item" + (pathname === "/dashboard/premium" ? " ap-nav-item-active" : "")}
+          style={pathname === "/dashboard/premium" ? undefined : { color: "var(--accent)" }}
+        >
+          <Crown size={17} strokeWidth={1.8} style={{ width: 17, height: 17, flexShrink: 0 }} />
+          Premium
+        </Link>
 
         <Link
           href="/dashboard/ajustes"

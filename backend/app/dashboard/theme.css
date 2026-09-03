@@ -854,6 +854,28 @@
   }
 }
 
+/* Tarjetas de precio (Free/Premium) -- necesitan su propio breakpoint porque
+   son mitad y mitad (no 2fr/1fr como ap-charts-row) y en mobile deben
+   apilarse antes de que se compriman demasiado para mostrar el precio. */
+.ap-pricing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 600px) {
+  .ap-pricing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* La tabla comparativa no se achica más allá de un ancho legible -- en vez
+   de apretar las columnas hasta ser ilegibles, se deja scrollear horizontal
+   solo a ella (el resto de la página no se mueve). */
+.ap-table-scroll {
+  overflow-x: auto;
+}
+
 .ap-legend-item {
   display: flex;
   align-items: center;
