@@ -299,6 +299,12 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
   const [finalizando, setFinalizando] = useState(false);
   const [finalizado, setFinalizado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // La IA misma avisa cuando ya tiene suficiente info (en vez de esperar a
+  // que se cumpla el mínimo de mensajes) y esto también se activa cuando se
+  // llega al tope duro de la fase 1 — en ambos casos hay que dejar de
+  // escribir y empujar hacia finalizar.
+  const [sugerenciaFinalizar, setSugerenciaFinalizar] = useState(false);
+  const [bloqueada, setBloqueada] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
   // React 18 en desarrollo monta cada efecto dos veces a propósito (para pescar
   // efectos sin cleanup) -- sin este guard, la conversación vacía dispara dos
@@ -348,8 +354,10 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
       const data = await parsearRespuesta(res);
       if (res.ok) {
         setConversacion((prev) => [...prev, { role: "assistant", content: quitarMarkdown(data.pregunta) }]);
+        if (data.sugerenciaFinalizar) setSugerenciaFinalizar(true);
       } else {
         setError(data.error ?? "No se pudo enviar el mensaje.");
+        if (res.status === 403) setBloqueada(true);
       }
     } finally {
       setEnviando(false);
@@ -373,7 +381,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
   }
 
   const mensajesUsuario = conversacion.filter((m) => m.role === "user").length;
-  const puedeFinalizar = mensajesUsuario >= MINIMO_MENSAJES_PARA_FINALIZAR;
+  const puedeFinalizar = sugerenciaFinalizar || mensajesUsuario >= MINIMO_MENSAJES_PARA_FINALIZAR;
 
   return (
     <>
@@ -396,20 +404,22 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         {enviando && <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Escribiendo...</p>}
         <div ref={finRef} />
       </div>
-      <form
-        onSubmit={(e) => { e.preventDefault(); if (input.trim()) { const t = input.trim(); setInput(""); enviar(t); } }}
-        style={{ display: "flex", gap: 8 }}
-      >
-        <input
-          className="ap-input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Escribe tu respuesta..."
-          disabled={enviando}
-          style={{ flex: 1 }}
-        />
-        <button className="ap-button" type="submit" disabled={enviando || !input.trim()}>Enviar</button>
-      </form>
+      {!finalizado && !bloqueada && (
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (input.trim()) { const t = input.trim(); setInput(""); enviar(t); } }}
+          style={{ display: "flex", gap: 8 }}
+        >
+          <input
+            className="ap-input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Escribe tu respuesta..."
+            disabled={enviando}
+            style={{ flex: 1 }}
+          />
+          <button className="ap-button" type="submit" disabled={enviando || !input.trim()}>Enviar</button>
+        </form>
+      )}
 
       {error && (
         <p style={{ fontSize: 12, color: "#dc2626", marginTop: 8 }}>{error}</p>

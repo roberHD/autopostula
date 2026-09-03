@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, Check, MessageSquare, PenLine, Target, Heart } from "lucide-react";
+import { Sparkles, Send, Check, MessageSquare, PenLine, Target, Heart, Lock } from "lucide-react";
 import { quitarMarkdown } from "@/lib/text";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -38,6 +38,13 @@ export default function ConversacionPage() {
   const [finalizando, setFinalizando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [resultado, setResultado] = useState<PerfilExtraido | null>(null);
+  // Fase 1 (armar el perfil la primera vez) es gratis para todos. Fase 2
+  // (volver a conversar cuando ya hay un perfil confirmado, para seguir
+  // profundizándolo) es premium — esto viene del GET para no dejar entrar al
+  // chat solo para toparse con el 403 recién al escribir.
+  const [puedeSeguirConversando, setPuedeSeguirConversando] = useState(true);
+  const [sugerenciaFinalizar, setSugerenciaFinalizar] = useState(false);
+  const [bloqueada, setBloqueada] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
   // React 18 en desarrollo monta cada efecto dos veces a propósito (para pescar
   // efectos sin cleanup) -- sin este guard, la conversación vacía dispara dos
@@ -62,6 +69,7 @@ export default function ConversacionPage() {
           )
         );
         setConfirmado(data.confirmado ?? false);
+        setPuedeSeguirConversando(data.puedeSeguirConversando ?? true);
         if (data.resultado) {
           setResultado(data.resultado);
         } else if (!data.conversacion || data.conversacion.length === 0) {
@@ -97,9 +105,12 @@ export default function ConversacionPage() {
       const data = await res.json();
       if (!res.ok) {
         setMensaje(data.error ?? `Error ${res.status}`);
+        if (data.requierePremium) setPuedeSeguirConversando(false);
+        else if (res.status === 403) setBloqueada(true);
         return;
       }
       setConversacion((prev) => [...prev, { role: "assistant", content: quitarMarkdown(data.pregunta) }]);
+      if (data.sugerenciaFinalizar) setSugerenciaFinalizar(true);
     } catch (err) {
       console.error("Error enviando mensaje:", err);
       setMensaje("No se pudo enviar — revisa la consola");
@@ -124,6 +135,7 @@ export default function ConversacionPage() {
       const data = await res.json();
       if (!res.ok) {
         setMensaje(data.error ?? `Error ${res.status}`);
+        if (data.requierePremium) setPuedeSeguirConversando(false);
         return;
       }
       setResultado(data);
@@ -137,7 +149,7 @@ export default function ConversacionPage() {
   }
 
   const mensajesUsuario = conversacion.filter((m) => m.role === "user").length;
-  const puedeFinalizar = mensajesUsuario >= MINIMO_MENSAJES_PARA_FINALIZAR;
+  const puedeFinalizar = sugerenciaFinalizar || mensajesUsuario >= MINIMO_MENSAJES_PARA_FINALIZAR;
   const pct = Math.min(100, Math.round((mensajesUsuario / MINIMO_MENSAJES_PARA_FINALIZAR) * 100));
 
   return (
@@ -254,16 +266,29 @@ export default function ConversacionPage() {
             </div>
           </div>
 
-          <button
-            className="ap-button-ghost"
-            style={{ marginTop: 20 }}
-            onClick={() => {
-              setResultado(null);
-              setConfirmado(false);
-            }}
-          >
-            Volver a conversar
-          </button>
+          {puedeSeguirConversando ? (
+            <button
+              className="ap-button-ghost"
+              style={{ marginTop: 20 }}
+              onClick={() => {
+                setResultado(null);
+                setConfirmado(false);
+              }}
+            >
+              Volver a conversar
+            </button>
+          ) : (
+            <div
+              style={{
+                marginTop: 20, padding: "10px 14px", borderRadius: 8, fontSize: 12.5,
+                background: "var(--bg-elevated-2)", color: "var(--text-muted)",
+                display: "flex", alignItems: "center", gap: 8,
+              }}
+            >
+              <Lock size={14} style={{ flexShrink: 0 }} />
+              Seguir profundizando tu perfil con más conversación es una función premium.
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 24, alignItems: "start" }}>
@@ -326,13 +351,18 @@ export default function ConversacionPage() {
 
             {/* Chips + composer */}
             <div style={{ borderTop: "1px solid var(--border)", padding: "14px 20px" }}>
+              {bloqueada && (
+                <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
+                  Llegaste al máximo de mensajes de esta conversación — finaliza tu perfil para seguir.
+                </p>
+              )}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
                 {CHIPS_RESPUESTA_RAPIDA.map((chip) => (
                   <button
                     key={chip}
                     type="button"
                     onClick={() => enviarMensaje(chip)}
-                    disabled={enviando}
+                    disabled={enviando || bloqueada}
                     style={{
                       borderRadius: 999, border: "1px solid var(--border)", background: "var(--bg-elevated-2)",
                       padding: "5px 12px", fontSize: 12, fontWeight: 500, color: "var(--text-muted)", cursor: "pointer",
@@ -348,13 +378,13 @@ export default function ConversacionPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Escribe tu respuesta…"
-                  disabled={enviando}
+                  disabled={enviando || bloqueada}
                   style={{ flex: 1 }}
                 />
                 <button
                   className="ap-button"
                   type="submit"
-                  disabled={enviando || !input.trim()}
+                  disabled={enviando || bloqueada || !input.trim()}
                   style={{ width: 38, height: 38, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
                   aria-label="Enviar"
                 >

@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
-import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
+import { usuarioTienePerfilDinamico } from "@/lib/plan-beneficios";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Tope duro de la fase 1 (armar el perfil por primera vez, gratis para todos)
+// -- red de seguridad para que nadie se quede chateando gratis sin fin sin
+// nunca finalizar. En la práctica no se nota: un perfil normal se arma en
+// 4-15 mensajes del usuario, esto da margen de sobra antes de cortar.
+const LIMITE_MENSAJES_FASE_1 = 30;
 
 const SYSTEM_PROMPT_BASE =
   "Eres un entrevistador cercano y curioso, no un formulario. Tu trabajo es conocer a esta " +
@@ -14,12 +20,21 @@ const SYSTEM_PROMPT_BASE =
   "Cubre a lo largo de la conversación (no todo de una vez): fortalezas reales con ejemplos " +
   "concretos, qué la motiva a trabajar, cómo prefiere que la describan, y pídele que cuente " +
   "algo con sus propias palabras para notar cómo se expresa naturalmente (frases que usa, si es " +
-  "directa o da vueltas, formal o informal). No hagas resúmenes ni cierres tú misma la " +
-  "conversación — solo sigue preguntando, una cosa a la vez. Nunca preguntes por datos que ya " +
-  "aparecen en su CV (en qué trabaja o trabajó, qué estudia o estudió, sus cargos, empresas, " +
-  "habilidades, etc.) — si ya tienes esa información dala por sabida y ve directo a lo que el CV " +
-  "no puede contarte. Escribe en texto plano, como en un chat real: nunca uses markdown (nada de " +
-  "**negritas**, #títulos, guiones de lista, etc.).";
+  "directa o da vueltas, formal o informal). Nunca preguntes por datos que ya aparecen en su CV " +
+  "(en qué trabaja o trabajó, qué estudia o estudió, sus cargos, empresas, habilidades, etc.) -- " +
+  "si ya tienes esa información dala por sabida y ve directo a lo que el CV no puede contarte. " +
+  "Escribe en texto plano, como en un chat real: nunca uses markdown (nada de **negritas**, " +
+  "#títulos, guiones de lista, etc.).\n\n" +
+  "IMPORTANTE -- vos decidís cuándo ya sabes suficiente, no sigas preguntando por preguntar: una " +
+  "vez que ya tengas fortalezas reales con ejemplos, qué la motiva, cómo prefiere que la " +
+  "describan, y al menos un ejemplo real de cómo se expresa con sus propias palabras, da por " +
+  "terminada la entrevista con un cierre breve y cálido (no otra pregunta), y marca listo=true. " +
+  "No alargues la conversación de más una vez que ya tenés esto -- mientras más corta y " +
+  "certera, mejor.\n\n" +
+  'Respondé SIEMPRE con un JSON válido, sin texto adicional ni markdown alrededor, con esta ' +
+  'forma exacta: {"mensaje":"...","listo":false} -- "mensaje" es lo que le vas a decir a la ' +
+  'persona (tu próxima pregunta, o el cierre si listo=true). "listo" es true solo cuando ya ' +
+  "terminaste la entrevista como se explicó arriba, false mientras sigas preguntando.";
 
 // Arma un resumen de lo que ya se sabe por el CV para que la IA no repregunte
 // datos que la persona ya entregó al subirlo.
@@ -97,7 +112,13 @@ export async function GET() {
       }
     : null;
 
-  return NextResponse.json({ conversacion, confirmado: perfil.confirmado, resultado });
+  // Fase 1 (armar el perfil por primera vez) es gratis para todos. Fase 2
+  // (seguir profundizando un perfil ya armado) es premium -- se le avisa al
+  // frontend de una vez para que no deje entrar al chat solo para toparse
+  // con el 403 recién al mandar el primer mensaje.
+  const puedeSeguirConversando = perfil.confirmado ? await usuarioTienePerfilDinamico(userId) : true;
+
+  return NextResponse.json({ conversacion, confirmado: perfil.confirmado, resultado, puedeSeguirConversando });
 }
 
 export async function POST(request: Request) {
@@ -112,16 +133,24 @@ export async function POST(request: Request) {
   const conversacion: { role: "user" | "assistant"; content: string }[] =
     (perfil.conversacion as any[]) || [];
 
-  if (mensaje) {
-    conversacion.push({ role: "user", content: mensaje });
-  }
-
-  const uso = await checkAndLogAiUsage(userId, "conversacion_estilo");
-  if (!uso.permitido) {
+  if (perfil.confirmado) {
+    // Fase 2: ya tiene perfil armado, seguir profundizándolo es premium.
+    if (!(await usuarioTienePerfilDinamico(userId))) {
+      return NextResponse.json(
+        { error: "Seguir profundizando tu perfil de estilo es una función premium.", requierePremium: true },
+        { status: 403 }
+      );
+    }
+  } else if (conversacion.length >= LIMITE_MENSAJES_FASE_1) {
+    // Fase 1: tope duro de mensajes, no de llamadas de IA por mes.
     return NextResponse.json(
-      { error: `Alcanzaste el límite de llamadas de IA de tu plan este mes (${uso.limite}).` },
+      { error: "Llegaste al máximo de mensajes de esta conversación — finaliza tu perfil para seguir." },
       { status: 403 }
     );
+  }
+
+  if (mensaje) {
+    conversacion.push({ role: "user", content: mensaje });
   }
 
   const cv = await prisma.cvProfile.findUnique({ where: { userId } });
@@ -129,18 +158,32 @@ export async function POST(request: Request) {
 
   const respuesta = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 200,
+    max_tokens: 220,
     system: systemPrompt,
     messages: conversacion.length
       ? conversacion
       : [{ role: "user", content: "Hola, empecemos." }],
   });
 
-  const textoIA = respuesta.content
+  const crudo = respuesta.content
     .filter((b) => b.type === "text")
     .map((b: any) => b.text)
     .join("")
     .trim();
+
+  let textoIA = crudo;
+  let listo = false;
+  try {
+    const limpio = crudo.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(limpio);
+    if (parsed.mensaje) {
+      textoIA = parsed.mensaje;
+      listo = !!parsed.listo;
+    }
+  } catch {
+    // Si alguna vez no devuelve JSON válido, se usa el texto tal cual en vez
+    // de romper la conversación -- simplemente no hay sugerencia de cierre.
+  }
 
   conversacion.push({ role: "assistant", content: textoIA });
 
@@ -149,8 +192,13 @@ export async function POST(request: Request) {
     data: { conversacion },
   });
 
+  await prisma.aiUsageLog.create({
+    data: { userId, tipo: "conversacion_estilo" },
+  });
+
   return NextResponse.json({
     pregunta: textoIA,
     totalMensajes: conversacion.length,
+    sugerenciaFinalizar: listo,
   });
 }
