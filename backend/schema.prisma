@@ -58,6 +58,22 @@ enum EstadoPostulacion {
   INCOMPLETA
 }
 
+// Ver docs/rediseno-filtrado-ofertas.md §8: el triaje de onboarding y la banda
+// gris son la misma interacción ("¿postularías a esto? Sí/No") y escriben en
+// la misma tabla (DecisionOferta) para que recompilar el perfil sea trivial.
+enum FuenteDecision {
+  TRIAJE_ONBOARDING
+  BANDA_GRIS
+  HISTORIAL // pulgar abajo en /dashboard/historial
+}
+
+enum Veredicto {
+  PENDIENTE
+  SI
+  NO
+  EXPIRADA
+}
+
 enum TipoCalibracion {
   FRASE
   HISTORIA
@@ -112,6 +128,7 @@ model User {
   adminProfile      AdminProfile?
   aiUsageLogs       AiUsageLog[]
   searchPreferences SearchPreferences?
+  decisionesOferta  DecisionOferta[]
 
   @@map("users")
 }
@@ -349,11 +366,36 @@ model JobOffer {
   publicadaEn   DateTime?     @map("publicada_en")
   cacheadaEn    DateTime      @default(now()) @map("cacheada_en")
 
-  platform     JobPlatform   @relation(fields: [platformId], references: [id])
+  platform     JobPlatform      @relation(fields: [platformId], references: [id])
   applications Application[]
+  decisiones   DecisionOferta[]
 
   @@unique([platformId, externalId])
   @@map("job_offers")
+}
+
+// Etiquetas del usuario sobre ofertas -- UNA sola tabla para triaje de
+// onboarding, banda gris y pulgar-abajo del historial (§8.1). Es lo que
+// permite que recompilar el Perfil de Búsqueda sea una query trivial:
+// prisma.decisionOferta.findMany({ where: { userId, veredicto: { in: ["SI","NO"] } } })
+model DecisionOferta {
+  id          String         @id @default(uuid())
+  userId      String         @map("user_id")
+  jobOfferId  String?        @map("job_offer_id") // null si viene del triaje de onboarding
+  tituloCrudo String         @map("titulo_crudo")
+  scoreLocal  Int?           @map("score_local") // el puntaje que la dejó en gris (§6)
+  razones     Json? // por qué cayó ahí -- para mostrárselo al usuario
+  fuente      FuenteDecision
+  veredicto   Veredicto      @default(PENDIENTE)
+  venceEn     DateTime?      @map("vence_en")
+  decididoEn  DateTime?      @map("decidido_en")
+  creadoEn    DateTime       @default(now()) @map("creado_en")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobOffer JobOffer? @relation(fields: [jobOfferId], references: [id])
+
+  @@index([userId, veredicto, venceEn])
+  @@map("decisiones_oferta")
 }
 
 model Application {

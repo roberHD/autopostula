@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2 } from "lucide-react";
+import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target } from "lucide-react";
 import { quitarMarkdown } from "@/lib/text";
+import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -23,6 +24,7 @@ async function parsearRespuesta(res: Response): Promise<any> {
 const PASOS = [
   { titulo: "Bienvenida", Icon: Sparkles },
   { titulo: "Tu CV", Icon: FileText },
+  { titulo: "Preferencias", Icon: Target },
   { titulo: "Conversación", Icon: MessageSquare },
   { titulo: "Extensión", Icon: Puzzle },
   { titulo: "Portales", Icon: Globe },
@@ -38,27 +40,34 @@ export default function OnboardingPage() {
   useEffect(() => {
     async function determinarInicio() {
       try {
-        const [perfilRes, conversacionRes, portalesRes, extensionRes] = await Promise.all([
+        const [perfilRes, triajeRes, conversacionRes, portalesRes, extensionRes] = await Promise.all([
           fetch("/api/perfil"),
+          fetch("/api/onboarding/triaje"),
           fetch("/api/style/onboarding/mensaje"),
           fetch("/api/platform-accounts"),
           fetch("/api/account/extension-conectada"),
         ]);
         const perfil = perfilRes.ok ? await perfilRes.json() : null;
+        const triaje = triajeRes.ok ? await triajeRes.json() : null;
         const conversacion = conversacionRes.ok ? await conversacionRes.json() : null;
         const portales = portalesRes.ok ? await portalesRes.json() : null;
         const extension = extensionRes.ok ? await extensionRes.json() : null;
 
         const cvListo = !!perfil?.nombreArchivo;
+        // No hay una bandera explícita de "triaje completado" -- se considera
+        // hecho con ~15 decisiones (holgado respecto a las ~20 que se ofrecen
+        // por ronda) para no exigir que respondiera absolutamente todas.
+        const triajeListo = (triaje?.totalDecisiones ?? 0) >= 15;
         const conversacionLista = !!conversacion?.confirmado;
         const extensionLista = !!extension?.extensionConectada;
         const portalConectado = (portales?.cuentas || []).some((c: any) => c.activa);
 
         if (!cvListo) setPaso(0);
-        else if (!conversacionLista) setPaso(2);
-        else if (!extensionLista) setPaso(3);
-        else if (!portalConectado) setPaso(4);
-        else setPaso(5);
+        else if (!triajeListo) setPaso(2);
+        else if (!conversacionLista) setPaso(3);
+        else if (!extensionLista) setPaso(4);
+        else if (!portalConectado) setPaso(5);
+        else setPaso(6);
       } catch (e) {
         console.error("No se pudo determinar en qué paso del onboarding retomar:", e);
         setPaso(0);
@@ -118,10 +127,11 @@ export default function OnboardingPage() {
         <div className="ap-card ap-onb-card ap-animate-in" key={paso} style={{ padding: 32 }}>
           {paso === 0 && <PasoBienvenida onSiguiente={() => setPaso(1)} onOmitir={() => setPaso(1)} />}
           {paso === 1 && <PasoCV onSiguiente={() => setPaso(2)} onOmitir={() => setPaso(2)} />}
-          {paso === 2 && <PasoConversacion onSiguiente={() => setPaso(3)} onOmitir={() => setPaso(3)} />}
-          {paso === 3 && <PasoExtension onSiguiente={() => setPaso(4)} />}
-          {paso === 4 && <PasoPortal onSiguiente={() => setPaso(5)} onOmitir={() => setPaso(5)} />}
-          {paso === 5 && <PasoListo onTerminar={terminar} />}
+          {paso === 2 && <PasoTriaje onSiguiente={() => setPaso(3)} onOmitir={() => setPaso(3)} />}
+          {paso === 3 && <PasoConversacion onSiguiente={() => setPaso(4)} onOmitir={() => setPaso(4)} />}
+          {paso === 4 && <PasoExtension onSiguiente={() => setPaso(5)} />}
+          {paso === 5 && <PasoPortal onSiguiente={() => setPaso(6)} onOmitir={() => setPaso(6)} />}
+          {paso === 6 && <PasoListo onTerminar={terminar} />}
         </div>
       </div>
     </div>
@@ -571,6 +581,73 @@ function PasoExtension({ onSiguiente }: { onSiguiente: () => void }) {
       <button className="ap-button" style={{ width: "100%" }} disabled={!extConectada} onClick={onSiguiente}>
         Siguiente
       </button>
+    </>
+  );
+}
+
+function PasoTriaje({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
+  const [titulos, setTitulos] = useState<ItemSwipe[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function cargar() {
+      try {
+        const res = await fetch("/api/onboarding/triaje");
+        const data = await parsearRespuesta(res);
+        if (!res.ok) {
+          setError(data.error ?? "No se pudo cargar");
+          return;
+        }
+        setTitulos(data.titulos ?? []);
+      } catch (e) {
+        console.error("Error cargando triaje:", e);
+        setError("No se pudo cargar — revisa la consola");
+      }
+    }
+    cargar();
+  }, []);
+
+  async function decidir(item: ItemSwipe, veredicto: "SI" | "NO") {
+    try {
+      await fetch("/api/onboarding/triaje", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titulo: item.titulo, veredicto }),
+      });
+    } catch (e) {
+      console.error("Error guardando decisión de triaje:", e);
+    }
+  }
+
+  return (
+    <>
+      <Header
+        Icon={Target}
+        titulo="¿Qué ofertas te interesan?"
+        sub="Dinos sí o no a estos cargos — nos ayuda a entender qué buscas de verdad, no solo el nombre exacto de tu puesto."
+      />
+      {error && <p style={{ fontSize: 12.5, color: "var(--status-rechazado)", marginBottom: 12 }}>{error}</p>}
+      {!titulos ? (
+        <p style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Cargando...</p>
+      ) : titulos.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <p style={{ fontSize: 13.5, color: "var(--text-muted)", marginBottom: 20 }}>
+            Por ahora no tenemos más cargos para mostrarte — puedes seguir.
+          </p>
+          <button className="ap-button" onClick={onSiguiente}>
+            Continuar
+          </button>
+        </div>
+      ) : (
+        <SwipeTriaje items={titulos} onDecidir={decidir} onTerminar={onSiguiente} />
+      )}
+      {titulos && titulos.length > 0 && (
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button onClick={onOmitir} className="ap-button-ghost" style={{ fontSize: 12.5 }}>
+            Omitir por ahora
+          </button>
+        </div>
+      )}
     </>
   );
 }
