@@ -76,6 +76,9 @@ export const flow = {
     urlCallback: string;
   }) => flowRequest("/plans/create", params),
 
+  editarPlan: (params: { planId: string; urlCallback: string }) =>
+    flowRequest("/plans/edit", params),
+
   crearSuscripcion: (params: { planId: string; customerId: string }) =>
     flowRequest<{
       subscriptionId: string;

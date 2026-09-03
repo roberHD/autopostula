@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { flow } from "@/lib/flow";
 import { FLOW_PLAN_ID } from "@/lib/flow-plan";
+import { asegurarPlanesBase } from "@/lib/plans";
 
 // Flow redirige el browser del cliente de vuelta acá con un POST
 // x-www-form-urlencoded que trae solo un "token" -- no identifica al usuario
@@ -28,9 +29,10 @@ export async function POST(request: Request) {
       return NextResponse.redirect(`${origin}/dashboard/ajustes?upgrade=error`, 303);
     }
 
+    await asegurarPlanesBase();
     const plan = await prisma.plan.findFirst({ where: { tipo: "PREMIUM" } });
     if (!plan) {
-      console.error("No existe el Plan PREMIUM en la base -- corre asegurarPlanesBase() antes.");
+      console.error("No se pudo asegurar el Plan PREMIUM en la base.");
       return NextResponse.redirect(`${origin}/dashboard/ajustes?upgrade=error`, 303);
     }
 
