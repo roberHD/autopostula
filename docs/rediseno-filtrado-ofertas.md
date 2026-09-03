@@ -9,7 +9,7 @@
 > Afecta a §7.0 (nueva), §7.1, §7.2, §7.4, §8.3, §9.1, §11 y §12. **Leer §7.0 antes que el resto de §7.**
 >
 > **✅ El catálogo ya está extraído y versionado:** `backend/scripts/data/catalogo-ocupaciones-cl.json`
-> — 3.509 ocupaciones chilenas mapeadas a código CIUO. No hay que bajar ni parsear nada; ver §7.1.
+> — 3.484 ocupaciones chilenas mapeadas a código CIUO. No hay que bajar ni parsear nada; ver §7.1.
 
 ---
 
@@ -378,14 +378,14 @@ Reemplaza al scrape (§7.0). Trabajo offline, una vez.
 
 #### Lo que hay en el archivo
 
-**3.509 pares ocupación → código CIUO**, 3.473 ocupaciones distintas, cubriendo 447 grupos
+**3.484 pares ocupación → código CIUO**, 3.473 ocupaciones distintas, cubriendo 447 grupos
 primarios.
 
 | Fuente | Aporte | Filas |
 |---|---|---|
-| CIUO-08.CL — grupos primarios | Nombres oficiales + jerarquía | 430 |
+| CIUO-08.CL — grupos primarios | Nombres oficiales + jerarquía | 444 |
 | CIUO-08.CL — *"Se incluyen las siguientes ocupaciones"* | Denominaciones reales por código | **2.303** |
-| CIUO-08.CL — *"No se incluyen…"* | Referencias cruzadas `título → código` | **107** |
+| CIUO-08.CL — *"No se incluyen…"* | Referencias cruzadas `título → código` | **82** |
 | ChileValora | Perfiles acreditados con sector | **1.099** |
 
 #### El hallazgo que hace que las dos fuentes se unan sin IA
@@ -403,7 +403,7 @@ ChileValora con CIUO-08.CL. **No hay que inferir el mapeo con un modelo: ya vien
 
 #### Las referencias cruzadas son el dato más valioso
 
-Las 107 entradas de *"No se incluyen"* son desambiguaciones **curadas a mano por el INE**:
+Las 82 entradas de *"No se incluyen"* son desambiguaciones **curadas a mano por el INE**:
 
 ```
 Gerente de tienda          → 1420   (no 5221)
@@ -463,8 +463,19 @@ Cobertura verificada de los 17 rubros objetivo de AutoPostula: **17 de 17**, inc
 - **37 filas descartadas** por control de calidad: paréntesis explicativos cortados entre
   líneas del PDF (`"Director de instituciones públicas (como por e"`). Sobre 4.851 es ruido.
   Recuperables afinando el manejo multilínea si algún día importa.
-- **17 códigos sin nombre de grupo** (`3111`–`3122`, técnicos de ciencias): el parser se saltó
-  esos encabezados, probablemente por un salto de página. Se completan a mano en minutos.
+- **3 códigos sin nombre de grupo** (`7129`, `7242`, `7243`). Se completan a mano en minutos.
+
+> **🐛 Bug corregido el 2026-09-03, después de la primera importación.** El PDF alterna
+> `Grupo primario` y `Grupo Primario` (14 encabezados con P mayúscula). El parser era sensible
+> a mayúsculas, se saltaba esos 14 encabezados, y **las ocupaciones de esos grupos quedaban
+> atribuidas al código anterior** — por ejemplo `Técnico físico` y `Ayudante de topógrafo`
+> terminaron en `2659` "Otros artistas creativos", junto a payasos y magos.
+>
+> **65 pares estaban mal asignados.** El archivo ya está corregido (444 grupos en vez de 430,
+> 3.484 pares en vez de 3.509).
+>
+> **⚠️ Si ya corriste `importar-catalogo.ts` con la versión anterior, hay que volver a
+> correrlo.** La base quedó con esos 65 pares apuntando a códigos equivocados.
 
 #### Qué NO da esta fuente
 
@@ -602,7 +613,7 @@ Corre offline, sobre la salida de §7.3.
   del catálogo (§7.1) como conjunto de destino.
 - **Tarea del modelo:** *"¿a qué código CIUO corresponde este título? Si no corresponde a
   ninguno, dilo."* La salida es un código de 4 dígitos, no texto libre.
-- **No mandar los 3.509 nombres en cada prompt.** Prefiltrar con el matcher local (§6) a los
+- **No mandar los 3.484 nombres en cada prompt.** Prefiltrar con el matcher local (§6) a los
   ~30 códigos candidatos y pedirle al modelo que elija entre esos. Baja el costo por título
   en más de un orden de magnitud y sube la precisión.
 - Batches de 200.
@@ -615,7 +626,7 @@ Corre offline, sobre la salida de §7.3.
 
 #### Set de validación gratis: las referencias cruzadas
 
-Las **107 entradas `CIUO_REFERENCIA`** del catálogo (§7.1) son mapeos `título → código`
+Las **82 entradas `CIUO_REFERENCIA`** del catálogo (§7.1) son mapeos `título → código`
 curados a mano por el INE, y son casos de frontera a propósito:
 
 ```
@@ -655,6 +666,24 @@ Como la cosecha (§7.2) sigue trayendo títulos nuevos indefinidamente, esta eta
 **job periódico** (sugerido: semanal) sobre los títulos aún sin `ciuo` — la query que sirve el
 índice `@@index([origen, ciuo])` de §9.1. Sigue siendo barato: solo procesa lo nuevo, nunca
 reprocesa lo ya clasificado.
+
+#### Esta etapa NO bloquea al scorer (§6)
+
+Es tentador leer el orden de §11 como "hay que esperar a tener volumen cosechado antes de poder
+construir el paso 6". **No es así**, y conviene tenerlo claro para no frenar el proyecto:
+
+1. **La clasificación es por título, no por corpus.** Un título se clasifica **la primera vez
+   que alguien lo ve** y queda cacheado para siempre (§5, la caché global). No hace falta
+   acumular nada: el sistema funciona desde el título número uno. El job en batch es solo una
+   optimización de costo para el backfill.
+2. **Un título sin clasificar degrada solo, y bien.** Si el scorer no puede ubicar una oferta
+   con confianza, cae en la **banda gris** — que ya va a la cola de decisión del usuario (§8).
+   No hay que diseñar nada extra: *sin clasificar = incierto = preguntarle al usuario*. Y la
+   respuesta del usuario se convierte en etiqueta de entrenamiento.
+
+**El sistema arranca vacío y se llena solo.** Lo que la cosecha determina no es *si* funciona,
+sino **cuánta banda gris ve el usuario al principio** — que es exactamente la métrica de salud
+de §8.2, y se achica sola.
 
 ---
 
@@ -725,6 +754,40 @@ Regla para elegir los ~10 títulos de frontera del triaje: **mismo subgrupo (3 d
 `cargoObjetivo`, pero distinto grupo primario (4 dígitos)**. Eso es exactamente "parecido pero
 no igual", que es donde está la duda real del usuario. Sin IA, sin embeddings, sin cálculo — es
 una query con `LIKE '522%'` sobre `GrupoCiuo` (§9.1).
+
+#### ⚠️ El ancla no siempre existe: detectar ambigüedad antes de elegirla
+
+Todo lo anterior asume que el `cargoObjetivo` del usuario se puede anclar a **un** código CIUO.
+**Para los cargos genéricos que la gente realmente escribe, eso es falso**, y ninguna heurística
+de string lo arregla. Medido sobre el catálogo real:
+
+| `cargoObjetivo` | Candidatos | Familias CIUO con peso | ¿Anclable? |
+|---|---|---|---|
+| `vendedor` | 48 | 2 | Sí |
+| `cajero` | 23 | 2 | Sí |
+| `garzón` / `reponedor` | 2 / 4 | 1 | Sí |
+| **`operario`** | 77 | **3** (7 oficios, 9 elementales, 8 operadores) | **No** |
+| **`auxiliar`** | 27 | **4** | **No** |
+| **`ayudante`** | 60 | **5** | **No** |
+| **`encargado`** | 109 | **4** | **No** |
+
+Elegir "la coincidencia más corta" en los ambiguos da resultados absurdos: `operario` →
+`Operario de ferry [8350]` (tripulante de barco), `administrativo` → `Encargado administrativo
+[3344]` (secretario médico), `asesor` → `Asesor forestal [2132]` (agrónomo). Y ordenar por
+otros criterios tampoco funciona: son ambiguos de verdad, no mal ordenados. **"Operario" no es
+una ocupación: es un modificador. La ocupación está en el complemento** ("operario *de
+bodega*").
+
+**Regla:** contar en cuántos grandes grupos (primer dígito) caen los candidatos con peso ≥10%.
+
+- **1–2 familias** → anclar normalmente y aplicar el 5/10/5.
+- **3 o más** → **no adivinar.** Repartir los 20 títulos entre las familias principales y dejar
+  que los swipes resuelvan cuál es.
+
+Esto convierte la ambigüedad de bug en función: **el triaje existe precisamente para resolver
+esa duda**, así que cuando el cargo es ambiguo hay que *ensanchar* la muestra, no acertar el
+ancla. El usuario que escribió "operario" te va a decir en 20 swipes si es de bodega, de planta
+o de aseo — que es justamente lo que su `cargoObjetivo` no dice.
 
 ### 8.4 El problema difícil: la caducidad
 
@@ -798,7 +861,7 @@ model TituloCanonico {
   @@map("titulos_canonicos")
 }
 
-// Los 430 grupos primarios del CIUO-08.CL, con su jerarquía. Tabla chica y fija.
+// Los 444 grupos primarios del CIUO-08.CL, con su jerarquía. Tabla chica y fija.
 // Sirve para: nombrar roles de forma legible, y para calcular vecindad entre
 // roles en el triaje (§8.3) — dos códigos del mismo subgrupo son vecinos por
 // construcción, sin necesidad de calcularlo con IA ni con embeddings.
@@ -975,7 +1038,7 @@ cosecha (§7.2) — por eso conviene sembrarla navegando a mano antes de dar el 
 Esto es nuevo — con clustering no se podía medir, con clasificación sí:
 
 1. **Test de regresión con etiquetas externas (obligatorio).** Correr el clasificador contra
-   las **107 referencias cruzadas** `CIUO_REFERENCIA` del catálogo (§7.1) — son casos de
+   las **82 referencias cruzadas** `CIUO_REFERENCIA` del catálogo (§7.1) — son casos de
    frontera etiquetados por el INE. **Objetivo: ≥85% de aciertos.** Este test no cuesta nada
    construir y es el único con etiquetas que no salieron del propio sistema.
 2. **Los cuatro casos que definen el éxito** (§7.4): `asesor comercial → 5223`,
@@ -988,7 +1051,7 @@ Esto es nuevo — con clustering no se podía medir, con clasificación sí:
 
 ### De la importación del catálogo (§7.1)
 
-- `TituloCanonico` debe quedar con **3.509 filas** `origen = CATALOGO_OFICIAL`, todas con
+- `TituloCanonico` debe quedar con **3.484 filas** `origen = CATALOGO_OFICIAL`, todas con
   `ciuo` poblado.
 - `GrupoCiuo` debe quedar con **430 filas** (447 códigos aparecen en `ocupaciones`, pero 17 no
   tienen nombre de grupo — ver deudas menores en §7.1; completarlos a mano o dejarlos con
