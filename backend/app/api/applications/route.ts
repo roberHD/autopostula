@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 
 export async function GET() {
   const session = await auth();
@@ -62,6 +63,14 @@ export async function POST(request: Request) {
 
     if (!platformNombre || !externalId || !titulo) {
       return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
+    }
+
+    const estadoPostulaciones = await obtenerEstadoPostulaciones(user.id);
+    if (!estadoPostulaciones.permitido) {
+      return NextResponse.json(
+        { error: `Alcanzaste el límite de postulaciones de tu plan este mes (${estadoPostulaciones.limite}).` },
+        { status: 403 }
+      );
     }
 
     const platform = await prisma.jobPlatform.findUnique({

@@ -121,6 +121,12 @@ model Plan {
   guardaConversacionesIa   Boolean          @default(false) @map("guarda_conversaciones_ia")
   perfilDinamico           Boolean          @default(false) @map("perfil_dinamico")
   limiteLlamadasIaMes      Int?             @map("limite_llamadas_ia_mes")
+  // Separado de limiteLlamadasIaMes: los mensajes de la conversación con la IA
+  // de estilo no tienen relación con cuántas postulaciones se envían, así que
+  // necesitan su propio balde (antes vivían en el mismo contador que todo lo
+  // demás, y una sola conversación larga dejaba a la persona sin cupo de IA
+  // para el resto del mes).
+  limiteMensajesConversacionMes Int?        @map("limite_mensajes_conversacion_mes")
   nivelAnaliticas          NivelAnaliticas  @default(BASICO) @map("nivel_analiticas")
 
   subscriptions Subscription[]
