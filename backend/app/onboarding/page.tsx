@@ -38,25 +38,26 @@ export default function OnboardingPage() {
   useEffect(() => {
     async function determinarInicio() {
       try {
-        const [perfilRes, conversacionRes, portalesRes] = await Promise.all([
+        const [perfilRes, conversacionRes, portalesRes, extensionRes] = await Promise.all([
           fetch("/api/perfil"),
           fetch("/api/style/onboarding/mensaje"),
           fetch("/api/platform-accounts"),
+          fetch("/api/account/extension-conectada"),
         ]);
         const perfil = perfilRes.ok ? await perfilRes.json() : null;
         const conversacion = conversacionRes.ok ? await conversacionRes.json() : null;
         const portales = portalesRes.ok ? await portalesRes.json() : null;
+        const extension = extensionRes.ok ? await extensionRes.json() : null;
 
         const cvListo = !!perfil?.nombreArchivo;
         const conversacionLista = !!conversacion?.confirmado;
+        const extensionLista = !!extension?.extensionConectada;
         const portalConectado = (portales?.cuentas || []).some((c: any) => c.activa);
 
-        // La extensión (paso 3) no se puede confirmar desde el servidor — el
-        // propio paso ya detecta solo si ya estaba conectada y deja avanzar
-        // casi al toque, así que igual se muestra aunque el resto esté listo.
         if (!cvListo) setPaso(0);
         else if (!conversacionLista) setPaso(2);
-        else if (!portalConectado) setPaso(3);
+        else if (!extensionLista) setPaso(3);
+        else if (!portalConectado) setPaso(4);
         else setPaso(5);
       } catch (e) {
         console.error("No se pudo determinar en qué paso del onboarding retomar:", e);
@@ -288,11 +289,22 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
   );
 }
 
+const MINIMO_MENSAJES_PARA_FINALIZAR = 4;
+
 function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   const [conversacion, setConversacion] = useState<Mensaje[]>([]);
   const [input, setInput] = useState("");
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [finalizando, setFinalizando] = useState(false);
+  const [finalizado, setFinalizado] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // La IA misma avisa cuando ya tiene suficiente info (en vez de esperar a
+  // que se cumpla el mínimo de mensajes) y esto también se activa cuando se
+  // llega al tope duro de la fase 1 — en ambos casos hay que dejar de
+  // escribir y empujar hacia finalizar.
+  const [sugerenciaFinalizar, setSugerenciaFinalizar] = useState(false);
+  const [bloqueada, setBloqueada] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
   // React 18 en desarrollo monta cada efecto dos veces a propósito (para pescar
   // efectos sin cleanup) -- sin este guard, la conversación vacía dispara dos
@@ -316,6 +328,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         } else {
           await enviar("");
         }
+        if (data.confirmado) setFinalizado(true);
       } finally {
         setCargando(false);
       }
@@ -330,6 +343,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
 
   async function enviar(texto: string) {
     setEnviando(true);
+    setError(null);
     if (texto) setConversacion((prev) => [...prev, { role: "user", content: texto }]);
     try {
       const res = await fetch("/api/style/onboarding/mensaje", {
@@ -338,11 +352,36 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         body: JSON.stringify({ mensaje: texto }),
       });
       const data = await parsearRespuesta(res);
-      if (res.ok) setConversacion((prev) => [...prev, { role: "assistant", content: quitarMarkdown(data.pregunta) }]);
+      if (res.ok) {
+        setConversacion((prev) => [...prev, { role: "assistant", content: quitarMarkdown(data.pregunta) }]);
+        if (data.sugerenciaFinalizar) setSugerenciaFinalizar(true);
+      } else {
+        setError(data.error ?? "No se pudo enviar el mensaje.");
+        if (res.status === 403) setBloqueada(true);
+      }
     } finally {
       setEnviando(false);
     }
   }
+
+  async function finalizar() {
+    setFinalizando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/style/onboarding/finalizar", { method: "POST" });
+      const data = await parsearRespuesta(res);
+      if (res.ok) {
+        setFinalizado(true);
+      } else {
+        setError(data.error ?? "No se pudo generar el perfil.");
+      }
+    } finally {
+      setFinalizando(false);
+    }
+  }
+
+  const mensajesUsuario = conversacion.filter((m) => m.role === "user").length;
+  const puedeFinalizar = sugerenciaFinalizar || mensajesUsuario >= MINIMO_MENSAJES_PARA_FINALIZAR;
 
   return (
     <>
@@ -365,20 +404,50 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         {enviando && <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Escribiendo...</p>}
         <div ref={finRef} />
       </div>
-      <form
-        onSubmit={(e) => { e.preventDefault(); if (input.trim()) { const t = input.trim(); setInput(""); enviar(t); } }}
-        style={{ display: "flex", gap: 8 }}
-      >
-        <input
-          className="ap-input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Escribe tu respuesta..."
-          disabled={enviando}
-          style={{ flex: 1 }}
-        />
-        <button className="ap-button" type="submit" disabled={enviando || !input.trim()}>Enviar</button>
-      </form>
+      {!finalizado && !bloqueada && (
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (input.trim()) { const t = input.trim(); setInput(""); enviar(t); } }}
+          style={{ display: "flex", gap: 8 }}
+        >
+          <input
+            className="ap-input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Escribe tu respuesta..."
+            disabled={enviando}
+            style={{ flex: 1 }}
+          />
+          <button className="ap-button" type="submit" disabled={enviando || !input.trim()}>Enviar</button>
+        </form>
+      )}
+
+      {error && (
+        <p style={{ fontSize: 12, color: "#dc2626", marginTop: 8 }}>{error}</p>
+      )}
+
+      {finalizado ? (
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 13,
+            background: "color-mix(in oklch, var(--status-finalizado) 14%, transparent)",
+            color: "var(--status-finalizado)",
+          }}
+        >
+          <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+          Tu perfil de estilo quedó listo — la IA ya lo va a usar en tus postulaciones.
+        </div>
+      ) : puedeFinalizar ? (
+        <div style={{ marginTop: 12 }}>
+          <button className="ap-button" style={{ width: "100%" }} disabled={finalizando} onClick={finalizar}>
+            {finalizando ? "Generando tu perfil..." : "✨ Ya tienes suficiente — Finalizar y generar mi perfil"}
+          </button>
+          <p style={{ fontSize: 11.5, color: "var(--text-muted)", textAlign: "center", marginTop: 6 }}>
+            Puedes seguir conversando si quieres, pero ya puedes terminar cuando quieras.
+          </p>
+        </div>
+      ) : null}
+
       <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} />
     </>
   );
@@ -402,6 +471,11 @@ function PasoExtension({ onSiguiente }: { onSiguiente: () => void }) {
       setExtConectada(true);
       setConectandoExt(false);
       setErrorConexion(null);
+      // Avisa al servidor para que retomar el onboarding más tarde (o un
+      // reload en este mismo paso) no te mande de vuelta a un paso anterior.
+      fetch("/api/account/extension-conectada", { method: "POST" }).catch((e) => {
+        console.error("No se pudo guardar que la extensión quedó conectada:", e);
+      });
     }
     function onError(e: Event) {
       const detail = (e as CustomEvent).detail;

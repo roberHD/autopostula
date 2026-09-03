@@ -11,6 +11,7 @@ import {
   ListOrdered,
   PenLine,
   CheckCircle2,
+  Lock,
 } from "lucide-react";
 
 type Pregunta = {
@@ -40,6 +41,18 @@ const ETIQUETA_TIPO: Record<string, string> = {
   escritura: "Estilo de escritura",
 };
 
+// Mismo criterio que PALETA_PORTALES en el Resumen -- un color distinto
+// por tipo de pregunta en vez de un solo acento repetido siete veces.
+const COLOR_TIPO: Record<string, string> = {
+  comparacion: "var(--chart-1)",
+  historia: "var(--chart-2)",
+  frase: "var(--chart-3)",
+  vocabulario: "var(--chart-4)",
+  formalidad: "var(--chart-5)",
+  prioridad: "var(--chart-1)",
+  escritura: "var(--chart-2)",
+};
+
 export default function CalibracionPage() {
   const [pendientes, setPendientes] = useState<Pregunta[]>([]);
   const [respondidas, setRespondidas] = useState(0);
@@ -49,6 +62,7 @@ export default function CalibracionPage() {
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [seleccionada, setSeleccionada] = useState<string | null>(null);
+  const [bloqueado, setBloqueado] = useState(false);
 
   async function cargar() {
     try {
@@ -62,6 +76,7 @@ export default function CalibracionPage() {
       setRespondidas(data.respondidas ?? 0);
       setTotalPreguntas(data.totalPreguntas ?? 0);
       setConfianza(data.confianzaPorcentaje ?? 0);
+      setBloqueado(data.bloqueado ?? false);
     } catch (err) {
       console.error("Error cargando calibración:", err);
       setMensaje("No se pudo cargar — revisa la consola");
@@ -75,6 +90,7 @@ export default function CalibracionPage() {
   }, []);
 
   async function responder(preguntaId: string, opcionElegida: string) {
+    if (bloqueado) return;
     setSeleccionada(opcionElegida);
     setEnviando(true);
     setMensaje("");
@@ -108,9 +124,10 @@ export default function CalibracionPage() {
   const preguntaActual = pendientes[0];
   const circunferencia = 97.4;
   const IconoActual = preguntaActual ? ICONO_TIPO[preguntaActual.tipo] ?? MessageSquareQuote : MessageSquareQuote;
+  const colorActual = preguntaActual ? COLOR_TIPO[preguntaActual.tipo] ?? "var(--accent)" : "var(--accent)";
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header">
         <h1 className="ap-page-title">Calibra tu estilo</h1>
         <p className="ap-page-sub">
@@ -151,7 +168,7 @@ export default function CalibracionPage() {
                 <div
                   style={{
                     width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-                    background: "var(--bg-elevated-2)", color: "var(--accent)",
+                    background: `color-mix(in oklch, ${colorActual} 16%, transparent)`, color: colorActual,
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}
                 >
@@ -166,6 +183,19 @@ export default function CalibracionPage() {
                 {preguntaActual.texto}
               </p>
 
+              {bloqueado && (
+                <div
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    marginBottom: 14, padding: "10px 14px", borderRadius: 8, fontSize: 12.5,
+                    background: "var(--bg-elevated-2)", color: "var(--text-muted)",
+                  }}
+                >
+                  <Lock size={14} style={{ flexShrink: 0 }} />
+                  Esta es una muestra — calibrar tu estilo completo es una función premium.
+                </div>
+              )}
+
               {preguntaActual.opciones.length === 2 ? (
                 // Exactamente 2 opciones (típico de "comparación") — tarjetas A/B lado a
                 // lado, como en la maqueta. Con más o menos opciones no calza este layout,
@@ -176,7 +206,7 @@ export default function CalibracionPage() {
                     return (
                       <button
                         key={i}
-                        disabled={enviando}
+                        disabled={enviando || bloqueado}
                         onClick={() => responder(preguntaActual.id, op)}
                         style={{
                           textAlign: "left",
@@ -218,7 +248,7 @@ export default function CalibracionPage() {
                     return (
                       <button
                         key={i}
-                        disabled={enviando}
+                        disabled={enviando || bloqueado}
                         onClick={() => responder(preguntaActual.id, op)}
                         className="ap-option-card"
                         style={{
@@ -294,6 +324,6 @@ export default function CalibracionPage() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

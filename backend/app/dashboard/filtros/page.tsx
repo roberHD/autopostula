@@ -158,7 +158,7 @@ export default function FiltrosPage() {
   if (cargando) return <div className="ap-empty">Cargando...</div>;
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
           <h1 className="ap-page-title">Filtros de búsqueda</h1>
@@ -260,6 +260,6 @@ export default function FiltrosPage() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

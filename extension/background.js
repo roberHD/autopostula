@@ -5,9 +5,9 @@
 
 console.log('[AP] background.js cargado', new Date().toLocaleTimeString());
 
-// TODO: cuando despliegues a producción, cambia esto por tu dominio real
-// (el mismo que agregues en manifest.json para bridge.js y host_permissions).
-const BACKEND_URL = 'http://localhost:3000';
+// Mismo dominio que host_permissions/content_scripts en manifest.json.
+// Cuando se compre el dominio propio, actualizar ambos archivos juntos.
+const BACKEND_URL = 'https://autopostula.vercel.app';
 
 let queue = [];
 let busy  = false;
@@ -59,7 +59,8 @@ function applyInTab(url, titulo) {
 const RUTA_POR_TIPO = {
   clasificar_ofertas: '/api/ai/clasificar-ofertas',
   analizar_oferta: '/api/ai/analizar-oferta',
-  responder_pregunta: '/api/ai/responder-pregunta'
+  responder_pregunta: '/api/ai/responder-pregunta',
+  procesar_postulacion: '/api/ai/procesar-postulacion'
 };
 
 async function llamarIABackend(tipo, payload) {
@@ -323,6 +324,32 @@ async function reportarPostulacionBackend(oferta) {
   }
 }
 
+// ── Reportar títulos vistos al backend (cosecha pasiva del corpus) ──────
+// Best-effort, no crítico: si falla o no hay token, no vale la pena ensuciar la
+// consola por esto (a diferencia de reportarPostulacionBackend, que sí importa).
+// Ver docs/rediseno-filtrado-ofertas.md, §7.2.
+async function reportarTitulosVistosBackend(titulos, plataforma) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return;
+
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/titulos-vistos', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + autopostulaToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ platformNombre: plataforma || 'Computrabajo', titulos: titulos })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('[AP] Backend rechazó títulos vistos:', data.error || res.status);
+    }
+  } catch (e) {
+    console.warn('[AP] Error de red reportando títulos vistos:', e);
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   if (msg.type === 'OPEN_AND_APPLY') {
     queue.push({ url: msg.url, titulo: msg.titulo });
@@ -331,6 +358,9 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   }
   if (msg.type === 'REPORTAR_POSTULACION') {
     reportarPostulacionBackend(msg.oferta);
+  }
+  if (msg.type === 'REPORTAR_TITULOS_VISTOS') {
+    reportarTitulosVistosBackend(msg.titulos, msg.plataforma);
   }
   if (msg.type === 'ACTUALIZAR_ESTADO') {
     actualizarEstadoBackend(msg.datos).then(sendResponse);

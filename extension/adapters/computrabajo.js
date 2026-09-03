@@ -8,10 +8,10 @@
 'use strict';
 
 const DELAY = 3000;
-const { msg, sleep, n, addLog, reportarPostulacion, llamarBackendIA,
+const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos, llamarBackendIA,
         cargarCV, construirMensajesCV, cargarEstiloProfesional,
         obtenerObjetivoLaboral, clasificarOfertasIA, coincideFiltros,
-        actualizarEstadoPostulacion, aiResponde, analizarOferta,
+        actualizarEstadoPostulacion, analizarYResponder,
         mostrarRevision, setVal, limitarTexto, esVisible, seleccionarOpcion } = window.AP;
 
 // ── Extraer el texto completo del aviso (no todo el body con menús/ruido) ─
@@ -178,12 +178,20 @@ function calcularRespuesta(preguntaTexto, opciones, perfil) {
   return null;
 }
 
-async function manejarGruposDeOpciones(perfil, respuestasLog, contexto, analisis) {
+// Recolecta y resuelve TODOS los grupos de opciones (radios, checkboxes, widgets),
+// categoría por categoría, igual que antes. Lo que calcularRespuesta puede resolver
+// sin IA se aplica al toque (así se preserva el orden de revelado condicional que ya
+// tenía este código: cada categoría se consulta fresca del DOM, después de aplicar la
+// anterior, por si elegir una opción hizo aparecer un grupo nuevo). Lo que SÍ necesita
+// IA se junta en una sola lista y se resuelve con UNA llamada al final — antes era una
+// llamada por pregunta, cada una remandando el CV y el aviso completos otra vez.
+async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
   let interacciones = 0;
   await esperarOpciones(SELECTOR_OPCIONES, { timeout:2500 });
   // Acotado al panel real del formulario — evita interferir con radios/checkboxes de otras
   // partes de la página (filtros, ordenar por, etc.)
   const panelForm = document.querySelector('.box_detail,[data-offers-grid-box-detail]') || document;
+  const pendientesIA = []; // { pregunta, opciones }
 
   // Radios nativos
   const gruposRadioVistos = new Set();
@@ -199,23 +207,16 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto, analisis
     if (!grupo.length) continue;
     const opciones = grupo.map(r => ({ el:r, texto:textoDeOpcion(r) }));
     const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(radio)) || getLabel(radio);
-    let elegida = calcularRespuesta(pregunta, opciones, perfil);
-    let errorIA = null;
-    // Si no hay match universal y hay IA, que la IA elija entre las opciones usando perfil + info adicional
-    if (!elegida && AP.iaDisponible && pregunta.length > 5) {
-      const { respuesta: respIA, error } = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
-      errorIA = error;
-      if (respIA) {
-        const rNorm = n(respIA);
-        elegida = opciones.find(o => rNorm.includes(n(o.texto)) || n(o.texto).length < 4 && rNorm.startsWith(n(o.texto)));
+    const elegida = calcularRespuesta(pregunta, opciones, perfil);
+    if (elegida) {
+      if (seleccionarOpcion(elegida.el)) {
+        interacciones++;
+        respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       }
-    }
-    if (elegida && seleccionarOpcion(elegida.el)) {
-      interacciones++;
-      respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
-      await sleep(300);
+    } else if (AP.iaDisponible && pregunta.length > 5) {
+      pendientesIA.push({ pregunta, opciones });
     } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA });
+      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
     }
   }
 
@@ -225,7 +226,7 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto, analisis
     if (!esVisible(cb)) continue;
     const textoCb = n(textoDeOpcion(cb) || (cb.closest('label,div') && cb.closest('label,div').textContent) || '');
     if (textoCb.includes('acepto') || textoCb.includes('terminos') || textoCb.includes('politica') || textoCb.includes('autorizo')) {
-      if (!cb.checked && seleccionarOpcion(cb)) { interacciones++; await sleep(200); }
+      if (!cb.checked && seleccionarOpcion(cb)) interacciones++;
       continue;
     }
     const nombre = cb.name || '';
@@ -234,22 +235,16 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto, analisis
       const grupo = [...panelForm.querySelectorAll('input[type=checkbox][name="' + CSS.escape(nombre) + '"]')].filter(esVisible);
       const opciones = grupo.map(c => ({ el:c, texto:textoDeOpcion(c) }));
       const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(cb)) || getLabel(cb);
-      let elegida = calcularRespuesta(pregunta, opciones, perfil);
-      let errorIA = null;
-      if (!elegida && AP.iaDisponible && pregunta.length > 5) {
-        const { respuesta: respIA, error } = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
-        errorIA = error;
-        if (respIA) {
-          const rNorm = n(respIA);
-          elegida = opciones.find(o => rNorm.includes(n(o.texto)));
+      const elegida = calcularRespuesta(pregunta, opciones, perfil);
+      if (elegida) {
+        if (!elegida.el.checked && seleccionarOpcion(elegida.el)) {
+          interacciones++;
+          respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
         }
-      }
-      if (elegida && !elegida.el.checked && seleccionarOpcion(elegida.el)) {
-        interacciones++;
-        respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
-        await sleep(200);
-      } else if (pregunta && !elegida) {
-        respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA });
+      } else if (AP.iaDisponible && pregunta.length > 5) {
+        pendientesIA.push({ pregunta, opciones });
+      } else if (pregunta) {
+        respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
       }
     }
   }
@@ -266,49 +261,77 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto, analisis
     if (!grupo.length) continue;
     const opciones = grupo.map(el => ({ el, texto:textoDeOpcion(el) }));
     const pregunta = textoPreguntaContenedor(contenedor);
-    let elegida = calcularRespuesta(pregunta, opciones, perfil);
-    let errorIA = null;
-    if (!elegida && AP.iaDisponible && pregunta.length > 5) {
-      const { respuesta: respIA, error } = await aiResponde(pregunta, contexto, opciones.map(o => o.texto), analisis);
-      errorIA = error;
-      if (respIA) {
-        const rNorm = n(respIA);
-        elegida = opciones.find(o => rNorm.includes(n(o.texto)));
+    const elegida = calcularRespuesta(pregunta, opciones, perfil);
+    if (elegida) {
+      if (seleccionarOpcion(elegida.el)) {
+        interacciones++;
+        respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       }
-    }
-    if (elegida && seleccionarOpcion(elegida.el)) {
-      interacciones++;
-      respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
-      await sleep(300);
+    } else if (AP.iaDisponible && pregunta.length > 5) {
+      pendientesIA.push({ pregunta, opciones });
     } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA });
+      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
     }
   }
 
-  return interacciones;
+  // Una sola llamada a la IA para TODAS las preguntas de opciones pendientes.
+  let analisis = null;
+  if (pendientesIA.length) {
+    const preguntasParaIA = pendientesIA.map((pd, i) => ({ id: 'o' + i, pregunta: pd.pregunta, opciones: pd.opciones.map(o => o.texto) }));
+    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', '#7C3AED');
+    const resultado = await analizarYResponder(contexto, preguntasParaIA);
+    analisis = resultado.analisis;
+    for (let i = 0; i < pendientesIA.length; i++) {
+      const pd = pendientesIA[i];
+      const respIA = resultado.respuestas['o' + i];
+      let elegida = null;
+      if (respIA) {
+        const rNorm = n(respIA);
+        elegida = pd.opciones.find(o => rNorm.includes(n(o.texto)) || (n(o.texto).length < 4 && rNorm.startsWith(n(o.texto))));
+      }
+      if (elegida && seleccionarOpcion(elegida.el)) {
+        interacciones++;
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
+      } else {
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
+      }
+      await sleep(250);
+    }
+  }
+
+  return { interacciones, analisis };
+}
+
+function aplicarValorTexto(el, val, labelRaw, fueIA, respuestasLog) {
+  val = limitarTexto(val, el);
+  el.scrollIntoView({ block:'nearest' });
+  setVal(el, val);
+  respuestasLog.push({ pregunta: labelRaw, respuesta: val, fueIA, tipo:'texto', el });
 }
 
 // ── Rellenar formulario ───────────────────────────────────────
-async function rellenar(contexto, analisis) {
+async function rellenar(contexto) {
   await sleep(1000);
-  if (!AP.activo) return { n2:0, respuestasLog:[] };
+  if (!AP.activo) return { n2:0, respuestasLog:[], analisis:null };
   const p = (AP.cfg && AP.cfg.perfil) || {};
   let n2 = 0;
   const respuestasLog = [];
 
-  // Opciones (radios, checkboxes, widgets)
-  n2 += await manejarGruposDeOpciones(p, respuestasLog, contexto, analisis);
+  // Opciones primero: pueden revelar campos de texto nuevos, y el paso de abajo
+  // consulta el DOM fresco después de esto a propósito (ver comentario ahí).
+  const { interacciones, analisis: analisisDeOpciones } = await manejarGruposDeOpciones(p, respuestasLog, contexto);
+  n2 += interacciones;
 
   // Textareas e inputs — acotado al panel real del formulario, para no tocar el buscador de arriba
-  // ni ningún otro campo de texto que esté fuera de las preguntas de postulación.
+  // ni ningún otro campo de texto que esté fuera de las preguntas de postulación. Se consulta DESPUÉS
+  // de aplicar las opciones (no antes): algunos formularios revelan campos nuevos según la opción
+  // elegida arriba, y este querySelectorAll fresco los agarra.
   const panelForm = document.querySelector('.box_detail,[data-offers-grid-box-detail]') || document;
+  const pendientesTexto = []; // { el, labelRaw }
   for (const el of panelForm.querySelectorAll('textarea:not([style*="display:none"]),input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=file]):not([type=radio]):not([type=checkbox])')) {
     if (!el.offsetParent) continue;
     const labelRaw = getLabel(el);
     const lbl = n(labelRaw);
-    let val = null;
-    let fueIA = false;
-    let errorIA = null;
 
     // clave(): coincide solo si el término aparece como inicio de palabra (con límite \b),
     // para no confundir p.ej. "posición" con "reposición" (que la contiene como substring).
@@ -320,43 +343,59 @@ async function rellenar(contexto, analisis) {
     // respondiendo solo el teléfono e ignorando la comuna). Todo lo demás —incluidas preguntas
     // compuestas de contacto, comuna, renta, disponibilidad, cargo, presentación, experiencia—
     // se responde con IA, que ya tiene tus datos de contacto y perfil como contexto.
-    if      (el.type === 'email' && p.email) val = p.email;
-    else if (el.type === 'tel' && p.tel) val = p.tel;
-    else if (clave('discapacidad') || (clave('identifica') && clave('discapacidad'))) {
-      // Preguntas de discapacidad — responder con IA si está disponible, sino "No"
-      if (AP.iaDisponible) {
-        msg('IA respondiendo…', '#7C3AED');
-        const r = await aiResponde(labelRaw, contexto, null, analisis);
-        val = r.respuesta; errorIA = r.error;
-        fueIA = !!val;
-        await sleep(200);
-      } else {
-        val = 'No';
-      }
-    }
-    else if (AP.iaDisponible && labelRaw.length > 5) {
-      // Cualquier campo no cubierto por los datos objetivos de arriba se resuelve con IA,
-      // usando el perfil, el CV, la "información adicional" y el aviso completo (no respuestas fijas).
-      msg('IA respondiendo…', '#7C3AED');
-      const r = await aiResponde(labelRaw, contexto, null, analisis);
-      val = r.respuesta; errorIA = r.error;
-      fueIA = !!val;
-      await sleep(200);
-    }
-
-    if (val) {
-      val = limitarTexto(val, el);
-      el.scrollIntoView({block:'nearest'});
-      setVal(el, val);
+    if (el.type === 'email' && p.email) {
+      aplicarValorTexto(el, p.email, labelRaw, false, respuestasLog);
       n2++;
-      respuestasLog.push({ pregunta: labelRaw, respuesta: val, fueIA, tipo:'texto', el });
-      await sleep(500);
+    } else if (el.type === 'tel' && p.tel) {
+      aplicarValorTexto(el, p.tel, labelRaw, false, respuestasLog);
+      n2++;
+    } else if (clave('discapacidad') || (clave('identifica') && clave('discapacidad'))) {
+      // Preguntas de discapacidad — responder con IA si está disponible, sino "No". Si la
+      // IA no contesta (puede pasar: es una pregunta de autoidentificación voluntaria, no
+      // siempre encaja con el patrón "experiencia" del resto de las preguntas), el fallback
+      // más abajo aplica el mismo default honesto "No" en vez de dejarla vacía.
+      if (AP.iaDisponible) {
+        pendientesTexto.push({ el, labelRaw, fallback: 'No' });
+      } else {
+        aplicarValorTexto(el, 'No', labelRaw, false, respuestasLog);
+        n2++;
+      }
+    } else if (AP.iaDisponible && labelRaw.length > 5) {
+      pendientesTexto.push({ el, labelRaw });
     } else if (labelRaw.length > 5) {
-      respuestasLog.push({ pregunta: labelRaw, respuesta: '', vacia: true, tipo:'texto', el, errorIA });
+      respuestasLog.push({ pregunta: labelRaw, respuesta: '', vacia: true, tipo:'texto', el, errorIA: null });
     }
   }
 
-  return { n2, respuestasLog };
+  // Una sola llamada a la IA para TODOS los campos de texto pendientes.
+  let analisis = analisisDeOpciones;
+  if (pendientesTexto.length) {
+    const preguntasParaIA = pendientesTexto.map((pd, i) => ({ id: 't' + i, pregunta: pd.labelRaw, opciones: null }));
+    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', '#7C3AED');
+    const resultado = await analizarYResponder(contexto, preguntasParaIA);
+    if (resultado.analisis) analisis = resultado.analisis;
+    for (let i = 0; i < pendientesTexto.length; i++) {
+      const pd = pendientesTexto[i];
+      const valIA = resultado.respuestas['t' + i];
+      if (valIA) {
+        n2++;
+        aplicarValorTexto(pd.el, valIA, pd.labelRaw, true, respuestasLog);
+      } else if (pd.fallback) {
+        n2++;
+        aplicarValorTexto(pd.el, pd.fallback, pd.labelRaw, false, respuestasLog);
+      } else {
+        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', vacia: true, tipo:'texto', el: pd.el, errorIA: resultado.error });
+      }
+      await sleep(250);
+    }
+  } else if (!analisis) {
+    // No hubo ninguna pregunta que necesitara IA, pero igual se quiere el matchScore
+    // para el log de la postulación (mismo comportamiento que antes: siempre se analizaba).
+    const resultado = await analizarYResponder(contexto, []);
+    analisis = resultado.analisis;
+  }
+
+  return { n2, respuestasLog, analisis };
 }
 
 // ── Postular ──────────────────────────────────────────────────
@@ -403,10 +442,8 @@ async function postular(url, id, titulo) {
   const hayForm = [...panelPostForm.querySelectorAll('textarea,input[type=radio]')].some(el => el.offsetParent && !el.closest('.hide'));
 
   if (hayForm) {
-    msg('Analizando aviso…', '#7C3AED');
-    const analisis = await analizarOferta(contexto);
     msg('Rellenando formulario…', '#D97706');
-    const { n2, respuestasLog } = await rellenar(contexto, analisis);
+    const { n2, respuestasLog, analisis } = await rellenar(contexto);
     await sleep(1000);
 
     // Modo revisión: pausar y mostrar respuestas al usuario
@@ -481,16 +518,21 @@ async function escanear() {
   if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en CT', '#9CA3AF'); return; }
 
   let pendientes = [];
+  const titulosVistos = [];
   tarjetas.forEach((t, idx) => {
     const id = getId(t, idx);
     if (AP.vistos.has(id)) return;
     const badge = t.querySelector('.postulated:not(.hide), .applied-offer-tag:not(.hide)');
     if (badge && badge.offsetParent !== null) { AP.vistos.add(id); return; }
+    const titulo = (t.querySelector('h2') && t.querySelector('h2').textContent.trim()) || 'Oferta';
+    // Se guarda el título se haya matcheado o no con los filtros -- antes esto se
+    // tiraba a la basura si no pasaba (ver docs/rediseno-filtrado-ofertas.md, §7.2).
+    titulosVistos.push(titulo);
     if (pasa(t)) {
-      const titulo = (t.querySelector('h2') && t.querySelector('h2').textContent.trim()) || 'Oferta';
       pendientes.push({t, id, idx, titulo});
     }
   });
+  reportarTitulosVistos(titulosVistos, 'Computrabajo');
 
   // Filtro inteligente con IA: descarta ofertas que no calzan con el cargo que busca el
   // candidato aunque el titulo no comparta ninguna palabra clave literal con los tags.

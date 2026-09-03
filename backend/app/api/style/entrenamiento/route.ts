@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { usuarioTienePerfilDinamico } from "@/lib/plan-beneficios";
 
 async function getOrCreateStyleProfile(userId: string) {
   const existente = await prisma.styleProfile.findFirst({
@@ -19,6 +20,7 @@ export async function GET() {
   }
 
   const perfil = await getOrCreateStyleProfile(userId);
+  const instruccionesBloqueadas = !(await usuarioTienePerfilDinamico(userId));
 
   return NextResponse.json({
     tono: perfil.tono ?? "profesional_cercano",
@@ -26,6 +28,7 @@ export async function GET() {
     instrucciones: perfil.instrucciones ?? "",
     usarPerfil: perfil.usarPerfil,
     evitarRepetidas: perfil.evitarRepetidas,
+    instruccionesBloqueadas,
   });
 }
 
@@ -41,9 +44,20 @@ export async function PATCH(request: Request) {
 
   const perfil = await getOrCreateStyleProfile(userId);
 
+  // Instrucciones libres son premium (perfilDinamico) -- tono, longitud y los
+  // demás toggles se guardan igual, solo se ignora el texto de instrucciones
+  // si no tiene el beneficio (no se rechaza el guardado completo por eso).
+  const puedeEscribirInstrucciones = await usuarioTienePerfilDinamico(userId);
+
   const actualizado = await prisma.styleProfile.update({
     where: { id: perfil.id },
-    data: { tono, longitudRespuesta, instrucciones, usarPerfil, evitarRepetidas },
+    data: {
+      tono,
+      longitudRespuesta,
+      usarPerfil,
+      evitarRepetidas,
+      ...(puedeEscribirInstrucciones ? { instrucciones } : {}),
+    },
   });
 
   return NextResponse.json({
@@ -52,5 +66,6 @@ export async function PATCH(request: Request) {
     instrucciones: actualizado.instrucciones ?? "",
     usarPerfil: actualizado.usarPerfil,
     evitarRepetidas: actualizado.evitarRepetidas,
+    instruccionesBloqueadas: !puedeEscribirInstrucciones,
   });
 }

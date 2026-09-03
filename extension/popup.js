@@ -3,9 +3,9 @@
 // ═══════════════════════════════════════════════════════════════
 'use strict';
 
-// TODO: cuando despliegues a producción, cambia esto por tu dominio real
-// (el mismo que agregues en manifest.json para bridge.js).
-const BACKEND_URL = 'http://localhost:3000';
+// Mismo dominio que host_permissions/content_scripts en manifest.json.
+// Cuando se compre el dominio propio, actualizar ambos archivos junto con background.js.
+const BACKEND_URL = 'https://autopostula.vercel.app';
 
 // ── Estado ─────────────────────────────────────────────────────
 let incTags = [];

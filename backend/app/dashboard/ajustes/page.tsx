@@ -7,9 +7,11 @@ export default function AjustesPage() {
   const [activa, setActiva] = useState(false);
   const [disponibleEnPlan, setDisponibleEnPlan] = useState(false);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
+  const [esPremium, setEsPremium] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [redirigiendo, setRedirigiendo] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
   async function cargar() {
@@ -20,6 +22,7 @@ export default function AjustesPage() {
       setActiva(data.activa);
       setDisponibleEnPlan(data.disponibleEnPlan);
       setPlanNombre(data.planNombre);
+      setEsPremium(data.esPremium ?? false);
       setEmail(data.email);
     } catch (err) {
       console.error("Error cargando ajustes:", err);
@@ -58,8 +61,47 @@ export default function AjustesPage() {
     }
   }
 
+  async function pasarAPremium() {
+    setRedirigiendo(true);
+    setMensaje("");
+    try {
+      const res = await fetch("/api/flow/checkout", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setMensaje(data.error ?? "No se pudo continuar — intenta de nuevo");
+        setRedirigiendo(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      console.error("Error abriendo Flow:", err);
+      setMensaje("No se pudo continuar — revisa la consola");
+      setRedirigiendo(false);
+    }
+  }
+
+  async function cancelarSuscripcion() {
+    if (!confirm("¿Cancelar tu suscripción premium? Sigues teniendo acceso hasta el final del período que ya pagaste.")) return;
+    setRedirigiendo(true);
+    setMensaje("");
+    try {
+      const res = await fetch("/api/flow/cancelar", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setMensaje(data.error ?? "No se pudo cancelar — intenta de nuevo");
+        return;
+      }
+      setMensaje(data.mensaje ?? "Suscripción cancelada.");
+    } catch (err) {
+      console.error("Error cancelando suscripción:", err);
+      setMensaje("No se pudo cancelar — revisa la consola");
+    } finally {
+      setRedirigiendo(false);
+    }
+  }
+
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header">
         <h1 className="ap-page-title">Ajustes</h1>
         <p className="ap-page-sub">Preferencias de tu cuenta.</p>
@@ -94,16 +136,23 @@ export default function AjustesPage() {
               <div
                 style={{
                   width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                  background: "color-mix(in oklch, var(--accent) 14%, transparent)", color: "var(--accent)",
+                  background: "color-mix(in oklch, var(--chart-4) 16%, transparent)", color: "var(--chart-4)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
                 <BadgeCheck size={15} />
               </div>
-              <div>
+              <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Plan actual</p>
                 <p style={{ fontSize: 13, fontWeight: 500 }}>{planNombre ?? "Plan gratuito"}</p>
               </div>
+              <button
+                className={esPremium ? "ap-button-ghost" : "ap-button"}
+                disabled={redirigiendo}
+                onClick={esPremium ? cancelarSuscripcion : pasarAPremium}
+              >
+                {redirigiendo ? "Un momento..." : esPremium ? "Cancelar suscripción" : "✨ Pasar a Premium"}
+              </button>
             </div>
           </div>
         )}
@@ -138,7 +187,7 @@ export default function AjustesPage() {
               <div
                 style={{
                   width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                  background: "color-mix(in oklch, var(--accent) 14%, transparent)", color: "var(--accent)",
+                  background: "color-mix(in oklch, var(--chart-5) 16%, transparent)", color: "var(--chart-5)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
@@ -167,6 +216,6 @@ export default function AjustesPage() {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }

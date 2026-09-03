@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
+import { usuarioTieneAnaliticaAvanzada } from "@/lib/plan-beneficios";
 
 export async function GET() {
   const session = await auth();
@@ -9,13 +11,16 @@ export async function GET() {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  const applications = await prisma.application.findMany({
-    where: { userId },
-    include: {
-      jobOffer: { include: { platform: true } },
-    },
-    orderBy: { enviadaEn: "desc" },
-  });
+  const [applications, analiticaAvanzada] = await Promise.all([
+    prisma.application.findMany({
+      where: { userId },
+      include: {
+        jobOffer: { include: { platform: true } },
+      },
+      orderBy: { enviadaEn: "desc" },
+    }),
+    usuarioTieneAnaliticaAvanzada(userId),
+  ]);
 
   return NextResponse.json({
     applications: applications.map((a) => ({
@@ -27,6 +32,7 @@ export async function GET() {
       notaAtencion: a.notaAtencion,
       enviadaEn: a.enviadaEn,
     })),
+    analiticaAvanzada,
   });
 }
 
@@ -62,6 +68,14 @@ export async function POST(request: Request) {
 
     if (!platformNombre || !externalId || !titulo) {
       return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
+    }
+
+    const estadoPostulaciones = await obtenerEstadoPostulaciones(user.id);
+    if (!estadoPostulaciones.permitido) {
+      return NextResponse.json(
+        { error: `Alcanzaste el límite de postulaciones de tu plan este mes (${estadoPostulaciones.limite}).` },
+        { status: 403 }
+      );
     }
 
     const platform = await prisma.jobPlatform.findUnique({

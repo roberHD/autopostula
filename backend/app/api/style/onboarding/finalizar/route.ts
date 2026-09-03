@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { checkAndLogAiUsage } from "@/lib/ai-usage";
+import { usuarioTienePerfilDinamico } from "@/lib/plan-beneficios";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -26,13 +26,17 @@ export async function POST() {
     );
   }
 
-  const uso = await checkAndLogAiUsage(userId, "finalizar_conversacion_estilo");
-  if (!uso.permitido) {
+  // Armar el perfil por primera vez (fase 1) es gratis para todos. Volver a
+  // finalizar un perfil que ya estaba confirmado (fase 2, tras seguir
+  // conversando) es lo mismo que seguir profundizándolo -- premium.
+  if (perfil.confirmado && !(await usuarioTienePerfilDinamico(userId))) {
     return NextResponse.json(
-      { error: `Alcanzaste el límite de llamadas de IA de tu plan este mes (${uso.limite}).` },
+      { error: "Volver a generar tu perfil de estilo es una función premium.", requierePremium: true },
       { status: 403 }
     );
   }
+
+  await prisma.aiUsageLog.create({ data: { userId, tipo: "finalizar_conversacion_estilo" } });
 
   const transcripcion = conversacion
     .map((m) => (m.role === "user" ? "Candidato: " : "Entrevistador: ") + m.content)

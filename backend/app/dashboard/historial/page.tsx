@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Inbox, SearchX } from "lucide-react";
+import { Inbox, SearchX, Download, Lock } from "lucide-react";
 
 type Application = {
   id: string;
@@ -46,6 +46,7 @@ export default function HistorialPage() {
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("TODAS");
+  const [analiticaAvanzada, setAnaliticaAvanzada] = useState(false);
 
   useEffect(() => {
     async function cargar() {
@@ -57,6 +58,7 @@ export default function HistorialPage() {
           return;
         }
         setApplications(data.applications ?? []);
+        setAnaliticaAvanzada(data.analiticaAvanzada ?? false);
       } catch (err) {
         console.error("Error cargando historial:", err);
         setMensaje("No se pudo cargar el historial — revisa la consola");
@@ -89,12 +91,34 @@ export default function HistorialPage() {
   });
 
   return (
-    <>
-      <div className="ap-page-header">
-        <h1 className="ap-page-title">Mis postulaciones</h1>
-        <p className="ap-page-sub">
-          {hoy} · {applications.length} en total
-        </p>
+    <div className="ap-glow-bg">
+      <div className="ap-page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+        <div>
+          <h1 className="ap-page-title">Mis postulaciones</h1>
+          <p className="ap-page-sub">
+            {hoy} · {applications.length} en total
+          </p>
+        </div>
+        {analiticaAvanzada ? (
+          <a
+            className="ap-button-ghost"
+            href="/api/applications/exportar"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}
+          >
+            <Download size={14} /> Exportar CSV
+          </a>
+        ) : (
+          <span
+            title="Exportar tu historial es una función premium"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0,
+              fontSize: 12.5, color: "var(--text-muted)", padding: "8px 14px",
+              borderRadius: "var(--radius)", background: "var(--bg-elevated-2)",
+            }}
+          >
+            <Lock size={13} /> Exportar CSV
+          </span>
+        )}
       </div>
 
       <div className="ap-toolbar">
@@ -181,6 +205,6 @@ export default function HistorialPage() {
           </table>
         )}
       </div>
-    </>
+    </div>
   );
 }
