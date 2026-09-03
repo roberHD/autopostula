@@ -99,6 +99,9 @@ model User {
   // opera en Chile), para poder mandarlo a registrar su tarjeta y suscribirlo
   // sin tener que crear el cliente de nuevo cada vez.
   flowCustomerId String? @map("flow_customer_id")
+  // ── recuperación de contraseña ──
+  resetToken       String?   @unique @map("reset_token")
+  resetTokenExpiry DateTime? @map("reset_token_expiry")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
