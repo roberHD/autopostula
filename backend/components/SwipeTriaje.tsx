@@ -8,18 +8,23 @@ import { Check, X } from "lucide-react";
 // onboarding como, más adelante, para la banda gris del scorer (§6) -- por eso
 // no sabe nada de dónde salen los items ni de qué endpoint los guarda, solo
 // recibe la lista y un callback.
-export type ItemSwipe = { id: string; titulo: string };
+export type ItemSwipe = { id: string; titulo: string; [extra: string]: unknown };
 
 export function SwipeTriaje({
   items,
   onDecidir,
   onTerminar,
   pregunta = (titulo: string) => `¿Postularías a un trabajo de "${titulo}"?`,
+  renderDetalle,
 }: {
   items: ItemSwipe[];
   onDecidir: (item: ItemSwipe, veredicto: "SI" | "NO") => void | Promise<void>;
   onTerminar: () => void;
   pregunta?: (titulo: string) => string;
+  // Contenido extra por debajo del título -- la banda gris lo usa para
+  // mostrar empresa, por qué cayó ahí, y un link a la oferta real; el triaje
+  // de onboarding no lo necesita y lo deja sin usar.
+  renderDetalle?: (item: ItemSwipe) => React.ReactNode;
 }) {
   const [indice, setIndice] = useState(0);
   const [enviando, setEnviando] = useState(false);
@@ -72,6 +77,7 @@ export function SwipeTriaje({
       >
         <p style={{ fontSize: 18, fontWeight: 700, textTransform: "capitalize" }}>{actual.titulo}</p>
       </div>
+      {renderDetalle && <div style={{ marginBottom: 16 }}>{renderDetalle(actual)}</div>}
       <p style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", marginBottom: 20 }}>
         {pregunta(actual.titulo)}
       </p>

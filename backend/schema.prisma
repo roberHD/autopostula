@@ -339,6 +339,11 @@ model SearchPreferences {
   // cada recompilación e invalida el caché de veredictos del scorer (§6).
   perfilCompilado Json?    @map("perfil_compilado")
   versionPerfil   Int      @default(0) @map("version_perfil")
+  // Flag de transición (§13: "no borrar coincideFiltros hasta que el scorer
+  // esté validado -- dejar las dos rutas conviviendo detrás de un flag").
+  // Default false a propósito: activar el scorer nuevo no debe cambiarle el
+  // comportamiento a nadie hasta que lo prenda a propósito.
+  usarScorerLocal Boolean  @default(false) @map("usar_scorer_local")
   actualizadoEn   DateTime @updatedAt @map("actualizado_en")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -389,6 +394,14 @@ model DecisionOferta {
   userId      String         @map("user_id")
   jobOfferId  String?        @map("job_offer_id") // null si viene del triaje de onboarding
   tituloCrudo String         @map("titulo_crudo")
+  // Solo se llenan para BANDA_GRIS -- JobOffer todavía nace solo al postular
+  // (§9.3 plantea que pase a ser el corpus de avistamientos, pero eso es un
+  // cambio más grande que se deja para después). Mientras tanto, la URL vive
+  // acá directo: es lo mínimo que necesita la aprobación para volver a la
+  // extensión (§8.6).
+  url         String?
+  empresa     String?
+  plataforma  String?
   scoreLocal  Int?           @map("score_local") // el puntaje que la dejó en gris (§6)
   razones     Json? // por qué cayó ahí -- para mostrárselo al usuario
   fuente      FuenteDecision

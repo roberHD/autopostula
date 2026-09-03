@@ -210,6 +210,10 @@ async function actualizarFiltrosDesdeBackend(token) {
         incTags: data.filtrosBusqueda.palabrasIncluir || [],
         excTags: data.filtrosBusqueda.palabrasExcluir || [],
         filtrosBusqueda: filtros,
+        // Scorer local (§6) -- se refresca acá también (no solo al abrir el
+        // popup) para que la búsqueda automática use el perfil compilado más
+        // reciente sin depender de que alguien haya abierto el popup antes.
+        scorer: data.scorer || (config && config.scorer) || null,
       }
     });
     // Se devuelve directo (no solo se guarda en storage) para que
@@ -372,6 +376,32 @@ async function reportarTitulosVistosBackend(titulos, plataforma) {
   }
 }
 
+// ── Reportar oferta en banda gris (scorer local, §6) ─────────────────────
+// A diferencia de reportarTitulosVistosBackend (best-effort), acá sí importa
+// que llegue: es lo que arma la cola de decisión del usuario (§8). Si falla,
+// se avisa por consola pero no se bloquea el escaneo por esto.
+async function reportarBandaGrisBackend(oferta) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return;
+
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/banda-gris', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + autopostulaToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(oferta)
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('[AP] Backend rechazó la oferta en banda gris:', data.error || res.status);
+    }
+  } catch (e) {
+    console.warn('[AP] Error de red reportando banda gris:', e);
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   if (msg.type === 'OPEN_AND_APPLY') {
     queue.push({ url: msg.url, titulo: msg.titulo });
@@ -383,6 +413,9 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   }
   if (msg.type === 'REPORTAR_TITULOS_VISTOS') {
     reportarTitulosVistosBackend(msg.titulos, msg.plataforma);
+  }
+  if (msg.type === 'REPORTAR_BANDA_GRIS') {
+    reportarBandaGrisBackend(msg.oferta);
   }
   if (msg.type === 'ACTUALIZAR_ESTADO') {
     actualizarEstadoBackend(msg.datos).then(sendResponse);

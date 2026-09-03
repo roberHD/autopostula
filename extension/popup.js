@@ -15,6 +15,9 @@ let locTags = [];
 // web (/dashboard/filtros) vía /api/extension/perfil, igual que el resto del
 // perfil. Esto es lo último que se trajo de ahí (o lo cacheado localmente).
 let filtrosBusquedaRemoto = { modalidad: 'cualquiera', jornada: 'cualquiera' };
+// Scorer local (docs/rediseno-filtrado-ofertas.md §6) -- apagado por defecto
+// hasta que el propio backend diga que hay perfil compilado Y el flag activo.
+let scorerRemoto = { usarScorerLocal: false, perfilCompilado: null, versionPerfil: 0 };
 let infoItems = [];   // [{id, texto}] — datos libres del candidato para que la IA los use como contexto
 
 // Perfil traído automáticamente desde la cuenta web (vía token) — reemplaza
@@ -216,6 +219,9 @@ async function cargarPerfilRemoto(mostrarToast) {
       renderTags();
       renderFiltrosBusqueda();
     }
+    if (data.scorer) {
+      scorerRemoto = data.scorer;
+    }
 
     renderPerfilCard();
     guardarConfigLocal(); // persiste el perfil y los filtros recién traídos para que content.js los use ya mismo
@@ -337,6 +343,7 @@ function construirConfig(activeOverride) {
     excTags,
     locTags,
     filtrosBusqueda: filtrosBusquedaRemoto,
+    scorer: scorerRemoto,
     info: infoItems,
     modoRevision: document.getElementById('toggle-revision')?.checked || false,
     usarIAFiltros: document.getElementById('toggle-ia-filtros')?.checked || false,
@@ -407,6 +414,7 @@ function loadState() {
     excTags = cfg.excTags || DEFAULTS.excTags;
     locTags = cfg.locTags || DEFAULTS.locTags;
     filtrosBusquedaRemoto = cfg.filtrosBusqueda || { modalidad: 'cualquiera', jornada: 'cualquiera' };
+    scorerRemoto = cfg.scorer || { usarScorerLocal: false, perfilCompilado: null, versionPerfil: 0 };
 
     if (cfg.info) {
       infoItems = cfg.info;

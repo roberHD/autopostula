@@ -89,6 +89,15 @@ AP.reportarTitulosVistos = function (titulos, plataforma) {
   }
 };
 
+// ── Reportar oferta en banda gris al backend (scorer local, §6) ──────────
+AP.reportarBandaGris = function (oferta) {
+  try {
+    chrome.runtime.sendMessage({ type: 'REPORTAR_BANDA_GRIS', oferta: oferta });
+  } catch (e) {
+    console.warn('[AP] No se pudo avisar al background (banda gris):', e);
+  }
+};
+
 AP.actualizarEstadoPostulacion = function (datos) {
   return new Promise(resolve => {
     try {
@@ -275,6 +284,30 @@ AP.puntuarOferta = function (campos, perfil) {
   if (!razones.length) razones.push('sin señales claras');
 
   return { score: score, banda: banda, razones: razones };
+};
+
+// Portal-agnóstico: cada adaptador arma sus propios "campos" (título, empresa,
+// cuerpo, ubicación -- lo que pueda leer sin abrir el aviso) y llama acá. Si
+// el scorer local está activo (AP.cfg.scorer.usarScorerLocal) y hay perfil
+// compilado, puntúa con AP.puntuarOferta; si no, cae al filtro viejo
+// (coincideFiltros) tratando cualquier "pasa" como banda 'postular' -- así
+// las dos rutas conviven detrás del flag sin que el adaptador tenga que saber
+// cuál está activa (§13: "no borrar coincideFiltros hasta que el scorer esté
+// validado").
+AP.evaluarOferta = function (campos) {
+  const scorerCfg = AP.cfg && AP.cfg.scorer;
+  if (scorerCfg && scorerCfg.usarScorerLocal && scorerCfg.perfilCompilado) {
+    const resultado = AP.puntuarOferta(campos, scorerCfg.perfilCompilado);
+    return { banda: resultado.banda, score: resultado.score, razones: resultado.razones, usoScorer: true };
+  }
+  const textoCompleto = [campos.titulo, campos.empresa, campos.cuerpo].filter(Boolean).join(' ');
+  const pasaFiltroViejo = AP.coincideFiltros(textoCompleto, campos.ubicacion);
+  return {
+    banda: pasaFiltroViejo ? 'postular' : 'descartar',
+    score: null,
+    razones: pasaFiltroViejo ? [] : ['no calza con tus filtros de búsqueda'],
+    usoScorer: false,
+  };
 };
 
 // ── CV / estilo / objetivo laboral (para el filtro inteligente y los

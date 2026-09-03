@@ -17,6 +17,7 @@ import {
   X,
   Filter,
   Crown,
+  Inbox,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
@@ -45,6 +46,14 @@ export default function Sidebar({ userName }: { userName: string }) {
   const grupoActivo = GRUPO_ENTRENAR.items.some((i) => i.href === pathname);
   const [grupoAbierto, setGrupoAbierto] = useState(grupoActivo);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [pendientesBandaGris, setPendientesBandaGris] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/banda-gris")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setPendientesBandaGris(data?.pendientes?.length ?? 0))
+      .catch(() => {});
+  }, [pathname]);
 
   // Cierra el drawer solo en mobile al navegar — en desktop nunca está "abierto"
   // porque el botón que lo activa está oculto por CSS.
@@ -106,6 +115,24 @@ export default function Sidebar({ userName }: { userName: string }) {
             </Link>
           );
         })}
+
+        <Link
+          href="/dashboard/por-decidir"
+          className={"ap-nav-item" + (pathname === "/dashboard/por-decidir" ? " ap-nav-item-active" : "")}
+        >
+          <Inbox size={17} strokeWidth={1.8} style={{ width: 17, height: 17, flexShrink: 0 }} />
+          Por decidir
+          {pendientesBandaGris > 0 && (
+            <span
+              style={{
+                marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#fff",
+                background: "var(--chart-4)", borderRadius: 999, padding: "1px 7px", minWidth: 18, textAlign: "center",
+              }}
+            >
+              {pendientesBandaGris}
+            </span>
+          )}
+        </Link>
 
         <button
           type="button"

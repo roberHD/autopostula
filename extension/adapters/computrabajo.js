@@ -10,7 +10,7 @@
 const DELAY = 3000;
 const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos, llamarBackendIA,
         cargarCV, construirMensajesCV, cargarEstiloProfesional,
-        obtenerObjetivoLaboral, clasificarOfertasIA, coincideFiltros,
+        obtenerObjetivoLaboral, clasificarOfertasIA,
         actualizarEstadoPostulacion, analizarYResponder,
         mostrarRevision, setVal, limitarTexto, esVisible, seleccionarOpcion } = window.AP;
 
@@ -64,10 +64,29 @@ function extraerUbicacion(tarjeta) {
   return n(tarjeta.innerText || '');
 }
 
-// ── Filtrar tarjeta ───────────────────────────────────────────
-function pasa(tarjeta) {
-  if (!AP.cfg) return false;
-  return coincideFiltros(tarjeta.innerText || '', extraerUbicacion(tarjeta));
+// ── Empresa de una tarjeta ──────────────────────────────────────
+// Verificado a mano contra el sitio real (2026-09-04): el link de la empresa
+// trae el atributo offer-grid-article-company-url, estable independiente del
+// hash de estilo del momento.
+function extraerEmpresa(tarjeta) {
+  const el = tarjeta.querySelector('[offer-grid-article-company-url]');
+  return (el && el.textContent && el.textContent.trim()) || '';
+}
+
+// ── Evaluar tarjeta (scorer local si está activo, si no el filtro viejo) ──
+// docs/rediseno-filtrado-ofertas.md §6 -- ver AP.evaluarOferta en core.js.
+function evaluarTarjeta(tarjeta) {
+  if (!AP.cfg) return { banda: 'descartar', score: null, razones: ['extensión sin configurar'] };
+  const campos = {
+    titulo: tituloDeTarjeta(tarjeta),
+    empresa: extraerEmpresa(tarjeta),
+    // El cuerpo del aviso no está disponible a nivel de tarjeta (recién se lee
+    // al abrir, en extraerTextoAviso) -- se deja vacío acá, el scorer igual
+    // funciona bien porque el título pesa x3 contra el x0.5 del cuerpo.
+    cuerpo: '',
+    ubicacion: extraerUbicacion(tarjeta),
+  };
+  return AP.evaluarOferta(campos);
 }
 
 // ── Label de un campo ─────────────────────────────────────────
@@ -540,8 +559,27 @@ async function escanear() {
     // Se guarda el título se haya matcheado o no con los filtros -- antes esto se
     // tiraba a la basura si no pasaba (ver docs/rediseno-filtrado-ofertas.md, §7.2).
     titulosVistos.push(titulo);
-    if (pasa(t)) {
+
+    const resultado = evaluarTarjeta(t);
+    if (resultado.banda === 'postular') {
       pendientes.push({t, id, idx, titulo});
+    } else if (resultado.banda === 'gris') {
+      // Banda gris (§8): no se descarta ni se postula sola -- va a la cola de
+      // decisión del usuario en el dashboard.
+      AP.vistos.add(id);
+      const a = t.querySelector('h2 a, a[href*="oferta"], a[href*="trabajo"]') || t.querySelector('a');
+      const url = a && a.href.split('#')[0] || '';
+      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'En banda gris — revisar en el dashboard'});
+      AP.reportarBandaGris({
+        titulo, url, plataforma: 'Computrabajo',
+        empresa: extraerEmpresa(t) || null,
+        scoreLocal: resultado.score, razones: resultado.razones,
+      });
+    } else {
+      // Descartada -- con razón real si vino del scorer (§13: "el log de
+      // descarte hoy no explica nada"), o el mensaje genérico del filtro viejo.
+      AP.vistos.add(id);
+      addLog({ts:Date.now(), status:'skip', title:titulo, url:'', uid:id, reason:(resultado.razones && resultado.razones[0]) || 'No calza con tus filtros'});
     }
   });
   reportarTitulosVistos(titulosVistos, 'Computrabajo');

@@ -15,7 +15,7 @@
 'use strict';
 
 const DELAY = 3000;
-const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos, coincideFiltros,
+const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos,
         analizarYResponder, mostrarRevision, setVal, limitarTexto, seleccionarOpcion } = window.AP;
 
 // ── Esperar a que aparezca al menos un elemento que matchee el selector ──
@@ -63,10 +63,31 @@ function getUbicacionDeTarjeta(a) {
   return (contenedor && contenedor.textContent.trim()) || '';
 }
 
-function pasa(a) {
-  if (!AP.cfg) return false;
-  const texto = (a.textContent || '');
-  return coincideFiltros(texto, getUbicacionDeTarjeta(a));
+// Empresa de una tarjeta -- las clases son hashes de styled-components (ver
+// nota de arriba), así que en vez de una clase se busca por patrón: el <h3>
+// que NO es la fecha ("Actualizado hace...") dentro del bloque de cabecera de
+// la tarjeta (que sí tiene un id estable, con el id de la oferta incrustado).
+function getEmpresaDeTarjeta(a) {
+  const id = getIdDeTarjeta(a);
+  const contenedor = a.querySelector('#header-col-job-posting-' + id) || a;
+  const h3s = [...contenedor.querySelectorAll('h3')];
+  const candidato = h3s.find((h) => !/hace\s+\d/i.test(h.textContent || ''));
+  return (candidato && candidato.textContent.trim()) || '';
+}
+
+// ── Evaluar tarjeta (scorer local si está activo, si no el filtro viejo) ──
+// docs/rediseno-filtrado-ofertas.md §6 -- ver AP.evaluarOferta en core.js.
+function evaluarTarjeta(a) {
+  if (!AP.cfg) return { banda: 'descartar', score: null, razones: ['extensión sin configurar'] };
+  const campos = {
+    titulo: getTituloDeTarjeta(a),
+    empresa: getEmpresaDeTarjeta(a),
+    // El cuerpo del aviso no está disponible a nivel de tarjeta -- se deja
+    // vacío, el título (peso x3) sigue siendo la señal dominante.
+    cuerpo: '',
+    ubicacion: getUbicacionDeTarjeta(a),
+  };
+  return AP.evaluarOferta(campos);
 }
 
 // ── Detectar postulación exitosa ──────────────────────────────────
@@ -352,7 +373,22 @@ async function escanear() {
     // Se guarda el título se haya matcheado o no con los filtros (ver
     // docs/rediseno-filtrado-ofertas.md, §7.2).
     titulosVistos.push(titulo);
-    if (pasa(a)) pendientes.push({ a, id, titulo, url: a.href });
+
+    const resultado = evaluarTarjeta(a);
+    if (resultado.banda === 'postular') {
+      pendientes.push({ a, id, titulo, url: a.href });
+    } else if (resultado.banda === 'gris') {
+      AP.vistos.add(id);
+      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: 'En banda gris — revisar en el dashboard' });
+      AP.reportarBandaGris({
+        titulo, url: a.href, plataforma: 'Laborum',
+        empresa: getEmpresaDeTarjeta(a) || null,
+        scoreLocal: resultado.score, razones: resultado.razones,
+      });
+    } else {
+      AP.vistos.add(id);
+      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros' });
+    }
   });
   reportarTitulosVistos(titulosVistos, 'Laborum');
 
