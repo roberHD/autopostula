@@ -188,19 +188,50 @@ model JobPlatform {
 // rolCanonico arrancan iguales a formaCruda -- el parser determinista (§7.3) y la
 // agrupación con IA (§7.4) los van refinando después, en batch, no en cada escritura.
 model TituloCanonico {
-  id            String   @id @default(uuid())
-  formaCruda    String   @unique @map("forma_cruda")
-  formaLimpia   String   @map("forma_limpia")
-  rolCanonico   String?  @map("rol_canonico")
-  frecuencia    Int      @default(1)
-  platformId    String?  @map("platform_id")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id            String       @id @default(uuid())
+  formaCruda    String       @unique @map("forma_cruda")
+  formaLimpia   String       @map("forma_limpia")
+  rolCanonico   String?      @map("rol_canonico")
+  // ── La llave del sistema ──
+  // Código CIUO-08.CL de 4 dígitos. Es lo que une catálogo y cosecha: las filas
+  // del catálogo nacen con él poblado (§7.1) y las cosechadas lo reciben al ser
+  // clasificadas (§7.4). Todo el matching por rol se hace contra este campo, no
+  // contra strings. Ver docs/rediseno-filtrado-ofertas.md §7.1/§9.1.
+  ciuo          String?      @db.VarChar(4)
+  // De dónde salió esta fila. Las del catálogo oficial nacen con ciuo ya
+  // poblado y son la capa canónica; las cosechadas nacen sin él y se
+  // clasifican contra las primeras (§7.4).
+  origen        OrigenTitulo @default(COSECHADO)
+  codigoOficial String?      @map("codigo_oficial") // código de perfil ChileValora, si aplica
+  frecuencia    Int          @default(1) // solo significativa en COSECHADO
+  platformId    String?      @map("platform_id")
+  actualizadoEn DateTime     @updatedAt @map("actualizado_en")
 
   platform JobPlatform? @relation(fields: [platformId], references: [id])
 
-  @@index([rolCanonico])
+  @@index([ciuo])
   @@index([frecuencia])
+  @@index([origen, ciuo]) // para "títulos sin clasificar" del job de §7.4
   @@map("titulos_canonicos")
+}
+
+// Los 430 grupos primarios del CIUO-08.CL, con su jerarquía. Tabla chica y fija.
+// Sirve para nombrar roles de forma legible y para calcular vecindad entre
+// roles en el triaje (§8.3) -- dos códigos del mismo subgrupo son vecinos por
+// construcción, sin IA ni embeddings.
+model GrupoCiuo {
+  codigo    String @id @db.VarChar(4) // "5223"
+  nombre    String // "Vendedores y asistentes de venta de tiendas..."
+  subgrupo  String @db.VarChar(3) // "522" -- derivado, para vecindad
+  granGrupo String @map("gran_grupo") @db.VarChar(1) // "5" -- derivado
+
+  @@index([subgrupo])
+  @@map("grupos_ciuo")
+}
+
+enum OrigenTitulo {
+  CATALOGO_OFICIAL // CIUO-08.CL o ChileValora -- la capa canónica (§7.1)
+  COSECHADO // visto por la extensión en un portal real (§7.2)
 }
 
 model PlatformAccount {
