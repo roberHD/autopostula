@@ -144,7 +144,7 @@ model Subscription {
   periodoInicio          DateTime?         @map("periodo_inicio")
   periodoFin             DateTime?         @map("periodo_fin")
 
-  user     User      @relation(fields: [userId], references: [id])
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan     Plan      @relation(fields: [planId], references: [id])
   payments Payment[]
 
@@ -159,7 +159,7 @@ model Payment {
   estado          EstadoPago @default(PAGADO)
   fecha           DateTime   @default(now())
 
-  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@map("payments")
 }
@@ -207,11 +207,10 @@ model PlatformAccount {
   id                    String   @id @default(uuid())
   userId                String   @map("user_id")
   platformId            String   @map("platform_id")
-  credencialesCifradas  String?  @map("credenciales_cifradas")
   activa                Boolean  @default(true)
   conectadaEn           DateTime @default(now()) @map("conectada_en")
 
-  user         User          @relation(fields: [userId], references: [id])
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform     JobPlatform   @relation(fields: [platformId], references: [id])
   applications Application[]
 
@@ -244,7 +243,7 @@ model CvProfile {
   experiencia         Json?
   habilidades         Json?
 
-  user         User          @relation(fields: [userId], references: [id])
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   applications Application[]
 
   @@map("cv_profiles")
@@ -271,7 +270,7 @@ model StyleProfile {
   confirmado           Boolean  @default(false)
   creadoEn             DateTime @default(now()) @map("creado_en")
 
-  user               User                     @relation(fields: [userId], references: [id])
+  user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   applications       Application[]
   calibrationAnswers StyleCalibrationAnswer[]
   refinements        StyleRefinement[]
@@ -288,7 +287,7 @@ model SearchPreferences {
   jornada          String   @default("cualquiera")
   actualizadoEn    DateTime @updatedAt @map("actualizado_en")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("search_preferences")
 }
@@ -298,7 +297,7 @@ model AdminProfile {
   userId       String @unique @map("user_id")
   nivelAcceso  String @map("nivel_acceso")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("admin_profiles")
 }
@@ -339,11 +338,11 @@ model Application {
   notaAtencion        String?           @map("nota_atencion")
   enviadaEn           DateTime          @default(now()) @map("enviada_en")
 
-  user             User                       @relation(fields: [userId], references: [id])
+  user             User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobOffer         JobOffer                   @relation(fields: [jobOfferId], references: [id])
-  platformAccount  PlatformAccount            @relation(fields: [platformAccountId], references: [id])
-  cvProfile        CvProfile                  @relation(fields: [cvProfileId], references: [id])
-  styleProfile     StyleProfile?              @relation(fields: [styleProfileId], references: [id])
+  platformAccount  PlatformAccount            @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
+  cvProfile        CvProfile                  @relation(fields: [cvProfileId], references: [id], onDelete: Cascade)
+  styleProfile     StyleProfile?              @relation(fields: [styleProfileId], references: [id], onDelete: Cascade)
   statusHistory    ApplicationStatusHistory[]
   answers          ApplicationAnswer[]
 
@@ -356,7 +355,7 @@ model ApplicationStatusHistory {
   estado         EstadoPostulacion
   cambiadoEn     DateTime          @default(now()) @map("cambiado_en")
 
-  application Application @relation(fields: [applicationId], references: [id])
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@map("application_status_history")
 }
@@ -367,7 +366,7 @@ model AiUsageLog {
   tipo      String
   creadoEn  DateTime @default(now()) @map("creado_en")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("ai_usage_logs")
 }
@@ -384,7 +383,7 @@ model StyleCalibrationAnswer {
   opcionElegida    String          @db.Text @map("opcion_elegida")
   respondidoEn     DateTime        @default(now()) @map("respondido_en")
 
-  styleProfile StyleProfile @relation(fields: [styleProfileId], references: [id])
+  styleProfile StyleProfile @relation(fields: [styleProfileId], references: [id], onDelete: Cascade)
 
   @@map("style_calibration_answers")
 }
@@ -399,7 +398,7 @@ model ApplicationAnswer {
   tema           String?
   respondidoEn   DateTime @default(now()) @map("respondido_en")
 
-  application Application @relation(fields: [applicationId], references: [id])
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@map("application_answers")
 }
@@ -414,7 +413,7 @@ model StyleRefinement {
   estado            EstadoRefinamiento @default(PENDIENTE)
   creadoEn          DateTime           @default(now()) @map("creado_en")
 
-  styleProfile StyleProfile @relation(fields: [styleProfileId], references: [id])
+  styleProfile StyleProfile @relation(fields: [styleProfileId], references: [id], onDelete: Cascade)
 
   @@map("style_refinements")
 }

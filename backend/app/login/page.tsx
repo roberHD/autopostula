@@ -8,7 +8,7 @@ import { Eye, EyeOff, Zap, FileText, LineChart } from "lucide-react";
 // useSearchParams() obliga a Next a renderizar esto dentro de un <Suspense> en
 // el build de producción (si no, "next build" falla al pre-renderizar /login)
 // — se aísla acá para no forzar eso sobre toda la página.
-function ErrorDesdeQuery({ onError }: { onError: (msg: string) => void }) {
+function ErrorDesdeQuery({ onError, onInfo }: { onError: (msg: string) => void; onInfo: (msg: string) => void }) {
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -16,6 +16,9 @@ function ErrorDesdeQuery({ onError }: { onError: (msg: string) => void }) {
     if (errorParam) {
       console.error("Error de Auth.js:", errorParam);
       onError(`Error: ${errorParam} — revisa la terminal donde corre "npm run dev"`);
+    }
+    if (searchParams.get("eliminada") === "1") {
+      onInfo("Tu cuenta fue eliminada correctamente.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -33,6 +36,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [error, setError] = useState("");
+  const [infoMsg, setInfoMsg] = useState("");
   const [enviando, setEnviando] = useState(false);
   const router = useRouter();
 
@@ -61,7 +65,7 @@ export default function LoginPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <Suspense fallback={null}>
-        <ErrorDesdeQuery onError={setError} />
+        <ErrorDesdeQuery onError={setError} onInfo={setInfoMsg} />
       </Suspense>
       <style>{`
         @media (max-width: 900px) {
@@ -186,6 +190,9 @@ export default function LoginPage() {
 
             {error && (
               <p style={{ fontSize: 12, color: "#dc2626", marginBottom: 14 }}>{error}</p>
+            )}
+            {!error && infoMsg && (
+              <p style={{ fontSize: 12, color: "#16a34a", marginBottom: 14 }}>{infoMsg}</p>
             )}
 
             <button
