@@ -6,11 +6,24 @@
 // ═══════════════════════════════════════════════════════════════
 'use strict';
 
-// Avisa a la página que la extensión está instalada, para que la web decida
-// si mostrar el botón de "conectar automáticamente" o el flujo manual.
-window.dispatchEvent(new CustomEvent('autopostula:extension-presente', {
-  detail: { version: chrome.runtime.getManifest().version }
-}));
+const VERSION = chrome.runtime.getManifest().version;
+
+// Marca en el DOM, no un evento: el content script corre en document_start,
+// mucho antes de que React hidrate y registre sus listeners, así que un evento
+// suelto se dispara al vacío y la web concluye que no hay extensión. El
+// atributo queda puesto y la página lo lee cuando le toca, sin carreras.
+document.documentElement.dataset.autopostulaExtension = VERSION;
+
+function avisarPresencia() {
+  window.dispatchEvent(new CustomEvent('autopostula:extension-presente', {
+    detail: { version: VERSION }
+  }));
+}
+
+// Se mantiene el evento para la página que ya esté escuchando, y además se
+// responde a un ping explícito por si la web se montó después del inyectado.
+avisarPresencia();
+window.addEventListener('autopostula:ping', avisarPresencia);
 
 // La web dispara este evento con el token cuando el usuario hace clic en
 // "Conectar extensión automáticamente". Solo escuchamos eventos del DOM de

@@ -485,7 +485,17 @@ function PasoExtension({ onSiguiente }: { onSiguiente: () => void }) {
     window.addEventListener("autopostula:extension-presente", onDetectada);
     window.addEventListener("autopostula:conectado", onConectado);
     window.addEventListener("autopostula:error-conexion", onError);
-    // Si no llega el aviso de presencia en ~700ms, asumimos que no está instalada.
+
+    // bridge.js se inyecta en document_start, o sea antes de que React hidrate:
+    // su evento de presencia ya pasó cuando llegamos acá. Por eso lo primero es
+    // leer la marca que deja en el DOM, y recién después pedirle que se anuncie.
+    if (document.documentElement.dataset.autopostulaExtension) {
+      onDetectada();
+    } else {
+      window.dispatchEvent(new CustomEvent("autopostula:ping"));
+    }
+
+    // Si igual no contesta, asumimos que no está instalada.
     const t = setTimeout(() => setExtensionDetectada((v) => (v === null ? false : v)), 700);
     return () => {
       window.removeEventListener("autopostula:extension-presente", onDetectada);

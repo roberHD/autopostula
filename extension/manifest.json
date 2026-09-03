@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutoPostula",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "description": "Postulaci\u00f3n autom\u00e1tica inteligente para Computrabajo y Laborum. Powered by IA.",
   "permissions": [
     "storage",
@@ -52,7 +52,7 @@
       "js": [
         "bridge.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "action": {
