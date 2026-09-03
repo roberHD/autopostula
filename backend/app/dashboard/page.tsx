@@ -11,7 +11,7 @@ import {
   Pie,
   PieChart,
 } from "recharts";
-import { ArrowUpRight, ArrowDownRight, Sparkles } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Sparkles, Send, CheckCheck, Trophy, Target } from "lucide-react";
 
 type Resumen = {
   postulacionesEnviadas: number;
@@ -123,6 +123,8 @@ export default function InicioPage() {
       delta: `${Math.abs(datos.cambioSemanal)}%`,
       up: datos.cambioSemanal >= 0,
       hint: "vs. semana anterior",
+      Icon: Send,
+      color: "var(--chart-1)",
     },
     {
       label: "Tasa de respuesta",
@@ -130,6 +132,8 @@ export default function InicioPage() {
       delta: null,
       up: true,
       hint: "empresas que respondieron",
+      Icon: CheckCheck,
+      color: "var(--chart-2)",
     },
     {
       label: "Finalistas",
@@ -137,6 +141,8 @@ export default function InicioPage() {
       delta: null,
       up: true,
       hint: "este mes",
+      Icon: Trophy,
+      color: "var(--chart-4)",
     },
     {
       label: "Match promedio IA",
@@ -144,13 +150,15 @@ export default function InicioPage() {
       delta: null,
       up: true,
       hint: "afinidad con ofertas",
+      Icon: Target,
+      color: "var(--chart-3)",
     },
   ];
 
   const totalPortal = datos.porPortal.reduce((a, b) => a + b.cantidad, 0);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="ap-glow-bg" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div className="ap-page-header" style={{ marginBottom: 0 }}>
         <h1 className="ap-page-title">Inicio</h1>
         <p className="ap-page-sub">
@@ -164,8 +172,17 @@ export default function InicioPage() {
           <div
             key={s.label}
             className="ap-card ap-animate-in"
-            style={{ padding: 20, animationDelay: `${i * 0.05}s` }}
+            style={{ padding: 20, animationDelay: `${i * 0.05}s`, borderTop: `2.5px solid ${s.color}` }}
           >
+            <div
+              style={{
+                width: 26, height: 26, borderRadius: 7, marginBottom: 10,
+                background: `color-mix(in oklch, ${s.color} 16%, transparent)`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <s.Icon size={14} color={s.color} strokeWidth={2.2} />
+            </div>
             <p style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>{s.label}</p>
             <div style={{ marginTop: 8, display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
               <span style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.02em" }}>{s.value}</span>

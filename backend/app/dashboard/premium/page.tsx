@@ -15,15 +15,15 @@ const FILAS: Fila[] = [
   { texto: "Exportar tu historial a CSV", free: false, premium: true },
 ];
 
-function Celda({ valor }: { valor: string | boolean }) {
+function Celda({ valor, destacar }: { valor: string | boolean; destacar?: boolean }) {
   if (typeof valor === "boolean") {
     return valor ? (
-      <Check size={16} color="var(--accent)" strokeWidth={2.5} />
+      <Check size={16} color="var(--chart-3)" strokeWidth={2.5} />
     ) : (
       <span style={{ color: "var(--text-muted)" }}>—</span>
     );
   }
-  return <span style={{ fontWeight: 600 }}>{valor}</span>;
+  return <span style={{ fontWeight: 600, color: destacar ? "var(--chart-3)" : undefined }}>{valor}</span>;
 }
 
 export default function PremiumPage() {
@@ -105,13 +105,14 @@ export default function PremiumPage() {
   }
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header" style={{ textAlign: "center" }}>
         <div
           style={{
             display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12,
             padding: "5px 14px", borderRadius: 999, fontSize: 12, fontWeight: 600,
-            background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)",
+            background: "linear-gradient(90deg, color-mix(in oklch, var(--chart-1) 18%, transparent), color-mix(in oklch, var(--chart-3) 18%, transparent))",
+            color: "var(--accent)",
           }}
         >
           <Sparkles size={13} /> AutoPostula Premium
@@ -136,39 +137,44 @@ export default function PremiumPage() {
           <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 18 }}>Para empezar a postular</p>
         </div>
 
-        {/* Premium */}
+        {/* Premium -- borde degradado: div exterior con el gradiente de fondo
+            + div interior sólido, para simular un borde de varios colores
+            (un border-image con gradiente no deja redondear bien las esquinas). */}
         <div
-          className="ap-section ap-animate-in"
-          style={{
-            marginBottom: 0, position: "relative",
-            border: "1.5px solid var(--accent)",
-            background: "color-mix(in srgb, var(--accent) 5%, var(--bg-elevated))",
-            animationDelay: "0.05s",
-          }}
+          className="ap-gradient-border ap-animate-in"
+          style={{ borderRadius: "var(--radius)", padding: "1.5px", animationDelay: "0.05s" }}
         >
-          <span
-            style={{
-              position: "absolute", top: -11, right: 16,
-              background: "var(--accent)", color: "var(--accent-contrast)",
-              fontSize: 10.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999,
-              textTransform: "uppercase", letterSpacing: "0.04em",
-            }}
+          <div
+            className="ap-section"
+            style={{ marginBottom: 0, position: "relative", height: "100%", boxSizing: "border-box" }}
           >
-            Recomendado
-          </span>
-          <p className="ap-section-title">Premium</p>
-          <p style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
-            $3.990 <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-muted)" }}>/mes</span>
-          </p>
-          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 18 }}>Cancela cuando quieras</p>
-          <button
-            className="ap-button"
-            style={{ width: "100%" }}
-            disabled={redirigiendo}
-            onClick={pasarAPremium}
-          >
-            {redirigiendo ? "Un momento..." : "✨ Pasar a Premium"}
-          </button>
+            <span
+              className="ap-gradient-accent"
+              style={{
+                position: "absolute", top: -11, right: 16,
+                fontSize: 10.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999,
+                textTransform: "uppercase", letterSpacing: "0.04em",
+              }}
+            >
+              Recomendado
+            </span>
+            <p className="ap-section-title">Premium</p>
+            <p style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
+              $3.990 <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-muted)" }}>/mes</span>
+            </p>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 18 }}>Cancela cuando quieras</p>
+            <button
+              className="ap-gradient-accent"
+              style={{
+                width: "100%", border: "none", borderRadius: 8, padding: "9px 16px",
+                fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}
+              disabled={redirigiendo}
+              onClick={pasarAPremium}
+            >
+              {redirigiendo ? "Un momento..." : "✨ Pasar a Premium"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -190,13 +196,13 @@ export default function PremiumPage() {
                   <Celda valor={fila.free} />
                 </td>
                 <td style={{ textAlign: "center" }}>
-                  <Celda valor={fila.premium} />
+                  <Celda valor={fila.premium} destacar />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </>
+    </div>
   );
 }

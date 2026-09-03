@@ -345,6 +345,59 @@
   width: 100%;
 }
 
+/* ── Fondo con resplandor ("Aurora") ─────────────────────
+   Envuelve el contenido de una página para darle algo de vida detrás
+   de las tarjetas -- dos manchas de color muy difuminadas, usando los
+   mismos tonos de --chart-1/--chart-3 que ya se usan en los gráficos.
+   La opacidad es una variable porque en claro se ve sucio con la misma
+   intensidad que en oscuro. */
+.ap-glow-bg {
+  position: relative;
+  --glow-opacity: 16%;
+}
+
+.ap-shell[data-theme="light"] .ap-glow-bg {
+  --glow-opacity: 7%;
+}
+
+.ap-glow-bg::before,
+.ap-glow-bg::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+}
+
+.ap-glow-bg::before {
+  top: -120px;
+  left: 15%;
+  width: 480px;
+  height: 380px;
+  background: color-mix(in oklch, var(--chart-1) var(--glow-opacity), transparent);
+}
+
+.ap-glow-bg::after {
+  top: 60px;
+  right: -10%;
+  width: 520px;
+  height: 420px;
+  background: color-mix(in oklch, var(--chart-3) var(--glow-opacity), transparent);
+}
+
+/* Degradés reutilizables para el plan premium -- mismos 3 tonos que las
+   manchas de fondo, para que se sienta parte del mismo sistema y no un
+   morado plano más. */
+.ap-gradient-border {
+  background: linear-gradient(135deg, var(--chart-1), var(--chart-3), var(--chart-2));
+}
+
+.ap-gradient-accent {
+  background: linear-gradient(90deg, var(--chart-1), var(--chart-2));
+  color: white;
+}
+
 .ap-page-header {
   margin-bottom: 24px;
 }
