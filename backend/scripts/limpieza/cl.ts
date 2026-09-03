@@ -11,10 +11,19 @@
 //
 // Generado a partir de la lista entregada por Roberto el 2026-09-03.
 
+// Formato único para todas las categorías del §7.3, aunque esta lista (la que
+// entregó Roberto) solo tenga datos de comuna/mall/jornada por ahora -- las
+// categorías region/modalidad/contrato/genero/marketing viven en
+// cl-borrador.ts, un archivo aparte para no mezclar su trabajo con un borrador mío.
 export type TerminoLimpieza =
   | { termino: string; tipo: "comuna"; destino: "comuna"; region: string }
   | { termino: string; tipo: "mall"; destino: "descartar" }
-  | { termino: string; tipo: "jornada"; destino: "jornada"; valor: string };
+  | { termino: string; tipo: "jornada"; destino: "jornada"; valor: string }
+  | { termino: string; tipo: "region"; destino: "region"; region: string }
+  | { termino: string; tipo: "modalidad"; destino: "modalidad"; valor: string }
+  | { termino: string; tipo: "contrato"; destino: "contrato"; valor: string }
+  | { termino: string; tipo: "genero"; destino: "descartar" }
+  | { termino: string; tipo: "marketing"; destino: "descartar" };
 
 export const LISTA_LIMPIEZA_CL: TerminoLimpieza[] = [
   // =====================================================

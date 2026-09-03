@@ -3,3 +3,7 @@ node_modules
 .env
 lib/generated
 node_modules
+
+# Salida cruda del scrape semilla (docs/rediseno-filtrado-ofertas.md, §7.1) --
+# local, no versionado, se regenera corriendo scripts/scrape-corpus.ts.
+scripts/data/

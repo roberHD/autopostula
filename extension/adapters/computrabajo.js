@@ -34,6 +34,18 @@ function getId(tarjeta, idx) {
   return 'idx-' + idx;
 }
 
+// ── Título de una tarjeta ───────────────────────────────────────
+// El <h2> trae adentro los badges "Postulado"/"Vista" (ocultos con display:none,
+// pero SIGUEN estando en el DOM) -- textContent los incluye igual aunque estén
+// invisibles, así que hay que leer el texto del <a> del título, no el h2 entero.
+function tituloDeTarjeta(tarjeta) {
+  const h2 = tarjeta.querySelector('h2');
+  if (!h2) return 'Oferta';
+  const a = h2.querySelector('a');
+  const texto = (a ? a.textContent : h2.textContent) || '';
+  return texto.trim() || 'Oferta';
+}
+
 // ── Ubicación de una tarjeta (comuna/ciudad) ───────────────────
 // Intenta leer el elemento específico de ubicación de la tarjeta con los
 // selectores que suele usar Computrabajo; si ninguno calza, cae de vuelta
@@ -524,7 +536,7 @@ async function escanear() {
     if (AP.vistos.has(id)) return;
     const badge = t.querySelector('.postulated:not(.hide), .applied-offer-tag:not(.hide)');
     if (badge && badge.offsetParent !== null) { AP.vistos.add(id); return; }
-    const titulo = (t.querySelector('h2') && t.querySelector('h2').textContent.trim()) || 'Oferta';
+    const titulo = tituloDeTarjeta(t);
     // Se guarda el título se haya matcheado o no con los filtros -- antes esto se
     // tiraba a la basura si no pasaba (ver docs/rediseno-filtrado-ofertas.md, §7.2).
     titulosVistos.push(titulo);
