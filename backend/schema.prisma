@@ -95,6 +95,10 @@ model User {
   // la página, volver más tarde) no tenía forma de saber que ya se había
   // conectado y mandaba a la persona de vuelta a un paso anterior.
   extensionConectada Boolean @default(false) @map("extension_conectada")
+  // Se guarda apenas Stripe crea el customer en el primer checkout, para poder
+  // abrirle después el Billing Portal (cancelar, cambiar tarjeta) sin tener
+  // que pedirle a Stripe que busque por email cada vez.
+  stripeCustomerId String? @map("stripe_customer_id")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]

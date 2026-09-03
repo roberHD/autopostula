@@ -7,9 +7,11 @@ export default function AjustesPage() {
   const [activa, setActiva] = useState(false);
   const [disponibleEnPlan, setDisponibleEnPlan] = useState(false);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
+  const [esPremium, setEsPremium] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [redirigiendo, setRedirigiendo] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
   async function cargar() {
@@ -20,6 +22,7 @@ export default function AjustesPage() {
       setActiva(data.activa);
       setDisponibleEnPlan(data.disponibleEnPlan);
       setPlanNombre(data.planNombre);
+      setEsPremium(data.esPremium ?? false);
       setEmail(data.email);
     } catch (err) {
       console.error("Error cargando ajustes:", err);
@@ -55,6 +58,25 @@ export default function AjustesPage() {
       setMensaje("No se pudo guardar el cambio — revisa la consola");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function irAStripe(ruta: "checkout" | "portal") {
+    setRedirigiendo(true);
+    setMensaje("");
+    try {
+      const res = await fetch(`/api/stripe/${ruta}`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setMensaje(data.error ?? "No se pudo continuar — intenta de nuevo");
+        setRedirigiendo(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      console.error("Error abriendo Stripe:", err);
+      setMensaje("No se pudo continuar — revisa la consola");
+      setRedirigiendo(false);
     }
   }
 
@@ -100,10 +122,17 @@ export default function AjustesPage() {
               >
                 <BadgeCheck size={15} />
               </div>
-              <div>
+              <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Plan actual</p>
                 <p style={{ fontSize: 13, fontWeight: 500 }}>{planNombre ?? "Plan gratuito"}</p>
               </div>
+              <button
+                className={esPremium ? "ap-button-ghost" : "ap-button"}
+                disabled={redirigiendo}
+                onClick={() => irAStripe(esPremium ? "portal" : "checkout")}
+              >
+                {redirigiendo ? "Un momento..." : esPremium ? "Gestionar suscripción" : "✨ Pasar a Premium"}
+              </button>
             </div>
           </div>
         )}

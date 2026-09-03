@@ -22,6 +22,7 @@ export async function GET() {
     activa: user?.busquedaAutomaticaActiva ?? true,
     disponibleEnPlan,
     planNombre: subscripcion?.plan.nombre ?? null,
+    esPremium: subscripcion?.plan.tipo === "PREMIUM",
     email: user?.email ?? null,
   });
 }
