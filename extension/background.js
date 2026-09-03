@@ -5,9 +5,9 @@
 
 console.log('[AP] background.js cargado', new Date().toLocaleTimeString());
 
-// TODO: cuando despliegues a producción, cambia esto por tu dominio real
-// (el mismo que agregues en manifest.json para bridge.js y host_permissions).
-const BACKEND_URL = 'http://localhost:3000';
+// Mismo dominio que host_permissions/content_scripts en manifest.json.
+// Cuando se compre el dominio propio, actualizar ambos archivos juntos.
+const BACKEND_URL = 'https://autopostula.vercel.app';
 
 let queue = [];
 let busy  = false;

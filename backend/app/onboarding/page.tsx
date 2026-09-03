@@ -298,6 +298,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
   const [enviando, setEnviando] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
   const [finalizado, setFinalizado] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const finRef = useRef<HTMLDivElement>(null);
   // React 18 en desarrollo monta cada efecto dos veces a propósito (para pescar
   // efectos sin cleanup) -- sin este guard, la conversación vacía dispara dos
@@ -336,6 +337,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
 
   async function enviar(texto: string) {
     setEnviando(true);
+    setError(null);
     if (texto) setConversacion((prev) => [...prev, { role: "user", content: texto }]);
     try {
       const res = await fetch("/api/style/onboarding/mensaje", {
@@ -344,7 +346,11 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         body: JSON.stringify({ mensaje: texto }),
       });
       const data = await parsearRespuesta(res);
-      if (res.ok) setConversacion((prev) => [...prev, { role: "assistant", content: quitarMarkdown(data.pregunta) }]);
+      if (res.ok) {
+        setConversacion((prev) => [...prev, { role: "assistant", content: quitarMarkdown(data.pregunta) }]);
+      } else {
+        setError(data.error ?? "No se pudo enviar el mensaje.");
+      }
     } finally {
       setEnviando(false);
     }
@@ -352,9 +358,15 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
 
   async function finalizar() {
     setFinalizando(true);
+    setError(null);
     try {
       const res = await fetch("/api/style/onboarding/finalizar", { method: "POST" });
-      if (res.ok) setFinalizado(true);
+      const data = await parsearRespuesta(res);
+      if (res.ok) {
+        setFinalizado(true);
+      } else {
+        setError(data.error ?? "No se pudo generar el perfil.");
+      }
     } finally {
       setFinalizando(false);
     }
@@ -398,6 +410,10 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
         />
         <button className="ap-button" type="submit" disabled={enviando || !input.trim()}>Enviar</button>
       </form>
+
+      {error && (
+        <p style={{ fontSize: 12, color: "#dc2626", marginTop: 8 }}>{error}</p>
+      )}
 
       {finalizado ? (
         <div
