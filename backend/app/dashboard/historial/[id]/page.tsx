@@ -76,7 +76,7 @@ export default function DetalleAplicacionPage() {
   if (!detalle) return null;
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header">
         <p style={{ marginBottom: 6 }}>
           <a href="/dashboard/historial" style={{ color: "var(--text-muted)", fontSize: 12.5 }}>
@@ -158,6 +158,6 @@ export default function DetalleAplicacionPage() {
           </div>
         ))}
       </div>
-    </>
+    </div>
   );
 }

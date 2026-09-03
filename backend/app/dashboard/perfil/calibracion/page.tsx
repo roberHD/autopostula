@@ -41,6 +41,18 @@ const ETIQUETA_TIPO: Record<string, string> = {
   escritura: "Estilo de escritura",
 };
 
+// Mismo criterio que PALETA_PORTALES en el Resumen -- un color distinto
+// por tipo de pregunta en vez de un solo acento repetido siete veces.
+const COLOR_TIPO: Record<string, string> = {
+  comparacion: "var(--chart-1)",
+  historia: "var(--chart-2)",
+  frase: "var(--chart-3)",
+  vocabulario: "var(--chart-4)",
+  formalidad: "var(--chart-5)",
+  prioridad: "var(--chart-1)",
+  escritura: "var(--chart-2)",
+};
+
 export default function CalibracionPage() {
   const [pendientes, setPendientes] = useState<Pregunta[]>([]);
   const [respondidas, setRespondidas] = useState(0);
@@ -112,9 +124,10 @@ export default function CalibracionPage() {
   const preguntaActual = pendientes[0];
   const circunferencia = 97.4;
   const IconoActual = preguntaActual ? ICONO_TIPO[preguntaActual.tipo] ?? MessageSquareQuote : MessageSquareQuote;
+  const colorActual = preguntaActual ? COLOR_TIPO[preguntaActual.tipo] ?? "var(--accent)" : "var(--accent)";
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header">
         <h1 className="ap-page-title">Calibra tu estilo</h1>
         <p className="ap-page-sub">
@@ -155,7 +168,7 @@ export default function CalibracionPage() {
                 <div
                   style={{
                     width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-                    background: "var(--bg-elevated-2)", color: "var(--accent)",
+                    background: `color-mix(in oklch, ${colorActual} 16%, transparent)`, color: colorActual,
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}
                 >
@@ -311,6 +324,6 @@ export default function CalibracionPage() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

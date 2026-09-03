@@ -101,7 +101,7 @@ export default function AjustesPage() {
   }
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header">
         <h1 className="ap-page-title">Ajustes</h1>
         <p className="ap-page-sub">Preferencias de tu cuenta.</p>
@@ -136,7 +136,7 @@ export default function AjustesPage() {
               <div
                 style={{
                   width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                  background: "color-mix(in oklch, var(--accent) 14%, transparent)", color: "var(--accent)",
+                  background: "color-mix(in oklch, var(--chart-4) 16%, transparent)", color: "var(--chart-4)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
@@ -187,7 +187,7 @@ export default function AjustesPage() {
               <div
                 style={{
                   width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                  background: "color-mix(in oklch, var(--accent) 14%, transparent)", color: "var(--accent)",
+                  background: "color-mix(in oklch, var(--chart-5) 16%, transparent)", color: "var(--chart-5)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
@@ -216,6 +216,6 @@ export default function AjustesPage() {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }

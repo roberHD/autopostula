@@ -153,7 +153,7 @@ export default function ConversacionPage() {
   const pct = Math.min(100, Math.round((mensajesUsuario / MINIMO_MENSAJES_PARA_FINALIZAR) * 100));
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header">
         <h1 className="ap-page-title">Tu estilo profesional</h1>
         <p className="ap-page-sub">
@@ -454,7 +454,7 @@ export default function ConversacionPage() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

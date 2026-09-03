@@ -109,7 +109,7 @@ export default function EntrenarIAPage() {
   }
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header">
         <h1 className="ap-page-title">Entrenar IA</h1>
         <p className="ap-page-sub">Ajusta el tono y las respuestas de tu asistente</p>
@@ -255,6 +255,6 @@ export default function EntrenarIAPage() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

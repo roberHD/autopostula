@@ -91,7 +91,7 @@ export default function HistorialPage() {
   });
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
         <div>
           <h1 className="ap-page-title">Mis postulaciones</h1>
@@ -205,6 +205,6 @@ export default function HistorialPage() {
           </table>
         )}
       </div>
-    </>
+    </div>
   );
 }

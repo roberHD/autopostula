@@ -116,7 +116,7 @@ export default function PortalesPage() {
   const masked = token ? `${token.slice(0, 6)}${"•".repeat(20)}${token.slice(-4)}` : "";
 
   return (
-    <>
+    <div className="ap-glow-bg">
       <div className="ap-page-header">
         <h1 className="ap-page-title">Portales conectados</h1>
         <p className="ap-page-sub">
@@ -306,6 +306,6 @@ export default function PortalesPage() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
