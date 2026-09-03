@@ -14,7 +14,6 @@
     "https://computrabajo.cl/*",
     "https://computrabajo.com/*",
     "https://www.laborum.cl/*",
-    "http://localhost:3000/*",
     "https://autopostula.vercel.app/*"
   ],
   "background": {
@@ -46,7 +45,6 @@
     },
     {
       "matches": [
-        "http://localhost:3000/*",
         "https://autopostula.vercel.app/*"
       ],
       "js": [
