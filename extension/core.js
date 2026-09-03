@@ -77,6 +77,18 @@ AP.reportarPostulacion = function (oferta) {
   }
 };
 
+// ── Reportar títulos vistos al backend (cosecha pasiva del corpus de títulos) ──
+// Fire-and-forget, igual que reportarPostulacion: no bloquea el escaneo ni espera
+// respuesta, y si falla no es grave (best-effort). Ver docs/rediseno-filtrado-ofertas.md, §7.2.
+AP.reportarTitulosVistos = function (titulos, plataforma) {
+  if (!titulos || !titulos.length) return;
+  try {
+    chrome.runtime.sendMessage({ type: 'REPORTAR_TITULOS_VISTOS', titulos: titulos, plataforma: plataforma });
+  } catch (e) {
+    console.warn('[AP] No se pudo avisar al background (títulos vistos):', e);
+  }
+};
+
 AP.actualizarEstadoPostulacion = function (datos) {
   return new Promise(resolve => {
     try {
@@ -280,29 +292,26 @@ AP.seleccionarOpcion = function (el) {
   } catch (e) { return false; }
 };
 
-// ── Responder una pregunta puntual con IA (usa perfil + info + CV del backend) ──
-AP.aiResponde = async function (pregunta, contexto, opciones, analisis) {
+// -- IA: analiza la oferta y responde varias preguntas del formulario EN UNA SOLA
+// llamada al backend. Reemplaza a los antiguos AP.aiResponde (una llamada por
+// pregunta) + AP.analizarOferta (otra llamada aparte) -- cada llamada por separado
+// remandaba el CV, el estilo y el aviso completos de nuevo, así que juntarlas en
+// una es lo que más ahorra de todo el rediseño de filtrado (ver docs/rediseno-filtrado-ofertas.md, §10).
+//
+// preguntas: [{ id, pregunta, opciones: string[]|null }] -- puede venir vacío si
+// solo se quiere el análisis (matchScore) sin preguntas de formulario que responder.
+// Devuelve { analisis, respuestas: {[id]: string|null}, error }.
+AP.analizarYResponder = async function (contexto, preguntas) {
+  if (!contexto) return { analisis: null, respuestas: {}, error: null };
   const p = (AP.cfg && AP.cfg.perfil) || {};
   const info = (AP.cfg && AP.cfg.info || []).map(it => it.texto);
-  const data = await AP.llamarBackendIA('responder_pregunta', {
-    pregunta, contexto, opciones, analisis, perfil: p, info
+  const data = await AP.llamarBackendIA('procesar_postulacion', {
+    contexto, perfil: p, info, preguntas: preguntas || []
   });
-  // Se devuelve el error explícitamente (no solo null) para que quien llama pueda
-  // distinguir "el modelo no tenía el dato" de "la llamada falló" (límite del plan,
-  // timeout, red, etc.) y mostrarlo distinto en el panel de revisión.
-  if (data && data.error) return { respuesta: null, error: data.error };
-  return { respuesta: data ? data.respuesta : null, error: null };
-};
-
-// -- IA: analisis previo de la oferta (UNA sola vez por postulacion) --
-// Analiza cargo, empresa, que prioriza la empresa, que fortalezas del candidato calzan mejor,
-// y que tono usar -- para no repetir ese analisis en cada una de las preguntas del formulario.
-AP.analizarOferta = async function (contexto) {
-  if (!contexto) return null;
-  const p = (AP.cfg && AP.cfg.perfil) || {};
-  const info = (AP.cfg && AP.cfg.info || []).map(it => it.texto);
-  const data = await AP.llamarBackendIA('analizar_oferta', { contexto, perfil: p, info });
-  return data && !data.error ? data : null;
+  if (!data || data.error) return { analisis: null, respuestas: {}, error: data && data.error };
+  const respuestas = {};
+  (data.respuestas || []).forEach(r => { if (r && r.id) respuestas[r.id] = r.respuesta; });
+  return { analisis: data.analisis || null, respuestas, error: null };
 };
 
 // ── Panel de revisión antes de enviar (editable) — genérico, cualquier

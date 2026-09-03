@@ -173,8 +173,31 @@ model JobPlatform {
 
   platformAccounts PlatformAccount[]
   jobOffers        JobOffer[]
+  titulosCanonicos TituloCanonico[]
 
   @@map("job_platforms")
+}
+
+// El corpus compilado de títulos de cargo (ver docs/rediseno-filtrado-ofertas.md, §7 y
+// §9.1). GLOBAL, no por usuario -- un título canónico vale para todos, así que el
+// usuario N+1 es casi gratis. Se llena por cosecha pasiva desde la extensión (§7.2):
+// cada escaneo reporta los títulos que vio, pasaran el filtro o no. formaLimpia y
+// rolCanonico arrancan iguales a formaCruda -- el parser determinista (§7.3) y la
+// agrupación con IA (§7.4) los van refinando después, en batch, no en cada escritura.
+model TituloCanonico {
+  id            String   @id @default(uuid())
+  formaCruda    String   @unique @map("forma_cruda")
+  formaLimpia   String   @map("forma_limpia")
+  rolCanonico   String?  @map("rol_canonico")
+  frecuencia    Int      @default(1)
+  platformId    String?  @map("platform_id")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  platform JobPlatform? @relation(fields: [platformId], references: [id])
+
+  @@index([rolCanonico])
+  @@index([frecuencia])
+  @@map("titulos_canonicos")
 }
 
 model PlatformAccount {

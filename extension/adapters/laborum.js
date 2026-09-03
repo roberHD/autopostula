@@ -15,8 +15,8 @@
 'use strict';
 
 const DELAY = 3000;
-const { msg, sleep, n, addLog, reportarPostulacion, coincideFiltros,
-        aiResponde, analizarOferta, mostrarRevision, setVal, limitarTexto, seleccionarOpcion } = window.AP;
+const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos, coincideFiltros,
+        analizarYResponder, mostrarRevision, setVal, limitarTexto, seleccionarOpcion } = window.AP;
 
 // ── Esperar a que aparezca al menos un elemento que matchee el selector ──
 // Necesario porque Laborum pinta el listado/la oferta después de cargar la
@@ -156,59 +156,73 @@ async function esperarBotonHabilitado(btn, timeout = 4500) {
 
 // Llena el modal de preguntas con IA y envía. Devuelve el respuestasLog
 // (para el panel de revisión, si corresponde) o null si no hay modal/falló.
+//
+// A diferencia de Computrabajo, este modal es una estructura fija y simple (ver
+// comentario de getModalPreguntas) que no revela campos nuevos según lo que se
+// responda antes — por eso acá SÍ se junta todo (análisis + todas las preguntas
+// de texto y de radio) en una sola llamada a la IA, sin necesidad de partirlo en
+// dos etapas como en el adaptador de Computrabajo.
 async function rellenarYEnviarPreguntas(contexto) {
   const form = getModalPreguntas();
   if (!form) return null;
 
-  msg('Analizando aviso…', '#7C3AED');
-  const analisis = await analizarOferta(contexto);
+  msg('Preparando preguntas…', '#D97706');
+  const textareas = [...form.querySelectorAll('textarea[id^="id-pregunta-"]')];
+  const grupos = getGruposRadio(form);
+
+  const preguntasIA = [];
+  const infoTextareas = textareas.map((ta, i) => {
+    const pregunta = getTituloPregunta(form, ta);
+    const id = (AP.iaDisponible && pregunta.length > 3) ? 't' + i : null;
+    if (id) preguntasIA.push({ id, pregunta, opciones: null });
+    return { ta, pregunta, id };
+  });
+  const infoGrupos = grupos.map((grupo, i) => {
+    const id = (AP.iaDisponible && grupo.pregunta.length > 3) ? 'r' + i : null;
+    if (id) preguntasIA.push({ id, pregunta: grupo.pregunta, opciones: grupo.opciones.map(o => o.texto) });
+    return { grupo, id };
+  });
+
+  msg(preguntasIA.length ? 'IA respondiendo ' + preguntasIA.length + ' pregunta(s)…' : 'Analizando aviso…', '#7C3AED');
+  const resultado = await analizarYResponder(contexto, preguntasIA);
+  const analisis = resultado.analisis;
 
   msg('Rellenando preguntas…', '#D97706');
-  const textareas = [...form.querySelectorAll('textarea[id^="id-pregunta-"]')];
   const respuestasLog = [];
 
-  for (const ta of textareas) {
-    const pregunta = getTituloPregunta(form, ta);
-    let val = null, errorIA = null;
-    if (AP.iaDisponible && pregunta.length > 3) {
-      const r = await aiResponde(pregunta, contexto, null, analisis);
-      val = r.respuesta; errorIA = r.error;
-    }
+  for (const info of infoTextareas) {
+    const val = info.id ? resultado.respuestas[info.id] : null;
     if (val) {
-      val = limitarTexto(val, ta);
-      ta.focus();
-      setVal(ta, val);
+      const valLimitado = limitarTexto(val, info.ta);
+      info.ta.focus();
+      setVal(info.ta, valLimitado);
       // Muchos formularios (react-hook-form y similares) solo marcan el campo
       // como "tocado" — y habilitan el botón de enviar — al perder el foco,
       // no con input/change solos. Sin este blur, el campo queda lleno pero
       // el botón sigue deshabilitado.
-      ta.blur();
-      ta.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-      respuestasLog.push({ pregunta, respuesta: val, fueIA: true, tipo: 'texto', el: ta });
+      info.ta.blur();
+      info.ta.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      respuestasLog.push({ pregunta: info.pregunta, respuesta: valLimitado, fueIA: true, tipo: 'texto', el: info.ta });
     } else {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo: 'texto', el: ta, errorIA });
+      respuestasLog.push({ pregunta: info.pregunta, respuesta: '', vacia: true, tipo: 'texto', el: info.ta, errorIA: resultado.error });
     }
     await sleep(300);
   }
 
   // Preguntas de radio (ej: "Tipo de documento") — si quedan sin responder,
   // Laborum nunca habilita el botón de enviar aunque el resto esté completo.
-  const grupos = getGruposRadio(form);
-  for (const grupo of grupos) {
-    let elegida = null, errorIA = null;
-    if (AP.iaDisponible && grupo.pregunta.length > 3) {
-      const r = await aiResponde(grupo.pregunta, contexto, grupo.opciones.map(o => o.texto), analisis);
-      errorIA = r.error;
-      if (r.respuesta) {
-        const rNorm = n(r.respuesta);
-        elegida = grupo.opciones.find(o => rNorm.includes(n(o.texto)) || (n(o.texto).length < 4 && rNorm.startsWith(n(o.texto))));
-      }
+  for (const info of infoGrupos) {
+    const respIA = info.id ? resultado.respuestas[info.id] : null;
+    let elegida = null;
+    if (respIA) {
+      const rNorm = n(respIA);
+      elegida = info.grupo.opciones.find(o => rNorm.includes(n(o.texto)) || (n(o.texto).length < 4 && rNorm.startsWith(n(o.texto))));
     }
     if (elegida && seleccionarOpcion(elegida.el)) {
       elegida.el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-      respuestasLog.push({ pregunta: grupo.pregunta, respuesta: elegida.texto, fueIA: true, tipo: 'opcion', opciones: grupo.opciones, elegidoEl: elegida.el });
+      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: elegida.texto, fueIA: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: elegida.el });
     } else {
-      respuestasLog.push({ pregunta: grupo.pregunta, respuesta: '', vacia: true, tipo: 'opcion', opciones: grupo.opciones, elegidoEl: null, errorIA });
+      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: '', vacia: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: null, errorIA: resultado.error });
     }
     await sleep(300);
   }
@@ -330,11 +344,17 @@ async function escanear() {
   if (!candidatas.length) { msg('Sin tarjetas — busca ofertas en Laborum', '#9CA3AF'); return; }
 
   const pendientes = [];
+  const titulosVistos = [];
   candidatas.forEach(a => {
     const id = getIdDeTarjeta(a);
     if (yaProcesada(id)) return;
-    if (pasa(a)) pendientes.push({ a, id, titulo: getTituloDeTarjeta(a), url: a.href });
+    const titulo = getTituloDeTarjeta(a);
+    // Se guarda el título se haya matcheado o no con los filtros (ver
+    // docs/rediseno-filtrado-ofertas.md, §7.2).
+    titulosVistos.push(titulo);
+    if (pasa(a)) pendientes.push({ a, id, titulo, url: a.href });
   });
+  reportarTitulosVistos(titulosVistos, 'Laborum');
 
   msg(pendientes.length + ' de ' + candidatas.length + ' coinciden', '#16A34A');
   if (!pendientes.length) return;
