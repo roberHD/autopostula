@@ -166,8 +166,23 @@ function normalizarParaUrl(texto) {
 // Un builder de URL por portal — mismo cargoObjetivo, distinta forma de armar
 // la búsqueda en cada sitio. Si sumas un portal nuevo más adelante, agrégalo
 // acá (y agrega su adaptador correspondiente en extension/adapters/).
+//
+// Facets del portal (docs/rediseno-filtrado-ofertas.md, §4, Capa 0): cada oferta
+// que el propio portal filtra es una que nunca se scrapea ni se puntúa. Verificado
+// a mano contra los sitios reales el 2026-09-03, no asumido:
+// - Computrabajo: "jornada part time" SÍ es un facet real en la URL
+//   (/trabajo-de-{slug}-jornada-part-time). No se encontró un facet de modalidad
+//   expuesto en la barra de filtros para este tipo de búsqueda.
+// - Laborum: sus filtros de jornada/modalidad viven detrás de una UI armada con
+//   JavaScript que llama a una API interna (/api/avisos/searchV2) -- no son URLs
+//   navegables simples. No se armó ese facet (mismo tipo de bloqueo que hizo
+//   descartar el scrape automático de Laborum, ver scripts/scrape-corpus.ts).
 const URL_BUSQUEDA_POR_PORTAL = {
-  'Computrabajo': (slug) => 'https://cl.computrabajo.com/trabajo-de-' + slug,
+  'Computrabajo': (slug, filtros) => {
+    let url = 'https://cl.computrabajo.com/trabajo-de-' + slug;
+    if (filtros && filtros.jornada === 'part_time') url += '-jornada-part-time';
+    return url;
+  },
   'Laborum': (slug) => 'https://www.laborum.cl/empleos-busqueda-' + slug + '.html',
 };
 
@@ -179,9 +194,14 @@ async function actualizarFiltrosDesdeBackend(token) {
     const res = await fetch(BACKEND_URL + '/api/extension/perfil', {
       headers: { 'Authorization': 'Bearer ' + token }
     });
-    if (!res.ok) return;
+    if (!res.ok) return null;
     const data = await res.json();
-    if (!data.filtrosBusqueda) return;
+    if (!data.filtrosBusqueda) return null;
+
+    const filtros = {
+      modalidad: data.filtrosBusqueda.modalidad || 'cualquiera',
+      jornada: data.filtrosBusqueda.jornada || 'cualquiera',
+    };
 
     const { config } = await chrome.storage.local.get('config');
     await chrome.storage.local.set({
@@ -189,14 +209,16 @@ async function actualizarFiltrosDesdeBackend(token) {
         ...(config || {}),
         incTags: data.filtrosBusqueda.palabrasIncluir || [],
         excTags: data.filtrosBusqueda.palabrasExcluir || [],
-        filtrosBusqueda: {
-          modalidad: data.filtrosBusqueda.modalidad || 'cualquiera',
-          jornada: data.filtrosBusqueda.jornada || 'cualquiera',
-        },
+        filtrosBusqueda: filtros,
       }
     });
+    // Se devuelve directo (no solo se guarda en storage) para que
+    // escanearAutomatico lo pueda pasar de una al builder de URL sin tener que
+    // releer el storage que se acaba de escribir acá mismo.
+    return filtros;
   } catch (e) {
     console.warn('[AP] No se pudieron actualizar los filtros antes de la búsqueda automática:', e);
+    return null;
   }
 }
 
@@ -226,13 +248,13 @@ async function escanearAutomatico() {
   // popup — si no se refresca acá, usaría los filtros de búsqueda que haya
   // cacheados de la última vez (quizás desactualizados). Se actualiza antes
   // de escanear para que siempre respete lo último guardado en la web.
-  await actualizarFiltrosDesdeBackend(autopostulaToken);
+  const filtros = await actualizarFiltrosDesdeBackend(autopostulaToken);
 
   const plataformas = estado.plataformasConectadas || [];
   for (const nombre of plataformas) {
     const construirUrl = URL_BUSQUEDA_POR_PORTAL[nombre];
     if (!construirUrl) continue; // portal conectado pero sin adaptador de búsqueda automática todavía
-    abrirYEscanear(construirUrl(slug));
+    abrirYEscanear(construirUrl(slug, filtros));
   }
 }
 
