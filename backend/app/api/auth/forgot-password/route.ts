@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/base-url";
 
 // Instanciado en el handler (no a nivel de módulo) -- si se crea acá arriba,
 // falta RESEND_API_KEY tira en cuanto Next intenta cargar el módulo para
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
       data: { resetToken, resetTokenExpiry },
     });
 
-    const resetUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${resetToken}`;
+    const resetUrl = `${getBaseUrl()}/reset-password?token=${resetToken}`;
 
     try {
       await getResend().emails.send({
