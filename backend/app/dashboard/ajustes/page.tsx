@@ -61,11 +61,11 @@ export default function AjustesPage() {
     }
   }
 
-  async function irAStripe(ruta: "checkout" | "portal") {
+  async function pasarAPremium() {
     setRedirigiendo(true);
     setMensaje("");
     try {
-      const res = await fetch(`/api/stripe/${ruta}`, { method: "POST" });
+      const res = await fetch("/api/flow/checkout", { method: "POST" });
       const data = await res.json();
       if (!res.ok || !data.url) {
         setMensaje(data.error ?? "No se pudo continuar — intenta de nuevo");
@@ -74,8 +74,28 @@ export default function AjustesPage() {
       }
       window.location.href = data.url;
     } catch (err) {
-      console.error("Error abriendo Stripe:", err);
+      console.error("Error abriendo Flow:", err);
       setMensaje("No se pudo continuar — revisa la consola");
+      setRedirigiendo(false);
+    }
+  }
+
+  async function cancelarSuscripcion() {
+    if (!confirm("¿Cancelar tu suscripción premium? Sigues teniendo acceso hasta el final del período que ya pagaste.")) return;
+    setRedirigiendo(true);
+    setMensaje("");
+    try {
+      const res = await fetch("/api/flow/cancelar", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setMensaje(data.error ?? "No se pudo cancelar — intenta de nuevo");
+        return;
+      }
+      setMensaje(data.mensaje ?? "Suscripción cancelada.");
+    } catch (err) {
+      console.error("Error cancelando suscripción:", err);
+      setMensaje("No se pudo cancelar — revisa la consola");
+    } finally {
       setRedirigiendo(false);
     }
   }
@@ -129,9 +149,9 @@ export default function AjustesPage() {
               <button
                 className={esPremium ? "ap-button-ghost" : "ap-button"}
                 disabled={redirigiendo}
-                onClick={() => irAStripe(esPremium ? "portal" : "checkout")}
+                onClick={esPremium ? cancelarSuscripcion : pasarAPremium}
               >
-                {redirigiendo ? "Un momento..." : esPremium ? "Gestionar suscripción" : "✨ Pasar a Premium"}
+                {redirigiendo ? "Un momento..." : esPremium ? "Cancelar suscripción" : "✨ Pasar a Premium"}
               </button>
             </div>
           </div>

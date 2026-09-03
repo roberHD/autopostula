@@ -95,10 +95,10 @@ model User {
   // la página, volver más tarde) no tenía forma de saber que ya se había
   // conectado y mandaba a la persona de vuelta a un paso anterior.
   extensionConectada Boolean @default(false) @map("extension_conectada")
-  // Se guarda apenas Stripe crea el customer en el primer checkout, para poder
-  // abrirle después el Billing Portal (cancelar, cambiar tarjeta) sin tener
-  // que pedirle a Stripe que busque por email cada vez.
-  stripeCustomerId String? @map("stripe_customer_id")
+  // Se guarda apenas se crea el cliente en Flow (pasarela de pago -- Stripe no
+  // opera en Chile), para poder mandarlo a registrar su tarjeta y suscribirlo
+  // sin tener que crear el cliente de nuevo cada vez.
+  flowCustomerId String? @map("flow_customer_id")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
@@ -137,7 +137,7 @@ model Subscription {
   userId                 String            @map("user_id")
   planId                 String            @map("plan_id")
   estado                 EstadoSuscripcion @default(ACTIVA)
-  stripeSubscriptionId   String?           @map("stripe_subscription_id")
+  flowSubscriptionId     String?           @map("flow_subscription_id")
   periodoInicio          DateTime?         @map("periodo_inicio")
   periodoFin             DateTime?         @map("periodo_fin")
 
@@ -151,7 +151,7 @@ model Subscription {
 model Payment {
   id              String     @id @default(uuid())
   subscriptionId  String     @map("subscription_id")
-  stripePaymentId String?    @map("stripe_payment_id")
+  flowOrder       String?    @map("flow_order")
   monto           Float
   estado          EstadoPago @default(PAGADO)
   fecha           DateTime   @default(now())
