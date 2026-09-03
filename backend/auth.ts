@@ -23,21 +23,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        });
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email as string },
+          });
 
-        // Usuario que se registró con Google no tiene passwordHash
-        if (!user || !user.passwordHash) return null;
+          // Usuario que se registró con Google no tiene passwordHash
+          if (!user || !user.passwordHash) return null;
 
-        const esValida = await bcrypt.compare(
-          credentials.password as string,
-          user.passwordHash
-        );
+          const esValida = await bcrypt.compare(
+            credentials.password as string,
+            user.passwordHash
+          );
 
-        if (!esValida) return null;
+          if (!esValida) return null;
 
-        return { id: user.id, email: user.email, name: user.nombre };
+          return { id: user.id, email: user.email, name: user.nombre };
+        } catch (e) {
+          // Auth.js convierte cualquier excepción de acá en un CredentialsSignin
+          // genérico, indistinguible de una contraseña mala: sin este log, una
+          // base desincronizada (P2022) o caída se ve en pantalla como "clave
+          // incorrecta" y no deja rastro en la terminal.
+          console.error("[auth] authorize() falló por un error inesperado:", e);
+          return null;
+        }
       },
     }),
   ],
