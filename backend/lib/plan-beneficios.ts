@@ -20,3 +20,22 @@ export async function usuarioTienePerfilDinamico(userId: string) {
 
   return subscripcion?.plan.perfilDinamico ?? false;
 }
+
+// Analítica avanzada (nivelAnaliticas) -- hoy solo gatea exportar el historial
+// de postulaciones a CSV. El dashboard de "Resumen" (tasa de respuesta, match
+// promedio, actividad semanal, por portal) queda gratis para todos por ahora
+// -- separar eso en básico/avanzado es un rediseño más grande, pendiente.
+export async function usuarioTieneAnaliticaAvanzada(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { rol: true },
+  });
+  if (user?.rol === "ADMIN") return true;
+
+  const subscripcion = await prisma.subscription.findFirst({
+    where: { userId, estado: "ACTIVA" },
+    include: { plan: true },
+  });
+
+  return subscripcion?.plan.nivelAnaliticas === "AVANZADO";
+}
