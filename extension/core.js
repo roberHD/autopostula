@@ -148,6 +148,135 @@ AP.coincideFiltros = function (textoCompleto, ubicacion) {
   return true;
 };
 
+// ── Scorer local (docs/rediseno-filtrado-ofertas.md §6) ──────────────────
+// Reemplaza a AP.coincideFiltros -- pero por ahora CONVIVEN detrás de
+// AP.cfg.usarScorerLocal (ver §13: "no borrar coincideFiltros hasta que el
+// scorer esté validado"). Puro JS, determinista, sin IA en runtime: evalúa
+// una oferta contra el Perfil de Búsqueda compilado (§5) y devuelve
+// {score, banda, razones[]} -- nunca un booleano pelado. banda es
+// 'postular' | 'gris' | 'descartar'.
+
+function apEscaparRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Sufijador simple de género/plural (§6: "cubre casi toda la varianza de
+// títulos chilenos, no hace falta una librería") -- solo se aplica a palabras
+// que terminan en los sufijos típicos de ocupación en masculino/neutro
+// singular (vendedor, cocinero, recepcionista), para no inflar de más
+// palabras que no varían así.
+function apPatronPalabra(palabra) {
+  const escapada = apEscaparRegex(palabra);
+  if (/^[a-z]+(o|or|ista)$/.test(palabra)) {
+    return escapada + '(?:a|as|es|os)?';
+  }
+  return escapada;
+}
+
+// Frase completa con límites de palabra, nunca subcadena (§6, mismo bug que
+// tenía coincideFiltros con "aseo"/"paseo"). El texto de entrada ya debe venir
+// normalizado con AP.n antes de construir/usar este patrón.
+function apConstruirPatron(patronNormalizado) {
+  const palabras = patronNormalizado.split(/\s+/).filter(Boolean).map(apPatronPalabra);
+  if (!palabras.length) return null;
+  return new RegExp('\\b' + palabras.join('\\s+') + '\\b');
+}
+
+AP.puntuarOferta = function (campos, perfil) {
+  const titulo = AP.n((campos && campos.titulo) || '');
+  const empresa = AP.n((campos && campos.empresa) || '');
+  const cuerpo = AP.n((campos && campos.cuerpo) || '');
+  const ubicacion = AP.n((campos && campos.ubicacion) || '');
+  const razones = [];
+
+  function buscar(patronTexto) {
+    const rx = apConstruirPatron(AP.n(patronTexto || ''));
+    if (!rx) return { coincide: false };
+    const enTitulo = rx.test(titulo);
+    const enEmpresa = rx.test(empresa);
+    const enCuerpo = rx.test(cuerpo);
+    return { coincide: enTitulo || enEmpresa || enCuerpo, enTitulo, enEmpresa, enCuerpo };
+  }
+
+  perfil = perfil || {};
+
+  // 1. Vetos -- si matchea alguno, corta acá. Sin IA, la razón sale del
+  // propio perfil (compilada una vez, mostrable siempre).
+  const vetos = perfil.vetos || [];
+  for (const veto of vetos) {
+    if (buscar(veto.patron).coincide) {
+      return { score: 0, banda: 'descartar', razones: [veto.razon || ('no cumple: ' + veto.patron)] };
+    }
+  }
+
+  // 2. Roles -- puntaje del mejor match (canónico o sinónimo) × peso del rol,
+  // con el campo donde matcheó pesando más (título ×3, empresa ×1, cuerpo
+  // ×0.5 -- ver §6). Se acota a 100 antes de aplicar señales para que estas
+  // mantengan un efecto proporcional, no se pierdan en el redondeo.
+  const roles = perfil.roles || [];
+  let score = 0;
+  let mejorRol = null;
+  for (const rol of roles) {
+    const terminos = [rol.canonico].concat(rol.sinonimos || []).filter(Boolean);
+    const peso = rol.peso != null ? rol.peso : 1;
+    for (const termino of terminos) {
+      const resultado = buscar(termino);
+      if (!resultado.coincide) continue;
+      const multiplicadorCampo = resultado.enTitulo ? 3 : resultado.enEmpresa ? 1 : 0.5;
+      const puntaje = peso * 100 * multiplicadorCampo;
+      if (puntaje > score) {
+        score = puntaje;
+        mejorRol = { rol: rol.canonico, termino: termino };
+      }
+    }
+  }
+  score = Math.min(100, score);
+  if (mejorRol) {
+    razones.push('calza con "' + mejorRol.rol + '" (' + mejorRol.termino + ')');
+  } else if (roles.length) {
+    razones.push('no se encontró ninguno de los roles buscados');
+  }
+
+  // 3. Ubicación -- penalización fuerte si hay comunas configuradas, ninguna
+  // matchea, y no acepta remoto (o el aviso no parece remoto).
+  const ubicacionCfg = perfil.ubicacion || {};
+  const comunas = ubicacionCfg.comunas || [];
+  if (comunas.length) {
+    const matcheaComuna = comunas.some((c) => {
+      const rx = apConstruirPatron(AP.n(c));
+      return rx && (rx.test(ubicacion) || rx.test(titulo) || rx.test(cuerpo));
+    });
+    const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo);
+    if (!matcheaComuna && !(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
+      score = Math.max(0, score - 40);
+      razones.push('fuera de las comunas que buscas');
+    }
+  }
+
+  // 4. Señales -- ajustes graduales, no descartan.
+  const senales = perfil.senales || [];
+  for (const senal of senales) {
+    if (buscar(senal.patron).coincide) {
+      const delta = senal.delta || 0;
+      score += delta;
+      razones.push((delta >= 0 ? '+' : '') + delta + ' por "' + senal.patron + '"');
+    }
+  }
+
+  // 5. Clamp y banda.
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  const umbralPostular = perfil.umbralPostular != null ? perfil.umbralPostular : 65;
+  const umbralGris = perfil.umbralGris != null ? perfil.umbralGris : 45;
+  let banda;
+  if (score >= umbralPostular) banda = 'postular';
+  else if (score <= umbralGris) banda = 'descartar';
+  else banda = 'gris';
+
+  if (!razones.length) razones.push('sin señales claras');
+
+  return { score: score, banda: banda, razones: razones };
+};
+
 // ── CV / estilo / objetivo laboral (para el filtro inteligente y los
 //    prompts de IA — usado por cualquier adaptador que llame a la IA) ──
 AP.cargarCV = function () {

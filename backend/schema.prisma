@@ -327,13 +327,19 @@ model StyleProfile {
 }
 
 model SearchPreferences {
-  id               String   @id @default(uuid())
-  userId           String   @unique @map("user_id")
-  palabrasIncluir  Json?    @map("palabras_incluir")
-  palabrasExcluir  Json?    @map("palabras_excluir")
-  modalidad        String   @default("cualquiera")
-  jornada          String   @default("cualquiera")
-  actualizadoEn    DateTime @updatedAt @map("actualizado_en")
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  palabrasIncluir Json?    @map("palabras_incluir")
+  palabrasExcluir Json?    @map("palabras_excluir")
+  modalidad       String   @default("cualquiera")
+  jornada         String   @default("cualquiera")
+  // El Perfil de Búsqueda compilado (docs/rediseno-filtrado-ofertas.md §5) --
+  // reemplaza las columnas de arriba, que se conservan durante la transición
+  // para poder hacer rollback sin migración inversa. version se incrementa en
+  // cada recompilación e invalida el caché de veredictos del scorer (§6).
+  perfilCompilado Json?    @map("perfil_compilado")
+  versionPerfil   Int      @default(0) @map("version_perfil")
+  actualizadoEn   DateTime @updatedAt @map("actualizado_en")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
