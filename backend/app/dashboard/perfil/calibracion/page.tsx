@@ -11,6 +11,7 @@ import {
   ListOrdered,
   PenLine,
   CheckCircle2,
+  Lock,
 } from "lucide-react";
 
 type Pregunta = {
@@ -49,6 +50,7 @@ export default function CalibracionPage() {
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [seleccionada, setSeleccionada] = useState<string | null>(null);
+  const [bloqueado, setBloqueado] = useState(false);
 
   async function cargar() {
     try {
@@ -62,6 +64,7 @@ export default function CalibracionPage() {
       setRespondidas(data.respondidas ?? 0);
       setTotalPreguntas(data.totalPreguntas ?? 0);
       setConfianza(data.confianzaPorcentaje ?? 0);
+      setBloqueado(data.bloqueado ?? false);
     } catch (err) {
       console.error("Error cargando calibración:", err);
       setMensaje("No se pudo cargar — revisa la consola");
@@ -75,6 +78,7 @@ export default function CalibracionPage() {
   }, []);
 
   async function responder(preguntaId: string, opcionElegida: string) {
+    if (bloqueado) return;
     setSeleccionada(opcionElegida);
     setEnviando(true);
     setMensaje("");
@@ -166,6 +170,19 @@ export default function CalibracionPage() {
                 {preguntaActual.texto}
               </p>
 
+              {bloqueado && (
+                <div
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    marginBottom: 14, padding: "10px 14px", borderRadius: 8, fontSize: 12.5,
+                    background: "var(--bg-elevated-2)", color: "var(--text-muted)",
+                  }}
+                >
+                  <Lock size={14} style={{ flexShrink: 0 }} />
+                  Esta es una muestra — calibrar tu estilo completo es una función premium.
+                </div>
+              )}
+
               {preguntaActual.opciones.length === 2 ? (
                 // Exactamente 2 opciones (típico de "comparación") — tarjetas A/B lado a
                 // lado, como en la maqueta. Con más o menos opciones no calza este layout,
@@ -176,7 +193,7 @@ export default function CalibracionPage() {
                     return (
                       <button
                         key={i}
-                        disabled={enviando}
+                        disabled={enviando || bloqueado}
                         onClick={() => responder(preguntaActual.id, op)}
                         style={{
                           textAlign: "left",
@@ -218,7 +235,7 @@ export default function CalibracionPage() {
                     return (
                       <button
                         key={i}
-                        disabled={enviando}
+                        disabled={enviando || bloqueado}
                         onClick={() => responder(preguntaActual.id, op)}
                         className="ap-option-card"
                         style={{

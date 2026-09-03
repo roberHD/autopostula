@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { BANCO_CALIBRACION } from "@/lib/style-calibration-questions";
+import { usuarioTienePerfilDinamico } from "@/lib/plan-beneficios";
 
 async function getOrCreateStyleProfile(userId: string) {
   const existente = await prisma.styleProfile.findFirst({
@@ -27,7 +28,13 @@ export async function GET() {
   });
   const idsRespondidos = new Set(respondidas.map((r) => r.pregunta));
 
-  const pendientes = BANCO_CALIBRACION.filter((p) => !idsRespondidos.has(p.texto));
+  const pendientesReales = BANCO_CALIBRACION.filter((p) => !idsRespondidos.has(p.texto));
+
+  // Calibración es premium (beneficio perfilDinamico). Free ve una sola
+  // pregunta de muestra bloqueada, no la lista completa -- un preview, no la
+  // función entera.
+  const bloqueado = !(await usuarioTienePerfilDinamico(userId));
+  const pendientes = bloqueado ? pendientesReales.slice(0, 1) : pendientesReales;
 
   return NextResponse.json({
     styleProfileId: perfil.id,
@@ -35,6 +42,7 @@ export async function GET() {
     totalPreguntas: BANCO_CALIBRACION.length,
     respondidas: respondidas.length,
     pendientes,
+    bloqueado,
   });
 }
 
@@ -53,6 +61,13 @@ export async function POST(request: Request) {
   const pregunta = BANCO_CALIBRACION.find((p) => p.id === preguntaId);
   if (!pregunta) {
     return NextResponse.json({ error: "Pregunta desconocida" }, { status: 400 });
+  }
+
+  if (!(await usuarioTienePerfilDinamico(userId))) {
+    return NextResponse.json(
+      { error: "La calibración de estilo es una función premium.", requierePremium: true },
+      { status: 403 }
+    );
   }
 
   const perfil = await getOrCreateStyleProfile(userId);

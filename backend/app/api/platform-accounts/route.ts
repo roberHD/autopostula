@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { asegurarPlataformasBase } from "@/lib/platforms";
+import { asegurarPlanesBase } from "@/lib/plans";
 
 export async function GET() {
   const session = await auth();
@@ -13,7 +14,7 @@ export async function GET() {
   // Se auto-repara acá en vez de depender de que alguien haya corrido
   // `npx tsx seed.ts` a mano — así los portales conocidos siempre aparecen,
   // tanto en local como recién desplegado en un ambiente nuevo.
-  await asegurarPlataformasBase();
+  await Promise.all([asegurarPlataformasBase(), asegurarPlanesBase()]);
 
   const [plataformas, cuentas, subscripcion] = await Promise.all([
     prisma.jobPlatform.findMany(),

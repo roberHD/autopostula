@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Lock } from "lucide-react";
 
 const OPCIONES_TONO = [
   { valor: "formal", titulo: "Formal", desc: "Serio y protocolar" },
@@ -29,6 +30,7 @@ export default function EntrenarIAPage() {
   const [mensaje, setMensaje] = useState("");
   const [guardado, setGuardado] = useState(false);
   const [respuestas, setRespuestas] = useState<Respuesta[]>([]);
+  const [instruccionesBloqueadas, setInstruccionesBloqueadas] = useState(false);
 
   useEffect(() => {
     async function cargar() {
@@ -44,6 +46,7 @@ export default function EntrenarIAPage() {
         setInstrucciones(data.instrucciones);
         setUsarPerfil(data.usarPerfil);
         setEvitarRepetidas(data.evitarRepetidas);
+        setInstruccionesBloqueadas(data.instruccionesBloqueadas ?? false);
       } catch (err) {
         console.error("Error cargando entrenamiento:", err);
         setMensaje("No se pudo cargar — revisa la consola");
@@ -154,10 +157,23 @@ export default function EntrenarIAPage() {
           <div className="ap-section ap-animate-in" style={{ animationDelay: "0.05s" }}>
             <p className="ap-section-title">Instrucciones personalizadas</p>
             <p className="ap-section-sub">Indícale a la IA cómo quieres que te represente</p>
+            {instruccionesBloqueadas && (
+              <div
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  marginBottom: 10, padding: "10px 14px", borderRadius: 8, fontSize: 12.5,
+                  background: "var(--bg-elevated-2)", color: "var(--text-muted)",
+                }}
+              >
+                <Lock size={14} style={{ flexShrink: 0 }} />
+                Escribir instrucciones propias es una función premium — el tono y la extensión de arriba siguen libres.
+              </div>
+            )}
             <textarea
               className="ap-textarea"
               value={instrucciones}
               onChange={(e) => setInstrucciones(e.target.value)}
+              disabled={instruccionesBloqueadas}
               placeholder="Ej: Responde en primera persona, con tono cercano pero profesional. Destaca mi experiencia en..."
             />
             <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
