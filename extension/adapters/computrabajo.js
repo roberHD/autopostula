@@ -430,8 +430,11 @@ async function rellenar(contexto) {
 }
 
 // ── Postular ──────────────────────────────────────────────────
-async function postular(url, id, titulo) {
-  if (AP.vistos.has(id)) return false;
+// Devuelve { ok, expirada } -- expirada=true SOLO cuando no hay ningún botón
+// de postular (§8.4/§8.6: la oferta ya no existe o ya no acepta postulantes).
+// El resto de los "no ok" son fallas puntuales del flujo, no la oferta en sí.
+async function postular(url, id, titulo, decisionOfertaId) {
+  if (AP.vistos.has(id)) return { ok: false, expirada: false };
   AP.vistos.add(id);
 
   msg('Postulando: ' + titulo.slice(0,35) + '…', '#D97706');
@@ -442,7 +445,7 @@ async function postular(url, id, titulo) {
     n(panelDetalle.innerText||'').includes('ya aplicaste')
   )) {
     addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Ya postulado'});
-    return false;
+    return { ok: false, expirada: false };
   }
 
   const btnSpan = document.querySelector('span[offer-detail-button]');
@@ -454,10 +457,10 @@ async function postular(url, id, titulo) {
   }
   if (!btn) {
     addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'No se encontró botón Postularme'});
-    return false;
+    return { ok: false, expirada: true };
   }
 
-  if (!AP.activo) return false;
+  if (!AP.activo) return { ok: false, expirada: false };
 
   // IMPORTANTE: leer el aviso ANTES de hacer clic en "Postularme". Computrabajo puede
   // reemplazar este mismo panel con el formulario de preguntas adicionales al hacer clic,
@@ -483,7 +486,7 @@ async function postular(url, id, titulo) {
       const decision = await mostrarRevision(titulo, respuestasLog, contexto);
       if (decision === 'skip') {
         addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
-        return false;
+        return { ok: false, expirada: false };
       }
     }
 
@@ -506,18 +509,18 @@ async function postular(url, id, titulo) {
         reason:'Enviado (' + n2 + ' campos)',
         respuestas: respuestasParaLog
       });
-      reportarPostulacion({ id, titulo, url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog });
+      reportarPostulacion({ id, titulo, url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
       msg('✓ ' + titulo.slice(0,40), '#16A34A');
-      return true;
+      return { ok: true, expirada: false };
     } else {
       addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Sin botón Enviar mi CV'});
-      return false;
+      return { ok: false, expirada: false };
     }
   } else {
     addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
-    reportarPostulacion({ id, titulo });
+    reportarPostulacion({ id, titulo, decisionOfertaId });
     msg('✓ ' + titulo.slice(0,40), '#2563EB');
-    return true;
+    return { ok: true, expirada: false };
   }
 }
 
@@ -670,12 +673,31 @@ async function escanearMisPostulaciones() {
   msg(actualizadas ? '✓ ' + actualizadas + ' estado(s) actualizado(s)' : 'Estados al día', '#16A34A');
 }
 
+// ── Postular directo a UNA oferta ya aprobada en banda gris (§8.6) ──────
+// La pestaña la abrió background.js apuntando directo a la URL de la
+// oferta (no a un listado) -- se extrae id/título de la propia página y se
+// reutiliza el mismo postular() de siempre, sin pasar por evaluarTarjeta:
+// el usuario ya aprobó esta oferta puntual con el swipe en banda gris, no
+// hay nada que puntuar de nuevo.
+async function aplicarDirecto(decisionOfertaId) {
+  const id = (location.href.split('#')[0].match(/-([A-F0-9]{8,})$/i) || [])[1] || location.pathname;
+  const tituloEl = document.querySelector('h1');
+  const titulo = (tituloEl && tituloEl.textContent.trim()) || 'Oferta';
+  AP.procesando = true;
+  try {
+    return await postular(location.href, id, titulo, decisionOfertaId);
+  } finally {
+    AP.procesando = false;
+  }
+}
+
 // ── Registro en el núcleo compartido (core.js) ──────────────────
 // core.js ya se encarga de: mensajería (TOGGLE/CONFIG_UPDATED/FORCE_SCAN/
-// AUTO_SCAN), el MutationObserver que dispara reescaneos, y cargar
-// AP.cfg/active/log/token al iniciar. Acá solo conectamos la función de
-// escaneo de Computrabajo y qué hacer una vez que el estado ya cargó.
+// AUTO_SCAN/DO_APPLY), el MutationObserver que dispara reescaneos, y cargar
+// AP.cfg/active/log/token al iniciar. Acá solo conectamos las funciones de
+// Computrabajo y qué hacer una vez que el estado ya cargó.
 AP.escanear = escanear;
+AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function() {
   console.log('[AP-CT] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible);
   if (location.pathname.indexOf('/candidate/match') !== -1) {

@@ -686,6 +686,16 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
     });
     sendResponse({ ok: true });
   }
+  // §8.6: la pestaña se abrió apuntando a una oferta concreta ya aprobada en
+  // banda gris -- cada adaptador define AP.aplicarDirecto con su propio
+  // flujo de postular una sola oferta (no un escaneo de listado). Async
+  // porque la postulación real toma varios segundos -- hay que devolver
+  // true para que Chrome no cierre el canal antes del sendResponse.
+  if (m.type === 'DO_APPLY') {
+    if (!AP.aplicarDirecto) { sendResponse({ success: false, expirada: false }); return true; }
+    AP.aplicarDirecto(m.decisionId).then(sendResponse);
+    return true;
+  }
 });
 
 new MutationObserver(function () {

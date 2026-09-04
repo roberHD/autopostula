@@ -18,14 +18,44 @@ async function processQueue() {
   if (busy || !queue.length) return;
   busy = true;
   while (queue.length) {
-    const { url, titulo } = queue.shift();
-    await applyInTab(url, titulo);
+    const item = queue.shift();
+    const resultado = await applyInTab(item.url, item.titulo, item.decisionId);
+    // §8.4/§8.6: si la oferta aprobada en banda gris ya no existe o no tiene
+    // botón de postular, se marca EXPIRADA en vez de reintentarla para
+    // siempre en cada ciclo -- "silencio ahí sería peor que el error".
+    if (item.decisionId && resultado && resultado.expirada) {
+      marcarBandaGrisExpirada(item.decisionId);
+    }
     await sleep(5000);
   }
   busy = false;
 }
 
-function applyInTab(url, titulo) {
+async function marcarBandaGrisExpirada(decisionId) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return;
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/banda-gris-expirada', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decisionId })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('[AP] Backend rechazó marcar expirada la banda gris:', data.error || res.status);
+    }
+  } catch (e) {
+    console.warn('[AP] Error de red marcando banda gris expirada:', e);
+  }
+}
+
+// decisionId presente = viene de una aprobación de banda gris (§8.6): se le
+// pasa al content script en el mensaje DO_APPLY para que la postulación
+// resultante quede enlazada a esa decisión (ver reportarPostulacionBackend).
+// Devuelve { success, expirada } -- si la pestaña nunca contestó (cerrada,
+// sin content script, o timeout de seguridad) no se marca nada, queda
+// pendiente para el siguiente ciclo en vez de asumir que expiró.
+function applyInTab(url, titulo, decisionId) {
   return new Promise(resolve => {
     chrome.tabs.create({ url, active: false }, tab => {
       const id = tab.id;
@@ -33,11 +63,11 @@ function applyInTab(url, titulo) {
         if (tabId !== id || info.status !== 'complete') return;
         chrome.tabs.onUpdated.removeListener(onUpdated);
         setTimeout(() => {
-          chrome.tabs.sendMessage(id, { type: 'DO_APPLY' }, res => {
+          chrome.tabs.sendMessage(id, { type: 'DO_APPLY', decisionId }, res => {
             if (chrome.runtime.lastError) { /* tab cerrada o sin content script */ }
             setTimeout(() => {
               chrome.tabs.remove(id, () => { if(chrome.runtime.lastError){} });
-              resolve(res?.success || false);
+              resolve(res || { success: false, expirada: false });
             }, 3500);
           });
         }, 3000);
@@ -47,7 +77,7 @@ function applyInTab(url, titulo) {
       setTimeout(() => {
         chrome.tabs.onUpdated.removeListener(onUpdated);
         chrome.tabs.remove(id, () => {});
-        resolve(false);
+        resolve({ success: false, expirada: false });
       }, 35000);
     });
   });
@@ -248,9 +278,9 @@ async function actualizarFiltrosDesdeBackend(token) {
     const res = await fetch(BACKEND_URL + '/api/extension/perfil', {
       headers: { 'Authorization': 'Bearer ' + token }
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { filtros: null, bandaGrisAprobadas: [] };
     const data = await res.json();
-    if (!data.filtrosBusqueda) return null;
+    if (!data.filtrosBusqueda) return { filtros: null, bandaGrisAprobadas: [] };
 
     // El perfil compilado (§5 del rediseño) es más rico que los filtros viejos
     // -- si ya existe, sus modalidad/jornada/comunas mandan sobre los viejos.
@@ -282,11 +312,12 @@ async function actualizarFiltrosDesdeBackend(token) {
     });
     // Se devuelve directo (no solo se guarda en storage) para que
     // escanearAutomatico lo pueda pasar de una al builder de URL sin tener que
-    // releer el storage que se acaba de escribir acá mismo.
-    return filtros;
+    // releer el storage que se acaba de escribir acá mismo. bandaGrisAprobadas
+    // (§8.6) viaja junto porque sale de la misma llamada a /api/extension/perfil.
+    return { filtros, bandaGrisAprobadas: data.bandaGrisAprobadas || [] };
   } catch (e) {
     console.warn('[AP] No se pudieron actualizar los filtros antes de la búsqueda automática:', e);
-    return null;
+    return { filtros: null, bandaGrisAprobadas: [] };
   }
 }
 
@@ -306,17 +337,27 @@ async function escanearAutomatico() {
     return;
   }
 
-  // Sin el beneficio del plan, o sin objetivo laboral guardado, no hay nada que buscar
-  if (!estado.busquedaAutomatica || !estado.cargoObjetivo) return;
-
-  const slug = normalizarParaUrl(estado.cargoObjetivo);
-  if (!slug) return;
+  // Sin el beneficio del plan no hay nada automático que hacer -- ni buscar
+  // ofertas nuevas ni postular a lo ya aprobado en banda gris.
+  if (!estado.busquedaAutomatica) return;
 
   // La búsqueda automática corre en background sin que nadie haya abierto el
   // popup — si no se refresca acá, usaría los filtros de búsqueda que haya
   // cacheados de la última vez (quizás desactualizados). Se actualiza antes
   // de escanear para que siempre respete lo último guardado en la web.
-  const filtros = await actualizarFiltrosDesdeBackend(autopostulaToken);
+  const { filtros, bandaGrisAprobadas } = await actualizarFiltrosDesdeBackend(autopostulaToken);
+
+  // §8.6: postular lo ya aprobado en banda gris no depende de tener un
+  // cargoObjetivo configurado -- cada item ya trae su propia URL concreta,
+  // no hace falta armar ninguna búsqueda para llegar a ella.
+  for (const item of bandaGrisAprobadas || []) {
+    queue.push({ url: item.url, titulo: item.titulo, decisionId: item.id });
+  }
+  processQueue();
+
+  if (!estado.cargoObjetivo) return;
+  const slug = normalizarParaUrl(estado.cargoObjetivo);
+  if (!slug) return;
 
   const plataformas = estado.plataformasConectadas || [];
   for (const nombre of plataformas) {
@@ -402,7 +443,10 @@ async function reportarPostulacionBackend(oferta) {
         respuestas: oferta.respuestas || [],
         incompleta: !!oferta.incompleta,
         nota: oferta.nota || null,
-        matchScore: typeof oferta.matchScore === 'number' ? oferta.matchScore : null
+        matchScore: typeof oferta.matchScore === 'number' ? oferta.matchScore : null,
+        // §8.6: si esta postulación viene de una aprobación de banda gris,
+        // enlaza esa decisión con la postulación resultante.
+        decisionOfertaId: oferta.decisionOfertaId || null
       })
     });
     if (!res.ok) {
