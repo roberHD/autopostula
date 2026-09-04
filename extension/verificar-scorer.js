@@ -125,5 +125,75 @@ const perfil = {
   check('perfil vacío no revienta', r && typeof r.score === 'number' && r.banda);
 }
 
+// ── Casos agregados tras la revisión del 2026-09-04 -- estas dos dimensiones
+// (peso por campo, peso de rol) eran justo las que tenían los dos bugs
+// críticos, y ningún caso de arriba las cubría (el único plural probado era
+// "vendedor", que es -or, el único caso que ya funcionaba antes del fix).
+
+// 10. Un match en título debe puntuar más que el mismo rol solo en empresa.
+// ubicacion: 'Nunoa' en los dos -- el perfil compartido tiene comunas
+// configuradas, sin esto la penalización de ubicación (-40) se mezclaría
+// con lo que este caso quiere medir (peso por campo).
+{
+  const rTitulo = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: '', ubicacion: 'Nunoa' }, perfil);
+  const rEmpresa = AP.puntuarOferta({ titulo: 'Bodeguero nocturno', empresa: 'Vendedores Unidos SpA', cuerpo: '', ubicacion: 'Nunoa' }, perfil);
+  check('match en título puntúa más que el mismo rol solo en empresa', rTitulo.score > rEmpresa.score);
+  check('rol solo en el nombre de la empresa no basta para postular solo', rEmpresa.banda !== 'postular');
+}
+
+// 11. El peso del rol debe importar: peso 0.5 en título debe dar la mitad
+// que peso 1.0 en título (antes del bug, ambos clampeaban a 100 por igual).
+{
+  const rPesoAlto = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: '', ubicacion: 'Nunoa' }, perfil);
+  const rPesoBajo = AP.puntuarOferta({ titulo: 'Cajero de tienda', empresa: '', cuerpo: '', ubicacion: 'Nunoa' }, perfil);
+  check('peso 0.5 en título puntúa menos que peso 1.0 en título', rPesoBajo.score < rPesoAlto.score);
+  check('peso 0.5 en título cae en banda gris, no postular', rPesoBajo.banda === 'gris');
+}
+
+// 12. Género/plural de palabras en -o (el caso que fallaba: el sufijo se
+// agregaba sin sacar la vocal final, así que nunca generaba "cajera").
+{
+  const formas = ['Cajero de supermercado', 'Cajera de supermercado', 'Se necesitan cajeros', 'Cajeras part time'];
+  formas.forEach((titulo) => {
+    const r = AP.puntuarOferta({ titulo, empresa: '', cuerpo: '', ubicacion: 'Nunoa' }, perfil);
+    check('"' + titulo + '" matchea "cajero" (género/plural)', r.banda !== 'descartar');
+  });
+}
+
+// 13. Plural de palabras en -ista y -o con otra raíz (operario, recepcionista).
+// Perfil sin comunas configuradas -- acá no aplica ninguna penalización de
+// ubicación aunque no se pase el campo.
+{
+  const perfilOperario = {
+    roles: [
+      { canonico: 'operario', sinonimos: [], peso: 1 },
+      { canonico: 'recepcionista', sinonimos: [], peso: 1 },
+    ],
+    umbralPostular: 65, umbralGris: 45,
+  };
+  const r1 = AP.puntuarOferta({ titulo: 'Operarios de producción', empresa: '', cuerpo: '', ubicacion: '' }, perfilOperario);
+  const r2 = AP.puntuarOferta({ titulo: 'Recepcionistas turno noche', empresa: '', cuerpo: '', ubicacion: '' }, perfilOperario);
+  check('"operarios" matchea "operario" (plural)', r1.banda === 'postular');
+  check('"recepcionistas" matchea "recepcionista" (plural en -ista)', r2.banda === 'postular');
+}
+
+// 14. Veto en el nombre de la empresa sigue cortando duro (no se ablandó por
+// error al arreglar el caso del cuerpo).
+{
+  const perfilVetoEmpresa = { roles: [{ canonico: 'analista', sinonimos: [], peso: 1 }], vetos: [{ patron: 'call center', razon: 'no quiere call center' }], umbralPostular: 65, umbralGris: 45 };
+  const r = AP.puntuarOferta({ titulo: 'Analista de datos', empresa: 'Call Center Corp', cuerpo: '', ubicacion: '' }, perfilVetoEmpresa);
+  check('veto en el nombre de la empresa corta duro', r.banda === 'descartar' && r.score === 0);
+}
+
+// 15. Veto que aparece SOLO en el cuerpo penaliza, no corta -- antes cortaba
+// igual que en título/empresa, reintroduciendo el problema de polaridad de
+// §2.1 (mención de pasada en el boilerplate matando una oferta buena).
+{
+  const perfilVetoCuerpo = { roles: [{ canonico: 'analista', sinonimos: [], peso: 1 }], vetos: [{ patron: 'call center', razon: 'no quiere call center' }], umbralPostular: 65, umbralGris: 45 };
+  const r = AP.puntuarOferta({ titulo: 'Analista de datos', empresa: 'Konecta', cuerpo: 'Nuestro call center queda en el centro', ubicacion: '' }, perfilVetoCuerpo);
+  check('veto solo en el cuerpo NO corta duro (no da score 0)', r.score > 0);
+  check('veto solo en el cuerpo sí penaliza (no postula directo)', r.banda !== 'postular');
+}
+
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));
 process.exit(fallos === 0 ? 0 : 1);

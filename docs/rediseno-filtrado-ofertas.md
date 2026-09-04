@@ -253,15 +253,30 @@ AP.puntuarOferta = function (campos, perfil) { ... }
 
 **1. Límites de palabra, no subcadena.** Tokenizar y comparar tokens. Se acaba `"p**aseo**"`.
 
-**2. Stemming ligero español** para género y plural: `vendedor / vendedora / vendedores → vendedor`. Un sufijador simple (`-a`, `-as`, `-os`, `-es`) cubre casi toda la varianza de títulos chilenos. No hace falta una librería.
+**2. Stemming ligero español** para género y plural: `vendedor / vendedora / vendedores → vendedor`, `cajero / cajera / cajeros / cajeras → cajero`. Un sufijador simple por terminación cubre casi toda la varianza de títulos chilenos, sacando la vocal final antes de flexionar cuando corresponde (`cajero` → raíz `cajer` + `o/a/os/as`). No hace falta una librería.
+> **🐛 Bug corregido el 2026-09-04 (revisión externa).** La primera versión agregaba el sufijo sin
+> sacar la vocal final, así que para palabras en `-o` nunca generaba el femenino ni el plural
+> correctos (`cajero` + sufijo daba `cajeroa`/`cajeroes`, nunca `cajera` ni `cajeros`) -- 7 de 16
+> títulos comunes probados fallaban, cayendo en banda `descartar` sin que el usuario se enterara
+> de que la oferta existió. Ver `extension/core.js`, `apPatronPalabra`.
 
 **3. Campos con peso distinto:**
 
+> **🐛 Bug corregido el 2026-09-04 (revisión externa).** La primera implementación usó estos
+> mismos ×3/×1/×0,5 como *multiplicadores* de `peso * 100`, y el clamp final a 100 los igualaba
+> a todos apenas el resultado pasaba de 100 — con `peso=1` en título eso pasaba siempre
+> (`1*100*3=300`), así que **el peso del rol y el campo dejaban de importar**: un match en el
+> *nombre de la empresa* puntuaba igual que uno en el título. Caso real: "Bodeguero nocturno" en
+> una empresa llamada "Vendedores Unidos SpA" daba 100 y postulaba. Están corregidos a
+> **factores ≤ 1** (`extension/core.js`, `multiplicadorCampo`): título ×1, empresa ×0,35, cuerpo
+> ×0,3 — la tabla de abajo documenta la intención (título pesa más), los números exactos del
+> código no tienen por qué coincidir 1:1 mientras mantengan el orden.
+
 | Campo | Peso |
 |---|---|
-| `titulo` | ×3 |
-| `empresa` | ×1 |
-| `cuerpo` | ×0,5 |
+| `titulo` | el que más pesa |
+| `empresa` | intermedio |
+| `cuerpo` | el que menos pesa |
 | `ubicacion` | solo para el chequeo de comuna |
 
 Hoy todo es un blob plano — por eso una palabra de exclusión en el *boilerplate* mata una oferta buena.
@@ -269,12 +284,21 @@ Hoy todo es un blob plano — por eso una palabra de exclusión en el *boilerpla
 ### Orden de evaluación
 
 ```
-1. Vetos          → si matchea alguno, banda = 'descartar', razones = [veto.razon]. Corta acá.
+1. Vetos          → si matchea en título o empresa, banda = 'descartar', razones = [veto.razon]. Corta acá.
+                    Si matchea SOLO en el cuerpo, no corta -- penalización fuerte (ver nota abajo).
 2. Roles          → puntaje base según mejor match (canónico o sinónimo) × peso del rol
-3. Ubicación      → si hay comunas configuradas y no matchea (y no acepta remoto), penalización fuerte
-4. Señales        → suma/resta los deltas que apliquen
-5. Clamp 0–100    → asignar banda según umbralPostular / umbralGris
+3. Señales de veto en el cuerpo → penalización fuerte, no corte (ver nota abajo)
+4. Ubicación      → si hay comunas configuradas y no matchea (y no acepta remoto), penalización fuerte
+5. Señales        → suma/resta los deltas que apliquen
+6. Clamp 0–100    → asignar banda según umbralPostular / umbralGris
 ```
+
+> **🐛 Bug corregido el 2026-09-04 (revisión externa).** Los vetos cortaban duro sin importar en
+> qué campo matchearan, reintroduciendo el problema de polaridad de §2.1 para el campo empresa
+> (`"call center"` mataría un aviso de analista publicado por *"Konecta Call Center SpA"*).
+> Corregido: título/empresa siguen cortando con la misma certeza de siempre; un match solo en el
+> cuerpo resta 60 puntos en vez de cortar, así que lo más probable es que la oferta caiga en
+> banda gris (§8) en vez de descartarse sin que nadie la vea.
 
 ### Las tres bandas
 
