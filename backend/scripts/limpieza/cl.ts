@@ -10,6 +10,11 @@
 // los términos más largos (más palabras) de cada categoría.
 //
 // Generado a partir de la lista entregada por Roberto el 2026-09-03.
+//
+// Verificado el 2026-09-03 contra una fuente externa de las 346 comunas oficiales
+// (github.com/jromerof/regiones-chile) -- cubre las 346, sin faltantes reales (las
+// diferencias que salieron eran typos de esa fuente, no de esta lista). Ver §13 del
+// documento, "verificar que la lista esté completa contra la fuente oficial".
 
 // Formato único para todas las categorías del §7.3, aunque esta lista (la que
 // entregó Roberto) solo tenga datos de comuna/mall/jornada por ahora -- las

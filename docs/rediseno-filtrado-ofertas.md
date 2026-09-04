@@ -1,9 +1,15 @@
 # Rediseño del filtrado de ofertas — especificación
 
-> **Estado:** diseño aprobado, sin implementar.
+> **Estado:** diseño aprobado, en implementación.
 > **Para:** el chat de producción (implementación).
 > **Origen:** sesión de diseño sobre el código actual de `extension/` y `backend/`.
 > **Fecha del diseño:** 2026-09-03.
+> **Última revisión:** 2026-09-03 — **§7 cambió de fondo**: el scrape semilla se intentó, falló
+> (403 de Computrabajo, SPA en Laborum) y se reemplazó por el catálogo oficial del INE/ChileValora.
+> Afecta a §7.0 (nueva), §7.1, §7.2, §7.4, §8.3, §9.1, §11 y §12. **Leer §7.0 antes que el resto de §7.**
+>
+> **✅ El catálogo ya está extraído y versionado:** `backend/scripts/data/catalogo-ocupaciones-cl.json`
+> — 3.484 ocupaciones chilenas mapeadas a código CIUO. No hay que bajar ni parsear nada; ver §7.1.
 
 ---
 
@@ -34,6 +40,7 @@ Las secciones 1 y 2 son diagnóstico — explican *por qué* se hacen los cambio
 
 - **§5** (el formato del perfil compilado)
 - **§6** (el scorer)
+- **§7.0** (**qué cambió el 2026-09-03 y por qué** — obligatorio antes de tocar §7)
 - **§7.3** (el parser de títulos — la parte que Roberto escribe a mano)
 - **§9** (esquema)
 - **§11** (orden)
@@ -283,34 +290,207 @@ entre medio                    →  cola de decisión del usuario (§8). Sin IA.
 
 ## 7. El corpus de títulos
 
-### 7.1 Scrape semilla — una sola vez
+> **⚠️ Sección revisada el 2026-09-03.** El plan original arrancaba con un scrape semilla
+> de los portales. **Se intentó y falló**, y se reemplazó por una fuente mejor. Ver §7.0.
+> Si estás leyendo una versión anterior de este documento, §7.1 y §7.4 cambiaron.
 
-**Decisión: el scrape NO es un pipeline, es un arranque en frío.** Se corre una vez a mano desde la máquina de Roberto y se acabó.
+### 7.0 Por qué cambió el plan (leer antes que el resto de §7)
 
-**Script:** `backend/scripts/scrape-corpus.ts`, mismo patrón que `backend/scripts/set-admin.ts` — uso manual, no expuesto por HTTP, no referenciado desde la app.
+Se implementó `backend/scripts/scrape-corpus.ts` y se corrió una vez. Resultado:
 
-**Portales: Computrabajo y Laborum. NO Indeed.** No es precaución legal, es un problema de diseño: se le van a mostrar al usuario títulos para predecir su comportamiento frente a ofertas de Computrabajo. Los títulos no se escriben igual en cada portal — convenciones distintas, `(a)` vs `/a`, cuánta ubicación y marca meten, qué tan largos son. Entrenar sobre una distribución y ejecutar sobre otra da peores resultados. Además Indeed bloquea agresivamente.
+| Portal | Resultado | Causa |
+|---|---|---|
+| **Computrabajo** | `HTTP 403` en las 20 búsquedas | Sistema anti-bot bloqueando activamente al User-Agent identificado |
+| **Laborum** | 0 títulos en las 20 búsquedas | Es una SPA: el `fetch` recibe el HTML sin renderizar, el listado lo arma JavaScript después |
 
-**Qué extraer:** no ofertas — **títulos distintos con frecuencia**.
+**Decisión sobre el 403: no se elude.** Devolver 403 a un User-Agent identificado como bot no
+es un problema técnico que resolver, es el sitio negando el acceso. Camuflar el User-Agent como
+navegador real sería eludir un control de acceso explícito. **No se hace, y no se busca otra vía
+para lograr lo mismo.**
+
+**El script queda en el repo, con su nota de por qué no se usa. No se borra, no se ejecuta.**
+
+#### Lo que reemplaza al scrape
+
+Existe una taxonomía oficial de ocupaciones chilenas, **pública y hecha para ser redistribuida**:
+
+| Fuente | Qué es | Tamaño |
+|---|---|---|
+| **CIUO-08.CL** (INE) | Clasificador Chileno de Ocupaciones, adaptación nacional del estándar internacional. Jerárquico: grandes grupos → subgrupos → grupos primarios | Catálogo completo |
+| **ChileValora** | Registro público de perfiles ocupacionales acreditados, buscable por nombre, sector y código | **1.069 perfiles** |
+
+- CIUO-08.CL: <https://www.ine.gob.cl/docs/default-source/buenas-practicas/clasificaciones/ciuo/clasificador/ciuo-08-cl.pdf>
+- ChileValora: <https://certificacion.chilevalora.cl/ChileValora-publica/perfilesList.html>
+
+Cero bloqueos, cero riesgo, cero ambigüedad legal.
+
+#### Esto invierte el pipeline — y lo mejora
 
 ```
-vendedor part time mall plaza vespucio   → 847
-asesor comercial                         → 412
-ejecutivo de ventas terreno              → 203
+ANTES:  scrapear títulos → limpiar → agrupar con IA → inventar taxonomía
+AHORA:  taxonomía oficial (gratis, autoritativa)  ←  mapear títulos cosechados
 ```
 
-La frecuencia es la mitad del valor: es lo que permite mostrar los títulos **más comunes** del área del usuario, que es donde cada swipe rinde más información.
+Lo importante es **qué se le pide a la IA**:
 
-**Volumen:** los títulos están en las páginas de listado, no en el detalle. Una request ≈ 20 títulos. Para ~3.000 títulos distintos se necesitan del orden de 300–500 requests.
+| | Antes | Ahora |
+|---|---|---|
+| Tarea | *Clustering*: "agrupa estas 800 formas en roles que tú decidas" | *Clasificación*: "¿a cuál de estos N perfiles corresponde este título?" |
+| Dificultad | Alta, no determinista | Baja, verificable |
+| Riesgo | Según §3, un error se propaga a todos los usuarios para siempre | El conjunto de destino lo definió el INE, no un modelo |
 
-**Reglas de ejecución:**
+Sigue valiendo usar Opus (§7.4), pero el riesgo de una taxonomía torcida baja muchísimo.
 
-- Ritmo lento: **1 request cada 2–3 segundos**. No paralelizar.
-- `User-Agent` identificable, no falsificado.
-- Guardar el resultado crudo en disco (`scripts/data/corpus-crudo.json`) para no repetir el scrape al iterar la limpieza.
-- Correrlo **una sola vez**. Si hace falta más corpus, viene de §7.2.
+#### Los dos trabajos necesitan datos distintos
 
-**Nota de contexto:** los ToS de estos portales generalmente prohíben el scraping automatizado. Lo que se extrae son títulos de cargo públicos y factuales, una vez, a volumen bajo, para construir una taxonomía que no se redistribuye. El riesgo es bajo pero no es cero, y por eso el diseño lo limita a un arranque en frío y lo reemplaza inmediatamente por §7.2.
+Este es el desbloqueo inmediato, y es lo que permite lanzar el triaje sin esperar corpus:
+
+| Para qué | Qué datos necesita | De dónde salen |
+|---|---|---|
+| **Triaje** (elicitar preferencias del usuario) | Nombres de roles reconocibles | **Catálogo oficial** + variantes sintéticas |
+| **Matching** (puntuar ofertas reales) | Distribución real de títulos | **Cosecha pasiva** (§7.2) |
+
+Los 20 títulos del triaje existen para averiguar **dónde está el borde de lo que el usuario
+quiere**. La respuesta a *"¿postularías a 'Cajero de supermercado'?"* no depende de si ese
+string exacto salió de Computrabajo. **El triaje no necesita títulos reales; el matching sí.**
+
+#### Cómo se acelera la cosecha sin escribir código
+
+Roberto (y los beta testers) tienen la extensión instalada. Abrir Computrabajo en el navegador,
+buscar 30 términos distintos y bajar 3 páginas de cada uno son ~1.800 títulos en una tarde.
+
+No es scraping: es un usuario real, con su cuenta, navegando a velocidad humana, con una
+extensión que lee lo que tiene en pantalla. Es el producto funcionando como fue diseñado.
+
+#### Laborum: el problema era el método, no el portal
+
+El scrape falló porque el `fetch` no ejecuta JavaScript. Pero el content script de la extensión
+corre **dentro de la página, después del render** (`run_at: "document_idle"` en el manifest), así
+que ve el DOM ya armado. **La cosecha pasiva funciona en Laborum aunque el scrape no pudiera.**
+
+### 7.1 Fuente semilla — catálogo oficial
+
+> **✅ EXTRACCIÓN YA HECHA (2026-09-03).** El resultado está en
+> **`backend/scripts/data/catalogo-ocupaciones-cl.json`** (694 KB, versionado en el repo).
+> **No hay que volver a bajar ni parsear nada.** Lo único que falta es cargarlo a la base.
+
+Reemplaza al scrape (§7.0). Trabajo offline, una vez.
+
+#### Lo que hay en el archivo
+
+**3.484 pares ocupación → código CIUO**, 3.473 ocupaciones distintas, cubriendo 447 grupos
+primarios.
+
+| Fuente | Aporte | Filas |
+|---|---|---|
+| CIUO-08.CL — grupos primarios | Nombres oficiales + jerarquía | 444 |
+| CIUO-08.CL — *"Se incluyen las siguientes ocupaciones"* | Denominaciones reales por código | **2.303** |
+| CIUO-08.CL — *"No se incluyen…"* | Referencias cruzadas `título → código` | **82** |
+| ChileValora | Perfiles acreditados con sector | **1.099** |
+
+#### El hallazgo que hace que las dos fuentes se unan sin IA
+
+**El código de perfil de ChileValora lleva el CIUO embebido:**
+
+```
+P-7000-1120-001-V03   →  GESTOR(A) PEQUEÑA EMPRESA
+       ^^^^
+       CIUO 1120 = Directores y gerentes generales de empresas
+```
+
+Calzan **los 1.130 perfiles**, sin excepción. El código de 4 dígitos es la llave que une
+ChileValora con CIUO-08.CL. **No hay que inferir el mapeo con un modelo: ya viene dado.**
+
+#### Las referencias cruzadas son el dato más valioso
+
+Las 82 entradas de *"No se incluyen"* son desambiguaciones **curadas a mano por el INE**:
+
+```
+Gerente de tienda          → 1420   (no 5221)
+Vendedor por internet      → 5244   (no 5223)
+Feriante                   → 5211   (no 5221)
+```
+
+Son exactamente los casos de frontera que el clasificador de §7.4 tiene que resolver, y no se
+consiguen de ningún scrape. **Usarlas como set de validación de §7.4**, no solo como datos.
+
+#### ChileValora sola no habría servido
+
+Su distribución está sesgada a lo industrial —`MINERÍA METÁLICA` 249 perfiles, `CONSTRUCCIÓN`
+131, `COMERCIO` solo 47— y **le faltan por completo chofer, promotor, atención al cliente y
+teleoperador**, que son rubros centrales de AutoPostula. CIUO los cubre todos.
+
+> **CIUO-08.CL es la columna vertebral; ChileValora es el complemento.** Al revés no funciona.
+
+Cobertura verificada de los 17 rubros objetivo de AutoPostula: **17 de 17**, incluidos
+`Promotor de ventas [5242]`, `Ejecutivo de atención al cliente [4229]`, `Junior [9621]` y
+`Conductor (chofer) de ambulancia [8322]`.
+
+#### Formato del archivo
+
+```jsonc
+{
+  "grupos": { "1120": "Directores y gerentes generales de empresas", ... },
+  "ocupaciones": [
+    { "ocupacion": "Alcalde", "ciuo": "1111",
+      "fuente": "CIUO_INCLUIDA", "normalizado": "alcalde" },
+    { "ocupacion": "Gestor(A) Pequeña Empresa", "ciuo": "1120",
+      "fuente": "CHILEVALORA", "codigoPerfil": "P-7000-1120-001-V03",
+      "sector": "ACTIVIDADES PROFESIONALES, CIENTÍFICAS Y TÉCNICAS",
+      "normalizado": "gestor(a) pequena empresa" }
+  ]
+}
+```
+
+`fuente` ∈ `CIUO_INCLUIDA` | `CIUO_REFERENCIA` | `CHILEVALORA`.
+`normalizado` ya viene en minúsculas y sin tildes, con el mismo criterio que `AP.n`
+(`extension/core.js:50`) — ver la trampa de normalización en §13.
+
+#### Lo único que falta: `importar-catalogo.ts`
+
+**Script:** `backend/scripts/importar-catalogo.ts`, mismo patrón que
+`backend/scripts/set-admin.ts` — uso manual, no expuesto por HTTP, no referenciado desde la app.
+
+1. Leer `scripts/data/catalogo-ocupaciones-cl.json`.
+2. Insertar cada `ocupaciones[]` en `TituloCanonico` (§9.1) con:
+   - `formaCruda = formaLimpia = normalizado`
+   - `ciuo` = el código, `rolCanonico` = `grupos[ciuo]`
+   - `origen = CATALOGO_OFICIAL`, `codigoOficial` = `codigoPerfil` si viene de ChileValora
+3. Idempotente: correrlo dos veces no debe duplicar (upsert por `formaCruda`).
+
+#### Deudas menores conocidas
+
+- **37 filas descartadas** por control de calidad: paréntesis explicativos cortados entre
+  líneas del PDF (`"Director de instituciones públicas (como por e"`). Sobre 4.851 es ruido.
+  Recuperables afinando el manejo multilínea si algún día importa.
+- **3 códigos sin nombre de grupo** (`7129`, `7242`, `7243`). Se completan a mano en minutos.
+
+> **🐛 Bug corregido el 2026-09-03, después de la primera importación.** El PDF alterna
+> `Grupo primario` y `Grupo Primario` (14 encabezados con P mayúscula). El parser era sensible
+> a mayúsculas, se saltaba esos 14 encabezados, y **las ocupaciones de esos grupos quedaban
+> atribuidas al código anterior** — por ejemplo `Técnico físico` y `Ayudante de topógrafo`
+> terminaron en `2659` "Otros artistas creativos", junto a payasos y magos.
+>
+> **65 pares estaban mal asignados.** El archivo ya está corregido (444 grupos en vez de 430,
+> 3.484 pares en vez de 3.509).
+>
+> **⚠️ Si ya corriste `importar-catalogo.ts` con la versión anterior, hay que volver a
+> correrlo.** La base quedó con esos 65 pares apuntando a códigos equivocados.
+
+#### Qué NO da esta fuente
+
+La distribución real y sucia de títulos (`"Vendedor(a) Part Time Mall Plaza Vespucio"`), y
+tampoco el lenguaje de aviso: **ni CIUO ni ChileValora tienen "asesor comercial",
+"teleoperador" ni "barista"**, porque son nombres comerciales, no ocupaciones oficiales
+("asesor comercial" es el nombre de mercado de `Vendedor [5223]`).
+
+**Eso confirma empíricamente el diseño de tres capas:** el catálogo da los roles canónicos, la
+cosecha (§7.2) da las variantes reales, y la IA (§7.4) solo tiene que unir una con otra. El
+hueco que la cosecha debe llenar quedó identificado con nombre y apellido.
+
+**Frecuencia:** las filas del catálogo no tienen frecuencia real de mercado. Ese dato aparece
+recién con la cosecha, y hasta entonces el triaje ordena por relevancia respecto al
+`cargoObjetivo`, no por frecuencia.
 
 ### 7.2 Cosecha por extensión — para siempre
 
@@ -323,9 +503,13 @@ Después del día uno hay una fuente mejor y gratis: **la extensión ya lee toda
 Costo cero, riesgo cero, sin infraestructura nueva: corre sobre la sesión del propio usuario, que es exactamente lo que la extensión ya hace para postular.
 
 ```
-Día 0:   scrape manual   →  ~3.000 títulos      (una tarde, una vez)
-Día 1+:  extensión       →  crece solo          (costo cero, riesgo cero)
+Día 0:   catálogo oficial  →  capa canónica       (§7.1, una vez, sin riesgo)
+Día 0:   navegación manual →  ~1.800 títulos      (una tarde, Roberto + testers)
+Día 1+:  extensión         →  crece solo          (costo cero, riesgo cero)
 ```
+
+**Esta es ahora la única fuente de títulos reales del sistema.** Con el scrape descartado
+(§7.0), la cosecha dejó de ser un complemento y pasó a ser crítica: priorizarla.
 
 ### 7.3 Etapa 1 — el parser determinista
 
@@ -417,16 +601,89 @@ El destino importa tanto como el término:
 
 Archivo `limpieza/cl.ts`, **no** `limpieza.ts`, con la firma recibiendo el país. Cuesta nada ahora y es una refactorización fea el día que se agregue Perú o Colombia (salto natural en Computrabajo).
 
-### 7.4 Etapa 2 — agrupación con IA
+### 7.4 Etapa 2 — clasificación contra el catálogo
 
-Corre **una sola vez**, offline, sobre la salida de §7.3.
+> **Cambió respecto a la versión original del documento.** Antes esta etapa era *agrupación*
+> (clustering): la IA inventaba la taxonomía. Ahora la taxonomía viene del catálogo oficial
+> (§7.1) y la IA solo **clasifica contra un conjunto conocido**. Ver §7.0.
 
-- Entrada: las ~800 formas limpias distintas que quedan después del parser.
-- Batches de 200 → **4 llamadas**.
+Corre offline, sobre la salida de §7.3.
+
+- **Entrada:** las formas limpias distintas que salen del parser, más los **447 códigos CIUO**
+  del catálogo (§7.1) como conjunto de destino.
+- **Tarea del modelo:** *"¿a qué código CIUO corresponde este título? Si no corresponde a
+  ninguno, dilo."* La salida es un código de 4 dígitos, no texto libre.
+- **No mandar los 3.484 nombres en cada prompt.** Prefiltrar con el matcher local (§6) a los
+  ~30 códigos candidatos y pedirle al modelo que elija entre esos. Baja el costo por título
+  en más de un orden de magnitud y sube la precisión.
+- Batches de 200.
 - **Usar la Batch API** (50% de descuento; la latencia no importa porque corre offline).
-- **Usar Opus 5 (`claude-opus-5`), no Haiku.** Ver §3 — corre una vez y su calidad se amortiza sobre todos los usuarios para siempre. Costo total: unos pocos dólares.
+- **Usar Opus 5 (`claude-opus-5`), no Haiku.** Ver §3 — su calidad se amortiza sobre todos los
+  usuarios para siempre. Costo total: unos pocos dólares.
 
-Salida: cada forma limpia mapeada a un `rolCanonico` con sus sinónimos. Se guarda en `TituloCanonico` (§9).
+**Salida:** cada forma limpia mapeada a un `ciuo` del catálogo. Se guarda en `TituloCanonico`
+(§9.1).
+
+#### Set de validación gratis: las referencias cruzadas
+
+Las **82 entradas `CIUO_REFERENCIA`** del catálogo (§7.1) son mapeos `título → código`
+curados a mano por el INE, y son casos de frontera a propósito:
+
+```
+Gerente de tienda     → 1420   (no 5221)
+Vendedor por internet → 5244   (no 5223)
+Feriante              → 5211   (no 5221)
+```
+
+**Correr el clasificador contra ellas antes de usarlo en producción.** Es un test de regresión
+real, con etiquetas de una autoridad externa, que no cuesta nada construir. Si el modelo no
+acierta ahí, no va a acertar en los títulos sucios de los portales.
+
+#### Dos cosas que esta etapa ahora sí permite
+
+1. **Es verificable.** Como el conjunto de destino es cerrado y conocido, se puede revisar a
+   mano una muestra y contar aciertos. Con clustering no había contra qué comparar.
+2. **"Ninguno" es una respuesta válida y útil.** Los títulos que no calzan con ningún código
+   oficial son señal: o es un cargo emergente que el catálogo no cubre, o el parser lo dejó
+   sucio. Revisar esa lista periódicamente ordenada por frecuencia.
+
+#### Lo que esta etapa tiene que resolver, concretamente
+
+El hueco está identificado (§7.1): **nombres comerciales que no son ocupaciones oficiales.**
+
+| Título de aviso | Debe mapear a |
+|---|---|
+| `asesor comercial` | `5223` Vendedores de tiendas |
+| `teleoperador` | `4222` Empleados de centros de llamadas |
+| `barista` | `5132` Bármanes |
+| `atención al cliente` | `4229` / según contexto |
+
+Si el clasificador resuelve bien estos cuatro, funciona.
+
+#### Ya no es "una sola vez"
+
+Como la cosecha (§7.2) sigue trayendo títulos nuevos indefinidamente, esta etapa pasa a ser un
+**job periódico** (sugerido: semanal) sobre los títulos aún sin `ciuo` — la query que sirve el
+índice `@@index([origen, ciuo])` de §9.1. Sigue siendo barato: solo procesa lo nuevo, nunca
+reprocesa lo ya clasificado.
+
+#### Esta etapa NO bloquea al scorer (§6)
+
+Es tentador leer el orden de §11 como "hay que esperar a tener volumen cosechado antes de poder
+construir el paso 6". **No es así**, y conviene tenerlo claro para no frenar el proyecto:
+
+1. **La clasificación es por título, no por corpus.** Un título se clasifica **la primera vez
+   que alguien lo ve** y queda cacheado para siempre (§5, la caché global). No hace falta
+   acumular nada: el sistema funciona desde el título número uno. El job en batch es solo una
+   optimización de costo para el backfill.
+2. **Un título sin clasificar degrada solo, y bien.** Si el scorer no puede ubicar una oferta
+   con confianza, cae en la **banda gris** — que ya va a la cola de decisión del usuario (§8).
+   No hay que diseñar nada extra: *sin clasificar = incierto = preguntarle al usuario*. Y la
+   respuesta del usuario se convierte en etiqueta de entrenamiento.
+
+**El sistema arranca vacío y se llena solo.** Lo que la cosecha determina no es *si* funciona,
+sino **cuánta banda gris ve el usuario al principio** — que es exactamente la métrica de salud
+de §8.2, y se achica sola.
 
 ---
 
@@ -466,7 +723,71 @@ No al azar. Se busca **máxima información por swipe**, y eso significa mostrar
 
 Veinte títulos obvios de "vendedor" no enseñan nada. Diez fronteras bien elegidas definen el borde entero del perfil.
 
-Los títulos se eligen del corpus filtrando por frecuencia alta (títulos raros no representan lo que el usuario va a ver).
+#### De dónde salen esos 20 títulos
+
+**El triaje no necesita títulos reales scrapeados** (§7.0). Su trabajo es elicitar preferencias,
+y para eso basta con que el título sea *reconocible*, no que sea *auténtico*. Orden de
+preferencia de la fuente:
+
+1. **Corpus cosechado** (§7.2), filtrando por frecuencia alta — lo ideal, cuando ya haya volumen.
+2. **Catálogo oficial** (§7.1) — los nombres de perfil del INE/ChileValora son perfectamente
+   reconocibles y están disponibles desde el día uno.
+3. **Variantes sintéticas** generadas con una llamada a Opus a partir del catálogo, para que
+   suenen a aviso chileno real (`"Vendedor part time retail"` en vez de `"Vendedor de tiendas"`).
+
+**Esto desbloquea el triaje sin esperar a que la cosecha llene nada.** Se lanza con (2) + (3) y
+se migra a (1) cuando el corpus tenga volumen, sin cambiar el componente.
+
+#### La vecindad entre roles sale gratis de la jerarquía CIUO
+
+La fila de "roles vecinos ambiguos" —la que más señal aporta— **no hay que calcularla**. El
+código CIUO es jerárquico, así que la distancia entre dos roles se lee del propio código:
+
+```
+5223  Vendedores de tiendas y almacenes
+5222  Supervisores de locales comerciales      ← mismo subgrupo 522: vecino cercano
+5230  Cajeros y expendedores de billetes       ← mismo subgrupo principal 52: vecino
+9334  Reponedores de estanterías               ← distinto gran grupo: lejano
+```
+
+Regla para elegir los ~10 títulos de frontera del triaje: **mismo subgrupo (3 dígitos) que el
+`cargoObjetivo`, pero distinto grupo primario (4 dígitos)**. Eso es exactamente "parecido pero
+no igual", que es donde está la duda real del usuario. Sin IA, sin embeddings, sin cálculo — es
+una query con `LIKE '522%'` sobre `GrupoCiuo` (§9.1).
+
+#### ⚠️ El ancla no siempre existe: detectar ambigüedad antes de elegirla
+
+Todo lo anterior asume que el `cargoObjetivo` del usuario se puede anclar a **un** código CIUO.
+**Para los cargos genéricos que la gente realmente escribe, eso es falso**, y ninguna heurística
+de string lo arregla. Medido sobre el catálogo real:
+
+| `cargoObjetivo` | Candidatos | Familias CIUO con peso | ¿Anclable? |
+|---|---|---|---|
+| `vendedor` | 48 | 2 | Sí |
+| `cajero` | 23 | 2 | Sí |
+| `garzón` / `reponedor` | 2 / 4 | 1 | Sí |
+| **`operario`** | 77 | **3** (7 oficios, 9 elementales, 8 operadores) | **No** |
+| **`auxiliar`** | 27 | **4** | **No** |
+| **`ayudante`** | 60 | **5** | **No** |
+| **`encargado`** | 109 | **4** | **No** |
+
+Elegir "la coincidencia más corta" en los ambiguos da resultados absurdos: `operario` →
+`Operario de ferry [8350]` (tripulante de barco), `administrativo` → `Encargado administrativo
+[3344]` (secretario médico), `asesor` → `Asesor forestal [2132]` (agrónomo). Y ordenar por
+otros criterios tampoco funciona: son ambiguos de verdad, no mal ordenados. **"Operario" no es
+una ocupación: es un modificador. La ocupación está en el complemento** ("operario *de
+bodega*").
+
+**Regla:** contar en cuántos grandes grupos (primer dígito) caen los candidatos con peso ≥10%.
+
+- **1–2 familias** → anclar normalmente y aplicar el 5/10/5.
+- **3 o más** → **no adivinar.** Repartir los 20 títulos entre las familias principales y dejar
+  que los swipes resuelvan cuál es.
+
+Esto convierte la ambigüedad de bug en función: **el triaje existe precisamente para resolver
+esa duda**, así que cuando el cargo es ambiguo hay que *ensanchar* la muestra, no acertar el
+ancla. El usuario que escribió "operario" te va a decir en 20 swipes si es de bodega, de planta
+o de aseo — que es justamente lo que su `cargoObjetivo` no dice.
 
 ### 8.4 El problema difícil: la caducidad
 
@@ -513,19 +834,50 @@ Es reutilización casi literal, no código nuevo.
 // El corpus compilado. GLOBAL, no por usuario — un título canónico vale
 // para todos. Esta es la tabla que hace que el usuario N+1 sea casi gratis.
 model TituloCanonico {
-  id            String   @id @default(uuid())
-  formaCruda    String   @unique @map("forma_cruda")   // "vendedor part time mall plaza vespucio"
-  formaLimpia   String   @map("forma_limpia")           // "vendedor"  (salida de §7.3)
-  rolCanonico   String?  @map("rol_canonico")           // "ventas"    (salida de §7.4, null hasta agrupar)
-  frecuencia    Int      @default(1)
-  platformId    String?  @map("platform_id")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id            String        @id @default(uuid())
+  formaCruda    String        @unique @map("forma_cruda")   // "vendedor part time mall plaza vespucio"
+  formaLimpia   String        @map("forma_limpia")           // "vendedor"  (salida de §7.3)
+  rolCanonico   String?       @map("rol_canonico")           // nombre del grupo CIUO, legible
+  // ── La llave del sistema ──
+  // Código CIUO-08.CL de 4 dígitos. Es lo que une catálogo y cosecha: las filas
+  // del catálogo nacen con él poblado (§7.1) y las cosechadas lo reciben al ser
+  // clasificadas (§7.4). Todo el matching por rol se hace contra este campo, no
+  // contra strings. Ver §7.1 — en ChileValora viene embebido en el código de perfil.
+  ciuo          String?       @db.VarChar(4)
+  // De dónde salió esta fila. Las del catálogo oficial nacen con ciuo ya poblado
+  // y son la capa canónica; las cosechadas nacen sin él y se clasifican contra
+  // las primeras. Sin este campo no se pueden distinguir. Ver §7.0/§7.1.
+  origen        OrigenTitulo  @default(COSECHADO)
+  codigoOficial String?       @map("codigo_oficial")         // código de perfil ChileValora, si aplica
+  frecuencia    Int           @default(1)                    // solo significativa en COSECHADO
+  platformId    String?       @map("platform_id")
+  actualizadoEn DateTime      @updatedAt @map("actualizado_en")
 
   platform JobPlatform? @relation(fields: [platformId], references: [id])
 
-  @@index([rolCanonico])
+  @@index([ciuo])
   @@index([frecuencia])
+  @@index([origen, ciuo])   // para "títulos sin clasificar" del job de §7.4
   @@map("titulos_canonicos")
+}
+
+// Los 444 grupos primarios del CIUO-08.CL, con su jerarquía. Tabla chica y fija.
+// Sirve para: nombrar roles de forma legible, y para calcular vecindad entre
+// roles en el triaje (§8.3) — dos códigos del mismo subgrupo son vecinos por
+// construcción, sin necesidad de calcularlo con IA ni con embeddings.
+model GrupoCiuo {
+  codigo    String @id @db.VarChar(4)   // "5223"
+  nombre    String                       // "Vendedores y asistentes de venta de tiendas..."
+  subgrupo  String @db.VarChar(3)        // "522"  — derivado, para vecindad
+  granGrupo String @db.VarChar(1)        // "5"    — derivado
+
+  @@index([subgrupo])
+  @@map("grupos_ciuo")
+}
+
+enum OrigenTitulo {
+  CATALOGO_OFICIAL   // CIUO-08.CL o ChileValora — la capa canónica (§7.1)
+  COSECHADO          // visto por la extensión en un portal real (§7.2)
 }
 
 // Etiquetas del usuario. UNA sola tabla para las tres fuentes — es lo que
@@ -645,12 +997,18 @@ Ordenado para que cada paso entregue valor solo y no bloquee al siguiente.
 |---|---|---|---|
 | **0** | **Batchear `responder-pregunta` + fusionar `analizar-oferta`** (§10) | — | Sí, pero aislado |
 | **1** | **Cosecha por extensión** — reportar títulos vistos al backend (§7.2) | — | Sí, aditivo |
-| **2** | **Script de scrape + parser determinista** (§7.1, §7.3) | Lista de Roberto | No (offline) |
-| **3** | **Agrupación con Opus en batch** → taxonomía (§7.4) | 2 | No (offline) |
-| **4** | **Componente de swipe** + tabla `DecisionOferta` (§8, §9.1) | 3 | Sí, ruta nueva |
-| **5** | **Triaje en onboarding** (usa el componente con títulos del corpus) | 4 | Sí |
-| **6** | **Scorer local con bandas** + cola gris (usa el mismo componente) | 4, 5 | **Sí — cambia el comportamiento de postulación** |
+| **2** | **Parser determinista** (§7.3) | Lista de Roberto | No (offline) |
+| **2b** | **Importar catálogo oficial** → `TituloCanonico` + `GrupoCiuo` (§7.1). **La extracción ya está hecha**: solo falta `importar-catalogo.ts` leyendo `scripts/data/catalogo-ocupaciones-cl.json` | — | No (offline) |
+| **3** | **Clasificación con Opus contra el catálogo** (§7.4) | 2, 2b | No (offline) |
+| **4** | **Componente de swipe** + tabla `DecisionOferta` (§8, §9.1) | 2b | Sí, ruta nueva |
+| **5** | **Triaje en onboarding** (títulos del catálogo + variantes sintéticas) | 4 | Sí |
+| **6** | **Scorer local con bandas** + cola gris (usa el mismo componente) | 3, 4, 5 | **Sí — cambia el comportamiento de postulación** |
 | **7** | **Facets del portal en la URL** (§4, capa 0) | — | Sí |
+
+**Cambio respecto a la versión original:** el paso 2 ya no incluye el scrape (§7.0). Se agregó
+**2b**, que es independiente de la lista de Roberto y se puede hacer en paralelo. Y **el paso 4
+ya no depende del 3**: con el catálogo importado (2b) el componente de swipe tiene datos
+suficientes, así que el triaje puede lanzarse antes de que la clasificación esté lista.
 
 **Los pasos 1–3 son backend/offline puro y no tocan el comportamiento de la extensión en producción.** El paso 4 se usa dos veces. Recién en el 6 cambia de verdad cómo se postula.
 
@@ -662,13 +1020,43 @@ Los pasos **0** y **7** son independientes de todo lo demás y se pueden interca
 
 ### Del parser de títulos (§7.3)
 
-Se puede **medir**, no adivinar — para eso se hace el corpus antes que la lista.
+Se puede **medir**, no adivinar. Con el scrape descartado (§7.0), el corpus de prueba sale de la
+cosecha (§7.2) — por eso conviene sembrarla navegando a mano antes de dar el parser por bueno.
 
-1. Correr la limpieza sobre los ~3.000 títulos crudos.
-2. Contar formas distintas antes y después. **Si no baja de 3.000 a bastante menos de 1.000, falta lista.**
+1. Correr la limpieza sobre el corpus cosechado disponible.
+2. Contar formas distintas antes y después. **La tasa de colapso debe ser holgadamente mayor a
+   3:1.** Con menos que eso, falta lista.
 3. Ordenar lo que quedó sin colapsar **por frecuencia** y mirar el top 100 → **esa es la lista de tareas exacta**. No se adivina qué falta: los datos dicen qué ruido es el más caro que sigue suelto. Dos o tres iteraciones y converge.
 4. **Revisión cualitativa:** mirar las 50 formas limpias más frecuentes. **Todas tienen que leerse como cargos reconocibles.** Si aparece un fragmento tipo `de local` o `part`, hay un bug de orden o de límites de palabra.
 5. **Regresión de jerarquía:** verificar que `Jefe de local`, `Supervisor de ventas` y `Vendedor` NO colapsaron al mismo canónico.
+
+> El umbral original era "de 3.000 formas a menos de 1.000". Se reescribió como **tasa** porque
+> el tamaño del corpus ahora depende de cuánto se haya cosechado, no de un scrape de tamaño fijo.
+
+### De la clasificación contra el catálogo (§7.4)
+
+Esto es nuevo — con clustering no se podía medir, con clasificación sí:
+
+1. **Test de regresión con etiquetas externas (obligatorio).** Correr el clasificador contra
+   las **82 referencias cruzadas** `CIUO_REFERENCIA` del catálogo (§7.1) — son casos de
+   frontera etiquetados por el INE. **Objetivo: ≥85% de aciertos.** Este test no cuesta nada
+   construir y es el único con etiquetas que no salieron del propio sistema.
+2. **Los cuatro casos que definen el éxito** (§7.4): `asesor comercial → 5223`,
+   `teleoperador → 4222`, `barista → 5132`, `atención al cliente → 4229`. Si estos fallan, el
+   clasificador no está resolviendo el problema para el que existe.
+3. **Muestra manual:** 100 títulos cosechados ya clasificados, revisados a mano. Objetivo:
+   ≥90% correctos.
+4. Revisar la lista de títulos marcados como **"ninguno"** ordenada por frecuencia. Si hay
+   términos frecuentes ahí, o falta cobertura del catálogo o el parser los dejó sucios.
+
+### De la importación del catálogo (§7.1)
+
+- `TituloCanonico` debe quedar con **3.484 filas** `origen = CATALOGO_OFICIAL`, todas con
+  `ciuo` poblado.
+- `GrupoCiuo` debe quedar con **430 filas** (447 códigos aparecen en `ocupaciones`, pero 17 no
+  tienen nombre de grupo — ver deudas menores en §7.1; completarlos a mano o dejarlos con
+  nombre nulo, pero **no dejar que el importador falle por eso**).
+- Correr el importador dos veces no debe duplicar filas.
 
 ### Del scorer (§6)
 
@@ -699,3 +1087,18 @@ Se puede **medir**, no adivinar — para eso se hace el corpus antes que la list
 - **Retención del corpus.** `TituloCanonico` es global y crece lento (formas distintas, no avistamientos). `JobOffer` con avistamientos crece rápido — definir purga (§9.3).
 
 - **Chile tiene 346 comunas y 16 regiones.** Verificar que la lista esté completa contra la fuente oficial antes de dar por buena la etapa 1.
+
+- **El 403 de Computrabajo (§7.0) es información sobre el negocio, no solo sobre el script.**
+  El portal defiende activamente contra automatización. La extensión es un caso muy distinto —
+  corre en la sesión del propio usuario, a velocidad humana, sin camuflaje — pero el riesgo de
+  que un portal suspenda cuentas de usuarios por automatización existe y está declarado en los
+  Términos y condiciones (`app/terminos/page.tsx`, §4). Si algún día Computrabajo aprieta, el
+  plan B es Laborum y el resto de portales. Tenerlo presente al decidir cuánto acelerar la
+  búsqueda automática.
+
+- **No intentar sortear bloqueos de portales.** Camuflar el User-Agent, rotar IPs o usar
+  navegadores headless con anti-detección para esquivar un 403 queda fuera del alcance de este
+  proyecto. Si una fuente bloquea, se busca otra fuente — como se hizo en §7.0.
+
+- **`backend/scripts/scrape-corpus.ts` se conserva pero no se ejecuta.** Tiene su nota
+  explicando por qué. No borrarlo (documenta el intento) y no reactivarlo sin volver a §7.0.

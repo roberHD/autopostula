@@ -23,13 +23,21 @@ export async function PUT(request: Request) {
   if (!userId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const body = await request.json();
-  const { palabrasIncluir, palabrasExcluir, modalidad, jornada } = body || {};
+  const { palabrasIncluir, palabrasExcluir, modalidad, jornada, usarScorerLocal } = body || {};
 
   await getOrCreatePreferencias(userId);
 
   const actualizado = await prisma.searchPreferences.update({
     where: { userId },
-    data: { palabrasIncluir, palabrasExcluir, modalidad, jornada },
+    data: {
+      palabrasIncluir,
+      palabrasExcluir,
+      modalidad,
+      jornada,
+      // Solo se toca si vino explícitamente en el body -- así el PUT que ya
+      // usaba la página de filtros (sin este campo) no lo pisa con undefined.
+      ...(typeof usarScorerLocal === "boolean" ? { usarScorerLocal } : {}),
+    },
   });
 
   return NextResponse.json(actualizado);

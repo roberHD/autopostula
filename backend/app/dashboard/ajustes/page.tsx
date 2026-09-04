@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Zap, Lock, Mail, BadgeCheck } from "lucide-react";
+import { signOut } from "next-auth/react";
+import { Zap, Lock, Mail, BadgeCheck, TriangleAlert } from "lucide-react";
 
 export default function AjustesPage() {
   const [activa, setActiva] = useState(false);
@@ -13,6 +14,11 @@ export default function AjustesPage() {
   const [guardando, setGuardando] = useState(false);
   const [redirigiendo, setRedirigiendo] = useState(false);
   const [mensaje, setMensaje] = useState("");
+
+  const [mostrarEliminar, setMostrarEliminar] = useState(false);
+  const [confirmacionEmail, setConfirmacionEmail] = useState("");
+  const [eliminando, setEliminando] = useState(false);
+  const [errorEliminar, setErrorEliminar] = useState("");
 
   async function cargar() {
     try {
@@ -97,6 +103,34 @@ export default function AjustesPage() {
       setMensaje("No se pudo cancelar — revisa la consola");
     } finally {
       setRedirigiendo(false);
+    }
+  }
+
+  async function eliminarCuenta() {
+    if (eliminando) return;
+    setErrorEliminar("");
+    if (!email || confirmacionEmail.trim().toLowerCase() !== email.toLowerCase()) {
+      setErrorEliminar("Escribe tu correo exactamente como aparece arriba para confirmar.");
+      return;
+    }
+    setEliminando(true);
+    try {
+      const res = await fetch("/api/account/eliminar", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmacionEmail }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorEliminar(data.error ?? "No se pudo eliminar la cuenta — intenta de nuevo");
+        setEliminando(false);
+        return;
+      }
+      await signOut({ callbackUrl: "/login?eliminada=1" });
+    } catch (err) {
+      console.error("Error eliminando cuenta:", err);
+      setErrorEliminar("No se pudo eliminar la cuenta — revisa la consola");
+      setEliminando(false);
     }
   }
 
@@ -216,6 +250,98 @@ export default function AjustesPage() {
           </div>
         )}
       </div>
+
+      <div
+        className="ap-section ap-animate-in"
+        style={{ animationDelay: "0.1s", borderColor: "color-mix(in oklch, var(--status-rechazado) 35%, transparent)" }}
+      >
+        <p className="ap-section-title" style={{ color: "var(--status-rechazado)" }}>Zona de peligro</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <p style={{ fontSize: 13, fontWeight: 600 }}>Eliminar mi cuenta</p>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.5 }}>
+              Borra tu cuenta y todos tus datos (CV, perfil, postulaciones, preferencias) de inmediato. No se puede deshacer.
+            </p>
+          </div>
+          <button
+            style={{
+              border: "1px solid var(--status-rechazado)", color: "var(--status-rechazado)",
+              background: "transparent", borderRadius: 8, padding: "8px 14px",
+              fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0,
+            }}
+            onClick={() => { setMostrarEliminar(true); setConfirmacionEmail(""); setErrorEliminar(""); }}
+          >
+            Eliminar mi cuenta
+          </button>
+        </div>
+      </div>
+
+      {mostrarEliminar && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            background: "color-mix(in oklch, black 45%, transparent)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+          }}
+          onClick={() => !eliminando && setMostrarEliminar(false)}
+        >
+          <div
+            className="ap-section"
+            style={{ maxWidth: 420, width: "100%", margin: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+              <div
+                style={{
+                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                  background: "color-mix(in oklch, var(--status-rechazado) 16%, transparent)", color: "var(--status-rechazado)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <TriangleAlert size={16} />
+              </div>
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 700 }}>¿Eliminar tu cuenta?</p>
+                <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4, lineHeight: 1.5 }}>
+                  Se borra todo de inmediato: CV, perfil de estilo, historial de postulaciones, portales conectados y tu suscripción (si tienes una activa se cancela). No hay vuelta atrás.
+                </p>
+              </div>
+            </div>
+
+            <label className="ap-label" style={{ marginTop: 8, display: "block" }}>
+              Escribe <strong>{email}</strong> para confirmar
+            </label>
+            <input
+              className="ap-input"
+              value={confirmacionEmail}
+              onChange={(e) => setConfirmacionEmail(e.target.value)}
+              placeholder={email ?? ""}
+              autoFocus
+              disabled={eliminando}
+            />
+            {errorEliminar && (
+              <p style={{ fontSize: 12, color: "var(--status-rechazado)", marginTop: 8 }}>{errorEliminar}</p>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+              <button className="ap-button-ghost" disabled={eliminando} onClick={() => setMostrarEliminar(false)}>
+                Cancelar
+              </button>
+              <button
+                style={{
+                  border: "none", background: "var(--status-rechazado)", color: "white",
+                  borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600,
+                  cursor: eliminando ? "default" : "pointer", opacity: eliminando ? 0.7 : 1,
+                }}
+                disabled={eliminando || !confirmacionEmail}
+                onClick={eliminarCuenta}
+              >
+                {eliminando ? "Eliminando..." : "Eliminar definitivamente"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -31,6 +31,14 @@ export async function GET(request: Request) {
     modalidad: filtros?.modalidad ?? "cualquiera",
     jornada: filtros?.jornada ?? "cualquiera",
   };
+  // Scorer local (docs/rediseno-filtrado-ofertas.md §6) -- detrás de un flag
+  // que empieza apagado para todos (§13). Sin perfilCompilado no hay nada que
+  // puntuar, así que usarScorerLocal nunca se activa solo sin uno.
+  const scorer = {
+    usarScorerLocal: !!(filtros?.usarScorerLocal && filtros?.perfilCompilado),
+    perfilCompilado: filtros?.perfilCompilado ?? null,
+    versionPerfil: filtros?.versionPerfil ?? 0,
+  };
 
   if (!perfil) {
     return NextResponse.json({
@@ -38,6 +46,7 @@ export async function GET(request: Request) {
       cargoObjetivo: null, expectativaRenta: null, disponibilidad: null,
       resumenProfesional: null, textoExtraido: null,
       filtrosBusqueda,
+      scorer,
     });
   }
 
@@ -52,5 +61,6 @@ export async function GET(request: Request) {
     resumenProfesional: perfil.resumenProfesional,
     textoExtraido: perfil.textoExtraido,
     filtrosBusqueda,
+    scorer,
   });
 }
