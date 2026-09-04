@@ -275,16 +275,19 @@ async function rellenarYEnviarPreguntas(contexto) {
 // Un 'err' de verdad (no un 'skip' esperable como "ya estaba postulada") también
 // se reporta al backend como postulación incompleta, para que quede visible en
 // el dashboard con la razón — antes esto se perdía en el log local nomás.
-function marcarIncompleta(id, titulo, url, razon, respuestas) {
+function marcarIncompleta(id, titulo, url, razon, respuestas, decisionOfertaId) {
   addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: razon, respuestas });
-  reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, incompleta: true, nota: razon, respuestas: respuestas || [] });
+  reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, incompleta: true, nota: razon, respuestas: respuestas || [], decisionOfertaId });
 }
 
 // ── Postular a una oferta ya abierta ──────────────────────────────
-async function postularEnPagina(id, titulo, url) {
+// Devuelve { ok, expirada } -- expirada=true SOLO cuando no hay ningún botón
+// de postular (§8.4/§8.6: la oferta ya no existe o ya no acepta postulantes).
+// El resto de los "no ok" son fallas puntuales del flujo, no la oferta en sí.
+async function postularEnPagina(id, titulo, url, decisionOfertaId) {
   if (yaPostulado()) {
     addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: 'Ya estaba postulada' });
-    return false;
+    return { ok: false, expirada: false };
   }
 
   // El texto del botón cambia según el tipo de oferta: "Postulación rápida"
@@ -296,11 +299,11 @@ async function postularEnPagina(id, titulo, url) {
     });
 
   if (!btn) {
-    marcarIncompleta(id, titulo, url, 'No se encontró el botón para postular');
-    return false;
+    marcarIncompleta(id, titulo, url, 'No se encontró el botón para postular', null, decisionOfertaId);
+    return { ok: false, expirada: true };
   }
 
-  if (!AP.activo) return false;
+  if (!AP.activo) return { ok: false, expirada: false };
 
   btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
   await sleep(400);
@@ -314,50 +317,60 @@ async function postularEnPagina(id, titulo, url) {
     const resultado = await rellenarYEnviarPreguntas(contexto);
 
     if (!resultado) {
-      marcarIncompleta(id, titulo, url, 'El modal de preguntas desapareció antes de poder llenarlo');
-      return false;
+      marcarIncompleta(id, titulo, url, 'El modal de preguntas desapareció antes de poder llenarlo', null, decisionOfertaId);
+      return { ok: false, expirada: false };
     }
     if (resultado.saltada) {
       addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: 'Saltada en revisión manual' });
-      return false;
+      return { ok: false, expirada: false };
     }
     if (resultado.errorEnvio) {
       const respuestasParaLog = resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia }));
-      marcarIncompleta(id, titulo, url, resultado.errorEnvio, respuestasParaLog);
-      return false;
+      marcarIncompleta(id, titulo, url, resultado.errorEnvio, respuestasParaLog, decisionOfertaId);
+      return { ok: false, expirada: false };
     }
 
     const ok = await esperarConfirmacion();
     if (ok) {
       const respuestasParaLog = resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia, fueIA: r.fueIA }));
       addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación con preguntas enviada', respuestas: respuestasParaLog });
-      reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, matchScore: resultado.matchScore, respuestas: respuestasParaLog });
+      reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, matchScore: resultado.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
       msg('✓ ' + titulo.slice(0, 40), '#16A34A');
-      return true;
+      return { ok: true, expirada: false };
     }
-    marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia })));
-    return false;
+    marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia })), decisionOfertaId);
+    return { ok: false, expirada: false };
   }
 
   // Sin modal: postulación directa de un clic.
   const ok = await esperarConfirmacion();
   if (ok) {
     addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación rápida enviada' });
-    reportarPostulacion({ id, titulo, plataforma: 'Laborum', url });
+    reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, decisionOfertaId });
     msg('✓ ' + titulo.slice(0, 40), '#16A34A');
-    return true;
+    return { ok: true, expirada: false };
   }
 
-  marcarIncompleta(id, titulo, url, 'Se hizo clic pero no se detectó confirmación — puede que haya redirigido a un portal externo');
-  return false;
+  marcarIncompleta(id, titulo, url, 'Se hizo clic pero no se detectó confirmación — puede que haya redirigido a un portal externo', null, decisionOfertaId);
+  return { ok: false, expirada: false };
 }
 
 // ── Escanear el listado ────────────────────────────────────────────
 async function escanear() {
   if (!AP.activo || AP.procesando || !AP.cfg) return;
 
-  // En una página de detalle (no listado), postular directo si corresponde.
-  if (/\/empleos\/.+-\d+\.html/.test(location.pathname)) {
+  // En una página de detalle (no listado), postular directo si corresponde
+  // -- pero solo si se llegó navegando desde un listado (history real: la
+  // propia escanear() de más abajo navega con location.href, así que la
+  // pestaña ya trae al menos una entrada previa). Una pestaña NUEVA abierta
+  // directo en la URL de una oferta (§8.6, banda gris aprobada -- ver
+  // AP.aplicarDirecto) siempre arranca con history.length === 1: si acá se
+  // disparara igual, competiría con el DO_APPLY explícito que trae el
+  // decisionOfertaId para enlazar la postulación, y esta postularía primero
+  // sin ese enlace (sin duplicar el envío -- postularEnPagina ya empieza
+  // chequeando yaPostulado() -- pero la decisión quedaría "pendiente" para
+  // siempre aunque ya se haya postulado).
+  if (/\/empleos\/.+-\d+\.html/.test(location.pathname) && history.length > 1) {
     return escanearPaginaDeOferta();
   }
 
@@ -366,6 +379,7 @@ async function escanear() {
 
   const pendientes = [];
   const titulosVistos = [];
+  const avistamientos = [];
   candidatas.forEach(a => {
     const id = getIdDeTarjeta(a);
     if (yaProcesada(id)) return;
@@ -374,6 +388,11 @@ async function escanear() {
     // docs/rediseno-filtrado-ofertas.md, §7.2).
     titulosVistos.push(titulo);
 
+    const empresa = getEmpresaDeTarjeta(a) || null;
+    // Avistamiento (§9.3): toda tarjeta vista alimenta el corpus global de
+    // JobOffer, se postule, quede en gris o se descarte.
+    avistamientos.push({ externalId: id, titulo, empresa, url: a.href });
+
     const resultado = evaluarTarjeta(a);
     if (resultado.banda === 'postular') {
       pendientes.push({ a, id, titulo, url: a.href });
@@ -381,8 +400,7 @@ async function escanear() {
       AP.vistos.add(id);
       addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: 'En banda gris — revisar en el dashboard' });
       AP.reportarBandaGris({
-        titulo, url: a.href, plataforma: 'Laborum',
-        empresa: getEmpresaDeTarjeta(a) || null,
+        titulo, url: a.href, plataforma: 'Laborum', empresa,
         scoreLocal: resultado.score, razones: resultado.razones,
       });
     } else {
@@ -391,6 +409,7 @@ async function escanear() {
     }
   });
   reportarTitulosVistos(titulosVistos, 'Laborum');
+  AP.reportarAvistamientos(avistamientos, 'Laborum');
 
   msg(pendientes.length + ' de ' + candidatas.length + ' coinciden', '#16A34A');
   if (!pendientes.length) return;
@@ -438,8 +457,29 @@ async function escanearPaginaDeOferta() {
   }
 }
 
+// ── Postular directo a UNA oferta ya aprobada en banda gris (§8.6) ──────
+// La pestaña la abrió background.js apuntando directo a la URL de la
+// oferta (no a un listado). A diferencia de escanearPaginaDeOferta (el
+// mismo flujo pero disparado por la continuación normal de un escaneo),
+// esta no vuelve atrás con history.back() al terminar -- no hay a dónde
+// volver, background.js cierra la pestaña sola con el resultado.
+async function aplicarDirecto(decisionOfertaId) {
+  const id = (location.pathname.match(/-(\d+)\.html/) || [])[1] || location.pathname;
+  await esperar('button');
+  const tituloEl = document.querySelector('h1');
+  const titulo = (tituloEl && tituloEl.textContent.trim()) || 'Oferta';
+
+  AP.procesando = true;
+  try {
+    return await postularEnPagina(id, titulo, location.href, decisionOfertaId);
+  } finally {
+    AP.procesando = false;
+  }
+}
+
 // ── Registro en el núcleo compartido ────────────────────────────
 AP.escanear = escanear;
+AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function () {
   console.log('[AP-Laborum] listo — activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length);
   if (AP.activo) {

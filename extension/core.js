@@ -89,6 +89,18 @@ AP.reportarTitulosVistos = function (titulos, plataforma) {
   }
 };
 
+// ── Reportar avistamientos al backend (corpus de JobOffer, §9.3) ─────────
+// Fire-and-forget igual que reportarTitulosVistos: cada tarjeta vista, se
+// postule, quede en gris o se descarte, alimenta el corpus de ofertas.
+AP.reportarAvistamientos = function (avistamientos, plataforma) {
+  if (!avistamientos || !avistamientos.length) return;
+  try {
+    chrome.runtime.sendMessage({ type: 'REPORTAR_AVISTAMIENTOS', avistamientos: avistamientos, plataforma: plataforma });
+  } catch (e) {
+    console.warn('[AP] No se pudo avisar al background (avistamientos):', e);
+  }
+};
+
 // ── Reportar oferta en banda gris al backend (scorer local, §6) ──────────
 AP.reportarBandaGris = function (oferta) {
   try {
@@ -169,16 +181,29 @@ function apEscaparRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Sufijador simple de género/plural (§6: "cubre casi toda la varianza de
-// títulos chilenos, no hace falta una librería") -- solo se aplica a palabras
-// que terminan en los sufijos típicos de ocupación en masculino/neutro
-// singular (vendedor, cocinero, recepcionista), para no inflar de más
-// palabras que no varían así.
+// Sufijador de género/plural (§6). Bug real encontrado en revisión el
+// 2026-09-04: la versión anterior AGREGABA el sufijo sin sacar la vocal
+// final, así que para palabras en -o generaba "cajeroa"/"cajeroes" pero
+// nunca "cajera" ni "cajeros" -- 7 de 16 títulos comunes (cajera, cajeros,
+// operarios, bodegueros, electricistas...) daban falso negativo silencioso:
+// la oferta caía a banda 'descartar' sin que el usuario se enterara de que
+// existió. Corregido sacando la vocal final antes de flexionar.
 function apPatronPalabra(palabra) {
   const escapada = apEscaparRegex(palabra);
-  if (/^[a-z]+(o|or|ista)$/.test(palabra)) {
-    return escapada + '(?:a|as|es|os)?';
-  }
+  // Muy corta: no flexionar -- recortarle la vocal final a algo como "pt" o
+  // "de" genera un patrón que matchea casi cualquier cosa.
+  if (palabra.length < 4) return escapada;
+  // -or: vendedor -> vendedor/a/es/as (acá el sufijo sí se agrega, no se
+  // saca nada de la raíz).
+  if (/^[a-z]+or$/.test(palabra)) return escapada + '(?:a|es|as)?';
+  // -ista / -e: electricista -> +s ; jefe -> jefes.
+  if (/^[a-z]+(ista|e)$/.test(palabra)) return escapada + 's?';
+  // -o: cajero -> "cajer" + o/a/os/as (acá SÍ hay que sacar la "o" final).
+  if (/^[a-z]+o$/.test(palabra)) return apEscaparRegex(palabra.slice(0, -1)) + '(?:o|a|os|as)';
+  // -a: cajera -> misma raíz que el caso anterior.
+  if (/^[a-z]+a$/.test(palabra)) return apEscaparRegex(palabra.slice(0, -1)) + '(?:o|a|os|as)';
+  // Termina en consonante (chofer, auxiliar): +es.
+  if (/^[a-z]*[bcdfglmnprstvz]$/.test(palabra)) return escapada + '(?:es)?';
   return escapada;
 }
 
@@ -209,19 +234,37 @@ AP.puntuarOferta = function (campos, perfil) {
 
   perfil = perfil || {};
 
-  // 1. Vetos -- si matchea alguno, corta acá. Sin IA, la razón sale del
-  // propio perfil (compilada una vez, mostrable siempre).
+  // 1. Vetos -- si matchea en título o empresa, corta acá con la misma
+  // certeza de siempre. Si matchea SOLO en el cuerpo, no corta -- queda
+  // como penalización fuerte (aplicada más abajo, después de puntuar los
+  // roles) en vez de corte duro. Bug real encontrado en revisión el
+  // 2026-09-04: cortar también por el cuerpo reintroduce el problema de
+  // polaridad que este scorer vino a arreglar (§2.1) -- un veto de "call
+  // center" mataría un aviso de analista publicado por "Konecta Call
+  // Center SpA" con la misma certeza que si apareciera en el título.
   const vetos = perfil.vetos || [];
+  let penalizacionVetoCuerpo = 0;
+  let razonVetoCuerpo = null;
   for (const veto of vetos) {
-    if (buscar(veto.patron).coincide) {
+    const resultado = buscar(veto.patron);
+    if (!resultado.coincide) continue;
+    if (resultado.enTitulo || resultado.enEmpresa) {
       return { score: 0, banda: 'descartar', razones: [veto.razon || ('no cumple: ' + veto.patron)] };
     }
+    penalizacionVetoCuerpo = 60;
+    razonVetoCuerpo = veto.razon || ('posible: ' + veto.patron);
   }
 
   // 2. Roles -- puntaje del mejor match (canónico o sinónimo) × peso del rol,
-  // con el campo donde matcheó pesando más (título ×3, empresa ×1, cuerpo
-  // ×0.5 -- ver §6). Se acota a 100 antes de aplicar señales para que estas
-  // mantengan un efecto proporcional, no se pierdan en el redondeo.
+  // con el campo donde matcheó pesando más (título, luego empresa, luego
+  // cuerpo -- ver §6). Los multiplicadores tienen que ser FACTORES <= 1: con
+  // peso=1 en título, puntaje = 1*100*1 = 100 -- si el de título fuera >1
+  // (como ×3), el clamp de más abajo lo iguala con cualquier otro campo que
+  // también llegue a >=100, y el peso del rol deja de importar. Bug real
+  // encontrado en revisión el 2026-09-04: con el ×3 de antes, "Bodeguero
+  // nocturno" en una empresa llamada "Vendedores Unidos SpA" daba 100 y
+  // postulaba, exactamente el bug de polaridad que este scorer vino a
+  // arreglar, solo que movido del filtro viejo a acá.
   const roles = perfil.roles || [];
   let score = 0;
   let mejorRol = null;
@@ -231,7 +274,7 @@ AP.puntuarOferta = function (campos, perfil) {
     for (const termino of terminos) {
       const resultado = buscar(termino);
       if (!resultado.coincide) continue;
-      const multiplicadorCampo = resultado.enTitulo ? 3 : resultado.enEmpresa ? 1 : 0.5;
+      const multiplicadorCampo = resultado.enTitulo ? 1 : resultado.enEmpresa ? 0.35 : 0.3;
       const puntaje = peso * 100 * multiplicadorCampo;
       if (puntaje > score) {
         score = puntaje;
@@ -244,6 +287,10 @@ AP.puntuarOferta = function (campos, perfil) {
     razones.push('calza con "' + mejorRol.rol + '" (' + mejorRol.termino + ')');
   } else if (roles.length) {
     razones.push('no se encontró ninguno de los roles buscados');
+  }
+  if (penalizacionVetoCuerpo) {
+    score = Math.max(0, score - penalizacionVetoCuerpo);
+    razones.push(razonVetoCuerpo + ' (mención en el cuerpo del aviso, no en título/empresa)');
   }
 
   // 3. Ubicación -- penalización fuerte si hay comunas configuradas, ninguna
@@ -673,6 +720,16 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
       if (AP.escanear) AP.escanear();
     });
     sendResponse({ ok: true });
+  }
+  // §8.6: la pestaña se abrió apuntando a una oferta concreta ya aprobada en
+  // banda gris -- cada adaptador define AP.aplicarDirecto con su propio
+  // flujo de postular una sola oferta (no un escaneo de listado). Async
+  // porque la postulación real toma varios segundos -- hay que devolver
+  // true para que Chrome no cierre el canal antes del sendResponse.
+  if (m.type === 'DO_APPLY') {
+    if (!AP.aplicarDirecto) { sendResponse({ success: false, expirada: false }); return true; }
+    AP.aplicarDirecto(m.decisionId).then(sendResponse);
+    return true;
   }
 });
 

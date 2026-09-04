@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       incompleta = false, // true: la extensión no pudo terminar la postulación sola
       nota, // por qué quedó incompleta (solo aplica si incompleta = true)
       matchScore, // 0-100 — viene de analizarOferta() en la extensión, si se llamó
+      decisionOfertaId, // §8.6: viene de una aprobación de banda gris -- enlaza esa decisión con esta postulación
     } = body;
 
     if (!platformNombre || !externalId || !titulo) {
@@ -103,9 +104,12 @@ export async function POST(request: Request) {
     const jobOffer = await prisma.jobOffer.upsert({
       where: { platformId_externalId: { platformId: platform.id, externalId } },
       // No pisar un matchScore ya guardado con "undefined" si esta vez no vino —
-      // solo se actualiza cuando realmente se calculó uno nuevo.
-      update: { ...(url ? { url } : {}), ...(relevanciaAi !== undefined ? { relevanciaAi } : {}) },
-      create: { platformId: platform.id, externalId, titulo, empresa, url, origen, relevanciaAi },
+      // solo se actualiza cuando realmente se calculó uno nuevo. postulada
+      // siempre se fuerza a true acá: puede que la fila ya existiera como
+      // avistamiento (§9.3, la vio la extensión antes sin postularse) y este
+      // POST es justo el momento en que eso deja de ser cierto.
+      update: { ...(url ? { url } : {}), ...(relevanciaAi !== undefined ? { relevanciaAi } : {}), postulada: true },
+      create: { platformId: platform.id, externalId, titulo, empresa, url, origen, relevanciaAi, postulada: true },
     });
 
     const cv = await prisma.cvProfile.findUnique({ where: { userId: user.id } });
@@ -133,6 +137,18 @@ export async function POST(request: Request) {
     await prisma.applicationStatusHistory.create({
       data: { applicationId: application.id, estado: estadoInicial },
     });
+
+    // §8.6: si esta postulación viene de una aprobación de banda gris, se
+    // enlaza acá -- es lo que la saca de "pendiente" en /api/extension/perfil
+    // (esa query filtra por jobOfferId: null). Guardado con condiciones
+    // (userId + veredicto SI) para que un id ajeno o ya resuelto no pueda
+    // pisar el estado de otra decisión.
+    if (decisionOfertaId) {
+      await prisma.decisionOferta.updateMany({
+        where: { id: decisionOfertaId, userId: user.id, veredicto: "SI" },
+        data: { jobOfferId: jobOffer.id },
+      });
+    }
 
     if (Array.isArray(respuestas) && respuestas.length) {
       await prisma.applicationAnswer.createMany({

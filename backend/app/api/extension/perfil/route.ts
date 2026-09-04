@@ -20,10 +20,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
   }
 
-  const [perfil, filtros] = await Promise.all([
+  const [perfil, filtros, aprobadas] = await Promise.all([
     prisma.cvProfile.findUnique({ where: { userId: user.id } }),
     prisma.searchPreferences.findUnique({ where: { userId: user.id } }),
+    // Banda gris aprobada, pendiente de que la extensión la tome (§8.6):
+    // jobOfferId sigue null hasta que se postula de verdad -- ver
+    // /api/applications, que lo enlaza cuando eso pasa. Tope bajo a
+    // propósito: cada una abre una pestaña nueva, no tiene sentido
+    // acumular decenas en un solo ciclo de la alarma.
+    prisma.decisionOferta.findMany({
+      where: { userId: user.id, fuente: "BANDA_GRIS", veredicto: "SI", jobOfferId: null },
+      orderBy: { decididoEn: "asc" },
+      take: 5,
+    }),
   ]);
+
+  const bandaGrisAprobadas = aprobadas
+    .filter((d) => d.url && d.plataforma)
+    .map((d) => ({ id: d.id, titulo: d.tituloCrudo, url: d.url, empresa: d.empresa, plataforma: d.plataforma }));
 
   const filtrosBusqueda = {
     palabrasIncluir: (filtros?.palabrasIncluir as string[] | null) ?? [],
@@ -47,6 +61,7 @@ export async function GET(request: Request) {
       resumenProfesional: null, textoExtraido: null,
       filtrosBusqueda,
       scorer,
+      bandaGrisAprobadas,
     });
   }
 
@@ -62,5 +77,6 @@ export async function GET(request: Request) {
     textoExtraido: perfil.textoExtraido,
     filtrosBusqueda,
     scorer,
+    bandaGrisAprobadas,
   });
 }
