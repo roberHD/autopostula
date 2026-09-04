@@ -155,7 +155,7 @@ export default function LoginPage() {
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 600 }}>Contraseña</label>
-                <a href="/recuperar-clave" style={{ fontSize: 12, color: ACCENT, textDecoration: "none" }}>
+                <a href="/login/forgot-password" style={{ fontSize: 12, color: ACCENT, textDecoration: "none" }}>
                   ¿Olvidaste tu contraseña?
                 </a>
               </div>
