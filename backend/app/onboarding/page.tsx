@@ -31,11 +31,32 @@ const PASOS = [
   { titulo: "Listo", Icon: CheckCircle2 },
 ];
 
+// Recuerda hasta dónde se avanzó manualmente (Siguiente/Omitir), para que un
+// reload -- como el que dispara "Ya la instalé, verificar" en el paso de la
+// extensión -- no regrese a un paso anterior que se saltó a propósito sin
+// confirmarlo (ej: Conversación con "Omitir por ahora"). determinarInicio()
+// solo recalcula hacia ADELANTE del servidor; esto evita que retroceda.
+const LLAVE_PASO_GUARDADO = "ap_onboarding_paso";
+
+function guardarPaso(paso: number) {
+  try {
+    localStorage.setItem(LLAVE_PASO_GUARDADO, String(paso));
+  } catch {
+    // localStorage puede fallar en privado/incógnito -- no es crítico, solo
+    // se pierde el "recordar por dónde iba" en ese caso.
+  }
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
   // null = todavía revisando desde dónde retomar. Evita el flash de "Bienvenida"
   // antes de saltar al paso que realmente falta.
-  const [paso, setPaso] = useState<number | null>(null);
+  const [paso, setPasoState] = useState<number | null>(null);
+
+  function irAPaso(n: number) {
+    guardarPaso(n);
+    setPasoState(n);
+  }
 
   useEffect(() => {
     async function determinarInicio() {
@@ -62,15 +83,27 @@ export default function OnboardingPage() {
         const extensionLista = !!extension?.extensionConectada;
         const portalConectado = (portales?.cuentas || []).some((c: any) => c.activa);
 
-        if (!cvListo) setPaso(0);
-        else if (!triajeListo) setPaso(2);
-        else if (!conversacionLista) setPaso(3);
-        else if (!extensionLista) setPaso(4);
-        else if (!portalConectado) setPaso(5);
-        else setPaso(6);
+        let calculado = 0;
+        if (!cvListo) calculado = 0;
+        else if (!triajeListo) calculado = 2;
+        else if (!conversacionLista) calculado = 3;
+        else if (!extensionLista) calculado = 4;
+        else if (!portalConectado) calculado = 5;
+        else calculado = 6;
+
+        let guardado = -1;
+        try {
+          guardado = Number(localStorage.getItem(LLAVE_PASO_GUARDADO) ?? -1);
+        } catch {
+          // ver comentario en guardarPaso()
+        }
+
+        const inicio = Number.isFinite(guardado) && guardado > calculado ? guardado : calculado;
+        guardarPaso(inicio);
+        setPasoState(inicio);
       } catch (e) {
         console.error("No se pudo determinar en qué paso del onboarding retomar:", e);
-        setPaso(0);
+        setPasoState(0);
       }
     }
     determinarInicio();
@@ -81,6 +114,11 @@ export default function OnboardingPage() {
       await fetch("/api/account/completar-onboarding", { method: "POST" });
     } catch (e) {
       console.error("No se pudo marcar el onboarding como completado:", e);
+    }
+    try {
+      localStorage.removeItem(LLAVE_PASO_GUARDADO);
+    } catch {
+      // ver comentario en guardarPaso()
     }
     router.push("/dashboard");
   }
@@ -125,12 +163,12 @@ export default function OnboardingPage() {
         </p>
 
         <div className="ap-card ap-onb-card ap-animate-in" key={paso} style={{ padding: 32 }}>
-          {paso === 0 && <PasoBienvenida onSiguiente={() => setPaso(1)} onOmitir={() => setPaso(1)} />}
-          {paso === 1 && <PasoCV onSiguiente={() => setPaso(2)} onOmitir={() => setPaso(2)} />}
-          {paso === 2 && <PasoTriaje onSiguiente={() => setPaso(3)} onOmitir={() => setPaso(3)} />}
-          {paso === 3 && <PasoConversacion onSiguiente={() => setPaso(4)} onOmitir={() => setPaso(4)} />}
-          {paso === 4 && <PasoExtension onSiguiente={() => setPaso(5)} />}
-          {paso === 5 && <PasoPortal onSiguiente={() => setPaso(6)} onOmitir={() => setPaso(6)} />}
+          {paso === 0 && <PasoBienvenida onSiguiente={() => irAPaso(1)} onOmitir={() => irAPaso(1)} />}
+          {paso === 1 && <PasoCV onSiguiente={() => irAPaso(2)} onOmitir={() => irAPaso(2)} />}
+          {paso === 2 && <PasoTriaje onSiguiente={() => irAPaso(3)} onOmitir={() => irAPaso(3)} />}
+          {paso === 3 && <PasoConversacion onSiguiente={() => irAPaso(4)} onOmitir={() => irAPaso(4)} />}
+          {paso === 4 && <PasoExtension onSiguiente={() => irAPaso(5)} />}
+          {paso === 5 && <PasoPortal onSiguiente={() => irAPaso(6)} onOmitir={() => irAPaso(6)} />}
           {paso === 6 && <PasoListo onTerminar={terminar} />}
         </div>
       </div>
