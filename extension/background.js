@@ -5,8 +5,8 @@
 
 console.log('[AP] background.js cargado', new Date().toLocaleTimeString());
 
-// Mismo dominio que host_permissions/content_scripts en manifest.json.
-// Cuando se compre el dominio propio, actualizar ambos archivos juntos.
+// Mismo dominio que host_permissions/content_scripts en manifest.json --
+// si cambia, actualizar ambos archivos juntos.
 const BACKEND_URL = 'https://autopostula.cl';
 
 let queue = [];
@@ -163,27 +163,81 @@ function normalizarParaUrl(texto) {
     .replace(/\s+/g, '-');
 }
 
+// Comunas de la Región Metropolitana (verificado en vivo el 2026-09-04 contra
+// Laborum). Computrabajo acepta el slug de cualquier comuna directo, sin
+// necesitar la región (probado con nunoa, chillan y providencia). Laborum en
+// cambio SÍ exige el prefijo de región para poder filtrar por comuna -- por
+// eso esta lista solo cubre RM: fuera de ella no hay una tabla comuna→región
+// disponible del lado de la extensión (el backend sí la tiene, en
+// scripts/limpieza/cl.ts). Si el uso real pide más regiones, conviene que el
+// backend resuelva la región y la mande ya lista en el perfil compilado, en
+// vez de duplicar las 346 comunas de Chile acá.
+const COMUNAS_RM = new Set([
+  'santiago centro', 'las condes', 'providencia', 'maipu', 'quilicura',
+  'huechuraba', 'la florida', 'pudahuel', 'san bernardo', 'nunoa', 'colina',
+  'puente alto', 'estacion central', 'cerrillos', 'lo barnechea', 'macul',
+  'la reina', 'vitacura', 'lampa', 'san miguel', 'independencia', 'renca',
+  'recoleta', 'quinta normal', 'penalolen', 'conchali', 'el bosque',
+  'la cisterna', 'san joaquin', 'pedro aguirre cerda', 'talagante',
+  'penaflor', 'lo espejo', 'melipilla', 'la granja', 'cerro navia', 'buin',
+  'la pintana', 'padre hurtado', 'san ramon', 'calera de tango', 'el monte',
+  'lo prado', 'pirque', 'isla de maipo', 'paine', 'curacavi', 'maria pinto',
+  'san jose de maipo', 'alhue',
+]);
+
+function comunaParaUrl(comuna) {
+  return comuna.trim().replace(/\s+/g, '-');
+}
+
 // Un builder de URL por portal — mismo cargoObjetivo, distinta forma de armar
 // la búsqueda en cada sitio. Si sumas un portal nuevo más adelante, agrégalo
 // acá (y agrega su adaptador correspondiente en extension/adapters/).
 //
 // Facets del portal (docs/rediseno-filtrado-ofertas.md, §4, Capa 0): cada oferta
 // que el propio portal filtra es una que nunca se scrapea ni se puntúa. Verificado
-// a mano contra los sitios reales el 2026-09-03, no asumido:
-// - Computrabajo: "jornada part time" SÍ es un facet real en la URL
-//   (/trabajo-de-{slug}-jornada-part-time). No se encontró un facet de modalidad
-//   expuesto en la barra de filtros para este tipo de búsqueda.
-// - Laborum: sus filtros de jornada/modalidad viven detrás de una UI armada con
-//   JavaScript que llama a una API interna (/api/avisos/searchV2) -- no son URLs
-//   navegables simples. No se armó ese facet (mismo tipo de bloqueo que hizo
-//   descartar el scrape automático de Laborum, ver scripts/scrape-corpus.ts).
+// a mano contra los sitios reales el 2026-09-04 (reemplaza una verificación
+// anterior del 2026-09-03 que había quedado incompleta -- Computrabajo SÍ
+// tiene facet de modalidad, y Laborum SÍ tiene URLs navegables para sus
+// filtros; solo tardan ~1-2s en reflejarse tras un click en la UI porque la
+// SPA le pega primero a su API interna y recién después actualiza la URL):
+// - Computrabajo: comuna va directa como slug (-en-{comuna}), sin necesitar
+//   región. Modalidad: -en-remoto / -hibrido (presencial = sin sufijo).
+//   Jornada part time: -jornada-part-time. Se combinan agregándolo todo al
+//   final, en cualquier orden.
+// - Laborum: comuna SÍ necesita el prefijo de región (en-{región}/{comuna}/),
+//   por eso acá el facet de comuna solo cubre RM (ver COMUNAS_RM). Modalidad:
+//   segmento -modalidad-{remoto|hibrido}- antes de -busqueda-. Jornada:
+//   segmento -{full-time|part-time}- antes de -busqueda-. Si van los dos
+//   juntos el ORDEN IMPORTA -- jornada primero, modalidad después
+//   (empleos-part-time-modalidad-remoto-busqueda-{slug}.html); al revés el
+//   sitio no reconoce la URL y hasta pierde el término de búsqueda.
 const URL_BUSQUEDA_POR_PORTAL = {
   'Computrabajo': (slug, filtros) => {
     let url = 'https://cl.computrabajo.com/trabajo-de-' + slug;
-    if (filtros && filtros.jornada === 'part_time') url += '-jornada-part-time';
+    const comuna = filtros && filtros.comunas && filtros.comunas[0];
+    // Remoto no tiene una comuna real asociada -- no combinar ambos facets.
+    if (comuna && (!filtros || filtros.modalidad !== 'remoto')) url += '-en-' + comunaParaUrl(comuna);
+    if (filtros) {
+      if (filtros.modalidad === 'remoto') url += '-en-remoto';
+      else if (filtros.modalidad === 'hibrido') url += '-hibrido';
+      if (filtros.jornada === 'part_time') url += '-jornada-part-time';
+    }
     return url;
   },
-  'Laborum': (slug) => 'https://www.laborum.cl/empleos-busqueda-' + slug + '.html',
+  'Laborum': (slug, filtros) => {
+    let prefijo = '';
+    const comuna = filtros && filtros.comunas && filtros.comunas[0];
+    if (comuna && (!filtros || filtros.modalidad !== 'remoto') && COMUNAS_RM.has(comuna)) {
+      prefijo = 'en-region-metropolitana/' + comunaParaUrl(comuna) + '/';
+    }
+    let archivo = 'empleos-';
+    if (filtros && filtros.jornada === 'part_time') archivo += 'part-time-';
+    else if (filtros && filtros.jornada === 'full_time') archivo += 'full-time-';
+    if (filtros && filtros.modalidad === 'remoto') archivo += 'modalidad-remoto-';
+    else if (filtros && filtros.modalidad === 'hibrido') archivo += 'modalidad-hibrido-';
+    archivo += 'busqueda-' + slug + '.html';
+    return 'https://www.laborum.cl/' + prefijo + archivo;
+  },
 };
 
 // Trae los filtros de búsqueda (palabras, modalidad, jornada) del dashboard y
@@ -198,9 +252,19 @@ async function actualizarFiltrosDesdeBackend(token) {
     const data = await res.json();
     if (!data.filtrosBusqueda) return null;
 
+    // El perfil compilado (§5 del rediseño) es más rico que los filtros viejos
+    // -- si ya existe, sus modalidad/jornada/comunas mandan sobre los viejos.
+    // Si el usuario todavía no compiló un perfil, se sigue usando lo de
+    // siempre para no dejar la búsqueda automática sin facets.
+    const perfilCompilado = data.scorer && data.scorer.perfilCompilado;
     const filtros = {
-      modalidad: data.filtrosBusqueda.modalidad || 'cualquiera',
-      jornada: data.filtrosBusqueda.jornada || 'cualquiera',
+      modalidad: (perfilCompilado && perfilCompilado.modalidad) || data.filtrosBusqueda.modalidad || 'cualquiera',
+      jornada: (perfilCompilado && perfilCompilado.jornada) || data.filtrosBusqueda.jornada || 'cualquiera',
+      // Facets de portal (§4, Capa 0): solo se usa la primera comuna
+      // configurada -- pedirle al portal varias comunas a la vez no es un
+      // facet real en ninguno de los dos sitios: el scorer (§6) sigue
+      // evaluando las demás client-side de todas formas.
+      comunas: (perfilCompilado && perfilCompilado.ubicacion && perfilCompilado.ubicacion.comunas) || [],
     };
 
     const { config } = await chrome.storage.local.get('config');
