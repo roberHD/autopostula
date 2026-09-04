@@ -343,6 +343,16 @@
   padding: 32px 40px;
   max-width: 1800px;
   width: 100%;
+  /* Las manchas de .ap-glow-bg se salen a proposito del contenido (una queda
+     en right:-10%), y eso hacia que toda la pagina scrolleara ~59px al costado.
+     Se recorta acá y no en .ap-glow-bg para no perder el sangrado hacia arriba
+     de la otra mancha (top:-120px), que es parte del efecto.
+
+     `clip` y no `hidden`: hidden convierte esto en un contenedor de scroll
+     (fuerza overflow-y a auto), lo que romperia cualquier position:sticky que
+     se meta adentro y agregaria una barra vertical anidada. clip solo recorta,
+     y es el unico valor que convive con overflow-y: visible. */
+  overflow-x: clip;
 }
 
 /* ── Fondo con resplandor ("Aurora") ─────────────────────
