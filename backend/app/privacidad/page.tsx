@@ -19,13 +19,13 @@ export default function PrivacidadPage() {
       <h2>1. Quién es responsable de tus datos</h2>
       <p>
         El responsable del tratamiento de tus datos personales es{" "}
-        <strong>[COMPLETAR: nombre completo o razón social]</strong>, RUT{" "}
-        <strong>[COMPLETAR]</strong>, domiciliado en <strong>[COMPLETAR: comuna, Chile]</strong>,
+        <strong>Roberto Andrés Hidalgo Bizama</strong>, RUT{" "}
+        <strong>21.723.850-1</strong>, domiciliado en <strong>Las Condes, Chile</strong>,
         en adelante &ldquo;AutoPostula&rdquo;.
       </p>
       <p>
         Para cualquier consulta sobre esta política o sobre tus datos, escríbenos a{" "}
-        <a href="mailto:[COMPLETAR: correo de contacto]">[COMPLETAR: correo de contacto]</a>.
+        <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a>.
       </p>
 
       <h2>2. Qué datos recolectamos</h2>
@@ -202,14 +202,14 @@ export default function PrivacidadPage() {
           </tr>
           <tr>
             <td>
-              <strong>[COMPLETAR: proveedor de hosting, ej. Vercel]</strong>
+              <strong>Vercel</strong>
             </td>
             <td>Alojar la aplicación</td>
             <td>Datos técnicos de conexión</td>
           </tr>
           <tr>
             <td>
-              <strong>[COMPLETAR: proveedor de base de datos]</strong>
+              <strong>Neon</strong>
             </td>
             <td>Almacenar la base de datos</td>
             <td>Todos los datos descritos en la sección 2</td>
@@ -314,7 +314,7 @@ export default function PrivacidadPage() {
           peligro → Eliminar mi cuenta. El borrado es inmediato: se elimina tu CV, tu perfil, tu
           historial de postulaciones, tus preferencias y tu suscripción (si tienes una activa, se
           cancela). Si no puedes acceder a tu cuenta, escríbenos a{" "}
-          <a href="mailto:[COMPLETAR: correo de contacto]">[COMPLETAR: correo de contacto]</a> desde
+          <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a> desde
           el correo con el que te registraste; en ese caso procesamos la solicitud dentro de los 30
           días siguientes y te confirmamos cuando esté hecho.
         </p>
@@ -343,7 +343,7 @@ export default function PrivacidadPage() {
       <h2>13. Contacto</h2>
       <p>
         Para ejercer tus derechos o hacer cualquier consulta sobre esta política, escríbenos a{" "}
-        <a href="mailto:[COMPLETAR: correo de contacto]">[COMPLETAR: correo de contacto]</a>.
+        <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a>.
       </p>
     </LegalPage>
   );

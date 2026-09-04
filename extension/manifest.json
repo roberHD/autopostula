@@ -14,7 +14,7 @@
     "https://computrabajo.cl/*",
     "https://computrabajo.com/*",
     "https://www.laborum.cl/*",
-    "https://autopostula.vercel.app/*"
+    "https://autopostula.cl/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -45,7 +45,7 @@
     },
     {
       "matches": [
-        "https://autopostula.vercel.app/*"
+        "https://autopostula.cl/*"
       ],
       "js": [
         "bridge.js"

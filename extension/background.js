@@ -7,7 +7,7 @@ console.log('[AP] background.js cargado', new Date().toLocaleTimeString());
 
 // Mismo dominio que host_permissions/content_scripts en manifest.json.
 // Cuando se compre el dominio propio, actualizar ambos archivos juntos.
-const BACKEND_URL = 'https://autopostula.vercel.app';
+const BACKEND_URL = 'https://autopostula.cl';
 
 let queue = [];
 let busy  = false;

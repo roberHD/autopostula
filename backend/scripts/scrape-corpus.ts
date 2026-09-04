@@ -32,7 +32,7 @@ import { writeFileSync, existsSync, mkdirSync } from "fs";
 import * as cheerio from "cheerio";
 
 const USER_AGENT =
-  "AutoPostulaCorpusBot/1.0 (+https://autopostula.vercel.app; scrape unico y manual para armar un corpus de titulos de cargo; contacto: rober.hidalgo2004@gmail.com)";
+  "AutoPostulaCorpusBot/1.0 (+https://autopostula.cl; scrape unico y manual para armar un corpus de titulos de cargo; contacto: rober.hidalgo2004@gmail.com)";
 
 const RITMO_MS = 2700; // dentro del rango pedido de 2-3s
 const PAGINAS_POR_BUSQUEDA = 8; // ~20 titulos/pagina -> ~160 por busqueda por portal

@@ -17,10 +17,10 @@ export default function TerminosPage() {
 
       <h2>1. Quiénes somos</h2>
       <p>
-        AutoPostula es un servicio operado por <strong>[COMPLETAR: nombre o razón social]</strong>,
-        RUT <strong>[COMPLETAR]</strong>, domiciliado en{" "}
-        <strong>[COMPLETAR: comuna, Chile]</strong>. Contacto:{" "}
-        <a href="mailto:[COMPLETAR: correo de contacto]">[COMPLETAR: correo de contacto]</a>.
+        AutoPostula es un servicio operado por <strong>Roberto Andrés Hidalgo Bizama</strong>,
+        RUT <strong>21.723.850-1</strong>, domiciliado en{" "}
+        <strong>Las Condes, Chile</strong>. Contacto:{" "}
+        <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a>.
       </p>
 
       <h2>2. Qué es AutoPostula</h2>
@@ -257,14 +257,14 @@ export default function TerminosPage() {
       <p>
         Estos términos se rigen por la ley chilena. Cualquier controversia se someterá a los
         tribunales ordinarios de justicia de{" "}
-        <strong>[COMPLETAR: comuna/ciudad]</strong>, sin perjuicio de los derechos que la Ley N°
+        <strong>Las Condes</strong>, sin perjuicio de los derechos que la Ley N°
         19.496 reconoce a los consumidores, incluida la posibilidad de recurrir al SERNAC.
       </p>
 
       <h2>16. Contacto</h2>
       <p>
         Para cualquier consulta sobre estos términos, escríbenos a{" "}
-        <a href="mailto:[COMPLETAR: correo de contacto]">[COMPLETAR: correo de contacto]</a>.
+        <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a>.
       </p>
     </LegalPage>
   );

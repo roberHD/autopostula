@@ -5,7 +5,7 @@
 
 // Mismo dominio que host_permissions/content_scripts en manifest.json.
 // Cuando se compre el dominio propio, actualizar ambos archivos junto con background.js.
-const BACKEND_URL = 'https://autopostula.vercel.app';
+const BACKEND_URL = 'https://autopostula.cl';
 
 // ── Estado ─────────────────────────────────────────────────────
 let incTags = [];
