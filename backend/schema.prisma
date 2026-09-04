@@ -111,6 +111,13 @@ model User {
   // la página, volver más tarde) no tenía forma de saber que ya se había
   // conectado y mandaba a la persona de vuelta a un paso anterior.
   extensionConectada Boolean @default(false) @map("extension_conectada")
+  // Distingue "la IA lo sacó del CV" de "la persona lo confirmó" (ver
+  // docs/objetivo-laboral.md §5.2). Sin esto no hay forma de saber si el
+  // ObjetivoLaboral de alguien es una sugerencia sin revisar o algo que de
+  // verdad declaró -- ni de que compilar-perfil sepa cuál de las dos fuentes
+  // usar. false para todo usuario existente: no rompe a quien ya está
+  // dentro, sigue funcionando con CvProfile.cargoObjetivo como hasta ahora.
+  objetivoConfirmado Boolean @default(false) @map("objetivo_confirmado")
   // Se guarda apenas se crea el cliente en Flow (pasarela de pago -- Stripe no
   // opera en Chile), para poder mandarlo a registrar su tarjeta y suscribirlo
   // sin tener que crear el cliente de nuevo cada vez.
@@ -129,8 +136,35 @@ model User {
   aiUsageLogs       AiUsageLog[]
   searchPreferences SearchPreferences?
   decisionesOferta  DecisionOferta[]
+  objetivosLaborales ObjetivoLaboral[]
 
   @@map("users")
+}
+
+// Lo que la persona declara que busca -- distinto de CvProfile.cargoObjetivo,
+// que es lo que la IA infirió del CV. El CV dice de dónde viene, esto dice a
+// dónde va (docs/objetivo-laboral.md §1). Puede haber varios a la vez (§5,
+// §9: alguien cambiándose de rubro quiere postular a lo que puede conseguir
+// mientras persigue lo que quiere).
+model ObjetivoLaboral {
+  id       String @id @default(uuid())
+  userId   String @map("user_id")
+  // Código CIUO cuando se eligió del catálogo (backend/scripts/data/catalogo-ocupaciones-cl.json);
+  // null si se escribió libre -- ver docs/objetivo-laboral.md §4 sobre por qué
+  // preferir el catálogo (ancla el triaje a un código, no a un string difuso).
+  ciuo     String? @db.VarChar(4)
+  // Nombre mostrable, siempre presente (del catálogo o tal cual se escribió).
+  etiqueta String
+  // 1.0 = objetivo principal. 0.3-0.6 = lo aceptaría pero no lo busca
+  // activamente. Alimenta directo el peso de perfilCompilado.roles[].
+  peso     Float    @default(1.0)
+  orden    Int      @default(0)
+  creadoEn DateTime @default(now()) @map("creado_en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, orden])
+  @@map("objetivos_laborales")
 }
 
 model Plan {

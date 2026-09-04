@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, X, Filter, FlaskConical } from "lucide-react";
+import { Sparkles, X, Filter, FlaskConical, Target, Plus } from "lucide-react";
 
 type Preferencias = {
   palabrasIncluir: string[];
@@ -16,6 +16,8 @@ type PerfilCompilado = {
   vetos: { patron: string; razon: string }[];
   senales: { patron: string; delta: number }[];
 };
+
+type ObjetivoItem = { ciuo: string | null; etiqueta: string; peso: number };
 
 const OPCIONES_MODALIDAD = [
   { valor: "cualquiera", titulo: "Cualquiera", desc: "No filtrar por modalidad" },
@@ -102,12 +104,23 @@ export default function FiltrosPage() {
   const [guardandoScorer, setGuardandoScorer] = useState(false);
   const [mensajeScorer, setMensajeScorer] = useState("");
 
+  // Objetivo laboral (docs/objetivo-laboral.md) -- distinto de cargoObjetivo
+  // del CV: esto es lo que la persona declara que busca, no lo que la IA
+  // infirió de su historial. Guardarlo dispara la recompilación del perfil.
+  const [objetivos, setObjetivos] = useState<ObjetivoItem[]>([]);
+  const [sugerenciaCv, setSugerenciaCv] = useState<string | null>(null);
+  const [objetivoConfirmado, setObjetivoConfirmado] = useState(false);
+  const [guardandoObjetivo, setGuardandoObjetivo] = useState(false);
+  const [mensajeObjetivo, setMensajeObjetivo] = useState("");
+  const [sugerirRetriaje, setSugerirRetriaje] = useState(false);
+
   useEffect(() => {
     async function cargar() {
       try {
-        const [resPrefs, resPerfil] = await Promise.all([
+        const [resPrefs, resPerfil, resObjetivos] = await Promise.all([
           fetch("/api/preferencias-busqueda"),
           fetch("/api/ai/compilar-perfil"),
+          fetch("/api/objetivos"),
         ]);
         const data = await resPrefs.json();
         if (!resPrefs.ok) { setMensaje(data.error ?? `Error ${resPrefs.status}`); return; }
@@ -122,6 +135,21 @@ export default function FiltrosPage() {
         if (resPerfil.ok) {
           const perfilData = await resPerfil.json();
           setPerfilCompilado(perfilData.perfilCompilado ?? null);
+        }
+
+        if (resObjetivos.ok) {
+          const objData = await resObjetivos.json();
+          setObjetivoConfirmado(!!objData.objetivoConfirmado);
+          setSugerenciaCv(objData.sugerenciaCv ?? null);
+          if (Array.isArray(objData.objetivos) && objData.objetivos.length) {
+            setObjetivos(objData.objetivos.map((o: any) => ({ ciuo: o.ciuo ?? null, etiqueta: o.etiqueta, peso: o.peso })));
+          } else if (objData.sugerenciaCv) {
+            // Precarga la sugerencia del CV como punto de partida editable --
+            // todavía no está confirmada hasta que se guarde.
+            setObjetivos([{ ciuo: null, etiqueta: objData.sugerenciaCv, peso: 1.0 }]);
+          } else {
+            setObjetivos([{ ciuo: null, etiqueta: "", peso: 1.0 }]);
+          }
         }
       } catch (err) {
         console.error("Error cargando filtros:", err);
@@ -215,6 +243,39 @@ export default function FiltrosPage() {
       setMensaje("No se pudo generar la sugerencia — revisa la consola");
     } finally {
       setSugiriendo(false);
+    }
+  }
+
+  async function guardarObjetivos() {
+    const limpios = objetivos.map((o) => ({ ...o, etiqueta: o.etiqueta.trim() })).filter((o) => o.etiqueta);
+    if (!limpios.length) { setMensajeObjetivo("Escribe al menos un objetivo."); return; }
+
+    setGuardandoObjetivo(true);
+    setMensajeObjetivo("");
+    setSugerirRetriaje(false);
+    try {
+      const res = await fetch("/api/objetivos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objetivos: limpios }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setMensajeObjetivo(data.error ?? "No se pudo guardar"); return; }
+
+      setObjetivoConfirmado(true);
+      setObjetivos(limpios);
+      if (data.perfilCompilado) setPerfilCompilado(data.perfilCompilado);
+      setSugerirRetriaje(!!data.sugerirRetriaje);
+      setMensajeObjetivo(
+        data.avisoCompilacion
+          ? "Objetivo guardado. " + data.avisoCompilacion
+          : "Objetivo guardado y perfil recompilado."
+      );
+    } catch (err) {
+      console.error("Error guardando objetivo:", err);
+      setMensajeObjetivo("No se pudo guardar — revisa la consola");
+    } finally {
+      setGuardandoObjetivo(false);
     }
   }
 
@@ -321,6 +382,96 @@ export default function FiltrosPage() {
               lo que conversaste en "Conversación IA".
             </p>
           </div>
+        </div>
+      </div>
+
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.18s", borderColor: "color-mix(in oklch, var(--chart-3) 35%, transparent)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <Target size={15} color="var(--chart-3)" />
+          <p className="ap-section-title" style={{ marginBottom: 0 }}>Objetivo laboral</p>
+        </div>
+        <p className="ap-section-sub">
+          Tu CV describe de dónde vienes. Esto es a dónde vas — puede ser distinto, sobre todo si te
+          estás cambiando de rubro. El motor nuevo de abajo usa esto (no tu CV) para decidir qué
+          ofertas te calzan.
+        </p>
+
+        {!objetivoConfirmado && sugerenciaCv && (
+          <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
+            Por tu CV, parece que buscas <strong>{sugerenciaCv}</strong> — puedes dejarlo así o cambiarlo abajo.
+          </p>
+        )}
+
+        {mensajeObjetivo && (
+          <p style={{ fontSize: 12.5, color: mensajeObjetivo.startsWith("Objetivo guardado") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
+            {mensajeObjetivo}
+          </p>
+        )}
+
+        {sugerirRetriaje && (
+          <div className="nota" style={{ marginBottom: 12 }}>
+            <p style={{ margin: 0 }}>
+              Cambiaste de rubro. Vale la pena rehacer el triaje de onboarding para recalibrar qué
+              ofertas te mostramos — desde tu perfil puedes volver a hacerlo cuando quieras.
+            </p>
+          </div>
+        )}
+
+        {objetivos.map((o, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <input
+              className="ap-input"
+              style={{ flex: 1 }}
+              value={o.etiqueta}
+              placeholder={i === 0 ? "Ej: vendedor" : "Ej: desarrollador de software (segundo objetivo)"}
+              onChange={(e) => {
+                const copia = [...objetivos];
+                copia[i] = { ...copia[i], etiqueta: e.target.value };
+                setObjetivos(copia);
+              }}
+            />
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.1}
+              className="ap-input"
+              style={{ width: 72 }}
+              title="Peso: 1.0 = objetivo principal, menos si lo aceptarías pero no lo buscas activamente"
+              value={o.peso}
+              onChange={(e) => {
+                const copia = [...objetivos];
+                copia[i] = { ...copia[i], peso: Math.max(0, Math.min(1, Number(e.target.value))) };
+                setObjetivos(copia);
+              }}
+            />
+            {objetivos.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setObjetivos(objetivos.filter((_, j) => j !== i))}
+                style={{ display: "flex", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: 4 }}
+                aria-label="Quitar objetivo"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        ))}
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {objetivos.length < 4 && (
+            <button
+              type="button"
+              className="ap-button-ghost"
+              style={{ display: "flex", alignItems: "center", gap: 6 }}
+              onClick={() => setObjetivos([...objetivos, { ciuo: null, etiqueta: "", peso: 0.5 }])}
+            >
+              <Plus size={14} /> Agregar otro objetivo
+            </button>
+          )}
+          <button className="ap-button" disabled={guardandoObjetivo} onClick={guardarObjetivos}>
+            {guardandoObjetivo ? "Guardando..." : "Guardar objetivo"}
+          </button>
         </div>
       </div>
 
