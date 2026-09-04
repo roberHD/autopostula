@@ -1137,8 +1137,12 @@
 }
 
 .ap-slat-cuerpo {
-  /* min-width:0 deja que el contenido se recorte mientras el listón todavía
-     es angosto, en vez de forzar el ancho y frenar la animación. */
+  /* flex:1 para que ocupe todo el ancho que le queda al listón abierto. Sin
+     esto toma el `0 1 auto` por defecto y se queda clavado en el min-width del
+     contenido, dejando los campos angostos y media tarjeta vacía a la derecha.
+     min-width:0 deja que se recorte mientras el listón todavía es angosto, en
+     vez de forzar el ancho y frenar la animación. */
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   opacity: 0;
