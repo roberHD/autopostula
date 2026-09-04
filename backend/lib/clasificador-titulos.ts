@@ -140,10 +140,19 @@ export function construirPrompt(titulo: string, candidatos: Candidato[]): { syst
 // Solo acepta un código si viene en la lista de candidatos ofrecida -- por
 // diseño el modelo elige entre esas opciones, no recuerda códigos de memoria
 // (evita alucinar un CIUO que no existe o que no fue evaluado).
+//
+// Toma el ÚLTIMO código de 4 dígitos que aparezca en la respuesta, no el
+// primero: aunque se le pide responder solo con el código, en casos difíciles
+// Opus a veces razona un poco antes de contestar y puede mencionar otros
+// códigos que descarta en el camino -- el que da al final es la decisión.
+// Si no aparece ningún código de 4 dígitos (dijo "ninguno" o la respuesta
+// quedó cortada por max_tokens antes de llegar a una), se interpreta como
+// "no hay match".
 export function parsearRespuesta(texto: string, codigosValidos: Set<string>): string | null {
   const limpio = (texto || "").trim().toLowerCase();
-  if (!limpio || limpio.startsWith("ninguno")) return null;
-  const match = limpio.match(/\d{4}/);
-  if (!match) return null;
-  return codigosValidos.has(match[0]) ? match[0] : null;
+  if (!limpio) return null;
+  const coincidencias = limpio.match(/\d{4}/g);
+  if (!coincidencias || !coincidencias.length) return null;
+  const ultimo = coincidencias[coincidencias.length - 1];
+  return codigosValidos.has(ultimo) ? ultimo : null;
 }

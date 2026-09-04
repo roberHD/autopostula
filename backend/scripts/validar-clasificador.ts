@@ -50,8 +50,14 @@ async function main() {
     return {
       custom_id: `caso-${i}`,
       params: {
+        // 20 tokens no alcanzaba: Opus a veces razona un poco antes de
+        // responder en casos difíciles y la respuesta quedaba cortada antes
+        // de llegar al código (medido: "asesor comercial" necesitó 103
+        // tokens de salida). parsearRespuesta ya toma el último código de
+        // la respuesta, así que el margen extra no rompe el parseo de los
+        // casos que sí contestan corto.
         model: MODEL,
-        max_tokens: 20,
+        max_tokens: 300,
         system,
         messages: [{ role: "user" as const, content: user }],
       },
