@@ -550,6 +550,7 @@ async function escanear() {
 
   let pendientes = [];
   const titulosVistos = [];
+  const avistamientos = [];
   tarjetas.forEach((t, idx) => {
     const id = getId(t, idx);
     if (AP.vistos.has(id)) return;
@@ -560,6 +561,14 @@ async function escanear() {
     // tiraba a la basura si no pasaba (ver docs/rediseno-filtrado-ofertas.md, §7.2).
     titulosVistos.push(titulo);
 
+    const a = t.querySelector('h2 a, a[href*="oferta"], a[href*="trabajo"]') || t.querySelector('a');
+    const url = a && a.href.split('#')[0] || '';
+    const empresa = extraerEmpresa(t) || null;
+    // Avistamiento (§9.3): toda tarjeta vista alimenta el corpus global de
+    // JobOffer, se postule, quede en gris o se descarte -- no solo lo que
+    // termina en una postulación real.
+    avistamientos.push({ externalId: id, titulo, empresa, url });
+
     const resultado = evaluarTarjeta(t);
     if (resultado.banda === 'postular') {
       pendientes.push({t, id, idx, titulo});
@@ -567,22 +576,20 @@ async function escanear() {
       // Banda gris (§8): no se descarta ni se postula sola -- va a la cola de
       // decisión del usuario en el dashboard.
       AP.vistos.add(id);
-      const a = t.querySelector('h2 a, a[href*="oferta"], a[href*="trabajo"]') || t.querySelector('a');
-      const url = a && a.href.split('#')[0] || '';
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'En banda gris — revisar en el dashboard'});
       AP.reportarBandaGris({
-        titulo, url, plataforma: 'Computrabajo',
-        empresa: extraerEmpresa(t) || null,
+        titulo, url, plataforma: 'Computrabajo', empresa,
         scoreLocal: resultado.score, razones: resultado.razones,
       });
     } else {
       // Descartada -- con razón real si vino del scorer (§13: "el log de
       // descarte hoy no explica nada"), o el mensaje genérico del filtro viejo.
       AP.vistos.add(id);
-      addLog({ts:Date.now(), status:'skip', title:titulo, url:'', uid:id, reason:(resultado.razones && resultado.razones[0]) || 'No calza con tus filtros'});
+      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:(resultado.razones && resultado.razones[0]) || 'No calza con tus filtros'});
     }
   });
   reportarTitulosVistos(titulosVistos, 'Computrabajo');
+  AP.reportarAvistamientos(avistamientos, 'Computrabajo');
 
   // Filtro inteligente con IA: descarta ofertas que no calzan con el cargo que busca el
   // candidato aunque el titulo no comparta ninguna palabra clave literal con los tags.

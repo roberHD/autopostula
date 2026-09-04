@@ -89,6 +89,18 @@ AP.reportarTitulosVistos = function (titulos, plataforma) {
   }
 };
 
+// ── Reportar avistamientos al backend (corpus de JobOffer, §9.3) ─────────
+// Fire-and-forget igual que reportarTitulosVistos: cada tarjeta vista, se
+// postule, quede en gris o se descarte, alimenta el corpus de ofertas.
+AP.reportarAvistamientos = function (avistamientos, plataforma) {
+  if (!avistamientos || !avistamientos.length) return;
+  try {
+    chrome.runtime.sendMessage({ type: 'REPORTAR_AVISTAMIENTOS', avistamientos: avistamientos, plataforma: plataforma });
+  } catch (e) {
+    console.warn('[AP] No se pudo avisar al background (avistamientos):', e);
+  }
+};
+
 // ── Reportar oferta en banda gris al backend (scorer local, §6) ──────────
 AP.reportarBandaGris = function (oferta) {
   try {

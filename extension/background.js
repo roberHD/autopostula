@@ -440,6 +440,31 @@ async function reportarTitulosVistosBackend(titulos, plataforma) {
   }
 }
 
+// ── Reportar avistamientos (corpus de JobOffer, §9.3) ────────────────────
+// Best-effort, mismo criterio que reportarTitulosVistosBackend: alimenta un
+// corpus global, no bloquea nada de la extensión si falla.
+async function reportarAvistamientosBackend(avistamientos, plataforma) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return;
+
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/avistamientos', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + autopostulaToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ platformNombre: plataforma || 'Computrabajo', avistamientos: avistamientos })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('[AP] Backend rechazó avistamientos:', data.error || res.status);
+    }
+  } catch (e) {
+    console.warn('[AP] Error de red reportando avistamientos:', e);
+  }
+}
+
 // ── Reportar oferta en banda gris (scorer local, §6) ─────────────────────
 // A diferencia de reportarTitulosVistosBackend (best-effort), acá sí importa
 // que llegue: es lo que arma la cola de decisión del usuario (§8). Si falla,
@@ -480,6 +505,9 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   }
   if (msg.type === 'REPORTAR_BANDA_GRIS') {
     reportarBandaGrisBackend(msg.oferta);
+  }
+  if (msg.type === 'REPORTAR_AVISTAMIENTOS') {
+    reportarAvistamientosBackend(msg.avistamientos, msg.plataforma);
   }
   if (msg.type === 'ACTUALIZAR_ESTADO') {
     actualizarEstadoBackend(msg.datos).then(sendResponse);

@@ -366,6 +366,7 @@ async function escanear() {
 
   const pendientes = [];
   const titulosVistos = [];
+  const avistamientos = [];
   candidatas.forEach(a => {
     const id = getIdDeTarjeta(a);
     if (yaProcesada(id)) return;
@@ -374,6 +375,11 @@ async function escanear() {
     // docs/rediseno-filtrado-ofertas.md, §7.2).
     titulosVistos.push(titulo);
 
+    const empresa = getEmpresaDeTarjeta(a) || null;
+    // Avistamiento (§9.3): toda tarjeta vista alimenta el corpus global de
+    // JobOffer, se postule, quede en gris o se descarte.
+    avistamientos.push({ externalId: id, titulo, empresa, url: a.href });
+
     const resultado = evaluarTarjeta(a);
     if (resultado.banda === 'postular') {
       pendientes.push({ a, id, titulo, url: a.href });
@@ -381,8 +387,7 @@ async function escanear() {
       AP.vistos.add(id);
       addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: 'En banda gris — revisar en el dashboard' });
       AP.reportarBandaGris({
-        titulo, url: a.href, plataforma: 'Laborum',
-        empresa: getEmpresaDeTarjeta(a) || null,
+        titulo, url: a.href, plataforma: 'Laborum', empresa,
         scoreLocal: resultado.score, razones: resultado.razones,
       });
     } else {
@@ -391,6 +396,7 @@ async function escanear() {
     }
   });
   reportarTitulosVistos(titulosVistos, 'Laborum');
+  AP.reportarAvistamientos(avistamientos, 'Laborum');
 
   msg(pendientes.length + ' de ' + candidatas.length + ' coinciden', '#16A34A');
   if (!pendientes.length) return;

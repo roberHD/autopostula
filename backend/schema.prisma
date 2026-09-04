@@ -365,6 +365,11 @@ model AdminProfile {
 // Postulaciones
 // ─────────────────────────────────────────
 
+// §9.3 del rediseño: deja de ser "solo lo postulado" y pasa a ser el corpus
+// de avistamientos -- la extensión reporta CADA tarjeta que ve (se postule,
+// quede en gris o se descarte), no solo las que terminan en Application.
+// Global (dedup por platformId+externalId): la misma oferta vista por
+// distintos usuarios es una sola fila, no se duplica por usuario.
 model JobOffer {
   id            String        @id @default(uuid())
   platformId    String        @map("platform_id")
@@ -373,6 +378,11 @@ model JobOffer {
   empresa       String?
   url           String?
   origen        OrigenOferta  @default(MANUAL)
+  // true = alguien se postuló de verdad (tiene Application). false = solo
+  // avistamiento -- la extensión la vio pero nunca se postuló. Default true
+  // porque las filas que ya existían en la base, antes de este campo, SON
+  // postulaciones reales; la migración no debe reescribir su significado.
+  postulada     Boolean       @default(true)
   relevanciaAi  Float?        @map("relevancia_ai")
   publicadaEn   DateTime?     @map("publicada_en")
   cacheadaEn    DateTime      @default(now()) @map("cacheada_en")
@@ -382,6 +392,8 @@ model JobOffer {
   decisiones   DecisionOferta[]
 
   @@unique([platformId, externalId])
+  // Para el purgado de avistamientos viejos sin postulación (scripts/purgar-avistamientos.ts).
+  @@index([postulada, cacheadaEn])
   @@map("job_offers")
 }
 

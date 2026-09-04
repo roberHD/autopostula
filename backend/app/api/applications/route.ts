@@ -103,9 +103,12 @@ export async function POST(request: Request) {
     const jobOffer = await prisma.jobOffer.upsert({
       where: { platformId_externalId: { platformId: platform.id, externalId } },
       // No pisar un matchScore ya guardado con "undefined" si esta vez no vino —
-      // solo se actualiza cuando realmente se calculó uno nuevo.
-      update: { ...(url ? { url } : {}), ...(relevanciaAi !== undefined ? { relevanciaAi } : {}) },
-      create: { platformId: platform.id, externalId, titulo, empresa, url, origen, relevanciaAi },
+      // solo se actualiza cuando realmente se calculó uno nuevo. postulada
+      // siempre se fuerza a true acá: puede que la fila ya existiera como
+      // avistamiento (§9.3, la vio la extensión antes sin postularse) y este
+      // POST es justo el momento en que eso deja de ser cierto.
+      update: { ...(url ? { url } : {}), ...(relevanciaAi !== undefined ? { relevanciaAi } : {}), postulada: true },
+      create: { platformId: platform.id, externalId, titulo, empresa, url, origen, relevanciaAi, postulada: true },
     });
 
     const cv = await prisma.cvProfile.findUnique({ where: { userId: user.id } });
