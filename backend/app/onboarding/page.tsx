@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target } from "lucide-react";
+import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target, Search, Plus, X } from "lucide-react";
 import { quitarMarkdown } from "@/lib/text";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import "../dashboard/theme.css";
@@ -24,6 +24,7 @@ async function parsearRespuesta(res: Response): Promise<any> {
 const PASOS = [
   { titulo: "Bienvenida", Icon: Sparkles },
   { titulo: "Tu CV", Icon: FileText },
+  { titulo: "¿Qué buscas?", Icon: Search },
   { titulo: "Preferencias", Icon: Target },
   { titulo: "Conversación", Icon: MessageSquare },
   { titulo: "Extensión", Icon: Puzzle },
@@ -36,7 +37,14 @@ const PASOS = [
 // extensión -- no regrese a un paso anterior que se saltó a propósito sin
 // confirmarlo (ej: Conversación con "Omitir por ahora"). determinarInicio()
 // solo recalcula hacia ADELANTE del servidor; esto evita que retroceda.
-const LLAVE_PASO_GUARDADO = "ap_onboarding_paso";
+//
+// _v2 (docs/objetivo-laboral.md §7.2): al insertar el paso "¿Qué buscas?" en
+// la posición 2, todos los índices de ahí en adelante se corrieron. Un valor
+// viejo en esta llave (de antes del cambio) apuntaría al paso equivocado --
+// "Conversación" (3) aterrizaría en "Preferencias". Cambiar la llave hace
+// que el valor viejo se ignore solo; determinarInicio() recalcula desde el
+// servidor, que es la fuente confiable.
+const LLAVE_PASO_GUARDADO = "ap_onboarding_paso_v2";
 
 function guardarPaso(paso: number) {
   try {
@@ -61,20 +69,23 @@ export default function OnboardingPage() {
   useEffect(() => {
     async function determinarInicio() {
       try {
-        const [perfilRes, triajeRes, conversacionRes, portalesRes, extensionRes] = await Promise.all([
+        const [perfilRes, objetivoRes, triajeRes, conversacionRes, portalesRes, extensionRes] = await Promise.all([
           fetch("/api/perfil"),
+          fetch("/api/objetivos"),
           fetch("/api/onboarding/triaje"),
           fetch("/api/style/onboarding/mensaje"),
           fetch("/api/platform-accounts"),
           fetch("/api/account/extension-conectada"),
         ]);
         const perfil = perfilRes.ok ? await perfilRes.json() : null;
+        const objetivo = objetivoRes.ok ? await objetivoRes.json() : null;
         const triaje = triajeRes.ok ? await triajeRes.json() : null;
         const conversacion = conversacionRes.ok ? await conversacionRes.json() : null;
         const portales = portalesRes.ok ? await portalesRes.json() : null;
         const extension = extensionRes.ok ? await extensionRes.json() : null;
 
         const cvListo = !!perfil?.nombreArchivo;
+        const objetivoListo = !!objetivo?.objetivoConfirmado;
         // No hay una bandera explícita de "triaje completado" -- se considera
         // hecho con ~15 decisiones (holgado respecto a las ~20 que se ofrecen
         // por ronda) para no exigir que respondiera absolutamente todas.
@@ -85,11 +96,12 @@ export default function OnboardingPage() {
 
         let calculado = 0;
         if (!cvListo) calculado = 0;
-        else if (!triajeListo) calculado = 2;
-        else if (!conversacionLista) calculado = 3;
-        else if (!extensionLista) calculado = 4;
-        else if (!portalConectado) calculado = 5;
-        else calculado = 6;
+        else if (!objetivoListo) calculado = 2;
+        else if (!triajeListo) calculado = 3;
+        else if (!conversacionLista) calculado = 4;
+        else if (!extensionLista) calculado = 5;
+        else if (!portalConectado) calculado = 6;
+        else calculado = 7;
 
         let guardado = -1;
         try {
@@ -165,11 +177,12 @@ export default function OnboardingPage() {
         <div className="ap-card ap-onb-card ap-animate-in" key={paso} style={{ padding: 32 }}>
           {paso === 0 && <PasoBienvenida onSiguiente={() => irAPaso(1)} onOmitir={() => irAPaso(1)} />}
           {paso === 1 && <PasoCV onSiguiente={() => irAPaso(2)} onOmitir={() => irAPaso(2)} />}
-          {paso === 2 && <PasoTriaje onSiguiente={() => irAPaso(3)} onOmitir={() => irAPaso(3)} />}
-          {paso === 3 && <PasoConversacion onSiguiente={() => irAPaso(4)} onOmitir={() => irAPaso(4)} />}
-          {paso === 4 && <PasoExtension onSiguiente={() => irAPaso(5)} />}
-          {paso === 5 && <PasoPortal onSiguiente={() => irAPaso(6)} onOmitir={() => irAPaso(6)} />}
-          {paso === 6 && <PasoListo onTerminar={terminar} />}
+          {paso === 2 && <PasoObjetivo onSiguiente={() => irAPaso(3)} onOmitir={() => irAPaso(3)} />}
+          {paso === 3 && <PasoTriaje onSiguiente={() => irAPaso(4)} onOmitir={() => irAPaso(4)} />}
+          {paso === 4 && <PasoConversacion onSiguiente={() => irAPaso(5)} onOmitir={() => irAPaso(5)} />}
+          {paso === 5 && <PasoExtension onSiguiente={() => irAPaso(6)} />}
+          {paso === 6 && <PasoPortal onSiguiente={() => irAPaso(7)} onOmitir={() => irAPaso(7)} />}
+          {paso === 7 && <PasoListo onTerminar={terminar} />}
         </div>
       </div>
     </div>
@@ -333,6 +346,213 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
         </div>
       )}
       <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} />
+    </>
+  );
+}
+
+// docs/objetivo-laboral.md §4: el CV describe de dónde viene la persona, no
+// a dónde va -- para quien se está cambiando de rubro (el caso que motiva
+// todo este paso) el CV es la peor fuente posible. Este paso confirma o
+// corrige eso ANTES de que el triaje (paso siguiente) lo use para elegir
+// qué títulos mostrar.
+type ObjetivoForm = { ciuo: string | null; etiqueta: string; peso: number };
+type ResultadoCatalogo = { ciuo: string; etiqueta: string; grupo: string | null };
+
+function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
+  const [cargando, setCargando] = useState(true);
+  const [sugerenciaCv, setSugerenciaCv] = useState<string | null>(null);
+  const [objetivos, setObjetivos] = useState<ObjetivoForm[]>([]);
+  const [modo, setModo] = useState<"sugerencia" | "editar">("editar");
+  const [indiceEditando, setIndiceEditando] = useState<number | null>(null);
+  const [busqueda, setBusqueda] = useState("");
+  const [resultados, setResultados] = useState<ResultadoCatalogo[]>([]);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function cargar() {
+      try {
+        const res = await fetch("/api/objetivos");
+        const data = await parsearRespuesta(res);
+        setSugerenciaCv(data.sugerenciaCv ?? null);
+        if (Array.isArray(data.objetivos) && data.objetivos.length) {
+          // Ya había algo confirmado (retomando el onboarding, o volviendo a
+          // este paso) -- se edita directo, no se vuelve a mostrar la
+          // sugerencia del CV como si fuera nueva.
+          setObjetivos(data.objetivos.map((o: any) => ({ ciuo: o.ciuo ?? null, etiqueta: o.etiqueta, peso: o.peso })));
+          setModo("editar");
+        } else if (data.sugerenciaCv) {
+          setObjetivos([{ ciuo: null, etiqueta: data.sugerenciaCv, peso: 1 }]);
+          setModo("sugerencia");
+        } else {
+          setObjetivos([{ ciuo: null, etiqueta: "", peso: 1 }]);
+          setModo("editar");
+        }
+      } catch (e) {
+        console.error("Error cargando objetivo:", e);
+        setObjetivos([{ ciuo: null, etiqueta: "", peso: 1 }]);
+        setModo("editar");
+      } finally {
+        setCargando(false);
+      }
+    }
+    cargar();
+  }, []);
+
+  // Autocompletado contra el catálogo, con debounce simple -- ver
+  // /api/catalogo/buscar. indiceEditando marca CUÁL de los campos de
+  // objetivo está recibiendo la búsqueda.
+  useEffect(() => {
+    if (indiceEditando === null || busqueda.trim().length < 2) {
+      setResultados([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/catalogo/buscar?q=" + encodeURIComponent(busqueda.trim()));
+        const data = await parsearRespuesta(res);
+        setResultados(data.resultados ?? []);
+      } catch (e) {
+        console.error("Error buscando en el catálogo:", e);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [busqueda, indiceEditando]);
+
+  function elegirResultado(r: ResultadoCatalogo) {
+    if (indiceEditando === null) return;
+    const copia = [...objetivos];
+    copia[indiceEditando] = { ...copia[indiceEditando], ciuo: r.ciuo, etiqueta: r.etiqueta };
+    setObjetivos(copia);
+    setIndiceEditando(null);
+    setBusqueda("");
+    setResultados([]);
+  }
+
+  async function guardar() {
+    const limpios = objetivos.map((o) => ({ ...o, etiqueta: o.etiqueta.trim() })).filter((o) => o.etiqueta);
+    if (!limpios.length) {
+      setError("Escribe o elige al menos un objetivo.");
+      return;
+    }
+    setGuardando(true);
+    setError("");
+    try {
+      const res = await fetch("/api/objetivos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objetivos: limpios }),
+      });
+      const data = await parsearRespuesta(res);
+      if (!res.ok) {
+        setError(data.error ?? "No se pudo guardar");
+        return;
+      }
+      onSiguiente();
+    } catch (e) {
+      console.error("Error guardando objetivo:", e);
+      setError("No se pudo guardar — revisa la consola");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (cargando) {
+    return <Header Icon={Search} titulo="¿Qué buscas?" sub="Cargando..." />;
+  }
+
+  return (
+    <>
+      <Header
+        Icon={Search}
+        titulo="¿Qué buscas?"
+        sub="Tu CV describe de dónde vienes. Esto es a dónde vas — puede ser distinto, sobre todo si te estás cambiando de rubro."
+      />
+
+      {modo === "sugerencia" && sugerenciaCv ? (
+        <div>
+          <p style={{ fontSize: 14, marginBottom: 16, textAlign: "center" }}>
+            Por tu CV, parece que buscas <strong>{sugerenciaCv}</strong>
+          </p>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="ap-button-ghost" style={{ flex: 1 }} onClick={() => setModo("editar")}>
+              Busco otra cosa
+            </button>
+            <button className="ap-button" style={{ flex: 1 }} onClick={guardar} disabled={guardando}>
+              {guardando ? "Guardando..." : "Sí, es eso"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {objetivos.map((o, i) => (
+            <div key={i} style={{ marginBottom: 14, position: "relative" }}>
+              <label className="ap-label">{i === 0 ? "Objetivo principal" : "También me interesa"}</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  className="ap-input"
+                  value={o.etiqueta}
+                  placeholder="Ej: vendedor, desarrollador de software..."
+                  onChange={(e) => {
+                    const copia = [...objetivos];
+                    copia[i] = { ...copia[i], etiqueta: e.target.value, ciuo: null };
+                    setObjetivos(copia);
+                    setIndiceEditando(i);
+                    setBusqueda(e.target.value);
+                  }}
+                  onFocus={() => { setIndiceEditando(i); setBusqueda(o.etiqueta); }}
+                />
+                {o.ciuo && (
+                  <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "var(--status-finalizado)" }}>
+                    ✓ del catálogo
+                  </span>
+                )}
+              </div>
+              {indiceEditando === i && resultados.length > 0 && (
+                <div className="ap-card" style={{ marginTop: 4, maxHeight: 180, overflowY: "auto", padding: 6, position: "absolute", zIndex: 10, width: "100%" }}>
+                  {resultados.map((r) => (
+                    <button
+                      key={r.ciuo}
+                      type="button"
+                      onClick={() => elegirResultado(r)}
+                      className="ap-button-ghost"
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", fontSize: 13, border: "none" }}
+                    >
+                      {r.etiqueta}
+                      {r.grupo && <span style={{ color: "var(--text-muted)", fontSize: 11 }}> — {r.grupo}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {objetivos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setObjetivos(objetivos.filter((_, j) => j !== i))}
+                  className="ap-button-ghost"
+                  style={{ fontSize: 11.5, marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}
+                >
+                  <X size={12} /> Quitar
+                </button>
+              )}
+            </div>
+          ))}
+
+          {objetivos.length < 2 && (
+            <button
+              type="button"
+              className="ap-button-ghost"
+              style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 16 }}
+              onClick={() => setObjetivos([...objetivos, { ciuo: null, etiqueta: "", peso: 0.5 }])}
+            >
+              <Plus size={14} /> También me interesa...
+            </button>
+          )}
+
+          {error && <p style={{ fontSize: 12.5, color: "var(--status-rechazado)", marginBottom: 12 }}>{error}</p>}
+
+          <Footer onSiguiente={guardar} onOmitir={onOmitir} siguienteTexto={guardando ? "Guardando..." : "Continuar"} deshabilitado={guardando} />
+        </>
+      )}
     </>
   );
 }
