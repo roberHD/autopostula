@@ -52,6 +52,12 @@ export async function GET(request: Request) {
     usarScorerLocal: !!(filtros?.usarScorerLocal && filtros?.perfilCompilado),
     perfilCompilado: filtros?.perfilCompilado ?? null,
     versionPerfil: filtros?.versionPerfil ?? 0,
+    // Revisión externa 2026-09-05: si una recompilación forzada por cambio
+    // de objetivo falló, perfilCompilado sigue con el objetivo viejo -- el
+    // scorer usa esto para mandar todo a banda gris en vez de confiar en un
+    // puntaje que puede estar mirando el rubro equivocado (ver
+    // lib/compilar-perfil.ts, marcarDesactualizadoSiForzado).
+    perfilDesactualizado: !!filtros?.perfilDesactualizado,
   };
 
   if (!perfil) {

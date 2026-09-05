@@ -344,6 +344,21 @@ AP.puntuarOferta = function (campos, perfil) {
 AP.evaluarOferta = function (campos) {
   const scorerCfg = AP.cfg && AP.cfg.scorer;
   if (scorerCfg && scorerCfg.usarScorerLocal && scorerCfg.perfilCompilado) {
+    // Revisión externa 2026-09-05: si el perfil quedó desactualizado (una
+    // recompilación forzada por cambio de objetivo falló -- ver
+    // lib/compilar-perfil.ts), el puntaje puede estar mirando un rubro que
+    // ya no es el real. En vez de confiar en él (postular o descartar mal
+    // en silencio), todo va a banda gris hasta que se recompile bien --
+    // mismo principio que "sin clasificar = incierto = preguntarle al
+    // usuario" del §7.4 del rediseño.
+    if (scorerCfg.perfilDesactualizado) {
+      return {
+        banda: 'gris',
+        score: null,
+        razones: ['tu perfil de búsqueda está desactualizado — revísalo en tu dashboard'],
+        usoScorer: true,
+      };
+    }
     const resultado = AP.puntuarOferta(campos, scorerCfg.perfilCompilado);
     return { banda: resultado.banda, score: resultado.score, razones: resultado.razones, usoScorer: true };
   }

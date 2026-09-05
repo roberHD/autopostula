@@ -132,10 +132,10 @@ async function seleccionarConAncla(candidatos: FilaCatalogo[], excluir: string[]
   const anclaCiuo = ancla.ciuo!;
   const grupoAncla = await prisma.grupoCiuo.findUnique({ where: { codigo: anclaCiuo } });
 
-  async function titulosPorCiuos(ciuos: string[], cantidad: number) {
+  async function titulosPorCiuos(ciuos: string[], cantidad: number, excluirExtra: string[] = excluir) {
     if (!ciuos.length || cantidad <= 0) return [];
     const filas = await prisma.tituloCanonico.findMany({
-      where: { ciuo: { in: ciuos }, origen: "CATALOGO_OFICIAL", formaCruda: { notIn: excluir } },
+      where: { ciuo: { in: ciuos }, origen: "CATALOGO_OFICIAL", formaCruda: { notIn: excluirExtra } },
     });
     return barajar(filas).slice(0, cantidad);
   }
@@ -151,10 +151,36 @@ async function seleccionarConAncla(candidatos: FilaCatalogo[], excluir: string[]
     });
     vecinos = await titulosPorCiuos(gruposVecinos.map((g) => g.codigo), cupoVecinos);
 
-    const gruposFuera = await prisma.grupoCiuo.findMany({
-      where: { granGrupo: grupoAncla.granGrupo, subgrupo: { not: grupoAncla.subgrupo } },
+    // "Fuera" en cascada (revisión externa 2026-09-05): usar solo granGrupo
+    // (1 dígito) es demasiado amplio -- para 2512 "Desarrollador de
+    // software" (granGrupo "2", 88 grupos) esa bolsa incluye "Bailarines y
+    // coreógrafos", tan lejano que no aporta nada al triaje. GrupoCiuo no
+    // guarda un nivel de 2 dígitos aparte, pero el propio código lo tiene:
+    // los primeros 2 dígitos de "2512" son "25" (Profesionales en TIC),
+    // que agrupa solo las 4 ocupaciones de informática -- todas plausibles.
+    // Primero se agota ese anillo cercano; solo si no alcanza para el cupo
+    // se amplía al gran grupo completo (el anillo ancho de siempre).
+    const subgrupoPrincipal = anclaCiuo.slice(0, 2);
+    const gruposFueraCercanos = await prisma.grupoCiuo.findMany({
+      where: { codigo: { startsWith: subgrupoPrincipal }, subgrupo: { not: grupoAncla.subgrupo } },
     });
-    fuera = await titulosPorCiuos(gruposFuera.map((g) => g.codigo), cupoFuera);
+    fuera = await titulosPorCiuos(gruposFueraCercanos.map((g) => g.codigo), cupoFuera);
+
+    if (fuera.length < cupoFuera) {
+      const yaUsados = fuera.map((t) => t.formaCruda);
+      const gruposFueraAmplios = await prisma.grupoCiuo.findMany({
+        where: {
+          granGrupo: grupoAncla.granGrupo,
+          subgrupo: { not: grupoAncla.subgrupo },
+          NOT: { codigo: { startsWith: subgrupoPrincipal } },
+        },
+      });
+      const amplios = await titulosPorCiuos(gruposFueraAmplios.map((g) => g.codigo), cupoFuera - fuera.length, [
+        ...excluir,
+        ...yaUsados,
+      ]);
+      fuera = [...fuera, ...amplios];
+    }
   }
 
   const combinados: FilaCatalogo[] = [...nucleo, ...vecinos, ...fuera];

@@ -64,13 +64,19 @@ export async function PUT(request: Request) {
   const anteriores = await prisma.objetivoLaboral.findMany({ where: { userId }, orderBy: { peso: "desc" } });
   const principalAnterior = anteriores[0] ?? null;
 
-  const datos = objetivosIn.map((o: any, i: number) => ({
-    userId,
-    ciuo: typeof o.ciuo === "string" && /^\d{4}$/.test(o.ciuo) ? o.ciuo : null,
-    etiqueta: String(o.etiqueta).trim().slice(0, 120),
-    peso: typeof o.peso === "number" ? Math.max(0, Math.min(1, o.peso)) : 1.0,
-    orden: i,
-  }));
+  // Se ordena por peso ANTES de asignar orden -- estado-automatico y el
+  // triaje leen con orderBy: { orden: "asc" } asumiendo que objetivos[0] es
+  // el principal. Sin este sort, un cliente que mandara [secundario 0.6,
+  // principal 1.0] dejaría esos lectores priorizando el objetivo equivocado.
+  const datos = [...objetivosIn]
+    .sort((a: any, b: any) => (typeof b.peso === "number" ? b.peso : 1.0) - (typeof a.peso === "number" ? a.peso : 1.0))
+    .map((o: any, i: number) => ({
+      userId,
+      ciuo: typeof o.ciuo === "string" && /^\d{4}$/.test(o.ciuo) ? o.ciuo : null,
+      etiqueta: String(o.etiqueta).trim().slice(0, 120),
+      peso: typeof o.peso === "number" ? Math.max(0, Math.min(1, o.peso)) : 1.0,
+      orden: i,
+    }));
 
   await prisma.$transaction([
     prisma.objetivoLaboral.deleteMany({ where: { userId } }),
@@ -78,7 +84,8 @@ export async function PUT(request: Request) {
     prisma.user.update({ where: { id: userId }, data: { objetivoConfirmado: true } }),
   ]);
 
-  const principalNuevo = [...datos].sort((a, b) => b.peso - a.peso)[0];
+  // datos ya viene ordenado por peso desc -- el primero es el principal.
+  const principalNuevo = datos[0];
 
   // Si es la primera vez que esta persona confirma un objetivo, no hay nada
   // que "cambió" -- está formalizando lo que antes era solo una sugerencia

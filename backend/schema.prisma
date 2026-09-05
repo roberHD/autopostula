@@ -378,6 +378,13 @@ model SearchPreferences {
   // Default false a propósito: activar el scorer nuevo no debe cambiarle el
   // comportamiento a nadie hasta que lo prenda a propósito.
   usarScorerLocal Boolean  @default(false) @map("usar_scorer_local")
+  // true si un cambio de objetivo laboral disparó una recompilación forzada
+  // (docs/objetivo-laboral.md §6) que falló -- perfilCompilado sigue
+  // reflejando el objetivo VIEJO mientras esto esté prendido. Sin esta
+  // bandera, el scorer seguiría puntuando en silencio con el rubro
+  // equivocado hasta la próxima recompilación exitosa (reabre P2 por la
+  // vía de excepción). Se limpia sola en la próxima compilación exitosa.
+  perfilDesactualizado Boolean @default(false) @map("perfil_desactualizado")
   actualizadoEn   DateTime @updatedAt @map("actualizado_en")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -24,6 +24,26 @@ export type ResultadoCompilarPerfil =
   | { ok: true; perfilCompilado: any }
   | { ok: false; status: number; error: string };
 
+// Revisión externa del 2026-09-05: si una recompilación FORZADA (viene de un
+// cambio de objetivo real, no del botón manual) falla, perfilCompilado se
+// queda con el objetivo VIEJO -- eso reabre P2 por la vía de excepción
+// (el scorer sigue puntuando en silencio con el rubro equivocado). Se marca
+// perfilDesactualizado para que /api/extension/perfil lo exponga y el
+// scorer mande todo a banda gris mientras tanto, en vez de descartar en
+// silencio. No se marca en recompilaciones NO forzadas (el botón manual de
+// /dashboard/filtros) porque ahí no cambió ninguna declaración del usuario
+// que el perfil actual esté contradiciendo.
+async function marcarDesactualizadoSiForzado(userId: string, forzar: boolean | undefined) {
+  if (!forzar) return;
+  await prisma.searchPreferences
+    .upsert({
+      where: { userId },
+      update: { perfilDesactualizado: true },
+      create: { userId, perfilDesactualizado: true },
+    })
+    .catch((e) => console.error("No se pudo marcar el perfil como desactualizado:", e));
+}
+
 export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }): Promise<ResultadoCompilarPerfil> {
   const [cv, styleProfile, prefsActuales, decisiones, objetivos] = await Promise.all([
     prisma.cvProfile.findUnique({ where: { userId } }),
@@ -34,6 +54,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
   ]);
 
   if (!cv?.textoExtraido) {
+    await marcarDesactualizadoSiForzado(userId, opts?.forzar);
     return { ok: false, status: 400, error: "Primero sube tu CV para poder compilar tu perfil de búsqueda" };
   }
 
@@ -52,6 +73,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
 
   const uso = await checkAndLogAiUsage(userId, "compilar_perfil");
   if (!uso.permitido) {
+    await marcarDesactualizadoSiForzado(userId, opts?.forzar);
     return { ok: false, status: 403, error: `Alcanzaste el límite de llamadas de IA de tu plan este mes (${uso.limite}).` };
   }
 
@@ -162,13 +184,14 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
 
     await prisma.searchPreferences.upsert({
       where: { userId },
-      create: { userId, perfilCompilado, versionPerfil: nuevaVersion },
-      update: { perfilCompilado, versionPerfil: nuevaVersion },
+      create: { userId, perfilCompilado, versionPerfil: nuevaVersion, perfilDesactualizado: false },
+      update: { perfilCompilado, versionPerfil: nuevaVersion, perfilDesactualizado: false },
     });
 
     return { ok: true, perfilCompilado };
   } catch (err) {
     console.error("Error compilando perfil:", err);
+    await marcarDesactualizadoSiForzado(userId, opts?.forzar);
     return { ok: false, status: 500, error: "No se pudo compilar el perfil — revisa la terminal del servidor" };
   }
 }

@@ -177,6 +177,20 @@ const perfil = {
   check('"recepcionistas" matchea "recepcionista" (plural en -ista)', r2.banda === 'postular');
 }
 
+// 14. perfilDesactualizado (revisión externa 2026-09-05): si una
+// recompilación forzada por cambio de objetivo falló, AP.evaluarOferta debe
+// mandar todo a banda gris -- no confiar en un puntaje que puede estar
+// mirando el rubro viejo. Esto prueba AP.evaluarOferta (el dispatcher),
+// no AP.puntuarOferta directo, porque ahí es donde vive la lógica nueva.
+{
+  const original = AP.cfg;
+  AP.cfg = { scorer: { usarScorerLocal: true, perfilCompilado: perfil, perfilDesactualizado: true } };
+  const r = AP.evaluarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: '', ubicacion: 'Ñuñoa' });
+  check('perfilDesactualizado manda a banda gris aunque el título matchee perfecto', r.banda === 'gris');
+  check('perfilDesactualizado trae una razón explicándolo', r.razones.some((x) => x.includes('desactualizado')));
+  AP.cfg = original;
+}
+
 // 14. Veto en el nombre de la empresa sigue cortando duro (no se ablandó por
 // error al arreglar el caso del cuerpo).
 {
