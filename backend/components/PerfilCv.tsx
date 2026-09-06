@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Mail, Phone, MapPin, IdCard, Briefcase, Pencil, X,
-  FileText, Loader2, Sparkles, Plus, User, CalendarClock,
+  FileText, Loader2, Sparkles, Plus,
 } from "lucide-react";
 import { useAvisos } from "@/components/Avisos";
 import { Skel } from "@/components/Esqueleto";
@@ -45,46 +45,6 @@ const CAMPOS_EDITABLES: { key: keyof Perfil; label: string; placeholder: string;
   },
 ];
 
-const POR_KEY = Object.fromEntries(CAMPOS_EDITABLES.map((c) => [c.key, c]));
-
-// Los mismos 10 campos de CAMPOS_EDITABLES, repartidos en los listones de la
-// persiana. Cada grupo toma un color de la paleta de gráficos para que la fila
-// se lea como un sistema y no como cinco cajas iguales.
-const GRUPOS: {
-  id: string;
-  label: string;
-  sub: string;
-  icon: typeof Mail;
-  color: string;
-  campos: (keyof Perfil)[];
-}[] = [
-  {
-    id: "identidad", label: "Identidad", icon: User, color: "var(--chart-1)",
-    sub: "Con estos datos te identifica el reclutador",
-    campos: ["nombre", "rut"],
-  },
-  {
-    id: "contacto", label: "Contacto", icon: Mail, color: "var(--chart-3)",
-    sub: "Por dónde te van a escribir",
-    campos: ["email", "telefono", "comuna"],
-  },
-  {
-    id: "objetivo", label: "Objetivo", icon: Briefcase, color: "var(--chart-2)",
-    sub: "Qué buscas y por cuánto",
-    campos: ["cargoObjetivo", "expectativaRenta"],
-  },
-  {
-    id: "jornada", label: "Jornada", icon: CalendarClock, color: "var(--chart-4)",
-    sub: "Cuándo y cómo puedes trabajar",
-    campos: ["disponibilidad", "modalidad"],
-  },
-  {
-    id: "resumen", label: "Resumen", icon: FileText, color: "var(--chart-5)",
-    sub: "La IA lo usa como base para tus cartas",
-    campos: ["resumenProfesional"],
-  },
-];
-
 function Dato({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value?: string | null }) {
   return (
     <div className="ap-dato">
@@ -117,9 +77,6 @@ export default function PerfilCv() {
   const [analizando, setAnalizando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
-  // Listón que queda abierto aunque el cursor se vaya. El hover lo resuelve
-  // el CSS; esto es solo el "clic para dejarlo fijo" y poder escribir tranquilo.
-  const [fijada, setFijada] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -295,115 +252,41 @@ export default function PerfilCv() {
       </div>
 
       {editando ? (
-        <>
-          <div className="ap-perfil-hero">
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <div
-                style={{
-                  width: 56, height: 56, borderRadius: "50%", flexShrink: 0,
-                  background: "oklch(1 0 0 / 20%)", border: "1px solid oklch(1 0 0 / 35%)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 19, fontWeight: 600,
-                }}
-              >
-                {iniciales}
-              </div>
-              <div>
-                <p style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.09em", opacity: 0.85 }}>
-                  Editando tu perfil
-                </p>
-                <h2 style={{ fontSize: 19, fontWeight: 600, lineHeight: 1.25 }}>{perfil.nombre || "Sin nombre"}</h2>
-                <p style={{ fontSize: 13, opacity: 0.9 }}>{perfil.cargoObjetivo || "Sin cargo objetivo"}</p>
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span
-                style={{
-                  fontSize: 12, fontWeight: 600, padding: "6px 12px", borderRadius: 999,
-                  background: "oklch(1 0 0 / 18%)", border: "1px solid oklch(1 0 0 / 30%)",
-                }}
-              >
-                {completitud}% completo
-              </span>
-              <button
-                onClick={() => setEditando(false)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
-                  fontSize: 12.5, fontFamily: "inherit", padding: "8px 14px", borderRadius: 8,
-                  background: "oklch(1 0 0 / 12%)", border: "1px solid oklch(1 0 0 / 30%)",
-                  color: "inherit",
-                }}
-              >
-                <X size={13} /> Cancelar
-              </button>
-            </div>
-          </div>
-
-          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-            Pasa el cursor por un grupo para abrirlo — haz clic en su lomo para dejarlo fijo mientras escribes.
+        <div className="ap-section ap-animate-in" style={{ marginBottom: 0 }}>
+          <p className="ap-section-title">Editar perfil</p>
+          <p className="ap-section-sub">
+            Estos son los datos con los que la IA rellena cada formulario.
           </p>
-
-          <div className="ap-persiana">
-            {GRUPOS.map((grupo) => {
-              const Icono = grupo.icon;
-              const llenos = grupo.campos.filter((k) => ((perfil[k] as string) || "").trim()).length;
-              const fija = fijada === grupo.id;
-              return (
-                <section
-                  key={grupo.id}
-                  className={"ap-slat" + (fija ? " ap-slat-fija" : "")}
-                  style={{ "--slat-color": grupo.color } as React.CSSProperties}
-                >
-                  <button
-                    type="button"
-                    className="ap-slat-lomo"
-                    onClick={() => setFijada((f) => (f === grupo.id ? null : grupo.id))}
-                    aria-expanded={fija}
-                    title={fija ? "Soltar el grupo" : "Dejar el grupo fijo"}
-                  >
-                    <Icono size={17} />
-                    <span className="ap-slat-lomo-txt">{grupo.label}</span>
-                    <span className="ap-slat-conteo">{llenos}/{grupo.campos.length}</span>
-                  </button>
-                  <div className="ap-slat-cuerpo">
-                    <div className="ap-slat-cuerpo-inner">
-                      <p className="ap-slat-cuerpo-titulo">{grupo.label}</p>
-                      <p className="ap-slat-cuerpo-sub">{grupo.sub}</p>
-                      {grupo.campos.map((key) => {
-                        const campo = POR_KEY[key];
-                        return (
-                          <div key={key} className="ap-field">
-                            <label className="ap-label">{campo.label}</label>
-                            {campo.textarea ? (
-                              <textarea
-                                value={(perfil[key] as string) || ""}
-                                onChange={(e) => setPerfil((p) => ({ ...p, [key]: e.target.value }))}
-                                placeholder={campo.placeholder}
-                                rows={8}
-                                className="ap-textarea"
-                              />
-                            ) : (
-                              <input
-                                value={(perfil[key] as string) || ""}
-                                onChange={(e) => setPerfil((p) => ({ ...p, [key]: e.target.value }))}
-                                placeholder={campo.placeholder}
-                                className="ap-input"
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </section>
-              );
-            })}
+          <div style={{ display: "grid", gap: 0, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", columnGap: 18 }}>
+            {CAMPOS_EDITABLES.map((campo) => (
+              <div key={campo.key} className="ap-field" style={campo.textarea ? { gridColumn: "1 / -1" } : undefined}>
+                <label className="ap-label">{campo.label}</label>
+                {campo.textarea ? (
+                  <textarea
+                    value={(perfil[campo.key] as string) || ""}
+                    onChange={(e) => setPerfil((p) => ({ ...p, [campo.key]: e.target.value }))}
+                    placeholder={campo.placeholder}
+                    rows={3}
+                    className="ap-textarea"
+                  />
+                ) : (
+                  <input
+                    value={(perfil[campo.key] as string) || ""}
+                    onChange={(e) => setPerfil((p) => ({ ...p, [campo.key]: e.target.value }))}
+                    placeholder={campo.placeholder}
+                    className="ap-input"
+                  />
+                )}
+              </div>
+            ))}
           </div>
-
-          <button onClick={guardar} disabled={guardando} className="ap-button" style={{ width: "100%" }}>
-            {guardando ? "Guardando…" : "Guardar cambios"}
-          </button>
-        </>
+          <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+            <button onClick={guardar} disabled={guardando} className="ap-button">
+              {guardando ? "Guardando…" : "Guardar cambios"}
+            </button>
+            <button onClick={() => setEditando(false)} className="ap-button-ghost">Cancelar</button>
+          </div>
+        </div>
       ) : (
         <>
           {/* ── Contacto: una fila que ocupa el ancho ── */}
