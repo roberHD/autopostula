@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target, Search, Plus, X } from "lucide-react";
 import { quitarMarkdown } from "@/lib/text";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
+import { Marca } from "@/components/Marca";
+import { Skel } from "@/components/Esqueleto";
+import { useAvisos } from "@/components/Avisos";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -140,8 +143,23 @@ export default function OnboardingPage() {
   // que se elige más adelante en el dashboard (esa sigue viviendo solo ahí).
   if (paso === null) {
     return (
-      <div className="ap-shell ap-onb-shell" data-theme="light" style={{ alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "var(--text-muted)", fontSize: 13.5 }}>Cargando...</p>
+      <div className="ap-shell ap-onb-shell" data-theme="light" style={{ alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ width: "100%", maxWidth: 620 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 28 }}>
+            <Marca tam={32} />
+            <span style={{ fontSize: 15, fontWeight: 700 }}>AutoPostula</span>
+          </div>
+          <div className="ap-onb-rail" aria-hidden="true">
+            {PASOS.map((p) => <div key={p.titulo} className="ap-onb-tramo" />)}
+          </div>
+          <div className="ap-card ap-onb-card" style={{ padding: 32, display: "grid", gap: 14, justifyItems: "center" }}>
+            <Skel ancho={46} alto={46} radio={13} variante="block" />
+            <Skel ancho={220} variante="title" />
+            <Skel ancho={300} />
+            <Skel ancho={260} />
+          </div>
+          <p className="ap-sr">Buscando en qué paso quedaste</p>
+        </div>
       </div>
     );
   }
@@ -151,36 +169,43 @@ export default function OnboardingPage() {
       <div style={{ width: "100%", maxWidth: 620 }}>
         {/* Marca */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 28 }}>
-          <div className="ap-onb-brand-mark">AP</div>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>AutoPostula</span>
+          <Marca tam={32} />
+          <span style={{ fontSize: 15, fontWeight: 700 }}>AutoPostula</span>
         </div>
 
-        {/* Indicador de pasos */}
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        {/* Rail de progreso: un tramo por paso, el actual se ensancha */}
+        <div className="ap-onb-rail" aria-hidden="true">
           {PASOS.map((p, i) => (
             <div
               key={p.titulo}
-              style={{
-                width: i === paso ? 22 : 8,
-                height: 8,
-                borderRadius: 999,
-                background: i <= paso ? "var(--accent)" : "var(--bg-elevated-2)",
-                transition: "all 0.3s ease",
-              }}
+              className="ap-onb-tramo"
+              data-estado={i < paso ? "hecho" : i === paso ? "actual" : undefined}
             />
           ))}
         </div>
-        <p style={{ textAlign: "center", fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, marginBottom: 24 }}>
-          Paso {paso + 1} de {PASOS.length} · {PASOS[paso].titulo}
-        </p>
+        <div
+          style={{
+            display: "flex", alignItems: "baseline", justifyContent: "space-between",
+            gap: 12, marginBottom: 20,
+          }}
+        >
+          <span style={{ fontSize: 13.5, fontWeight: 700 }}>{PASOS[paso].titulo}</span>
+          <span className="ap-tnum" style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600 }}>
+            Paso {paso + 1} de {PASOS.length}
+          </span>
+        </div>
 
-        <div className="ap-card ap-onb-card ap-animate-in" key={paso} style={{ padding: 32 }}>
+        <div
+          className="ap-card ap-onb-card ap-animate-in"
+          key={paso}
+          style={{ padding: 32, ["--ap-onb-avance" as string]: `${((paso + 1) / PASOS.length) * 100}%` }}
+        >
           {paso === 0 && <PasoBienvenida onSiguiente={() => irAPaso(1)} onOmitir={() => irAPaso(1)} />}
           {paso === 1 && <PasoCV onSiguiente={() => irAPaso(2)} onOmitir={() => irAPaso(2)} />}
           {paso === 2 && <PasoObjetivo onSiguiente={() => irAPaso(3)} onOmitir={() => irAPaso(3)} />}
           {paso === 3 && <PasoTriaje onSiguiente={() => irAPaso(4)} onOmitir={() => irAPaso(4)} />}
           {paso === 4 && <PasoConversacion onSiguiente={() => irAPaso(5)} onOmitir={() => irAPaso(5)} />}
-          {paso === 5 && <PasoExtension onSiguiente={() => irAPaso(6)} />}
+          {paso === 5 && <PasoExtension onSiguiente={() => irAPaso(6)} onOmitir={() => irAPaso(6)} />}
           {paso === 6 && <PasoPortal onSiguiente={() => irAPaso(7)} onOmitir={() => irAPaso(7)} />}
           {paso === 7 && <PasoListo onTerminar={terminar} />}
         </div>
@@ -690,7 +715,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
       )}
 
       {error && (
-        <p style={{ fontSize: 12, color: "#dc2626", marginTop: 8 }}>{error}</p>
+        <p style={{ fontSize: 12, color: "var(--err)", marginTop: 8 }}>{error}</p>
       )}
 
       {finalizado ? (
@@ -721,7 +746,7 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
   );
 }
 
-function PasoExtension({ onSiguiente }: { onSiguiente: () => void }) {
+function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   // null = todavía detectando si la extensión está instalada.
   const [extensionDetectada, setExtensionDetectada] = useState<boolean | null>(null);
   const [conectandoExt, setConectandoExt] = useState(false);
@@ -820,13 +845,15 @@ function PasoExtension({ onSiguiente }: { onSiguiente: () => void }) {
           <button className="ap-button" onClick={conectarExtension} disabled={conectandoExt}>
             {conectandoExt ? "Conectando..." : "Conectar extensión"}
           </button>
-          {errorConexion && <p style={{ fontSize: 12, color: "#dc2626", marginTop: 8 }}>{errorConexion}</p>}
+          {errorConexion && <p style={{ fontSize: 12, color: "var(--err)", marginTop: 8 }}>{errorConexion}</p>}
         </div>
       ) : (
         <div className="ap-section" style={{ marginBottom: 20 }}>
           <p className="ap-section-title">Todavía no la detectamos</p>
           <p className="ap-section-sub">
             Instala la extensión de AutoPostula en tu navegador y vuelve a intentar.
+            Si prefieres dejarlo para después, omite este paso y conéctala cuando
+            quieras desde Portales — hasta entonces no podremos postular por ti.
           </p>
           <button className="ap-button-ghost" onClick={() => window.location.reload()}>
             Ya la instalé, verificar
@@ -834,11 +861,16 @@ function PasoExtension({ onSiguiente }: { onSiguiente: () => void }) {
         </div>
       )}
 
-      {/* Paso obligatorio a propósito: no hay botón "Omitir" ni "Siguiente" habilitado
-          hasta que la extensión quede conectada. */}
-      <button className="ap-button" style={{ width: "100%" }} disabled={!extConectada} onClick={onSiguiente}>
-        Siguiente
-      </button>
+      {/* Antes este paso era obligatorio: sin la extensión conectada no había
+          forma de avanzar. Se dejó saltable como el resto del onboarding —
+          quien lo omita puede conectarla después desde Portales, pero hasta
+          entonces AutoPostula no puede postular por él. */}
+      <Footer
+        onSiguiente={onSiguiente}
+        onOmitir={onOmitir}
+        siguienteTexto="Siguiente"
+        deshabilitado={!extConectada}
+      />
     </>
   );
 }

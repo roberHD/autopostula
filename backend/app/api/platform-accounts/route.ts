@@ -20,7 +20,10 @@ export async function GET() {
     prisma.jobPlatform.findMany(),
     prisma.platformAccount.findMany({
       where: { userId },
-      include: { _count: { select: { applications: true } } },
+      include: {
+        _count: { select: { applications: true } },
+        applications: { select: { estadoActual: true, enviadaEn: true } },
+      },
     }),
     prisma.subscription.findFirst({
       where: { userId, estado: "ACTIVA" },
@@ -36,6 +39,20 @@ export async function GET() {
       activa: c.activa,
       conectadaEn: c.conectadaEn,
       postulaciones: c._count.applications,
+      // Solo las que la empresa realmente vio. INCOMPLETA queda fuera: esa
+      // ni siquiera se terminó de enviar.
+      vistas: c.applications.filter((a) =>
+        ["VISTO", "EN_PROCESO", "FINALISTA", "FINALIZADO", "RECHAZADO"].includes(a.estadoActual),
+      ).length,
+      finalistas: c.applications.filter(
+        (a) => a.estadoActual === "FINALISTA" || a.estadoActual === "FINALIZADO",
+      ).length,
+      ultimaEn:
+        c.applications.length > 0
+          ? c.applications
+              .reduce((max, a) => (a.enviadaEn > max ? a.enviadaEn : max), c.applications[0].enviadaEn)
+              .toISOString()
+          : null,
     })),
     maxPlataformasActivas: subscripcion?.plan.maxPlataformasActivas ?? 1,
     planNombre: subscripcion?.plan.nombre ?? null,

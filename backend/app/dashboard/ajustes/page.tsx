@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
-import { Zap, Lock, Mail, BadgeCheck, TriangleAlert } from "lucide-react";
+import { Zap, Lock, Mail, BadgeCheck, TriangleAlert, LogOut } from "lucide-react";
 
 export default function AjustesPage() {
   const [activa, setActiva] = useState(false);
@@ -185,7 +185,37 @@ export default function AjustesPage() {
                 disabled={redirigiendo}
                 onClick={esPremium ? cancelarSuscripcion : pasarAPremium}
               >
-                {redirigiendo ? "Un momento..." : esPremium ? "Cancelar suscripción" : "✨ Pasar a Premium"}
+                {redirigiendo ? "Un momento..." : esPremium ? "Cancelar suscripción" : "Pasar a Premium"}
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                paddingTop: 12, borderTop: "1px solid var(--border)",
+              }}
+            >
+              <div
+                style={{
+                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                  background: "var(--bg-elevated-2)", color: "var(--text-muted)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <LogOut size={15} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 600 }}>Cerrar sesión</p>
+                <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 1 }}>
+                  Sales de AutoPostula en este dispositivo. Tu cuenta y tus postulaciones quedan intactas.
+                </p>
+              </div>
+              <button
+                className="ap-button-ghost"
+                style={{ flexShrink: 0 }}
+                onClick={() => signOut({ callbackUrl: "/login" })}
+              >
+                Cerrar sesión
               </button>
             </div>
           </div>

@@ -1,0 +1,491 @@
+/* ═══════════════════════════════════════════════════════════════════
+   AutoPostula — sistema de diseño
+   ───────────────────────────────────────────────────────────────────
+   Un solo vocabulario de tokens para las tres zonas de la app: las
+   páginas públicas (landing, login, registro), el onboarding y el
+   dashboard. Los nombres son los que el dashboard ya usaba
+   (--bg, --bg-elevated, --text, --accent...) para no tener que tocar
+   cada página; lo que cambia son los valores y los tokens nuevos
+   (--marker, --ok/--err, --inv-*).
+
+   La identidad: papel bond, tinta índigo y un destacador citrón.
+   El citrón es el único acento fuerte y se gasta en un solo lugar
+   por pantalla — es el gesto de marcar un aviso.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Superficies ── */
+  --bg:             #F2F3EE;
+  --bg-elevated:    #FFFFFF;
+  --bg-elevated-2:  #FAFAF6;
+  --border:         #DFE0D8;
+  --border-strong:  #C9CABF;
+
+  /* ── Texto ── */
+  --text:           #1B1A2E;
+  --text-muted:     #6B6A7D;
+
+  /* ── Acento ── */
+  --accent:          #5A2FD6;
+  --accent-soft:     #EEE9FD;
+  --accent-contrast: #FFFFFF;
+
+  /* ── Destacador ── */
+  --marker:      #D6F24B;
+  --marker-deep: #B9D62E;
+  --on-marker:   #1B1A2E;
+
+  /* ── Bloque invertido (cierre de la landing, volver arriba) ── */
+  --inv-bg:    #1B1A2E;
+  --inv-fg:    #F2F3EE;
+  --inv-muted: #9A98AE;
+
+  /* ── Semánticos: separados del acento a propósito ── */
+  --ok:        #17784F;
+  --ok-soft:   #E2F3EA;
+  --warn:      #9A5B00;
+  --warn-soft: #FBF0DC;
+  --err:       #B3283C;
+  --err-soft:  #FBE9EC;
+
+  /* ── Estados de una postulación ── */
+  --status-enviado:    #6B6A7D;
+  --status-visto:      #5A2FD6;
+  --status-en-proceso: #9A5B00;
+  --status-finalista:  #17784F;
+  --status-finalizado: #1F7A75;
+  --status-rechazado:  #B3283C;
+
+  /* ── Gráficos ── */
+  --chart-1: #5A2FD6;
+  --chart-2: #8B63E8;
+  --chart-3: #1F9E96;
+  --chart-4: #8FA800;
+  --chart-5: #C77800;
+
+  /* ── Sombras: el papel se levanta, no flota ── */
+  --shadow-sheet: 0 1px 0 var(--border), 0 18px 40px -24px rgba(27, 26, 46, 0.28);
+  --shadow-lift:  0 12px 30px -18px rgba(27, 26, 46, 0.45);
+
+  /* ── Tipografía ── */
+  --ff-display: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --ff-body:    var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --radius: 10px;
+  --ease:   cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* El dashboard arranca en oscuro y tiene su propio interruptor; el
+   atributo lo pone ThemeToggle sobre .ap-shell. Las páginas públicas
+   y el onboarding se quedan en el :root de arriba.
+
+   El segundo selector es el que hace que el dashboard salga oscuro de
+   entrada: antes de que ThemeToggle monte y estampe el atributo no hay
+   data-theme, y sin esto se vería un parpadeo claro en cada carga. */
+[data-theme="dark"],
+.ap-shell:not([data-theme="light"]) {
+  --bg:             #14131C;
+  --bg-elevated:    #1D1C29;
+  --bg-elevated-2:  #232232;
+  --border:         #302E42;
+  --border-strong:  #443F5E;
+
+  --text:           #ECECF3;
+  --text-muted:     #9998AC;
+
+  --accent:          #A98BFF;
+  --accent-soft:     #2A2247;
+  /* Sobre lavanda clara el texto va oscuro: en el tema anterior era casi
+     blanco y los botones primarios quedaban ilegibles. */
+  --accent-contrast: #17122B;
+
+  --marker:      #D6F24B;
+  --marker-deep: #A6C221;
+  --on-marker:   #17122B;
+
+  --inv-bg:    #232232;
+  --inv-fg:    #ECECF3;
+  --inv-muted: #9998AC;
+
+  --ok:        #5BD59B;
+  --ok-soft:   #16342A;
+  --warn:      #E5A94A;
+  --warn-soft: #33260F;
+  --err:       #FF8A9B;
+  --err-soft:  #3A1A22;
+
+  --status-enviado:    #9998AC;
+  --status-visto:      #A98BFF;
+  --status-en-proceso: #E5A94A;
+  --status-finalista:  #5BD59B;
+  --status-finalizado: #6FD8D0;
+  --status-rechazado:  #FF8A9B;
+
+  --chart-1: #A98BFF;
+  --chart-2: #C9A6FF;
+  --chart-3: #6FD8D0;
+  --chart-4: #D6F24B;
+  --chart-5: #F2A65A;
+
+  --shadow-sheet: 0 1px 0 var(--border), 0 18px 40px -24px rgba(0, 0, 0, 0.7);
+  --shadow-lift:  0 12px 30px -18px rgba(0, 0, 0, 0.8);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════════════ */
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ff-body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 112;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+  margin: 0;
+}
+h3 { font-variation-settings: "wdth" 104; letter-spacing: -0.012em; }
+
+p { margin: 0; }
+
+/* El foco tiene que verse siempre — se navega mucho con teclado acá. */
+:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.ap-tnum { font-variant-numeric: tabular-nums; }
+
+.ap-sr {
+  position: absolute; width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BOTONES
+   .ap-button / .ap-button-ghost son los nombres que ya usaban las
+   páginas del dashboard — se mantienen como alias para no tener que
+   editar cada archivo.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ap-btn,
+.ap-button,
+.ap-button-ghost {
+  font-family: var(--ff-body);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.16s var(--ease), box-shadow 0.2s ease,
+              background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.ap-btn:active:not(:disabled),
+.ap-button:active:not(:disabled),
+.ap-button-ghost:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+
+.ap-btn:disabled,
+.ap-button:disabled,
+.ap-button-ghost:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Primario ── */
+.ap-btn--primary,
+.ap-button {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset,
+              0 8px 20px -12px var(--accent);
+}
+.ap-btn--primary:hover:not(:disabled),
+.ap-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset,
+              0 16px 28px -14px var(--accent);
+}
+
+/* ── Fantasma ── */
+.ap-btn--ghost,
+.ap-button-ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.ap-btn--ghost:hover:not(:disabled),
+.ap-button-ghost:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--text);
+  transform: translateY(-2px);
+}
+
+/* ── Destacador: se usa una sola vez por pantalla ── */
+.ap-btn--mark {
+  background: var(--marker);
+  color: var(--on-marker);
+  border-color: var(--marker-deep);
+  box-shadow: 0 8px 20px -14px var(--marker-deep);
+}
+.ap-btn--mark:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 26px -16px var(--marker-deep);
+}
+
+.ap-btn--sm,
+.ap-button.ap-btn--sm,
+.ap-button-ghost.ap-btn--sm { padding: 9px 14px; font-size: 13px; border-radius: 8px; }
+
+.ap-btn--full { width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   DESTACADOR — el gesto de la marca
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Barrido sobre una frase. Se dibuja al cargar (hero) o al entrar en
+   vista (.is-in).
+
+   Va como fondo del propio <span> y no como pseudo-elemento: con
+   box-decoration-break:clone cada fragmento de línea recibe su propia
+   marca, así que la frase puede cortarse en dos líneas y el destacador
+   sigue cada una. Con un ::before absoluto salía una sola barra suelta
+   debajo del bloque. */
+.ap-swipe {
+  background-image: linear-gradient(var(--marker), var(--marker));
+  background-repeat: no-repeat;
+  background-position: 0 86%;
+  background-size: 0% 0.34em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  padding-inline: 0.06em;
+  transition: background-size 0.55s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.ap-swipe--auto { animation: ap-swipe 0.62s 1.05s cubic-bezier(0.65, 0, 0.35, 1) forwards; }
+.is-in .ap-swipe,
+.ap-swipe.is-in { background-size: 100% 0.34em; }
+
+@keyframes ap-swipe { to { background-size: 100% 0.34em; } }
+
+/* Marca sobre un dato suelto dentro de un párrafo. Mismo mecanismo que
+   .ap-swipe, por la misma razón: estos datos casi siempre se cortan en
+   dos líneas. */
+.ap-mk {
+  font-weight: 500;
+  color: var(--on-marker);
+  background-image: linear-gradient(var(--marker), var(--marker));
+  background-repeat: no-repeat;
+  background-position: 0 50%;
+  background-size: 0% 1.15em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  padding-inline: 0.12em;
+  border-radius: 2px;
+  transition: background-size 0.5s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.is-in .ap-mk { background-size: 100% 1.15em; }
+.is-in .ap-mk:nth-of-type(1) { transition-delay: 0.15s; }
+.is-in .ap-mk:nth-of-type(2) { transition-delay: 0.35s; }
+.is-in .ap-mk:nth-of-type(3) { transition-delay: 0.55s; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   MARCA — el logo es una casilla que se marca sola
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ap-mark {
+  width: 30px; height: 30px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+}
+.ap-mark svg { width: 17px; height: 17px; display: block; }
+.ap-mark path {
+  fill: none;
+  stroke: var(--marker);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: ap-tick 0.5s 0.35s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes ap-tick { to { stroke-dashoffset: 0; } }
+
+.ap-brand {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; color: inherit; flex: none;
+}
+.ap-brand b {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 108;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.015em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CARGA — esqueletos
+   Se muestra la forma de lo que viene, no un spinner sobre el vacío.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ap-skel {
+  background: linear-gradient(90deg,
+    var(--bg-elevated-2) 25%,
+    color-mix(in srgb, var(--border) 55%, var(--bg-elevated-2)) 50%,
+    var(--bg-elevated-2) 75%);
+  background-size: 220% 100%;
+  animation: ap-shimmer 1.25s ease-in-out infinite;
+  border-radius: 5px;
+  display: block;
+}
+@keyframes ap-shimmer { to { background-position: -220% 0; } }
+
+/* Giro para los iconos de "trabajando" (Loader2 de lucide). */
+@keyframes ap-girar { to { transform: rotate(360deg); } }
+
+.ap-skel--text { height: 11px; }
+.ap-skel--title { height: 18px; border-radius: 6px; }
+.ap-skel--pill { height: 20px; border-radius: 999px; }
+.ap-skel--block { border-radius: var(--radius); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   AVISOS — éxito y error
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ap-avisos {
+  position: fixed;
+  z-index: 200;
+  right: 20px;
+  bottom: 20px;
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+  max-width: min(360px, calc(100vw - 40px));
+  pointer-events: none;
+}
+.ap-avisos > * { pointer-events: auto; }
+
+.ap-toast {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border-strong);
+  border-radius: 11px;
+  padding: 13px 14px;
+  box-shadow: var(--shadow-lift);
+  animation: ap-toast-in 0.38s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.ap-toast.is-out { animation: ap-toast-out 0.28s ease forwards; }
+
+@keyframes ap-toast-in  { from { opacity: 0; transform: translateX(20px) scale(0.96); } }
+@keyframes ap-toast-out { to   { opacity: 0; transform: translateX(20px) scale(0.96); } }
+
+.ap-toast__ico { width: 19px; height: 19px; flex: none; margin-top: 1px; }
+.ap-toast__t   { font-size: 13.5px; font-weight: 700; }
+.ap-toast__d   { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; line-height: 1.5; }
+.ap-toast__x {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 2px;
+  color: var(--text-muted);
+  border-radius: 5px;
+  line-height: 0;
+  transition: color 0.2s ease;
+}
+.ap-toast__x:hover { color: var(--text); }
+.ap-toast__x svg { width: 14px; height: 14px; }
+
+.ap-toast--ok  { border-left-color: var(--ok); }
+.ap-toast--ok  .ap-toast__ico { color: var(--ok); }
+.ap-toast--err { border-left-color: var(--err); }
+.ap-toast--err .ap-toast__ico { color: var(--err); }
+.ap-toast--info { border-left-color: var(--accent); }
+.ap-toast--info .ap-toast__ico { color: var(--accent); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   VOLVER ARRIBA
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ap-arriba {
+  position: fixed;
+  right: 20px; bottom: 20px;
+  z-index: 150;
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+  border: 1px solid var(--inv-bg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(12px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s var(--ease), background 0.2s ease;
+}
+.ap-arriba.is-on { opacity: 1; transform: none; pointer-events: auto; }
+.ap-arriba:hover { transform: translateY(-3px); }
+.ap-arriba svg { width: 18px; height: 18px; }
+
+/* Cuando hay avisos abajo a la derecha, el botón se corre para no taparlos. */
+.ap-avisos:not(:empty) ~ .ap-arriba { bottom: 84px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   REVELADO AL SCROLL
+   Sin JS todo se ve igual: la clase .js la pone el propio componente.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ap-rv { opacity: 1; }
+.ap-rv[data-armado="1"] { opacity: 0; transform: translateY(20px); }
+.ap-rv[data-armado="1"].is-in {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+}
+.ap-rv[data-retraso="1"].is-in { transition-delay: 0.08s; }
+.ap-rv[data-retraso="2"].is-in { transition-delay: 0.16s; }
+.ap-rv[data-retraso="3"].is-in { transition-delay: 0.24s; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   MOVIMIENTO REDUCIDO
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .ap-rv[data-armado="1"] { opacity: 1; transform: none; }
+  .ap-swipe { background-size: 100% 0.34em; }
+  .ap-mk { background-size: 100% 1.15em; }
+  .ap-mark path { stroke-dashoffset: 0; }
+}

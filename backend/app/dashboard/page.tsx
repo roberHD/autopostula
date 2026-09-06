@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Area,
   AreaChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  Cell,
-  Pie,
-  PieChart,
 } from "recharts";
 import { ArrowUpRight, ArrowDownRight, Sparkles, Send, CheckCheck, Trophy, Target } from "lucide-react";
+import { SkelStats, SkelGrafico, SkelFilas } from "@/components/Esqueleto";
+import { useAvisos } from "@/components/Avisos";
 
 type Resumen = {
   postulacionesEnviadas: number;
@@ -21,6 +21,7 @@ type Resumen = {
   matchPromedio: number | null;
   actividad: { etiqueta: string; enviadas: number; respuestas: number }[];
   porPortal: { nombre: string; cantidad: number }[];
+  embudo: { etiqueta: string; cantidad: number }[];
   perfilEntrenado: number;
   portalesActivos: number;
   recientes: {
@@ -51,12 +52,79 @@ const ESTILO_BADGE: Record<string, { bg: string; fg: string }> = {
   FINALISTA: { bg: "color-mix(in oklch, var(--status-finalista) 18%, transparent)", fg: "var(--status-finalista)" },
   FINALIZADO: { bg: "color-mix(in oklch, var(--status-finalizado) 18%, transparent)", fg: "var(--status-finalizado)" },
   RECHAZADO: { bg: "color-mix(in oklch, var(--status-rechazado) 15%, transparent)", fg: "var(--status-rechazado)" },
-  // Ámbar fijo (no una variable del theme) porque es un estado de advertencia,
+  // Va con los tokens de advertencia, no con los de estado: es una alerta,
   // no un paso más del progreso normal de la postulación.
-  INCOMPLETA: { bg: "rgba(217,119,6,0.12)", fg: "#D97706" },
+  INCOMPLETA: { bg: "color-mix(in srgb, var(--warn) 15%, transparent)", fg: "var(--warn)" },
+};
+
+// El embudo usa los mismos colores de estado que los badges: la misma
+// cosa se ve del mismo color en toda la app.
+const COLOR_EMBUDO: Record<string, string> = {
+  Enviadas: "var(--status-enviado)",
+  Vistas: "var(--status-visto)",
+  "En proceso": "var(--status-en-proceso)",
+  Finalistas: "var(--status-finalista)",
+  Rechazadas: "var(--status-rechazado)",
 };
 
 const PALETA_PORTALES = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
+
+/**
+ * Rosca de reparto por portal, dibujada a mano.
+ *
+ * Recharts 3 no llega a emitir el <path> del sector cuando hay un solo
+ * segmento (el grupo .recharts-shape queda vacío y la rosca desaparece),
+ * que es justo el caso de quien tiene un portal conectado. Son cuatro
+ * líneas de SVG y no dependen de la librería.
+ */
+function Rosca({ datos, colores }: { datos: { nombre: string; cantidad: number }[]; colores: string[] }) {
+  const total = datos.reduce((a, b) => a + b.cantidad, 0);
+  if (!total) return null;
+
+  const r = 52;
+  const circunferencia = 2 * Math.PI * r;
+  // Separación entre arcos, solo si hay más de uno que separar.
+  const hueco = datos.length > 1 ? 3 : 0;
+  let acumulado = 0;
+
+  return (
+    <div style={{ display: "grid", placeItems: "center", position: "relative", height: 160 }}>
+      <svg
+        width={140}
+        height={140}
+        viewBox="0 0 140 140"
+        role="img"
+        aria-label={`${total} postulaciones repartidas en ${datos.length} portales`}
+      >
+        {datos.map((d, i) => {
+          const largo = (d.cantidad / total) * circunferencia - hueco;
+          const desfase = -acumulado;
+          acumulado += (d.cantidad / total) * circunferencia;
+          return (
+            <circle
+              key={d.nombre}
+              cx={70}
+              cy={70}
+              r={r}
+              fill="none"
+              stroke={colores[i % colores.length]}
+              strokeWidth={17}
+              strokeDasharray={`${Math.max(0, largo)} ${circunferencia - Math.max(0, largo)}`}
+              strokeDashoffset={desfase}
+              style={{ transform: "rotate(-90deg)", transformOrigin: "center" }}
+            />
+          );
+        })}
+      </svg>
+      <div style={{ position: "absolute", textAlign: "center" }}>
+        <p style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
+          {total}
+        </p>
+        <p style={{ fontSize: 11, color: "var(--text-muted)" }}>en total</p>
+      </div>
+    </div>
+  );
+}
 
 function Badge({ estado }: { estado: string }) {
   const s = ESTILO_BADGE[estado] ?? ESTILO_BADGE.ENVIADO;
@@ -84,6 +152,7 @@ export default function InicioPage() {
   const [datos, setDatos] = useState<Resumen | null>(null);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState("");
+  const { error: avisarError } = useAvisos();
 
   useEffect(() => {
     async function cargar() {
@@ -92,21 +161,61 @@ export default function InicioPage() {
         const data = await res.json();
         if (!res.ok) {
           setMensaje(data.error ?? `Error ${res.status}`);
+          avisarError("No pudimos cargar tu resumen", data.error ?? "Recarga la página en unos segundos.");
           return;
         }
         setDatos(data);
       } catch (err) {
         console.error("Error cargando resumen:", err);
-        setMensaje("No se pudo cargar — revisa la consola");
+        setMensaje("No se pudo cargar tu resumen.");
+        avisarError("No pudimos cargar tu resumen", "Revisa tu conexión y recarga la página.");
       } finally {
         setCargando(false);
       }
     }
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (cargando) return <div className="ap-empty">Cargando...</div>;
-  if (mensaje) return <p style={{ color: "var(--status-rechazado)", fontSize: 13 }}>{mensaje}</p>;
+  if (cargando) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div className="ap-page-header" style={{ marginBottom: 0 }}>
+          <h1 className="ap-page-title">Inicio</h1>
+          <p className="ap-page-sub">Cargando tu actividad...</p>
+        </div>
+        <SkelStats />
+        <div className="ap-charts-row">
+          <SkelGrafico alto={220} />
+          <SkelGrafico alto={220} />
+        </div>
+        <div className="ap-card">
+          <SkelFilas n={5} />
+        </div>
+      </div>
+    );
+  }
+
+  if (mensaje) {
+    return (
+      <div className="ap-empty-state">
+        <div className="ap-empty-state-icon" style={{ color: "var(--err)", background: "var(--err-soft)" }}>
+          <Target size={20} />
+        </div>
+        <p className="ap-empty-state-title">No pudimos cargar tu resumen</p>
+        <p className="ap-empty-state-sub">{mensaje}</p>
+        <button
+          type="button"
+          className="ap-button"
+          style={{ marginTop: 16 }}
+          onClick={() => window.location.reload()}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
   if (!datos) return null;
 
   const hoy = new Date().toLocaleDateString("es-CL", {
@@ -157,6 +266,17 @@ export default function InicioPage() {
 
   const totalPortal = datos.porPortal.reduce((a, b) => a + b.cantidad, 0);
 
+  // "De cada 10 que envías, N ..." — se saca del mismo embudo que se dibuja,
+  // para que el texto y las barras nunca digan cosas distintas.
+  const deEmbudo = (etiqueta: string) => {
+    const fila = datos.embudo.find((e) => e.etiqueta === etiqueta);
+    if (!fila || !datos.postulacionesEnviadas) return "0";
+    const porDiez = (fila.cantidad / datos.postulacionesEnviadas) * 10;
+    return porDiez >= 1 ? String(Math.round(porDiez)) : porDiez.toFixed(1).replace(".0", "");
+  };
+  // Decir "activo" sin un portal conectado es mentira: no puede postular.
+  const asistenteActivo = datos.portalesActivos > 0;
+
   return (
     <div className="ap-glow-bg" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div className="ap-page-header" style={{ marginBottom: 0 }}>
@@ -167,7 +287,7 @@ export default function InicioPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+      <div className="ap-metricas">
         {stats.map((s, i) => (
           <div
             key={s.label}
@@ -207,13 +327,103 @@ export default function InicioPage() {
         ))}
       </div>
 
-      {/* Actividad + Por portal */}
-      <div style={{ display: "grid", gap: 20, gridTemplateColumns: "2fr 1fr" }} className="ap-charts-row">
-        <div className="ap-card ap-animate-in" style={{ padding: 20, animationDelay: "0.2s" }}>
-          <p style={{ fontSize: 14, fontWeight: 600 }}>Actividad de la semana</p>
-          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>
-            Postulaciones enviadas y respuestas recibidas
+      {/* Embudo + reparto por portal: las dos terminan parejas de alto */}
+      <div className="ap-fila-2 ap-split--parejo">
+        <div className="ap-card ap-animate-in" style={{ padding: 20, animationDelay: "0.15s" }}>
+          <p style={{ fontSize: 14, fontWeight: 600 }}>De enviada a finalista</p>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
+            Dónde se te quedan las postulaciones
           </p>
+
+          <div className="ap-embudo">
+            {datos.embudo.map(({ etiqueta, cantidad }) => (
+              <div
+                key={etiqueta}
+                className="ap-embudo__fila"
+                style={{ color: COLOR_EMBUDO[etiqueta] ?? "var(--text-muted)" }}
+              >
+                <span className="ap-embudo__lab"><i />{etiqueta}</span>
+                <span className="ap-embudo__pista">
+                  <span
+                    className="ap-embudo__relleno"
+                    style={{
+                      width: datos.postulacionesEnviadas
+                        ? `${(cantidad / datos.postulacionesEnviadas) * 100}%`
+                        : "0%",
+                    }}
+                  />
+                </span>
+                <span className="ap-embudo__n">{cantidad}</span>
+              </div>
+            ))}
+          </div>
+
+          {datos.postulacionesEnviadas > 0 && (
+            <p
+              style={{
+                marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)",
+                fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.6,
+              }}
+            >
+              De cada 10 que envías,{" "}
+              <b style={{ color: "var(--text)" }}>{deEmbudo("Vistas")} las abre la empresa</b> y{" "}
+              <b style={{ color: "var(--text)" }}>{deEmbudo("Finalistas")} llega a finalista</b>.
+            </p>
+          )}
+        </div>
+
+        <div className="ap-card ap-animate-in" style={{ padding: 20, animationDelay: "0.25s" }}>
+          <p style={{ fontSize: 14, fontWeight: 600 }}>Por portal</p>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Distribución de postulaciones</p>
+          <Rosca datos={datos.porPortal} colores={PALETA_PORTALES} />
+          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+            {datos.porPortal.map((p, i) => (
+              <div key={p.nombre} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: PALETA_PORTALES[i % PALETA_PORTALES.length],
+                    }}
+                  />
+                  <span style={{ color: "var(--text-muted)" }}>{p.nombre}</span>
+                </span>
+                <span style={{ fontWeight: 500 }}>{p.cantidad}</span>
+              </div>
+            ))}
+            {datos.porPortal.length === 0 && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Sin postulaciones todavía</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Actividad de la semana, a lo ancho */}
+      <div style={{ marginBottom: 16 }}>
+        <div className="ap-card ap-animate-in" style={{ padding: 20, animationDelay: "0.2s" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 600 }}>Actividad de la semana</p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                Postulaciones enviadas y respuestas recibidas
+              </p>
+            </div>
+            {/* Sin esto las dos áreas de color no decían cuál era cuál. */}
+            <div style={{ display: "flex", gap: 14, flexShrink: 0 }}>
+                {[
+                  { t: "Enviadas", c: "var(--chart-1)" },
+                  { t: "Respuestas", c: "var(--chart-2)" },
+              ].map(({ t, c }) => (
+                <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--text-muted)" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: c }} />
+                  {t}
+                </span>
+              ))}
+            </div>
+          </div>
+
           <div style={{ height: 256 }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={datos.actividad} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -266,76 +476,26 @@ export default function InicioPage() {
           </div>
         </div>
 
-        <div className="ap-card ap-animate-in" style={{ padding: 20, animationDelay: "0.25s" }}>
-          <p style={{ fontSize: 14, fontWeight: 600 }}>Por portal</p>
-          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Distribución de postulaciones</p>
-          <div style={{ display: "flex", justifyContent: "center", position: "relative", height: 160 }}>
-            <ResponsiveContainer width={160} height={160}>
-              <PieChart>
-                <Pie
-                  data={datos.porPortal}
-                  dataKey="cantidad"
-                  nameKey="nombre"
-                  innerRadius={52}
-                  outerRadius={72}
-                  paddingAngle={3}
-                  stroke="none"
-                  animationDuration={600}
-                >
-                  {datos.porPortal.map((p, i) => (
-                    <Cell key={p.nombre} fill={PALETA_PORTALES[i % PALETA_PORTALES.length]} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                pointerEvents: "none",
-              }}
-            >
-              <span style={{ fontSize: 20, fontWeight: 600 }}>{totalPortal}</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>total</span>
-            </div>
-          </div>
-          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-            {datos.porPortal.map((p, i) => (
-              <div key={p.nombre} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      background: PALETA_PORTALES[i % PALETA_PORTALES.length],
-                    }}
-                  />
-                  <span style={{ color: "var(--text-muted)" }}>{p.nombre}</span>
-                </span>
-                <span style={{ fontWeight: 500 }}>{p.cantidad}</span>
-              </div>
-            ))}
-            {datos.porPortal.length === 0 && (
-              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Sin postulaciones todavía</p>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Recientes + asistente */}
-      <div style={{ display: "grid", gap: 20, gridTemplateColumns: "2fr 1fr" }} className="ap-charts-row">
+      <div className="ap-fila-2">
         <div className="ap-card ap-animate-in" style={{ padding: 20, animationDelay: "0.3s" }}>
           <p style={{ fontSize: 14, fontWeight: 600 }}>Postulaciones recientes</p>
           <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>
             Las últimas gestionadas por tu asistente
           </p>
           {datos.recientes.length === 0 && (
-            <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Todavía no hay postulaciones.</p>
+            <div className="ap-empty-state" style={{ padding: "36px 20px" }}>
+              <div className="ap-empty-state-icon">
+                <CheckCheck size={20} />
+              </div>
+              <p className="ap-empty-state-title">Acá va a aparecer cada postulación</p>
+              <p className="ap-empty-state-sub">
+                Con su estado real: enviada, vista, en proceso o finalista. Así sabes en qué quedó
+                cada una sin entrar al portal.
+              </p>
+            </div>
           )}
           <div>
             {datos.recientes.map((r, i) => (
@@ -399,11 +559,19 @@ export default function InicioPage() {
             >
               <Sparkles size={18} />
             </div>
-            <h2 style={{ marginTop: 12, fontSize: 13.5, fontWeight: 600 }}>Tu asistente está activo</h2>
+            <h2 style={{ marginTop: 12, fontSize: 13.5, fontWeight: 600 }}>
+              {asistenteActivo ? "Tu asistente está activo" : "Tu asistente todavía no postula"}
+            </h2>
             <p style={{ marginTop: 4, fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-              Perfil entrenado al {datos.perfilEntrenado}%. Mientras más completo, más precisas y
-              personales serán las respuestas en los formularios.
+              {asistenteActivo
+                ? `Perfil entrenado al ${datos.perfilEntrenado}%. Mientras más completo, más precisas y personales serán las respuestas en los formularios.`
+                : "Le falta un portal conectado para empezar a trabajar. Entretanto puedes ir completando tu perfil: mientras más entrenado, más tuyas suenan las respuestas."}
             </p>
+            {!asistenteActivo && (
+              <Link className="ap-button-ghost" style={{ marginTop: 12 }} href="/dashboard/portales">
+                Conectar un portal
+              </Link>
+            )}
           </div>
           <div style={{ marginTop: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12 }}>
@@ -431,7 +599,11 @@ export default function InicioPage() {
               />
             </div>
             <p style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-muted)" }}>
-              Monitoreando {datos.portalesActivos} portal(es) conectado(s)
+              {datos.portalesActivos === 0
+                ? "Sin portales conectados"
+                : datos.portalesActivos === 1
+                  ? "Monitoreando 1 portal conectado"
+                  : `Monitoreando ${datos.portalesActivos} portales conectados`}
             </p>
           </div>
         </div>
