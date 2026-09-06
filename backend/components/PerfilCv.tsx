@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Mail, Phone, MapPin, IdCard, Briefcase, Pencil, CheckCircle2, X, User, CalendarClock, FileText } from "lucide-react";
+import {
+  Mail, Phone, MapPin, IdCard, Briefcase, Pencil, X,
+  FileText, Loader2, Sparkles, Plus, User, CalendarClock,
+} from "lucide-react";
+import { useAvisos } from "@/components/Avisos";
+import { Skel } from "@/components/Esqueleto";
 
 type Experiencia = { cargo: string; empresa: string; periodo: string };
 
@@ -80,36 +85,37 @@ const GRUPOS: {
   },
 ];
 
-function Field({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value: string }) {
+function Dato({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value?: string | null }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <div
-        style={{
-          width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-          background: "var(--bg-elevated-2)", color: "var(--text-muted)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}
-      >
-        <Icon size={16} />
-      </div>
+    <div className="ap-dato">
+      <span className="ap-dato__ico"><Icon size={15} /></span>
       <div style={{ minWidth: 0 }}>
-        <p style={{ fontSize: 11, color: "var(--text-muted)" }}>{label}</p>
-        <p style={{ fontSize: 13.5, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {value || "—"}
+        <p className="ap-dato__lab">{label}</p>
+        <p className="ap-dato__val" data-vacio={value ? undefined : "1"}>
+          {value || "Sin completar"}
         </p>
       </div>
     </div>
   );
 }
 
+function Par({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="ap-par">
+      <span>{label}</span>
+      <span data-vacio={value ? undefined : "1"}>{value || "Sin completar"}</span>
+    </div>
+  );
+}
+
 export default function PerfilCv() {
+  const { exito, error: avisarError } = useAvisos();
   const [perfil, setPerfil] = useState<Perfil>({});
   const [cargando, setCargando] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [analizando, setAnalizando] = useState(false);
   const [editando, setEditando] = useState(false);
-  const [mensaje, setMensaje] = useState<string | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
   // Listón que queda abierto aunque el cursor se vaya. El hover lo resuelve
   // el CSS; esto es solo el "clic para dejarlo fijo" y poder escribir tranquilo.
@@ -120,23 +126,26 @@ export default function PerfilCv() {
     fetch("/api/perfil")
       .then((res) => res.json())
       .then((data) => setPerfil(data || {}))
-      .catch(() => setMensaje("No se pudo cargar tu perfil"))
+      .catch(() => avisarError("No pudimos cargar tu perfil", "Revisa tu conexión y recarga la página."))
       .finally(() => setCargando(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function subirCv(file: File) {
     if (file.type !== "application/pdf") {
-      setMensaje("El archivo debe ser un PDF");
+      avisarError("Ese archivo no es un PDF", "Exporta tu CV como PDF y vuelve a subirlo.");
       return;
     }
     setSubiendo(true);
-    setMensaje(null);
     try {
       const formData = new FormData();
       formData.append("cv", file);
       const res = await fetch("/api/cv/upload", { method: "POST", body: formData });
       const data = await res.json();
-      if (!res.ok) { setMensaje(data.error || "No se pudo procesar el CV"); return; }
+      if (!res.ok) {
+        avisarError("No pudimos procesar tu CV", data.error || "Intenta con otro archivo PDF.");
+        return;
+      }
       setPerfil((p) => ({ ...p, nombreArchivo: data.nombreArchivo }));
 
       setAnalizando(true);
@@ -144,21 +153,20 @@ export default function PerfilCv() {
       const dataAI = await resAI.json();
       if (resAI.ok && dataAI.disponible && dataAI.datos) {
         const nuevo = { ...perfil, ...dataAI.datos };
-        setPerfil(nuevo);
-        // Guardamos de una vez lo que la IA extrajo, para que la vista y la completitud queden al día
+        // Se guarda de una vez lo que la IA extrajo, para que la vista y la
+        // completitud queden al día sin un paso manual.
         const guardado = await fetch("/api/perfil", {
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(nuevo),
         });
-        const perfilGuardado = await guardado.json();
-        setPerfil(perfilGuardado);
-        setMensaje("CV leído — revisa tu perfil actualizado abajo");
+        setPerfil(await guardado.json());
+        exito("CV leído", "Completamos tu perfil con lo que encontramos. Revísalo abajo.");
       } else {
-        setMensaje(dataAI.error || "CV subido. Completa tus datos manualmente.");
+        exito("CV guardado", dataAI.error || "No pudimos leerlo automáticamente: completa tus datos a mano.");
       }
     } catch {
-      setMensaje("Error al subir el CV. Intenta de nuevo.");
+      avisarError("No se pudo subir el CV", "Revisa tu conexión e intenta de nuevo.");
     } finally {
       setSubiendo(false);
       setAnalizando(false);
@@ -167,7 +175,6 @@ export default function PerfilCv() {
 
   async function guardar() {
     setGuardando(true);
-    setMensaje(null);
     try {
       const res = await fetch("/api/perfil", {
         method: "PUT",
@@ -175,33 +182,72 @@ export default function PerfilCv() {
         body: JSON.stringify(perfil),
       });
       const data = await res.json();
-      if (!res.ok) { setMensaje("No se pudo guardar tu perfil"); return; }
+      if (!res.ok) {
+        avisarError("No pudimos guardar tu perfil", "Vuelve a intentar en unos segundos.");
+        return;
+      }
       setPerfil(data);
       setEditando(false);
-      setMensaje("Perfil guardado ✔");
+      exito("Perfil guardado", "La IA ya usa estos datos para responder por ti.");
     } catch {
-      setMensaje("Error al guardar. Intenta de nuevo.");
+      avisarError("No se pudo guardar", "Revisa tu conexión e intenta de nuevo.");
     } finally {
       setGuardando(false);
     }
   }
 
-  if (cargando) return <div className="ap-empty">Cargando tu perfil…</div>;
+  if (cargando) return <Cargando />;
 
-  const iniciales = (perfil.nombre || "?")
-    .split(" ")
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
+  const iniciales =
+    (perfil.nombre || "?").split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
 
   const completitud = perfil.completitud ?? 0;
-  const circunferencia = 97.4; // 2 * PI * r(15.5), igual que en el repomix
+
+  // Decir "62%" sin decir qué falta no ayuda a nadie. Se nombran los campos
+  // vacíos para que completarlo sea una acción concreta.
+  const faltantes = CAMPOS_EDITABLES.filter((c) => !perfil[c.key]).map((c) => c.label.toLowerCase());
 
   return (
-    <div>
-      {/* Dropzone del CV — siempre visible arriba */}
+    <div className="ap-hoja" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* ── Cabecera: identidad + cuánto falta ── */}
+      <div className="ap-ficha-cab ap-animate-in">
+        <div className="ap-ficha-cab__id">
+          <span className="ap-ficha-avatar">{iniciales}</span>
+          <div style={{ minWidth: 0 }}>
+            <h2 className="ap-ficha-nombre">{perfil.nombre || "Sin nombre todavía"}</h2>
+            <p className="ap-ficha-cargo">{perfil.cargoObjetivo || "Sin cargo objetivo"}</p>
+          </div>
+          <button onClick={() => setEditando((v) => !v)} className="ap-button-ghost">
+            {editando ? <><X size={14} /> Cancelar</> : <><Pencil size={14} /> Editar perfil</>}
+          </button>
+        </div>
+
+        <div className="ap-medidor">
+          <div className="ap-medidor__top">
+            <span style={{ color: "var(--text-muted)" }}>Perfil completo</span>
+            <span className="ap-medidor__pct">{completitud}%</span>
+          </div>
+          <span className="ap-medidor__barra">
+            <span
+              className="ap-medidor__relleno"
+              style={{ width: `${completitud}%` }}
+              data-lleno={completitud >= 100 ? "1" : undefined}
+            />
+          </span>
+          <p className="ap-medidor__falta">
+            {faltantes.length === 0
+              ? "Está todo listo: la IA tiene con qué responder por ti."
+              : `Falta ${faltantes.slice(0, 3).join(", ")}${faltantes.length > 3 ? ` y ${faltantes.length - 3} más` : ""}.`}
+          </p>
+        </div>
+      </div>
+
+      {/* ── El CV: una fila, no un cajón ── */}
       <div
+        className="ap-cv ap-animate-in"
+        style={{ animationDelay: "0.04s" }}
+        data-vacio={perfil.nombreArchivo ? undefined : "1"}
+        data-arrastrando={arrastrando ? "1" : undefined}
         onClick={() => fileInputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
         onDragLeave={() => setArrastrando(false)}
@@ -211,8 +257,6 @@ export default function PerfilCv() {
           const file = e.dataTransfer.files?.[0];
           if (file) subirCv(file);
         }}
-        className={"ap-dropzone" + (arrastrando ? " ap-dropzone-active" : "")}
-        style={{ marginBottom: 20 }}
       >
         <input
           ref={fileInputRef}
@@ -221,20 +265,34 @@ export default function PerfilCv() {
           style={{ display: "none" }}
           onChange={(e) => { const f = e.target.files?.[0]; if (f) subirCv(f); }}
         />
-        <span style={{ fontSize: 20 }}>📄</span>
-        <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-          {subiendo ? "Subiendo y leyendo tu CV…"
-            : analizando ? "🤖 La IA está leyendo tu información…"
-            : perfil.nombreArchivo ? `${perfil.nombreArchivo} — toca para reemplazar`
-            : "Sube tu CV en PDF — la IA leerá tu información"}
-        </span>
-      </div>
 
-      {mensaje && (
-        <p style={{ fontSize: 12.5, color: mensaje.includes("✔") || mensaje.includes("leído") ? "var(--status-finalizado)" : "var(--text-muted)", marginBottom: 16 }}>
-          {mensaje}
-        </p>
-      )}
+        <span className="ap-cv__ico">
+          {subiendo || analizando ? (
+            <Loader2 size={16} style={{ animation: "ap-girar 0.8s linear infinite" }} />
+          ) : perfil.nombreArchivo ? (
+            <FileText size={16} />
+          ) : (
+            <Plus size={16} />
+          )}
+        </span>
+
+        <div style={{ minWidth: 0 }}>
+          <p className="ap-cv__nombre">
+            {subiendo ? "Subiendo tu CV…"
+              : analizando ? "La IA está leyendo tu CV…"
+              : perfil.nombreArchivo || "Sube tu CV en PDF"}
+          </p>
+          <p className="ap-cv__sub">
+            {perfil.nombreArchivo && !subiendo && !analizando
+              ? "De acá salen tus datos y tu forma de escribir"
+              : "Arrástralo acá o haz clic para elegirlo"}
+          </p>
+        </div>
+
+        {!subiendo && !analizando && (
+          <span className="ap-cv__accion">{perfil.nombreArchivo ? "Reemplazar" : "Elegir archivo"}</span>
+        )}
+      </div>
 
       {editando ? (
         <>
@@ -347,149 +405,141 @@ export default function PerfilCv() {
           </button>
         </>
       ) : (
-        <div style={{ display: "grid", gap: 20, gridTemplateColumns: "2fr 1fr" }} className="ap-charts-row">
-          {/* Columna principal */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {/* Identidad */}
-            <div className="ap-section" style={{ marginBottom: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <div
-                    style={{
-                      width: 60, height: 60, borderRadius: "50%", flexShrink: 0,
-                      background: "var(--accent)", color: "var(--accent-contrast)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 20, fontWeight: 600,
-                    }}
-                  >
-                    {iniciales}
-                  </div>
-                  <div>
-                    <h2 style={{ fontSize: 17, fontWeight: 600 }}>{perfil.nombre || "Sin nombre"}</h2>
-                    <p style={{ fontSize: 13, color: "var(--text-muted)" }}>{perfil.cargoObjetivo || "Sin cargo objetivo"}</p>
-                  </div>
-                </div>
-                <button onClick={() => setEditando(true)} className="ap-button-ghost" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <Pencil size={14} /> Editar perfil
-                </button>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
-                <Field icon={Mail} label="Correo" value={perfil.email || ""} />
-                <Field icon={Phone} label="Teléfono" value={perfil.telefono || ""} />
-                <Field icon={MapPin} label="Ubicación" value={perfil.comuna || ""} />
-                <Field icon={IdCard} label="RUT" value={perfil.rut || ""} />
-              </div>
-            </div>
-
-            {/* Resumen profesional */}
-            <div className="ap-section" style={{ marginBottom: 0 }}>
-              <p className="ap-section-title">Resumen profesional</p>
-              <p className="ap-section-sub">La IA lo usa como base para presentaciones y cartas</p>
-              <p style={{ fontSize: 13.5, lineHeight: 1.6 }}>
-                {perfil.resumenProfesional || "Todavía no hay un resumen — sube tu CV o edítalo manualmente."}
-              </p>
-            </div>
-
-            {/* Experiencia */}
-            <div className="ap-section" style={{ marginBottom: 0 }}>
-              <p className="ap-section-title">Experiencia laboral</p>
-              {(!perfil.experiencia || perfil.experiencia.length === 0) && (
-                <p className="ap-section-sub" style={{ marginBottom: 0 }}>
-                  Sin experiencia registrada todavía — se completa al subir tu CV.
-                </p>
-              )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {perfil.experiencia?.map((e, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    <div
-                      style={{
-                        width: 36, height: 36, borderRadius: 8, flexShrink: 0, marginTop: 2,
-                        background: "var(--bg-elevated-2)", color: "var(--text-muted)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}
-                    >
-                      <Briefcase size={16} />
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 13.5, fontWeight: 500 }}>{e.cargo}</p>
-                      <p style={{ fontSize: 12, color: "var(--text-muted)" }}>{e.empresa} · {e.periodo}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        <>
+          {/* ── Contacto: una fila que ocupa el ancho ── */}
+          <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.08s" }}>
+            <div className="ap-datos">
+              <Dato icon={Mail} label="Correo" value={perfil.email} />
+              <Dato icon={Phone} label="Teléfono" value={perfil.telefono} />
+              <Dato icon={MapPin} label="Comuna" value={perfil.comuna} />
+              <Dato icon={IdCard} label="RUT" value={perfil.rut} />
             </div>
           </div>
 
-          {/* Columna lateral */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {/* Completitud */}
-            <div className="ap-section" style={{ marginBottom: 0 }}>
-              <p className="ap-section-title">Completitud del perfil</p>
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <div style={{ position: "relative", width: 80, height: 80, flexShrink: 0 }}>
-                  <svg viewBox="0 0 36 36" width={80} height={80} className="ap-donut-draw">
-                    <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--bg-elevated-2)" strokeWidth="4" />
-                    <circle
-                      cx="18" cy="18" r="15.5" fill="none"
-                      stroke="var(--accent)" strokeWidth="4" strokeLinecap="round"
-                      strokeDasharray={`${(completitud / 100) * circunferencia} ${circunferencia}`}
-                      style={{ transition: "stroke-dasharray 0.6s ease" }}
-                    />
-                  </svg>
-                  <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600 }}>
-                    {completitud}%
-                  </span>
-                </div>
-                <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  Completa tu perfil para que las respuestas automáticas suenen aún más como tú.
-                </p>
-              </div>
+          <div className="ap-split ap-animate-in" style={{ animationDelay: "0.12s" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <section className="ap-section" style={{ marginBottom: 0 }}>
+                <p className="ap-section-title">Resumen profesional</p>
+                <p className="ap-section-sub">La IA lo usa como base para presentaciones y cartas</p>
+                {perfil.resumenProfesional ? (
+                  <p style={{ fontSize: 13.5, lineHeight: 1.7, maxWidth: "68ch" }}>
+                    {perfil.resumenProfesional}
+                  </p>
+                ) : (
+                  <VacioSuave
+                    texto="Todavía no hay resumen. Sube tu CV y lo escribimos por ti, o edítalo a mano."
+                    onEditar={() => setEditando(true)}
+                  />
+                )}
+              </section>
+
+              <section className="ap-section" style={{ marginBottom: 0 }}>
+                <p className="ap-section-title">Experiencia laboral</p>
+                <p className="ap-section-sub">Lo que citamos cuando una oferta pide experiencia</p>
+                {perfil.experiencia && perfil.experiencia.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {perfil.experiencia.map((e, i) => (
+                      <div
+                        key={`${e.cargo}-${i}`}
+                        style={{
+                          display: "flex", alignItems: "flex-start", gap: 12,
+                          padding: "12px 0",
+                          borderBottom: i < (perfil.experiencia?.length ?? 0) - 1 ? "1px solid var(--border)" : "none",
+                        }}
+                      >
+                        <span className="ap-dato__ico" style={{ marginTop: 1 }}><Briefcase size={15} /></span>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontSize: 13.5, fontWeight: 600 }}>{e.cargo}</p>
+                          <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
+                            {e.empresa} · {e.periodo}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <VacioSuave texto="Sin experiencia registrada. Se completa sola al subir tu CV." />
+                )}
+              </section>
             </div>
 
-            {/* Preferencias */}
-            <div className="ap-section" style={{ marginBottom: 0 }}>
-              <p className="ap-section-title">Preferencias laborales</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                  <span style={{ color: "var(--text-muted)" }}>Disponibilidad</span>
-                  <span style={{ fontWeight: 500, textAlign: "right" }}>{perfil.disponibilidad || "—"}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <section className="ap-section" style={{ marginBottom: 0 }}>
+                <p className="ap-section-title">Preferencias laborales</p>
+                <p className="ap-section-sub">Lo que respondemos cuando el formulario pregunta</p>
+                <div className="ap-pares">
+                  <Par label="Disponibilidad" value={perfil.disponibilidad} />
+                  <Par label="Modalidad" value={perfil.modalidad} />
+                  <Par label="Pretensión de renta" value={perfil.expectativaRenta} />
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                  <span style={{ color: "var(--text-muted)" }}>Modalidad</span>
-                  <span style={{ fontWeight: 500, textAlign: "right" }}>{perfil.modalidad || "—"}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                  <span style={{ color: "var(--text-muted)" }}>Pretensión</span>
-                  <span style={{ fontWeight: 500, textAlign: "right" }}>{perfil.expectativaRenta || "—"}</span>
-                </div>
-              </div>
-            </div>
+              </section>
 
-            {/* Habilidades */}
-            <div className="ap-section" style={{ marginBottom: 0 }}>
-              <p className="ap-section-title">Habilidades</p>
-              {(!perfil.habilidades || perfil.habilidades.length === 0) && (
-                <p className="ap-section-sub" style={{ marginBottom: 0 }}>Sin habilidades registradas todavía.</p>
-              )}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {perfil.habilidades?.map((h) => (
-                  <span
-                    key={h}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      borderRadius: 999, padding: "5px 12px", fontSize: 12, fontWeight: 500,
-                      background: "var(--bg-elevated-2)", color: "var(--text)",
-                    }}
-                  >
-                    <CheckCircle2 size={12} color="var(--accent)" />
-                    {h}
-                  </span>
-                ))}
-              </div>
+              <section className="ap-section" style={{ marginBottom: 0 }}>
+                <p className="ap-section-title">Habilidades</p>
+                <p className="ap-section-sub">Se mencionan cuando la oferta las pide</p>
+                {perfil.habilidades && perfil.habilidades.length > 0 ? (
+                  <div className="ap-tags">
+                    {perfil.habilidades.map((h) => (
+                      <span key={h} className="ap-tag">{h}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <VacioSuave texto="Sin habilidades registradas todavía." />
+                )}
+              </section>
             </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Vacío discreto: dice qué falta y, si aplica, cómo llenarlo. */
+function VacioSuave({ texto, onEditar }: { texto: string; onEditar?: () => void }) {
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "14px 16px", borderRadius: 10,
+        background: "var(--bg-elevated-2)", border: "1px dashed var(--border-strong)",
+      }}
+    >
+      <Sparkles size={15} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+      <p style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 }}>{texto}</p>
+      {onEditar && (
+        <button className="ap-button-ghost ap-btn--sm" style={{ marginLeft: "auto", flexShrink: 0 }} onClick={onEditar}>
+          Escribirlo
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Cargando() {
+  return (
+    <div className="ap-hoja" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="ap-ficha-cab">
+        <div className="ap-ficha-cab__id">
+          <Skel ancho={56} alto={56} radio={14} variante="block" />
+          <div style={{ display: "grid", gap: 8, flex: 1 }}>
+            <Skel ancho={180} variante="title" />
+            <Skel ancho={120} />
           </div>
         </div>
-      )}
+        <div style={{ display: "grid", gap: 8 }}>
+          <Skel ancho="100%" alto={7} />
+          <Skel ancho="70%" />
+        </div>
+      </div>
+      <Skel ancho="100%" alto={62} variante="block" />
+      <div className="ap-split">
+        <div style={{ display: "grid", gap: 20 }}>
+          <div className="ap-section" style={{ marginBottom: 0 }}><Skel ancho="100%" alto={96} variante="block" /></div>
+          <div className="ap-section" style={{ marginBottom: 0 }}><Skel ancho="100%" alto={120} variante="block" /></div>
+        </div>
+        <div className="ap-section" style={{ marginBottom: 0 }}><Skel ancho="100%" alto={140} variante="block" /></div>
+      </div>
     </div>
   );
 }

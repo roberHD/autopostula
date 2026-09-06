@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { usuarioTieneAnaliticaAvanzada } from "@/lib/plan-beneficios";
+import { limpiarTitulo } from "@/lib/text";
 
 export async function GET() {
   const session = await auth();
@@ -25,7 +26,7 @@ export async function GET() {
   return NextResponse.json({
     applications: applications.map((a) => ({
       id: a.id,
-      titulo: a.jobOffer.titulo,
+      titulo: limpiarTitulo(a.jobOffer.titulo),
       empresa: a.jobOffer.empresa,
       portal: a.jobOffer.platform.nombre,
       estado: a.estadoActual,

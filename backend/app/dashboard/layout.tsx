@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import "./theme.css";
 import Sidebar from "./Sidebar";
+import BarraMaquina from "./BarraMaquina";
 
 export default async function DashboardLayout({
   children,
@@ -30,7 +31,10 @@ export default async function DashboardLayout({
   return (
     <div className="ap-shell">
       <Sidebar userName={session.user.name ?? session.user.email ?? "Usuario"} />
-      <main className="ap-main">{children}</main>
+      <div className="ap-col">
+        <BarraMaquina />
+        <main className="ap-main">{children}</main>
+      </div>
     </div>
   );
 }

@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
   }
 
-  const [subscripcion, cv, cuentasActivas, estadoPostulaciones] = await Promise.all([
+  const [subscripcion, cv, cuentasActivas, estadoPostulaciones, objetivosLaborales] = await Promise.all([
     prisma.subscription.findFirst({
       where: { userId: user.id, estado: "ACTIVA" },
       include: { plan: true },
@@ -26,7 +26,17 @@ export async function GET(request: Request) {
       include: { platform: true },
     }),
     obtenerEstadoPostulaciones(user.id),
+    prisma.objetivoLaboral.findMany({ where: { userId: user.id }, orderBy: { orden: "asc" } }),
   ]);
+
+  // docs/objetivo-laboral.md §8: una búsqueda por objetivo, no solo por el
+  // cargoObjetivo del CV. Sin nada confirmado todavía, cae a un único
+  // objetivo con el cargoObjetivo del CV -- mismo comportamiento de siempre.
+  const objetivos = objetivosLaborales.length
+    ? objetivosLaborales.map((o) => ({ etiqueta: o.etiqueta, peso: o.peso }))
+    : cv?.cargoObjetivo
+    ? [{ etiqueta: cv.cargoObjetivo, peso: 1 }]
+    : [];
 
   // Mismo criterio que checkAndLogAiUsage y platform-accounts: las cuentas ADMIN
   // no dependen de tener un plan con el beneficio activo (útil para probar sin
@@ -41,7 +51,12 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     busquedaAutomatica,
+    // Se mantiene por compatibilidad -- background.js viejo (o una versión
+    // de la extensión que todavía no actualizó) sigue funcionando con esto.
     cargoObjetivo: cv?.cargoObjetivo ?? null,
+    // Uno o más objetivos con su peso (docs/objetivo-laboral.md §8) -- el
+    // principal es objetivos[0] cuando vienen de ObjetivoLaboral (orden asc).
+    objetivos,
     // Nombres de JobPlatform (ej. "Computrabajo", "Laborum") — el automático
     // solo debe abrir pestañas de los portales que el usuario tiene conectados.
     plataformasConectadas: cuentasActivas.map((c) => c.platform.nombre),

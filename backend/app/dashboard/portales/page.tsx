@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 import { ShieldCheck, KeyRound, Eye, EyeOff, Copy, Check, RefreshCw, Plug, PlugZap } from "lucide-react";
 
 type Plataforma = { id: string; nombre: string; urlBase: string };
-type Cuenta = { id: string; platformId: string; activa: boolean; conectadaEn: string; postulaciones: number };
+type Cuenta = {
+  id: string;
+  platformId: string;
+  activa: boolean;
+  conectadaEn: string;
+  postulaciones: number;
+  vistas: number;
+  finalistas: number;
+  ultimaEn: string | null;
+};
 
 // Solo estilo (color + iniciales del badge) — no hay estos datos en la base
 // porque son puramente visuales, no información real sobre el usuario.
@@ -170,7 +179,7 @@ export default function PortalesPage() {
       {cargando ? (
         <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Cargando...</p>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14, marginBottom: 24 }}>
+        <div style={{ display: "grid", gap: 14, marginBottom: 24 }}>
           {plataformas.map((p) => {
             const cuenta = cuentas.find((c) => c.platformId === p.id);
             const conectado = !!cuenta?.activa;
@@ -219,14 +228,9 @@ export default function PortalesPage() {
 
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                   <p style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-                    {conectado && cuenta ? (
-                      <>
-                        <span style={{ fontWeight: 600, color: "var(--text)" }}>{cuenta.postulaciones}</span> postulaciones · desde{" "}
-                        {new Date(cuenta.conectadaEn).toLocaleDateString("es-CL")}
-                      </>
-                    ) : (
-                      "Sin conectar"
-                    )}
+                    {conectado && cuenta
+                      ? `Conectado desde el ${new Date(cuenta.conectadaEn).toLocaleDateString("es-CL")}`
+                      : "Sin conectar"}
                   </p>
                   {conectado ? (
                     <button className="ap-button-ghost" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, flexShrink: 0 }} onClick={() => desconectar(p.id)}>
@@ -240,6 +244,29 @@ export default function PortalesPage() {
                     </button>
                   )}
                 </div>
+
+                {conectado && cuenta && cuenta.postulaciones > 0 && (
+                  <div className="ap-portal-cifras" style={{ marginTop: 16 }}>
+                    <div className="ap-portal-cifra" style={{ paddingLeft: 0 }}>
+                      <p className="ap-portal-cifra__l">Enviadas</p>
+                      <p className="ap-portal-cifra__v">{cuenta.postulaciones}</p>
+                    </div>
+                    <div className="ap-portal-cifra">
+                      <p className="ap-portal-cifra__l">Vistas por la empresa</p>
+                      <p className="ap-portal-cifra__v">{cuenta.vistas}</p>
+                    </div>
+                    <div className="ap-portal-cifra">
+                      <p className="ap-portal-cifra__l">Finalistas</p>
+                      <p className="ap-portal-cifra__v">{cuenta.finalistas}</p>
+                    </div>
+                    <div className="ap-portal-cifra">
+                      <p className="ap-portal-cifra__l">Tasa de respuesta</p>
+                      <p className="ap-portal-cifra__v">
+                        {Math.round((cuenta.vistas / cuenta.postulaciones) * 100)}%
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

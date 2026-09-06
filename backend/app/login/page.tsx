@@ -26,10 +26,10 @@ function ErrorDesdeQuery({ onError, onInfo }: { onError: (msg: string) => void; 
   return null;
 }
 
-const ACCENT = "oklch(0.53 0.2 280)";
-const BG_LEFT = "oklch(0.985 0.003 275)";
-const BORDER = "oklch(0.91 0.008 275)";
-const TEXT_MUTED = "oklch(0.52 0.02 275)";
+const ACCENT = "var(--accent)";
+const BG_LEFT = "var(--bg)";
+const BORDER = "var(--border)";
+const TEXT_MUTED = "var(--text-muted)";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");

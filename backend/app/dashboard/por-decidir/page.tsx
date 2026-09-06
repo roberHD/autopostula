@@ -97,7 +97,7 @@ export default function PorDecidirPage() {
         </div>
       )}
 
-      <div className="ap-section ap-animate-in" style={{ maxWidth: 480, margin: "0 auto" }}>
+      <div className="ap-section ap-animate-in" style={{ maxWidth: 660, margin: "0 auto", padding: 26 }}>
         {pendientes === null ? (
           <p style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center" }}>Cargando...</p>
         ) : items.length === 0 ? (
@@ -136,9 +136,11 @@ export default function PorDecidirPage() {
                   )}
                 </div>
                 {Array.isArray(item.razones) && item.razones.length > 0 && (
-                  <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 8, fontStyle: "italic" }}>
-                    {(item.razones as string[]).join(" · ")}
-                  </p>
+                  <ul className="ap-razones">
+                    {(item.razones as string[]).map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
                 )}
               </div>
             )}

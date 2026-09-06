@@ -1,52 +1,14 @@
-.ap-shell {
-  --bg: oklch(0.145 0.006 275);
-  --bg-elevated: oklch(0.205 0.008 275);
-  --bg-elevated-2: oklch(0.255 0.01 275);
-  --border: oklch(1 0 0 / 10%);
-  --text: oklch(0.96 0.005 275);
-  --text-muted: oklch(0.66 0.02 275);
-  --accent: oklch(0.65 0.19 280);
-  --accent-contrast: oklch(0.99 0.005 280);
-  --status-enviado: oklch(0.66 0.02 275);
-  --status-visto: oklch(0.65 0.19 280);
-  --status-en-proceso: oklch(0.75 0.14 85);
-  --status-finalista: oklch(0.75 0.15 150);
-  --status-finalizado: oklch(0.72 0.13 180);
-  --status-rechazado: oklch(0.7 0.19 25);
-  --chart-1: oklch(0.65 0.19 280);
-  --chart-2: oklch(0.72 0.15 300);
-  --chart-3: oklch(0.75 0.13 200);
-  --chart-4: oklch(0.78 0.15 145);
-  --chart-5: oklch(0.75 0.16 55);
-  --radius: 10px;
+/* Los tokens (colores, tipografía, radios) viven en app/globals.css —
+   acá queda solo el layout y los componentes propios del dashboard.
+   El tema oscuro/claro se resuelve allá con
+   .ap-shell:not([data-theme="light"]). */
 
+.ap-shell {
   display: flex;
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
-.ap-shell[data-theme="light"] {
-  --bg: oklch(0.985 0.003 275);
-  --bg-elevated: oklch(1 0 0);
-  --bg-elevated-2: oklch(0.96 0.008 275);
-  --border: oklch(0.91 0.008 275);
-  --text: oklch(0.21 0.02 275);
-  --text-muted: oklch(0.52 0.02 275);
-  --accent: oklch(0.53 0.2 280);
-  --accent-contrast: oklch(0.99 0.005 280);
-  --status-enviado: oklch(0.52 0.02 275);
-  --status-visto: oklch(0.35 0.12 285);
-  --status-en-proceso: oklch(0.45 0.15 85);
-  --status-finalista: oklch(0.42 0.12 150);
-  --status-finalizado: oklch(0.4 0.1 180);
-  --status-rechazado: oklch(0.5 0.18 25);
-  --chart-1: oklch(0.53 0.2 280);
-  --chart-2: oklch(0.66 0.16 300);
-  --chart-3: oklch(0.72 0.13 200);
-  --chart-4: oklch(0.75 0.15 145);
-  --chart-5: oklch(0.7 0.16 55);
+  font-family: var(--ff-body);
 }
 
 /* Fondos suaves para los badges de estado — versión clara y translúcida
@@ -213,6 +175,13 @@
   display: none;
 }
 
+/* Sin esta regla el <button> quedaba visible en escritorio (dentro del
+   sidebar salía una X suelta al lado de la marca): los estilos del botón
+   solo existían dentro del media query de mobile. */
+.ap-mobile-menu-btn {
+  display: none;
+}
+
 .ap-sidebar-overlay {
   display: none;
   position: fixed;
@@ -291,121 +260,142 @@
   }
 }
 
-/* ── Onboarding: siempre en claro, con más vida que el resto
-   del dashboard (fondo con degradé suave, marca y tarjeta con
-   sombra) — es la primera impresión de la app. ────────────── */
+/* ── Onboarding ───────────────────────────────────────────
+   Es la primera impresión de la app, así que se ve en claro y sobre
+   papel, no sobre los degradados morados que tenía antes. La única
+   nota fuerte es el filo de destacador arriba de la tarjeta. */
 
 .ap-onb-shell {
   position: relative;
-  background:
-    radial-gradient(600px 400px at 15% -5%, color-mix(in oklch, var(--accent) 16%, transparent), transparent 60%),
-    radial-gradient(560px 420px at 105% 10%, color-mix(in oklch, var(--accent) 12%, transparent), transparent 55%),
-    var(--bg);
-  overflow: hidden;
+  background: var(--bg);
 }
 
-.ap-onb-brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, var(--accent), color-mix(in oklch, var(--accent) 60%, #a78bfa));
-  color: var(--accent-contrast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 13px;
-  box-shadow: 0 4px 14px color-mix(in oklch, var(--accent) 35%, transparent);
+/* Trama muy tenue de papel cuadriculado: da textura sin ensuciar. */
+.ap-onb-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 0.5;
+  mask-image: radial-gradient(760px 460px at 50% 0%, #000 0%, transparent 72%);
 }
+
+.ap-onb-shell > * { position: relative; z-index: 1; }
 
 .ap-onb-card {
   position: relative;
-  box-shadow: 0 20px 50px -20px color-mix(in oklch, var(--accent) 25%, transparent), 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sheet);
+  overflow: hidden;
+}
+
+/* El filo de destacador: el paso en el que vas, en el borde de la hoja. */
+.ap-onb-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 4px;
+  width: var(--ap-onb-avance, 0%);
+  background: var(--marker);
+  border-radius: 0 3px 3px 0;
+  transition: width 0.5s var(--ease);
 }
 
 .ap-onb-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
   margin: 0 auto 14px;
-  background: linear-gradient(135deg, var(--accent), color-mix(in oklch, var(--accent) 55%, #a78bfa));
-  color: var(--accent-contrast);
+  background: var(--accent-soft);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 20px -4px color-mix(in oklch, var(--accent) 45%, transparent);
+}
+
+/* Rail de progreso: cada tramo es un paso, el actual se ensancha. */
+.ap-onb-rail {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.ap-onb-tramo {
+  height: 5px;
+  flex: 1;
+  border-radius: 999px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  transition: flex-grow 0.35s var(--ease);
+}
+
+.ap-onb-tramo[data-estado="hecho"] { background: var(--accent); border-color: var(--accent); }
+.ap-onb-tramo[data-estado="actual"] {
+  flex-grow: 2.4;
+  background: var(--marker);
+  border-color: var(--marker-deep);
 }
 
 /* ── Contenido principal ────────────────────────────────── */
 
+/* La columna derecha: barra de máquina arriba, contenido abajo. */
+.ap-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .ap-main {
   flex: 1;
-  padding: 32px 40px;
-  max-width: 1800px;
+  padding: 28px 40px 48px;
   width: 100%;
-  /* Las manchas de .ap-glow-bg se salen a proposito del contenido (una queda
-     en right:-10%), y eso hacia que toda la pagina scrolleara ~59px al costado.
-     Se recorta acá y no en .ap-glow-bg para no perder el sangrado hacia arriba
-     de la otra mancha (top:-120px), que es parte del efecto.
-
-     `clip` y no `hidden`: hidden convierte esto en un contenedor de scroll
-     (fuerza overflow-y a auto), lo que romperia cualquier position:sticky que
-     se meta adentro y agregaria una barra vertical anidada. clip solo recorta,
-     y es el unico valor que convive con overflow-y: visible. */
-  overflow-x: clip;
 }
 
-/* ── Fondo con resplandor ("Aurora") ─────────────────────
-   Envuelve el contenido de una página para darle algo de vida detrás
-   de las tarjetas -- dos manchas de color muy difuminadas, usando los
-   mismos tonos de --chart-1/--chart-3 que ya se usan en los gráficos.
-   La opacidad es una variable porque en claro se ve sucio con la misma
-   intensidad que en oscuro. */
+/* ── Trama de papel ──────────────────────────────────────
+   Textura de fondo para las páginas del dashboard: la misma cuadrícula
+   tenue del onboarding, para que las dos zonas se sientan del mismo
+   sistema. Antes acá había dos manchas de degradado que además se salían
+   10% del viewport y metían scroll horizontal en todas las páginas. */
+
 .ap-glow-bg {
   position: relative;
-  --glow-opacity: 16%;
-}
-
-.ap-shell[data-theme="light"] .ap-glow-bg {
-  --glow-opacity: 7%;
-}
-
-.ap-glow-bg::before,
-.ap-glow-bg::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  border-radius: 50%;
-  filter: blur(70px);
-  pointer-events: none;
 }
 
 .ap-glow-bg::before {
-  top: -120px;
-  left: 15%;
-  width: 480px;
-  height: 380px;
-  background: color-mix(in oklch, var(--chart-1) var(--glow-opacity), transparent);
-}
-
-.ap-glow-bg::after {
-  top: 60px;
-  right: -10%;
-  width: 520px;
-  height: 420px;
-  background: color-mix(in oklch, var(--chart-3) var(--glow-opacity), transparent);
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 30px 30px;
+  opacity: 0.45;
+  mask-image: radial-gradient(680px 360px at 20% 0%, #000 0%, transparent 70%);
+  -webkit-mask-image: radial-gradient(680px 360px at 20% 0%, #000 0%, transparent 70%);
 }
 
 /* Degradés reutilizables para el plan premium -- mismos 3 tonos que las
    manchas de fondo, para que se sienta parte del mismo sistema y no un
    morado plano más. */
 .ap-gradient-border {
-  background: linear-gradient(135deg, var(--chart-1), var(--chart-3), var(--chart-2));
+  background: linear-gradient(135deg, var(--accent), var(--marker));
 }
 
+/* Mismo botón que "Empezar con Premium" en la landing: el destacador se
+   gasta acá, que es la única acción fuerte de la página. */
 .ap-gradient-accent {
-  background: linear-gradient(90deg, var(--chart-1), var(--chart-2));
-  color: white;
+  background: var(--marker);
+  color: var(--on-marker);
 }
 
 .ap-page-header {
@@ -590,19 +580,6 @@
 
 /* ── Entrenar IA: opciones, switches, preview ───────────── */
 
-.ap-two-col {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-  align-items: start;
-}
-
-@media (max-width: 800px) {
-  .ap-two-col {
-    grid-template-columns: 1fr;
-  }
-}
-
 .ap-section {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -687,49 +664,6 @@
   box-sizing: border-box;
 }
 
-.ap-button {
-  padding: 9px 16px;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-}
-
-.ap-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.ap-button:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.ap-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.ap-button-ghost {
-  padding: 8px 14px;
-  background: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 12.5px;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.ap-button-ghost:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--text-muted);
-  background: var(--bg-elevated-2);
-}
-
 .ap-toggle-row {
   display: flex;
   align-items: center;
@@ -810,11 +744,9 @@
 
 .ap-label {
   display: block;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
+  color: var(--text);
   margin-bottom: 5px;
 }
 
@@ -1051,6 +983,1154 @@
     animation: none;
   }
 }
+/* ═══════════════════════════════════════════════════════════
+   Identidad: el destacador en el dashboard
+   Se gasta en un solo lugar por pantalla — el ítem del menú en el
+   que estás. Todo lo demás se queda callado.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-nav-item {
+  position: relative;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s var(--ease);
+}
+
+.ap-nav-item:hover { transform: translateX(2px); }
+
+.ap-nav-item-active {
+  background: var(--bg-elevated-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ap-nav-item-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--marker);
+}
+
+/* Los títulos de página van en la display, igual que la landing. */
+.ap-page-title {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 108;
+  font-weight: 800;
+  font-size: 25px;
+  letter-spacing: -0.02em;
+}
+
+.ap-stat-value,
+.ap-plan-precio {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 100;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Las filas de una tabla clickeable tienen que verse clickeables. */
+.ap-table tbody tr { transition: background 0.15s ease; }
+.ap-recent-item { transition: background 0.15s ease, padding-left 0.18s var(--ease); }
+.ap-recent-item:hover { background: var(--bg-elevated-2); padding-left: 6px; }
+
+/* Las etiquetas en versalita de la tabla se quedan, pero sin gritar. */
+.ap-table th { font-size: 11px; letter-spacing: 0.06em; }
+
+.ap-brand-mark { background: var(--accent); }
+
+/* Transición entre páginas del dashboard: entra el contenido, no la
+   estructura — el sidebar no debe parpadear al navegar. */
+@keyframes ap-page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ap-main > * { animation: ap-page-in 0.32s var(--ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ap-main > * { animation: none; }
+  .ap-nav-item:hover { transform: none; }
+  .ap-recent-item:hover { padding-left: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Ancho de contenido
+   Las páginas se veían con todo apretado a la izquierda y medio
+   monitor vacío: .ap-main llegaba a 1800px pero las grillas de
+   adentro no lo aprovechaban. Este ancho es el de una hoja de
+   trabajo cómoda; el contenido lo llena de verdad.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-hoja {
+  /* Sin techo: el contenido llena la pantalla. Lo que sí se limita es el
+     ancho de LECTURA de los parrafos largos, campo por campo — a 1600px
+     una linea de 200 caracteres no se puede leer. */
+  width: 100%;
+}
+
+/* Dos columnas que sí se llenan. La lateral no baja de 300px, así
+   que su texto deja de partirse en cuatro palabras por línea. */
+.ap-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .ap-split { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Cabecera de ficha (Mi perfil)
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-ficha-cab {
+  display: grid;
+  gap: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+/* Fila 1: quién eres y el botón de editar. Fila 2: cuánto falta.
+   Antes era un solo flex-wrap y el botón caía solo en una tercera línea. */
+.ap-ficha-cab__id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ap-ficha-cab__id > .ap-button-ghost { margin-left: auto; flex: none; }
+
+.ap-ficha-avatar {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  display: grid;
+  place-items: center;
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 100;
+  font-weight: 800;
+  font-size: 19px;
+}
+
+.ap-ficha-nombre {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 106;
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.ap-ficha-cargo { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+/* El medidor de completitud: horizontal y con el dato al lado, en vez
+   del donut chico metido en una columna angosta. */
+.ap-medidor { min-width: 0; }
+
+.ap-medidor__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+
+.ap-medidor__pct {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 100;
+  font-weight: 800;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ap-medidor__barra {
+  display: block;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.ap-medidor__relleno {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.7s var(--ease);
+}
+
+/* Al 100% se marca con el destacador: es el único premio de la pantalla. */
+.ap-medidor__relleno[data-lleno="1"] { background: var(--marker); }
+
+.ap-medidor__falta { font-size: 11.5px; color: var(--text-muted); margin-top: 8px; }
+
+/* ═══════════════════════════════════════════════════════════
+   Fila del CV
+   Antes era un rectángulo enorme punteado que dominaba la página
+   para una acción que se hace una vez. Ahora es una fila.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-cv {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.ap-cv:hover { border-color: var(--border-strong); }
+
+/* Sin CV todavía: borde punteado, que se lee como "falta algo acá". */
+.ap-cv[data-vacio="1"] {
+  border-style: dashed;
+  background: var(--bg-elevated-2);
+}
+
+.ap-cv[data-arrastrando="1"] {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+}
+
+.ap-cv__ico {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ap-cv__nombre {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-cv__sub { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+
+.ap-cv__accion {
+  margin-left: auto;
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Datos de contacto en fila
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px 20px;
+}
+
+.ap-dato { display: flex; align-items: center; gap: 11px; min-width: 0; }
+
+.ap-dato__ico {
+  width: 32px; height: 32px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--bg-elevated-2);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+}
+
+.ap-dato__lab { font-size: 11px; color: var(--text-muted); }
+
+.ap-dato__val {
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-dato__val[data-vacio="1"] { color: var(--text-muted); font-weight: 400; }
+
+/* Lista de pares etiqueta/valor (preferencias laborales) */
+.ap-pares { display: grid; gap: 0; }
+
+.ap-par {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.ap-par:last-child { border-bottom: none; }
+.ap-par > span:first-child { color: var(--text-muted); flex: none; }
+.ap-par > span:last-child { font-weight: 500; text-align: right; }
+.ap-par > span:last-child[data-vacio="1"] { color: var(--text-muted); font-weight: 400; }
+
+/* Etiquetas de habilidades */
+.ap-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+
+.ap-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Chat (Conversación IA)
+   Antes el chat vivía en una columna de ~330px con un panel al
+   lado que estaba casi vacío, y debajo quedaba media pantalla en
+   blanco. Ahora el hilo se queda con la página y llega hasta
+   abajo: el redactor siempre al pie, sin vacío.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-chat {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  max-width: 1000px;
+  /* Alto de la ventana menos la cabecera de página y el padding
+     de .ap-main; el mínimo evita que se aplaste en pantallas bajas. */
+  height: calc(100dvh - 172px);
+  min-height: 430px;
+}
+
+.ap-chat__cab {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated-2);
+}
+
+.ap-chat__ico {
+  width: 32px; height: 32px;
+  flex: none;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  display: grid;
+  place-items: center;
+}
+
+.ap-chat__quien { font-size: 13.5px; font-weight: 700; line-height: 1.2; }
+.ap-chat__estado { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+
+.ap-chat__avance { display: flex; align-items: center; gap: 9px; margin-left: auto; flex: none; }
+.ap-chat__avance-barra {
+  width: 96px; height: 6px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.ap-chat__avance-relleno {
+  display: block; height: 100%;
+  background: var(--accent);
+  transition: width 0.4s var(--ease);
+}
+.ap-chat__avance-relleno[data-lleno="1"] { background: var(--marker); }
+.ap-chat__avance-pct { font-size: 11.5px; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* El hilo crece y hace scroll solo él. */
+.ap-chat__hilo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Las burbujas se quedan en un ancho de lectura cómodo aunque el
+   panel sea ancho: si no, las líneas se hacen larguísimas. */
+.ap-chat__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 700px;
+  width: 100%;
+  margin: auto auto 0; /* auto arriba: los mensajes se apoyan abajo */
+}
+
+.ap-burbuja { display: flex; align-items: flex-end; gap: 8px; }
+.ap-burbuja[data-de="ia"] { justify-content: flex-start; }
+.ap-burbuja[data-de="tu"] { justify-content: flex-end; }
+
+.ap-burbuja__quien {
+  width: 26px; height: 26px;
+  flex: none;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.ap-burbuja[data-de="ia"] .ap-burbuja__quien { background: var(--accent); color: var(--accent-contrast); }
+.ap-burbuja[data-de="tu"] .ap-burbuja__quien { background: var(--marker); color: var(--on-marker); }
+
+.ap-burbuja__texto {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  animation: ap-fade-up 0.28s var(--ease) both;
+}
+.ap-burbuja[data-de="ia"] .ap-burbuja__texto {
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.ap-burbuja[data-de="tu"] .ap-burbuja__texto {
+  background: var(--marker);
+  color: var(--on-marker);
+  font-weight: 500;
+  border-bottom-right-radius: 4px;
+}
+.ap-burbuja__texto[data-tenue="1"] { color: var(--text-muted); }
+
+/* Tres puntitos mientras la IA escribe. */
+.ap-escribiendo { display: inline-flex; align-items: center; gap: 4px; }
+.ap-escribiendo i {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ap-punto 1s ease-in-out infinite;
+}
+.ap-escribiendo i:nth-child(2) { animation-delay: 0.13s; }
+.ap-escribiendo i:nth-child(3) { animation-delay: 0.26s; }
+@keyframes ap-punto {
+  0%, 100% { opacity: 0.35; transform: translateY(0); }
+  50%      { opacity: 1; transform: translateY(-3px); }
+}
+
+/* Pie: sugerencias + redactor. */
+.ap-chat__pie { border-top: 1px solid var(--border); padding: 14px 20px; background: var(--bg-elevated); }
+.ap-chat__pie-in { max-width: 700px; margin: 0 auto; }
+
+.ap-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 11px; }
+
+.ap-chip {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated-2);
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, transform 0.18s var(--ease);
+}
+.ap-chip:hover:not(:disabled) { color: var(--text); border-color: var(--text-muted); transform: translateY(-1px); }
+.ap-chip:disabled { opacity: 0.5; cursor: default; }
+
+.ap-redactor { display: flex; align-items: center; gap: 8px; }
+.ap-redactor .ap-input { flex: 1; }
+.ap-redactor__enviar {
+  width: 40px; height: 40px;
+  padding: 0;
+  flex: none;
+}
+
+.ap-nota-pie {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-top: 10px;
+}
+
+@media (max-width: 860px) {
+  .ap-chat { height: calc(100dvh - 210px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ap-burbuja__texto { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Calibración — la comparación A/B es la pantalla
+   Antes las dos opciones vivían en una columna de ~340px con un
+   donut al lado; el texto se partía en cuatro palabras por línea.
+   Ahora ocupan el ancho y se leen como dos respuestas de verdad.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-cal-barra {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.ap-cal-tramos { display: flex; gap: 6px; flex: 1; min-width: 160px; }
+
+.ap-cal-tramo {
+  height: 6px;
+  flex: 1;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.3s ease;
+}
+.ap-cal-tramo[data-hecho="1"] { background: var(--accent); }
+
+.ap-cal-cuenta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.ap-cal-pregunta {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 104;
+  font-weight: 800;
+  font-size: clamp(19px, 2.2vw, 25px);
+  letter-spacing: -0.018em;
+  line-height: 1.2;
+  text-wrap: balance;
+  margin-bottom: 22px;
+  max-width: 30ch;
+}
+
+.ap-ab {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 720px) { .ap-ab { grid-template-columns: 1fr; } }
+
+.ap-ab__op {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated-2);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.18s ease, background 0.18s ease,
+              transform 0.18s var(--ease), box-shadow 0.18s ease;
+}
+
+.ap-ab__op:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lift);
+}
+
+.ap-ab__op[data-activa="1"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+}
+
+.ap-ab__op:disabled { cursor: default; }
+.ap-ab__op[data-apagada="1"] { opacity: 0.45; }
+
+.ap-ab__letra {
+  width: 24px; height: 24px;
+  flex: none;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.ap-ab__op[data-activa="1"] .ap-ab__letra {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.ap-ab__texto { font-size: 14px; line-height: 1.6; }
+
+.ap-ab__pie {
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.ap-ab__op:hover:not(:disabled) .ap-ab__pie { color: var(--accent); }
+.ap-ab__op[data-activa="1"] .ap-ab__pie { color: var(--accent); }
+
+/* Lista vertical para preguntas que no son de dos opciones. */
+.ap-cal-lista { display: flex; flex-direction: column; gap: 10px; }
+
+.ap-cal-lista .ap-ab__op { flex-direction: row; align-items: center; justify-content: space-between; }
+
+/* ═══════════════════════════════════════════════════════════
+   Selectores de opción (Entrenar IA)
+   .ap-option-group era un flex con min-width 140px: las tarjetas
+   quedaban de distinto ancho y la fila se veía coja. Grilla.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-opciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+/* Control segmentado para escalas cortas (corta / media / detallada):
+   se leen como un continuo, no como tres tarjetas sueltas. */
+.ap-segmento {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated-2);
+}
+
+.ap-segmento__op {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.ap-segmento__op:hover { color: var(--text); }
+
+.ap-segmento__op[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* Aviso de función premium, reutilizable. */
+.ap-candado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.ap-candado svg { flex: none; }
+
+/* Tarjeta de respuesta de ejemplo: la pregunta arriba en tenue y la
+   respuesta como texto de lectura, no como dato. */
+.ap-preview-card {
+  padding: 14px 16px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+.ap-preview-card:last-child { margin-bottom: 0; }
+.ap-preview-q { font-size: 12px; color: var(--text-muted); margin-bottom: 7px; }
+.ap-preview-a { font-size: 13.5px; line-height: 1.65; max-width: 70ch; }
+
+/* ═══════════════════════════════════════════════════════════
+   Filtros — incluir y excluir son opuestos, y se leen así
+   Antes eran dos tarjetas idénticas apiladas: nada en la forma
+   decía que una deja pasar ofertas y la otra las bota. Ahora van
+   lado a lado y las etiquetas se ven distintas.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-criba {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 780px) { .ap-criba { grid-template-columns: 1fr; } }
+
+.ap-criba__col {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+/* La columna que descarta se marca en el filo, no con color de fondo:
+   sigue siendo un campo, no una alerta. */
+.ap-criba__col[data-modo="descarta"] { border-left: 3px solid var(--err); }
+.ap-criba__col[data-modo="pasa"] { border-left: 3px solid var(--ok); }
+
+.ap-etiquetas { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ap-etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 9px 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+}
+
+/* Tachado: se lee al instante como "esta palabra bota la oferta". */
+.ap-etiqueta[data-modo="descarta"] {
+  color: var(--text-muted);
+  border-style: dashed;
+  text-decoration: line-through;
+  text-decoration-color: var(--err);
+}
+
+.ap-etiqueta__x {
+  display: flex;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+.ap-etiqueta__x:hover { color: var(--err); }
+
+/* Barra de guardado pegada abajo: en una página de ajustes el botón
+   no debe quedar flotando a media pantalla ni obligar a bajar. */
+.ap-guardar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding: 14px 0;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+.ap-guardar__nota { font-size: 12.5px; color: var(--ok); }
+
+/* Nota al pie explicativa: es ayuda, no una sección par. */
+.ap-nota {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 76ch;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+}
+.ap-nota svg { flex: none; margin-top: 2px; color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════
+   Barra de máquina
+   Va sobre todos los módulos. AutoPostula trabaja cuando nadie
+   está mirando: esto cuenta si está corriendo, qué hizo y cuánto
+   cupo queda, sin tener que entrar a tres pantallas.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-maquina {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 13px 40px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px) saturate(1.3);
+  border-bottom: 1px solid var(--border);
+}
+
+.ap-maquina__estado { display: flex; align-items: center; gap: 9px; flex: none; }
+
+.ap-pulso {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-muted);
+}
+
+/* Solo late cuando de verdad está trabajando. */
+.ap-maquina[data-activa="1"] .ap-pulso {
+  background: var(--ok);
+  animation: ap-latir 2.2s ease-out infinite;
+}
+@keyframes ap-latir {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.ap-maquina__t { font-size: 13.5px; font-weight: 700; }
+
+.ap-maquina__ult {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ap-maquina__ult b { color: var(--text); font-weight: 600; }
+
+.ap-maquina__cupo { display: flex; align-items: center; gap: 10px; margin-left: auto; flex: none; }
+.ap-maquina__cifra { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.ap-maquina__cifra b { color: var(--text); font-weight: 700; }
+
+.ap-maquina__barra {
+  display: block;
+  width: 92px; height: 6px;
+  border-radius: 999px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.ap-maquina__relleno {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 1s var(--ease);
+}
+/* Cupo agotado: deja de ser información y pasa a ser una advertencia. */
+.ap-maquina__relleno[data-lleno="1"] { background: var(--warn); }
+
+@media (max-width: 860px) {
+  .ap-maquina { padding: 12px 16px; gap: 12px; }
+  .ap-maquina__ult { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Menú agrupado
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-nav-grupo {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 14px 10px 6px;
+}
+.ap-nav-grupo:first-child { padding-top: 4px; }
+
+/* ═══════════════════════════════════════════════════════════
+   Cifras grandes reutilizables (portales, métricas)
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-cifra {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 100;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Los <svg> sin width/height se estiran hasta llenar su caja. Pasaba en
+   los botones anchos y en las celdas de tabla. Los gráficos quedan fuera:
+   ellos sí deben escalar con su contenedor. */
+.ap-button svg,
+.ap-button-ghost svg,
+.ap-btn svg,
+.ap-badge svg,
+.ap-tag svg { width: 16px; height: 16px; flex: none; }
+
+.ap-nav-badge {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--warn);
+  color: var(--warn-soft);
+  border-radius: 999px;
+  padding: 1px 7px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Pestañas de módulo (Entrenar IA)
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-pestanas {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 22px;
+}
+
+.ap-pestana {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+.ap-pestana:hover { color: var(--text); }
+
+/* El destacador marca en qué pestaña estás, igual que en el menú. */
+.ap-pestana[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--marker);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Embudo de estados (Resumen)
+   La forma dice lo mismo que el número: cada escalón es más corto
+   que el anterior, así se ve dónde se caen las postulaciones sin
+   tener que leer las cifras.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-embudo {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+  justify-content: space-evenly;
+}
+
+.ap-embudo__fila {
+  display: grid;
+  grid-template-columns: 104px 1fr 36px;
+  align-items: center;
+  gap: 12px;
+}
+
+.ap-embudo__lab { font-size: 12.5px; color: var(--text-muted); display: flex; align-items: center; gap: 7px; }
+.ap-embudo__lab i { width: 7px; height: 7px; border-radius: 2px; background: currentColor; flex: none; }
+
+.ap-embudo__pista {
+  height: 30px;
+  border-radius: 5px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.ap-embudo__relleno {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: currentColor;
+  opacity: 0.85;
+  transition: width 0.9s var(--ease);
+}
+
+.ap-embudo__n {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* Dos columnas que terminan parejas: sin esto, la más corta dejaba un
+   hueco en blanco al lado de la más alta. */
+.ap-split--parejo { align-items: stretch; }
+.ap-split--parejo > .ap-card,
+.ap-split--parejo > .ap-section { display: flex; flex-direction: column; }
+
+/* Métricas: son exactamente cuatro. 4 / 2x2 / 1, nunca una descolgada. */
+.ap-metricas { display: grid; gap: 16px; grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1180px) { .ap-metricas { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px)  { .ap-metricas { grid-template-columns: 1fr; } }
+
+/* ═══════════════════════════════════════════════════════════
+   Bitácora de postulaciones
+   Un historial se escanea de arriba abajo, no se mira como una
+   galería: filas densas y un filo de color por estado, que se lee
+   antes que la etiqueta.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-log {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.ap-log__cab,
+.ap-log__fila {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) 120px 130px 96px;
+  align-items: center;
+  gap: 14px;
+  padding-right: 18px;
+}
+
+.ap-log__cab {
+  background: var(--bg-elevated-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.ap-log__cab > span { padding-block: 10px; }
+.ap-log__cab > span:last-child { text-align: right; }
+
+.ap-log__fila {
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  border-left: none;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+.ap-log__fila:last-child { border-bottom: none; }
+.ap-log__fila:hover { background: var(--bg-elevated-2); }
+
+/* El filo: el estado se ve antes de leer nada. */
+.ap-log__filo { align-self: stretch; background: var(--c); }
+
+.ap-log__cargo { padding-block: 13px; min-width: 0; }
+.ap-log__cargo b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ap-log__cargo span { font-size: 12px; color: var(--text-muted); }
+
+.ap-log__meta { font-size: 12.5px; color: var(--text-muted); }
+.ap-log__fecha { font-size: 12.5px; color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* En angosto la tabla se reduce a lo esencial. */
+@media (max-width: 780px) {
+  .ap-log__cab { display: none; }
+  .ap-log__fila { grid-template-columns: 3px minmax(0, 1fr) auto; }
+  .ap-log__meta, .ap-log__fecha { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Razones de una oferta dudosa (Por decidir)
+   Antes iban en una línea en cursiva unida por puntos medios y no
+   se leían. Son el motivo por el que la oferta quedó en duda: van
+   como lista, alineadas a la izquierda.
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-razones {
+  list-style: none;
+  padding: 14px 0 0;
+  margin: 14px 0 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.ap-razones li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.ap-razones li::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: 8px;
+  flex: none;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Cifras de un portal
+   ═══════════════════════════════════════════════════════════ */
+
+.ap-portal-cifras {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 780px) { .ap-portal-cifras { grid-template-columns: repeat(2, 1fr); } }
+
+.ap-portal-cifra { padding: 14px 18px; }
+.ap-portal-cifra + .ap-portal-cifra { border-left: 1px solid var(--border); }
+@media (max-width: 780px) {
+  .ap-portal-cifra:nth-child(odd) { border-left: none; }
+  .ap-portal-cifra:nth-child(n + 3) { border-top: 1px solid var(--border); }
+}
+
+.ap-portal-cifra__l { font-size: 11.5px; color: var(--text-muted); }
+.ap-portal-cifra__v {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 100;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 3px;
+}
+
+/* Fila de dos columnas del dashboard. Existe como clase y no como estilo
+   en línea porque un gridTemplateColumns inline le gana al media query, y
+   entonces la fila nunca se apila en pantallas angostas. */
+.ap-fila-2 {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.9fr) minmax(280px, 1fr);
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1180px) {
+  .ap-fila-2 { grid-template-columns: 1fr; }
 /* ── Editar perfil: persianas horizontales ───────────────
    Los campos se agrupan en listones verticales. Al pasar el cursor (o al
    tabular hacia adentro) el listón se abre hacia el costado y empuja a los
