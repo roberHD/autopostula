@@ -287,6 +287,22 @@ p { margin: 0; }
 
 @keyframes ap-swipe { to { background-size: 100% 0.34em; } }
 
+/* Sobre tinta (panel de acceso): el destacador cubre toda la frase, no solo
+   el filo inferior. Con la banda baja, la parte alta de las letras quedaría
+   tinta sobre tinta y no se leería nada. */
+.ap-swipe--bloque {
+  color: var(--on-marker);
+  background-position: 0 50%;
+  background-size: 0% 1.02em;
+  padding-inline: 0.12em;
+  border-radius: 3px;
+}
+.ap-swipe--bloque.ap-swipe--auto { animation-name: ap-swipe-bloque; }
+.is-in .ap-swipe--bloque,
+.ap-swipe--bloque.is-in { background-size: 100% 1.02em; }
+
+@keyframes ap-swipe-bloque { to { background-size: 100% 1.02em; } }
+
 /* Marca sobre un dato suelto dentro de un párrafo. Mismo mecanismo que
    .ap-swipe, por la misma razón: estos datos casi siempre se cortan en
    dos líneas. */
@@ -486,6 +502,203 @@ p { margin: 0; }
   }
   .ap-rv[data-armado="1"] { opacity: 1; transform: none; }
   .ap-swipe { background-size: 100% 0.34em; }
+  .ap-swipe--bloque { background-size: 100% 1.02em; }
   .ap-mk { background-size: 100% 1.15em; }
   .ap-mark path { stroke-dashoffset: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PANTALLAS DE ACCESO (entrar, crear cuenta, recuperar contraseña)
+
+   Es el único formulario que la persona llena a mano — justamente para
+   no volver a llenar ninguno. Esa idea manda la copy y el reparto: el
+   formulario sobre papel a la izquierda, y a la derecha una sola frase
+   sobre tinta, no el panel morado con tres viñetas de iconos que trae
+   cualquier plantilla.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ap-acceso { display: flex; min-height: 100vh; }
+
+.ap-acceso__forma {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 40px 24px;
+  background: var(--bg);
+}
+
+.ap-acceso__caja { width: 100%; max-width: 392px; margin: 0 auto; }
+
+.ap-acceso__marca { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; text-decoration: none; color: inherit; }
+
+.ap-acceso h1 {
+  font-size: clamp(24px, 2.6vw, 29px);
+  margin-bottom: 8px;
+}
+
+.ap-acceso__sub {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin-bottom: 28px;
+  max-width: 42ch;
+}
+
+/* ── Campos ── */
+.ap-campo { margin-bottom: 16px; }
+
+.ap-campo__lab {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.ap-campo__lab a { font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 500; }
+.ap-campo__lab a:hover { text-decoration: underline; }
+
+/* Se cuelga de .ap-campo y no de .ap-acceso a propósito: .ap-acceso trae
+   el layout de pantalla partida, y usarla como ámbito de estilo rompía los
+   formularios sueltos (recuperar y restablecer contraseña). */
+.ap-campo input[type="text"],
+.ap-campo input[type="email"],
+.ap-campo input[type="password"] {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.ap-campo input::placeholder { color: var(--text-muted); }
+.ap-campo input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ap-campo__ojo {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  display: flex;
+  border-radius: 6px;
+  transition: color 0.18s ease;
+}
+.ap-campo__ojo:hover { color: var(--text); }
+
+/* ── Entrar con Google ── */
+.ap-google {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s var(--ease), box-shadow 0.18s ease;
+}
+.ap-google:hover { border-color: var(--text); transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+.ap-google svg { width: 17px; height: 17px; flex: none; }
+
+.ap-separador { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+.ap-separador::before, .ap-separador::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.ap-separador span { font-size: 12px; color: var(--text-muted); }
+
+.ap-acceso__pie { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 24px; }
+.ap-acceso__pie a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.ap-acceso__pie a:hover { text-decoration: underline; }
+
+/* Mensajes del formulario: dicen qué pasó y qué hacer, no solo que falló. */
+.ap-mensaje {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 11px 13px;
+  border-radius: 9px;
+  margin-bottom: 16px;
+}
+.ap-mensaje svg { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+.ap-mensaje[data-tipo="error"] { background: var(--err-soft); color: var(--err); }
+.ap-mensaje[data-tipo="ok"] { background: var(--ok-soft); color: var(--ok); }
+.ap-mensaje[data-tipo="info"] { background: var(--accent-soft); color: var(--accent); }
+
+/* ── Panel de tinta ── */
+.ap-acceso__panel {
+  flex: 1;
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 56px;
+}
+
+.ap-acceso__frase {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 110;
+  font-weight: 800;
+  font-size: clamp(28px, 3.4vw, 42px);
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  max-width: 15ch;
+  text-wrap: balance;
+}
+
+.ap-acceso__bajada {
+  margin-top: 18px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--inv-muted);
+  max-width: 40ch;
+}
+
+.ap-acceso__hechos { display: grid; gap: 12px; margin-top: 32px; }
+.ap-acceso__hecho { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.5; }
+.ap-acceso__hecho svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--marker); }
+
+.ap-acceso__nota { font-size: 12px; color: var(--inv-muted); }
+
+/* El panel es contexto, no contenido: si no cabe, se va. */
+@media (max-width: 900px) { .ap-acceso__panel { display: none; } }
+
+/* ── Trámite (recuperar / restablecer): una tarjeta al centro y nada más.
+   Un panel de venta acá sería ruido: la persona vino a resolver algo. ── */
+.ap-tramite {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 24px;
+  background: var(--bg);
+}
+
+.ap-tramite__caja { width: 100%; max-width: 420px; }
+
+.ap-tramite__hoja {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: var(--shadow-sheet);
 }

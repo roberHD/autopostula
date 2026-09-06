@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-
-const ACCENT = "var(--accent)";
-const BG_LEFT = "var(--bg)";
-const BORDER = "var(--border)";
-const TEXT_MUTED = "var(--text-muted)";
+import Link from "next/link";
+import { ArrowLeft, MailCheck } from "lucide-react";
+import { MarcaAcceso, Mensaje } from "@/components/acceso/Piezas";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -27,127 +25,105 @@ export default function ForgotPasswordPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "No se pudo procesar la solicitud");
+        setError(data.error ?? "No pudimos enviar el correo. Intenta de nuevo en unos segundos.");
         return;
       }
 
       setEnviado(true);
     } catch (err) {
       console.error("Error solicitando recuperación de contraseña:", err);
-      setError("No se pudo conectar con el servidor -- intenta de nuevo");
+      setError("No pudimos conectar con el servidor. Revisa tu conexión e intenta de nuevo.");
     } finally {
       setEnviando(false);
     }
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-        alignItems: "center",
-        justifyContent: "center",
-        background: BG_LEFT,
-        padding: "40px 24px",
-        fontFamily: "var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 384 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              flexShrink: 0,
-              background: ACCENT,
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              fontSize: 14,
-            }}
-          >
-            AP
-          </div>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>AutoPostula</div>
-            <div style={{ fontSize: 11, color: TEXT_MUTED }}>Autopostulación IA</div>
-          </div>
+    // Es un trámite, no un momento de venta: una tarjeta al centro y nada más.
+    <div className="ap-tramite">
+      <div className="ap-tramite__caja">
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+          <MarcaAcceso />
         </div>
 
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Recupera tu contraseña</h1>
-        <p style={{ fontSize: 13.5, color: TEXT_MUTED, marginBottom: 28, lineHeight: 1.5 }}>
-          Ingresa tu correo y te enviamos un enlace para restablecerla.
-        </p>
-
-        {enviado ? (
-          <div
-            style={{
-              padding: "14px 16px",
-              borderRadius: 10,
-              background: "color-mix(in oklch, #16A34A 12%, transparent)",
-              color: "#16A34A",
-              fontSize: 13,
-              lineHeight: 1.5,
-            }}
-          >
-            Si el correo está registrado, te llegará un enlace para restablecer tu contraseña en unos minutos.
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-                Correo electrónico
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
-                required
+        <div className="ap-tramite__hoja">
+          {enviado ? (
+            <div style={{ textAlign: "center" }}>
+              <span
                 style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  border: `1px solid ${BORDER}`,
-                  fontSize: 13.5,
-                  boxSizing: "border-box",
+                  width: 48, height: 48, borderRadius: 13, margin: "0 auto 16px",
+                  background: "var(--ok-soft)", color: "var(--ok)",
+                  display: "grid", placeItems: "center",
                 }}
-              />
+              >
+                <MailCheck size={22} />
+              </span>
+              <h1 style={{ fontSize: 22, marginBottom: 8 }}>Revisa tu correo</h1>
+              <p style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.6 }}>
+                Si <b style={{ color: "var(--text)" }}>{email}</b> tiene una cuenta, te llegó un enlace
+                para crear una contraseña nueva. Vence en una hora.
+              </p>
+              <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 16, lineHeight: 1.6 }}>
+                ¿No llegó? Mira en spam, o{" "}
+                <button
+                  type="button"
+                  onClick={() => setEnviado(false)}
+                  style={{
+                    background: "none", border: "none", padding: 0, font: "inherit",
+                    color: "var(--accent)", fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  prueba con otro correo
+                </button>.
+              </p>
             </div>
+          ) : (
+            <>
+              <h1 style={{ fontSize: 22, marginBottom: 8 }}>Recupera tu contraseña</h1>
+              <p style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 22 }}>
+                Escribe el correo de tu cuenta y te mandamos un enlace para crear una nueva.
+              </p>
 
-            {error && <p style={{ fontSize: 12, color: "#dc2626", marginBottom: 14 }}>{error}</p>}
+              {error && <Mensaje tipo="error">{error}</Mensaje>}
 
-            <button
-              type="submit"
-              disabled={enviando}
-              style={{
-                width: "100%",
-                padding: 12,
-                borderRadius: 10,
-                border: "none",
-                background: ACCENT,
-                color: "#fff",
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: enviando ? "default" : "pointer",
-                opacity: enviando ? 0.7 : 1,
-                marginTop: 4,
-                marginBottom: 16,
-              }}
-            >
-              {enviando ? "Enviando..." : "Enviar enlace de recuperación"}
-            </button>
-          </form>
-        )}
+              <form onSubmit={handleSubmit}>
+                <div className="ap-campo">
+                  <label className="ap-campo__lab" htmlFor="correo">Correo electrónico</label>
+                  <input
+                    id="correo"
+                    type="email"
+                    value={email}
+                    onChange={(ev) => setEmail(ev.target.value)}
+                    placeholder="tu@correo.com"
+                    autoComplete="email"
+                    required
+                  />
+                </div>
 
-        <div style={{ textAlign: "center", fontSize: 13, color: TEXT_MUTED, marginTop: 16 }}>
-          <a href="/login" style={{ color: ACCENT, fontWeight: 600, textDecoration: "none" }}>
-            ← Volver a iniciar sesión
-          </a>
+                <button
+                  type="submit"
+                  className="ap-btn ap-btn--primary"
+                  style={{ width: "100%", marginTop: 8 }}
+                  disabled={enviando}
+                >
+                  {enviando ? "Enviando…" : "Enviarme el enlace"}
+                </button>
+              </form>
+            </>
+          )}
         </div>
+
+        <p style={{ textAlign: "center", marginTop: 20 }}>
+          <Link
+            href="/login"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              fontSize: 13, color: "var(--text-muted)", textDecoration: "none",
+            }}
+          >
+            <ArrowLeft size={14} /> Volver a entrar
+          </Link>
+        </p>
       </div>
     </div>
   );
