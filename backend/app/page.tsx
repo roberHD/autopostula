@@ -1,272 +1,358 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Zap, FileText, LineChart, Puzzle, Check } from "lucide-react";
+import { AlignLeft, Check, Highlighter, Info } from "lucide-react";
+
+import NavLanding from "@/components/landing/NavLanding";
+import FichaDemo from "@/components/landing/FichaDemo";
+import Revelar from "@/components/Revelar";
+import VolverArriba from "@/components/VolverArriba";
+import { Marca } from "@/components/Marca";
+import "./landing.css";
 
 export const metadata: Metadata = {
-  title: "AutoPostula — Postula a más empleos, con menos esfuerzo",
+  title: "Postula 80 veces al mes. Escribe una sola.",
   description:
-    "AutoPostula usa IA para rellenar y enviar tus postulaciones en Computrabajo y Laborum, con respuestas que suenan a ti. Sube tu CV una vez y postula en segundos.",
+    "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo y Laborum con tus palabras. Tú revisas y envías, o lo dejas corriendo solo.",
 };
 
-// Mismos tokens que /login y /registro -- no se tocan, para que las tres
-// pantallas públicas se sientan como una sola experiencia.
-const ACCENT = "oklch(0.53 0.2 280)";
-const ACCENT_SOFT = "oklch(0.53 0.2 280 / 10%)";
-const BG = "oklch(0.985 0.003 275)";
-const BORDER = "oklch(0.91 0.008 275)";
-const TEXT = "oklch(0.22 0.01 275)";
-const TEXT_MUTED = "oklch(0.52 0.02 275)";
-
-const CARACTERISTICAS = [
-  {
-    Icon: Zap,
-    titulo: "Autorrelleno con IA",
-    desc: "Completa los formularios de postulación de Computrabajo, Laborum y más, en segundos.",
-  },
-  {
-    Icon: FileText,
-    titulo: "Respuestas cercanas a ti",
-    desc: "La IA responde con tu CV, tu perfil y tu forma real de escribir -- no genéricas, no repetidas.",
-  },
-  {
-    Icon: LineChart,
-    titulo: "Todo en un dashboard",
-    desc: "Postulaciones, estados y analíticas centralizadas, sin perder el hilo de a qué le postulaste.",
-  },
-  {
-    Icon: Puzzle,
-    titulo: "Filtros a tu medida",
-    desc: "Vos decides qué ofertas te interesan -- rubro, jornada, modalidad -- y la extensión se encarga del resto.",
-  },
+// Cargos reales de los portales chilenos: la tira es textura, pero textura
+// del rubro de la persona que está mirando.
+const CARGOS = [
+  ["Operario/a de bodega", "Quilicura"],
+  ["Ejecutivo/a de call center", "Santiago Centro"],
+  ["Auxiliar de aseo", "Providencia"],
+  ["Vendedor/a integral", "Maipú"],
+  ["Cajero/a part time", "La Florida"],
+  ["Asistente contable", "Las Condes"],
+  ["Conductor clase B", "San Bernardo"],
+  ["Guardia de seguridad OS10", "Puente Alto"],
+  ["Reponedor/a de sala", "Ñuñoa"],
+  ["Secretaria administrativa", "Viña del Mar"],
 ];
 
 const PASOS = [
-  { numero: "1", titulo: "Sube tu CV", desc: "Lo leemos una vez y armamos tu perfil -- experiencia, habilidades, forma de escribir." },
-  { numero: "2", titulo: "Instala la extensión", desc: "Conecta tu cuenta de Computrabajo y/o Laborum en un clic." },
-  { numero: "3", titulo: "Postula en segundos", desc: "La IA rellena cada formulario con respuestas reales, tuyas -- revisa o postula directo." },
+  {
+    titulo: "Sube tu CV",
+    desc: "Lo leemos una vez y armamos tu perfil: experiencia, certificaciones, disponibilidad y tu forma de escribir.",
+  },
+  {
+    titulo: "Instala la extensión",
+    desc: "Conecta tu cuenta de Computrabajo o Laborum. La extensión trabaja dentro del portal, con tu sesión.",
+  },
+  {
+    titulo: "Define qué te sirve",
+    desc: "Rubro, comuna, jornada y sueldo mínimo. De ahí en adelante postula sola y tú revisas el historial.",
+  },
 ];
+
+const PIPELINE = [
+  { estado: "Enviado", n: 76, w: "100%", color: "var(--status-enviado)" },
+  { estado: "Visto", n: 46, w: "61%", color: "var(--status-visto)" },
+  { estado: "En proceso", n: 18, w: "24%", color: "var(--status-en-proceso)" },
+  { estado: "Finalista", n: 7, w: "9%", color: "var(--status-finalista)" },
+  { estado: "Rechazado", n: 11, w: "15%", color: "var(--status-rechazado)" },
+];
+
+const SEMANA = [
+  { dia: "Lun", h: "52%" },
+  { dia: "Mar", h: "78%" },
+  { dia: "Mié", h: "39%" },
+  { dia: "Jue", h: "96%" },
+  { dia: "Vie", h: "65%" },
+];
+
+const PLAN_LIBRE = [
+  "20 postulaciones al mes",
+  "Un portal conectado a la vez",
+  "Postulación asistida: la IA responde, tú envías",
+];
+
+const PLAN_PRO = [
+  "80 postulaciones al mes",
+  "Computrabajo y Laborum conectados a la vez",
+  "Busca y postula sola, según tus filtros",
+  "Perfil dinámico e instrucciones propias",
+];
+
+function Tilde({ color }: { color?: string }) {
+  return <Check size={15} color={color} strokeWidth={2.6} />;
+}
 
 export default function LandingPage() {
   return (
-    <div style={{ background: BG, color: TEXT, minHeight: "100vh" }}>
-      {/* En pantallas angostas se esconden los anchors de sección -- si no, el
-          nav completo no entra en una fila y desborda horizontalmente toda la
-          página (bug real que se encontró probando esto en 375px). */}
-      <style>{`
-        @media (max-width: 560px) {
-          .ap-landing-anchor { display: none; }
-        }
-      `}</style>
-      {/* ── Header ── */}
-      <header
-        style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          maxWidth: 1100, margin: "0 auto", padding: "20px 16px", gap: 12,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <div
-            style={{
-              width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-              background: ACCENT, color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13,
-            }}
-          >
-            AP
-          </div>
-          <span style={{ fontWeight: 700, fontSize: 15 }}>AutoPostula</span>
-        </div>
-        <nav style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "nowrap", minWidth: 0 }}>
-          <a href="#como-funciona" className="ap-landing-anchor" style={{ fontSize: 13.5, color: TEXT_MUTED, textDecoration: "none", whiteSpace: "nowrap" }}>
-            Cómo funciona
-          </a>
-          <a href="#precios" className="ap-landing-anchor" style={{ fontSize: 13.5, color: TEXT_MUTED, textDecoration: "none", whiteSpace: "nowrap" }}>
-            Precios
-          </a>
-          <Link href="/login" style={{ fontSize: 13.5, color: TEXT, textDecoration: "none", fontWeight: 600, whiteSpace: "nowrap" }}>
-            Iniciar sesión
-          </Link>
-          <Link
-            href="/registro"
-            style={{
-              fontSize: 13.5, fontWeight: 600, color: "#fff", background: ACCENT,
-              padding: "9px 14px", borderRadius: 8, textDecoration: "none", whiteSpace: "nowrap",
-            }}
-          >
-            Regístrate
-          </Link>
-        </nav>
-      </header>
+    <div className="lp">
+      <NavLanding />
 
-      {/* ── Hero ── */}
-      <section style={{ maxWidth: 780, margin: "0 auto", padding: "64px 24px 56px", textAlign: "center" }}>
-        <h1 style={{ fontSize: "clamp(32px, 5vw, 48px)", fontWeight: 800, lineHeight: 1.15, marginBottom: 18 }}>
-          Postula a más empleos,
-          <br />
-          con menos esfuerzo.
-        </h1>
-        <p style={{ fontSize: 17, color: TEXT_MUTED, lineHeight: 1.6, maxWidth: 560, margin: "0 auto 32px" }}>
-          AutoPostula sube tu CV una vez y deja que la IA rellene y envíe tus postulaciones en
-          Computrabajo y Laborum, con respuestas que suenan a ti -- no genéricas.
-        </p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <Link
-            href="/registro"
-            style={{
-              fontSize: 14.5, fontWeight: 600, color: "#fff", background: ACCENT,
-              padding: "13px 24px", borderRadius: 10, textDecoration: "none",
-            }}
-          >
-            Empezar gratis
-          </Link>
-          <a
-            href="#como-funciona"
-            style={{
-              fontSize: 14.5, fontWeight: 600, color: TEXT, background: "transparent",
-              border: `1px solid ${BORDER}`, padding: "13px 24px", borderRadius: 10, textDecoration: "none",
-            }}
-          >
-            Ver cómo funciona
-          </a>
-        </div>
-      </section>
+      <main id="inicio">
+        {/* ── Hero ─────────────────────────────────────────────── */}
+        <section className="lp-hero">
+          <div className="lp-wrap lp-hero__grid">
+            <div>
+              <span className="lp-flag lp-rise lp-rise--1">
+                <i />
+                Computrabajo y Laborum, conectados
+              </span>
 
-      {/* ── Características ── */}
-      <section style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 24px 64px" }}>
-        <div
-          style={{
-            display: "grid", gap: 20,
-            gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
-          }}
-        >
-          {CARACTERISTICAS.map(({ Icon, titulo, desc }) => (
-            <div
-              key={titulo}
-              style={{ border: `1px solid ${BORDER}`, borderRadius: 14, padding: 22, background: "#fff" }}
-            >
-              <div
-                style={{
-                  width: 36, height: 36, borderRadius: 10, marginBottom: 14,
-                  background: ACCENT_SOFT, color: ACCENT,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}
-              >
-                <Icon size={17} />
+              <h1 className="lp-rise lp-rise--2">
+                Postula 80 veces al mes.
+                <br />
+                <span className="ap-swipe ap-swipe--auto">Escribe una sola.</span>
+              </h1>
+
+              <p className="lp-hero__sub lp-rise lp-rise--3">
+                AutoPostula lee tu CV, aprende cómo escribes y responde cada formulario con tus
+                palabras y tu experiencia real. Tú revisas y envías, o lo dejas corriendo solo.
+              </p>
+
+              <div className="lp-hero__cta lp-rise lp-rise--4">
+                <Link className="ap-btn ap-btn--primary" href="/registro">
+                  Crear cuenta gratis
+                </Link>
+                <a className="ap-btn ap-btn--ghost" href="#pasos">
+                  Ver cómo funciona
+                </a>
               </div>
-              <p style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 6 }}>{titulo}</p>
-              <p style={{ fontSize: 13, color: TEXT_MUTED, lineHeight: 1.55 }}>{desc}</p>
+
+              <div className="lp-terms lp-rise lp-rise--5">
+                <span className="lp-term">
+                  <Check strokeWidth={2.6} /> 20 postulaciones gratis al mes
+                </span>
+                <span className="lp-term">
+                  <Check strokeWidth={2.6} /> Sin tarjeta de crédito
+                </span>
+              </div>
             </div>
-          ))}
-        </div>
-      </section>
 
-      {/* ── Cómo funciona ── */}
-      <section id="como-funciona" style={{ background: "#fff", borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "64px 24px" }}>
-          <h2 style={{ fontSize: 26, fontWeight: 800, textAlign: "center", marginBottom: 44 }}>Cómo funciona</h2>
-          <div style={{ display: "grid", gap: 32, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-            {PASOS.map(({ numero, titulo, desc }) => (
-              <div key={numero} style={{ textAlign: "center" }}>
-                <div
-                  style={{
-                    width: 40, height: 40, borderRadius: "50%", margin: "0 auto 16px",
-                    background: ACCENT, color: "#fff", fontWeight: 700, fontSize: 15,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                >
-                  {numero}
-                </div>
-                <p style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 6 }}>{titulo}</p>
-                <p style={{ fontSize: 13, color: TEXT_MUTED, lineHeight: 1.55, maxWidth: 260, margin: "0 auto" }}>
-                  {desc}
+            <FichaDemo />
+          </div>
+        </section>
+
+        {/* ── Tira de avisos ───────────────────────────────────── */}
+        <div className="lp-tira" aria-hidden="true">
+          <div className="lp-tira__row">
+            {/* Duplicada para que el loop no corte al llegar al final. */}
+            {[...CARGOS, ...CARGOS].map(([cargo, comuna], i) => (
+              <span className="lp-tira__item" key={`${cargo}-${i}`}>
+                <b>{cargo}</b> {comuna}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* ── La diferencia ────────────────────────────────────── */}
+        <section className="lp-band" id="diferencia">
+          <div className="lp-wrap">
+            <Revelar className="lp-head">
+              <div className="lp-head__rule" />
+              <h2>La misma pregunta, dos respuestas.</h2>
+              <p>
+                Todos los portales preguntan lo mismo. La diferencia está en si la respuesta
+                podría ser de cualquiera, o solamente tuya.
+              </p>
+            </Revelar>
+
+            <Revelar className="lp-versus" retraso={1}>
+              <article className="lp-hoja lp-hoja--gris">
+                <p className="lp-hoja__tag">
+                  <AlignLeft size={15} />
+                  Lo que manda todo el mundo
                 </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+                <p className="lp-hoja__txt">
+                  Estimados, me dirijo a ustedes con el fin de postular al cargo publicado.
+                  Cuento con amplia experiencia en el área y soy una persona responsable,
+                  proactiva y con gran capacidad de trabajo en equipo.
+                </p>
+                <p className="lp-fuente">
+                  <Info size={14} />
+                  Sin un solo dato que el reclutador no haya leído hoy 40 veces.
+                </p>
+              </article>
 
-      {/* ── Precios ── */}
-      <section id="precios" style={{ maxWidth: 900, margin: "0 auto", padding: "64px 24px" }}>
-        <h2 style={{ fontSize: 26, fontWeight: 800, textAlign: "center", marginBottom: 10 }}>Precios simples</h2>
-        <p style={{ fontSize: 14, color: TEXT_MUTED, textAlign: "center", marginBottom: 40 }}>
-          Empieza gratis. Pasa a Premium cuando quieras postular sin límites.
-        </p>
-        <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
-          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 16, padding: 28, background: "#fff" }}>
-            <p style={{ fontSize: 13.5, fontWeight: 700, color: TEXT_MUTED, marginBottom: 4 }}>Gratis</p>
-            <p style={{ fontSize: 32, fontWeight: 800, marginBottom: 18 }}>$0</p>
-            {[
-              "20 postulaciones al mes",
-              "1 portal conectado a la vez",
-              "Postulación manual asistida por IA",
-            ].map((item) => (
-              <div key={item} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
-                <Check size={15} color={TEXT_MUTED} style={{ flexShrink: 0, marginTop: 2 }} />
-                <span style={{ fontSize: 13.5 }}>{item}</span>
-              </div>
-            ))}
+              <article className="lp-hoja lp-hoja--tuya">
+                <p className="lp-hoja__tag">
+                  <Marca tam={20} />
+                  Lo que mandas tú
+                </p>
+                <p className="lp-hoja__txt">
+                  Trabajé <span className="ap-mk">3 años en bodega en Maipú</span>, recepción y
+                  picking. Tengo <span className="ap-mk">licencia D al día</span> y manejo grúa
+                  horquilla. Vivo a 20 minutos de Quilicura, así que el{" "}
+                  <span className="ap-mk">turno de mañana</span> me acomoda bien.
+                </p>
+                <p className="lp-fuente">
+                  <Highlighter size={14} />
+                  Lo marcado salió de tu CV y de tu calibración de estilo. Nada inventado.
+                </p>
+              </article>
+            </Revelar>
           </div>
-          <div
-            style={{
-              border: `2px solid ${ACCENT}`, borderRadius: 16, padding: 28, background: "#fff",
-              position: "relative",
-            }}
-          >
-            <span
-              style={{
-                position: "absolute", top: -11, right: 20, background: ACCENT, color: "#fff",
-                fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999,
-              }}
+        </section>
+
+        {/* ── Pasos ────────────────────────────────────────────── */}
+        <section className="lp-band lp-band--sheet" id="pasos">
+          <div className="lp-wrap">
+            <Revelar className="lp-head">
+              <div className="lp-head__rule" />
+              <h2>Se configura una vez.</h2>
+              <p>Después de estos tres pasos no vuelves a escribir una carta de presentación.</p>
+            </Revelar>
+
+            <Revelar className="lp-pasos" retraso={1}>
+              {PASOS.map(({ titulo, desc }, i) => (
+                <div className="lp-paso" key={titulo}>
+                  <span className="lp-paso__line" />
+                  <span className="lp-paso__n ap-tnum">{i + 1}</span>
+                  <h3>{titulo}</h3>
+                  <p>{desc}</p>
+                </div>
+              ))}
+            </Revelar>
+          </div>
+        </section>
+
+        {/* ── Tablero ──────────────────────────────────────────── */}
+        <section className="lp-band">
+          <div className="lp-wrap">
+            <Revelar className="lp-head">
+              <div className="lp-head__rule" />
+              <h2>Sabes en qué quedó cada una.</h2>
+              <p>
+                Cada postulación queda registrada con su estado real, actualizado desde el portal.
+                Se acabó el &ldquo;¿a esta ya postulé?&rdquo;.
+              </p>
+            </Revelar>
+
+            <Revelar className="lp-tablero" retraso={1}>
+              <div className="lp-tablero__bar">
+                <span className="lp-tablero__t">Tus postulaciones</span>
+                <span className="lp-tablero__meta ap-tnum">Últimos 30 días · 76 enviadas</span>
+              </div>
+
+              <div className="lp-tablero__in">
+                <div className="lp-pipe">
+                  {PIPELINE.map(({ estado, n, w, color }) => (
+                    <div className="lp-pipe__row" key={estado}>
+                      <span className="lp-pipe__lab">
+                        <i style={{ color }} />
+                        {estado}
+                      </span>
+                      <span className="lp-pipe__track">
+                        <span
+                          className="lp-pipe__fill"
+                          style={{ ["--w" as string]: w, color }}
+                        />
+                      </span>
+                      <span className="lp-pipe__n ap-tnum">{n}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <div className="lp-semana">
+                    {SEMANA.map(({ dia, h }) => (
+                      <div
+                        className={`lp-dia${h === "96%" ? " lp-dia--alto" : ""}`}
+                        key={dia}
+                      >
+                        <span className="lp-dia__bar" style={{ ["--h" as string]: h }} />
+                        <span className="lp-dia__l">{dia}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="lp-semana__cap ap-tnum">
+                    Esta semana · máximo 22 el jueves, 15 el viernes
+                  </p>
+                </div>
+              </div>
+            </Revelar>
+          </div>
+        </section>
+
+        {/* ── Precios ──────────────────────────────────────────── */}
+        <section className="lp-band lp-band--sheet" id="precios">
+          <div className="lp-wrap">
+            <Revelar className="lp-head">
+              <div className="lp-head__rule" />
+              <h2>Precios simples.</h2>
+              <p>Empieza gratis. Pasa a Premium cuando quieras que postule sola.</p>
+            </Revelar>
+
+            <Revelar className="lp-planes" retraso={1}>
+              <article className="lp-plan lp-plan--libre">
+                <p className="lp-plan__n">Gratis</p>
+                <p className="lp-plan__p ap-tnum">$0</p>
+                <ul className="lp-plan__list">
+                  {PLAN_LIBRE.map((item) => (
+                    <li key={item}>
+                      <Tilde />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <Link className="ap-btn ap-btn--ghost ap-btn--full" href="/registro">
+                  Crear cuenta gratis
+                </Link>
+              </article>
+
+              <article className="lp-plan lp-plan--pro">
+                <p className="lp-plan__n">Premium</p>
+                <p className="lp-plan__p ap-tnum">
+                  $3.990 <small>al mes</small>
+                </p>
+                <ul className="lp-plan__list">
+                  {PLAN_PRO.map((item) => (
+                    <li key={item}>
+                      <Tilde />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <Link className="ap-btn ap-btn--mark ap-btn--full" href="/registro?plan=premium">
+                  Empezar con Premium
+                </Link>
+              </article>
+            </Revelar>
+          </div>
+        </section>
+
+        {/* ── Cierre ───────────────────────────────────────────── */}
+        <section className="lp-band lp-cierre">
+          <div className="lp-wrap lp-cierre__grid">
+            <div>
+              <h2>Deja de llenar formularios a mano.</h2>
+              <p>
+                Crea tu cuenta, sube tu CV y postula a tu primera oferta en menos de diez minutos.
+              </p>
+            </div>
+            <Link
+              className="ap-btn ap-btn--mark"
+              href="/registro"
+              style={{ padding: "16px 28px", fontSize: 15 }}
             >
-              Recomendado
-            </span>
-            <p style={{ fontSize: 13.5, fontWeight: 700, color: ACCENT, marginBottom: 4 }}>Premium</p>
-            <p style={{ fontSize: 32, fontWeight: 800, marginBottom: 18 }}>
-              $3.990 <span style={{ fontSize: 13, fontWeight: 500, color: TEXT_MUTED }}>/mes</span>
-            </p>
-            {[
-              "80 postulaciones al mes",
-              "Todos tus portales conectados a la vez",
-              "Búsqueda y postulación automática",
-              "Perfil dinámico e instrucciones personalizadas",
-            ].map((item) => (
-              <div key={item} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
-                <Check size={15} color={ACCENT} style={{ flexShrink: 0, marginTop: 2 }} />
-                <span style={{ fontSize: 13.5, fontWeight: 500 }}>{item}</span>
-              </div>
-            ))}
+              Crear cuenta gratis
+            </Link>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* ── CTA final ── */}
-      <section style={{ background: ACCENT, color: "#fff", padding: "56px 24px", textAlign: "center" }}>
-        <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>Deja de llenar formularios a mano.</h2>
-        <p style={{ fontSize: 14.5, opacity: 0.85, marginBottom: 24 }}>Crea tu cuenta gratis y postula a tu primera oferta en minutos.</p>
-        <Link
-          href="/registro"
-          style={{
-            display: "inline-block", fontSize: 14.5, fontWeight: 700, color: ACCENT, background: "#fff",
-            padding: "13px 28px", borderRadius: 10, textDecoration: "none",
-          }}
-        >
-          Empezar gratis
-        </Link>
-      </section>
-
-      {/* ── Footer ── */}
-      <footer style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px", display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 12.5, color: TEXT_MUTED }}>© {new Date().getFullYear()} AutoPostula</span>
-        <div style={{ display: "flex", gap: 20 }}>
-          <Link href="/terminos" style={{ fontSize: 12.5, color: TEXT_MUTED, textDecoration: "none" }}>
-            Términos y condiciones
-          </Link>
-          <Link href="/privacidad" style={{ fontSize: 12.5, color: TEXT_MUTED, textDecoration: "none" }}>
-            Privacidad
-          </Link>
+      {/* ── Pie ────────────────────────────────────────────────── */}
+      <footer className="lp-pie">
+        <div className="lp-wrap lp-pie__in">
+          <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+            <Link href="/" className="ap-brand">
+              <Marca />
+              <b>AutoPostula</b>
+            </Link>
+            <small className="ap-tnum">© {new Date().getFullYear()}</small>
+          </div>
+          <div className="lp-pie__links">
+            <Link href="/terminos">Términos y condiciones</Link>
+            <Link href="/privacidad">Privacidad</Link>
+          </div>
         </div>
       </footer>
+
+      <VolverArriba />
     </div>
   );
 }

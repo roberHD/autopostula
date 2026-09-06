@@ -355,15 +355,41 @@ async function escanearAutomatico() {
   }
   processQueue();
 
-  if (!estado.cargoObjetivo) return;
-  const slug = normalizarParaUrl(estado.cargoObjetivo);
-  if (!slug) return;
+  // docs/objetivo-laboral.md §8: uno o más objetivos, cada uno con su propia
+  // búsqueda -- no solo el cargoObjetivo del CV. Si el backend todavía no
+  // manda "objetivos" (versión vieja) o el usuario nunca confirmó ninguno,
+  // cargoObjetivo sigue funcionando como único objetivo, igual que siempre.
+  const objetivos = (estado.objetivos && estado.objetivos.length)
+    ? estado.objetivos
+    : (estado.cargoObjetivo ? [{ etiqueta: estado.cargoObjetivo, peso: 1 }] : []);
+  if (!objetivos.length) return;
 
   const plataformas = estado.plataformasConectadas || [];
-  for (const nombre of plataformas) {
-    const construirUrl = URL_BUSQUEDA_POR_PORTAL[nombre];
-    if (!construirUrl) continue; // portal conectado pero sin adaptador de búsqueda automática todavía
-    abrirYEscanear(construirUrl(slug, filtros));
+  if (!plataformas.length) return;
+
+  // Con más de un objetivo, el secundario se visita con menos frecuencia que
+  // el principal -- "uno de cada dos ciclos" (§8). Sin esto, alguien con 2
+  // objetivos × 2 portales pasaría de 2 a 4 pestañas cada 2 horas.
+  const { cicloBusquedaAutomatica } = await chrome.storage.local.get('cicloBusquedaAutomatica');
+  const ciclo = (cicloBusquedaAutomatica || 0) + 1;
+  await chrome.storage.local.set({ cicloBusquedaAutomatica: ciclo });
+  const objetivosDeEsteCiclo = objetivos.filter((_, i) => i === 0 || ciclo % 2 === 0);
+
+  // Se recorren en serie, espaciadas, en vez de abrirlas todas a la vez
+  // (§8: "cuidado con el volumen... recorrerlas en serie") -- menos carga
+  // simultánea sobre el mismo portal, más parecido a como navegaría alguien.
+  const ESPACIO_MS = 45 * 1000;
+  let demora = 0;
+  for (const objetivo of objetivosDeEsteCiclo) {
+    const slug = normalizarParaUrl(objetivo.etiqueta);
+    if (!slug) continue;
+    for (const nombre of plataformas) {
+      const construirUrl = URL_BUSQUEDA_POR_PORTAL[nombre];
+      if (!construirUrl) continue; // portal conectado pero sin adaptador de búsqueda automática todavía
+      const url = construirUrl(slug, filtros);
+      setTimeout(() => abrirYEscanear(url), demora);
+      demora += ESPACIO_MS;
+    }
   }
 }
 

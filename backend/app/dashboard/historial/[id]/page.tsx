@@ -39,7 +39,7 @@ const COLOR_ESTADO: Record<string, string> = {
   FINALISTA: "var(--status-finalista)",
   FINALIZADO: "var(--status-finalizado)",
   RECHAZADO: "var(--status-rechazado)",
-  INCOMPLETA: "#D97706",
+  INCOMPLETA: "var(--warn)",
 };
 
 export default function DetalleAplicacionPage() {
@@ -93,11 +93,11 @@ export default function DetalleAplicacionPage() {
         <div
           className="ap-section"
           style={{
-            background: "rgba(217,119,6,0.08)",
-            border: "1px solid rgba(217,119,6,0.35)",
+            background: "color-mix(in srgb, var(--warn) 10%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--warn) 40%, transparent)",
           }}
         >
-          <p style={{ fontSize: 13, fontWeight: 700, color: "#D97706", marginBottom: 4 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: "var(--warn)", marginBottom: 4 }}>
             Necesita tu atención
           </p>
           <p style={{ fontSize: 13, color: "var(--text)", marginBottom: detalle.url ? 10 : 0 }}>
@@ -108,7 +108,7 @@ export default function DetalleAplicacionPage() {
               href={detalle.url}
               target="_blank"
               rel="noreferrer"
-              style={{ fontSize: 12.5, fontWeight: 600, color: "#D97706" }}
+              style={{ fontSize: 12.5, fontWeight: 600, color: "var(--warn)" }}
             >
               Terminar en {detalle.portal} ↗
             </a>

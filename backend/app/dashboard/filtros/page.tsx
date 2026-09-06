@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, X, Filter, FlaskConical } from "lucide-react";
+import { Sparkles, X, Filter, FlaskConical, Target, Plus } from "lucide-react";
 
 type Preferencias = {
   palabrasIncluir: string[];
@@ -17,6 +17,8 @@ type PerfilCompilado = {
   senales: { patron: string; delta: number }[];
 };
 
+type ObjetivoItem = { ciuo: string | null; etiqueta: string; peso: number };
+
 const OPCIONES_MODALIDAD = [
   { valor: "cualquiera", titulo: "Cualquiera", desc: "No filtrar por modalidad" },
   { valor: "remoto", titulo: "Remoto", desc: "Solo trabajo a distancia" },
@@ -31,9 +33,11 @@ const OPCIONES_JORNADA = [
 ];
 
 function TagInput({
-  etiqueta, descripcion, valores, onChange, placeholder,
+  etiqueta, descripcion, valores, onChange, placeholder, modo,
 }: {
-  etiqueta: string; descripcion: string; valores: string[]; onChange: (v: string[]) => void; placeholder: string;
+  etiqueta: string; descripcion: string; valores: string[];
+  onChange: (v: string[]) => void; placeholder: string;
+  modo: "pasa" | "descarta";
 }) {
   const [input, setInput] = useState("");
 
@@ -44,31 +48,28 @@ function TagInput({
   }
 
   return (
-    <div className="ap-field">
+    <div className="ap-criba__col" data-modo={modo}>
       <label className="ap-label">{etiqueta}</label>
-      <p className="ap-section-sub" style={{ marginBottom: 8 }}>{descripcion}</p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: valores.length ? 8 : 0 }}>
-        {valores.map((v) => (
-          <span
-            key={v}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 5,
-              borderRadius: 999, padding: "5px 10px 5px 12px", fontSize: 12, fontWeight: 500,
-              background: "var(--bg-elevated-2)", color: "var(--text)",
-            }}
-          >
-            {v}
-            <button
-              type="button"
-              onClick={() => onChange(valores.filter((x) => x !== v))}
-              style={{ display: "flex", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: 0 }}
-              aria-label={`Quitar ${v}`}
-            >
-              <X size={12} />
-            </button>
-          </span>
-        ))}
-      </div>
+      <p className="ap-section-sub">{descripcion}</p>
+
+      {valores.length > 0 && (
+        <div className="ap-etiquetas" style={{ marginBottom: 10 }}>
+          {valores.map((v) => (
+            <span key={v} className="ap-etiqueta" data-modo={modo}>
+              {v}
+              <button
+                type="button"
+                className="ap-etiqueta__x"
+                onClick={() => onChange(valores.filter((x) => x !== v))}
+                aria-label={`Quitar ${v}`}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <input
         className="ap-input"
         value={input}
@@ -102,12 +103,23 @@ export default function FiltrosPage() {
   const [guardandoScorer, setGuardandoScorer] = useState(false);
   const [mensajeScorer, setMensajeScorer] = useState("");
 
+  // Objetivo laboral (docs/objetivo-laboral.md) -- distinto de cargoObjetivo
+  // del CV: esto es lo que la persona declara que busca, no lo que la IA
+  // infirió de su historial. Guardarlo dispara la recompilación del perfil.
+  const [objetivos, setObjetivos] = useState<ObjetivoItem[]>([]);
+  const [sugerenciaCv, setSugerenciaCv] = useState<string | null>(null);
+  const [objetivoConfirmado, setObjetivoConfirmado] = useState(false);
+  const [guardandoObjetivo, setGuardandoObjetivo] = useState(false);
+  const [mensajeObjetivo, setMensajeObjetivo] = useState("");
+  const [sugerirRetriaje, setSugerirRetriaje] = useState(false);
+
   useEffect(() => {
     async function cargar() {
       try {
-        const [resPrefs, resPerfil] = await Promise.all([
+        const [resPrefs, resPerfil, resObjetivos] = await Promise.all([
           fetch("/api/preferencias-busqueda"),
           fetch("/api/ai/compilar-perfil"),
+          fetch("/api/objetivos"),
         ]);
         const data = await resPrefs.json();
         if (!resPrefs.ok) { setMensaje(data.error ?? `Error ${resPrefs.status}`); return; }
@@ -122,6 +134,21 @@ export default function FiltrosPage() {
         if (resPerfil.ok) {
           const perfilData = await resPerfil.json();
           setPerfilCompilado(perfilData.perfilCompilado ?? null);
+        }
+
+        if (resObjetivos.ok) {
+          const objData = await resObjetivos.json();
+          setObjetivoConfirmado(!!objData.objetivoConfirmado);
+          setSugerenciaCv(objData.sugerenciaCv ?? null);
+          if (Array.isArray(objData.objetivos) && objData.objetivos.length) {
+            setObjetivos(objData.objetivos.map((o: any) => ({ ciuo: o.ciuo ?? null, etiqueta: o.etiqueta, peso: o.peso })));
+          } else if (objData.sugerenciaCv) {
+            // Precarga la sugerencia del CV como punto de partida editable --
+            // todavía no está confirmada hasta que se guarde.
+            setObjetivos([{ ciuo: null, etiqueta: objData.sugerenciaCv, peso: 1.0 }]);
+          } else {
+            setObjetivos([{ ciuo: null, etiqueta: "", peso: 1.0 }]);
+          }
         }
       } catch (err) {
         console.error("Error cargando filtros:", err);
@@ -218,6 +245,39 @@ export default function FiltrosPage() {
     }
   }
 
+  async function guardarObjetivos() {
+    const limpios = objetivos.map((o) => ({ ...o, etiqueta: o.etiqueta.trim() })).filter((o) => o.etiqueta);
+    if (!limpios.length) { setMensajeObjetivo("Escribe al menos un objetivo."); return; }
+
+    setGuardandoObjetivo(true);
+    setMensajeObjetivo("");
+    setSugerirRetriaje(false);
+    try {
+      const res = await fetch("/api/objetivos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objetivos: limpios }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setMensajeObjetivo(data.error ?? "No se pudo guardar"); return; }
+
+      setObjetivoConfirmado(true);
+      setObjetivos(limpios);
+      if (data.perfilCompilado) setPerfilCompilado(data.perfilCompilado);
+      setSugerirRetriaje(!!data.sugerirRetriaje);
+      setMensajeObjetivo(
+        data.avisoCompilacion
+          ? "Objetivo guardado. " + data.avisoCompilacion
+          : "Objetivo guardado y perfil recompilado."
+      );
+    } catch (err) {
+      console.error("Error guardando objetivo:", err);
+      setMensajeObjetivo("No se pudo guardar — revisa la consola");
+    } finally {
+      setGuardandoObjetivo(false);
+    }
+  }
+
   if (cargando) return <div className="ap-empty">Cargando...</div>;
 
   return (
@@ -241,86 +301,154 @@ export default function FiltrosPage() {
         </p>
       )}
 
-      <div className="ap-two-col">
-        <div>
-          <div className="ap-section ap-animate-in" style={{ animationDelay: "0s" }}>
-            <TagInput
-              etiqueta="Palabras clave a incluir"
-              descripcion="Solo se consideran ofertas que mencionen al menos una de estas (cargo, rubro, herramienta)"
-              valores={prefs.palabrasIncluir}
-              onChange={(v) => setPrefs((p) => ({ ...p, palabrasIncluir: v }))}
-              placeholder="Ej: vendedor, retail — Enter para agregar"
-            />
-          </div>
-
-          <div className="ap-section ap-animate-in" style={{ animationDelay: "0.05s" }}>
-            <TagInput
-              etiqueta="Palabras a excluir"
-              descripcion="Se descartan las ofertas que mencionen cualquiera de estas"
-              valores={prefs.palabrasExcluir}
-              onChange={(v) => setPrefs((p) => ({ ...p, palabrasExcluir: v }))}
-              placeholder="Ej: comisión pura — Enter para agregar"
-            />
-          </div>
-
-          <div className="ap-section ap-animate-in" style={{ animationDelay: "0.1s" }}>
-            <p className="ap-section-title">Modalidad</p>
-            <div className="ap-option-group">
-              {OPCIONES_MODALIDAD.map((o) => (
-                <button
-                  key={o.valor}
-                  className={"ap-option-card" + (prefs.modalidad === o.valor ? " ap-option-card-active" : "")}
-                  onClick={() => setPrefs((p) => ({ ...p, modalidad: o.valor }))}
-                >
-                  <div className="ap-option-title">{o.titulo}</div>
-                  <div className="ap-option-desc">{o.desc}</div>
-                </button>
-              ))}
-            </div>
-
-            <p className="ap-section-title" style={{ marginTop: 4 }}>Jornada</p>
-            <div className="ap-option-group" style={{ marginBottom: 0 }}>
-              {OPCIONES_JORNADA.map((o) => (
-                <button
-                  key={o.valor}
-                  className={"ap-option-card" + (prefs.jornada === o.valor ? " ap-option-card-active" : "")}
-                  onClick={() => setPrefs((p) => ({ ...p, jornada: o.valor }))}
-                  style={{ flex: "0 0 auto", minWidth: 100, textAlign: "center" }}
-                >
-                  <div className="ap-option-title">{o.titulo}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button className="ap-button" disabled={guardando} onClick={guardar}>
-            {guardando ? "Guardando..." : "Guardar filtros"}
-          </button>
-          {guardado && (
-            <span style={{ fontSize: 12, color: "var(--status-finalizado)", marginLeft: 12 }}>
-              Guardado — la extensión ya usa estos filtros.
-            </span>
-          )}
+      <div className="ap-hoja" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <div className="ap-criba ap-animate-in">
+          <TagInput
+            modo="pasa"
+            etiqueta="Deja pasar si menciona"
+            descripcion="Solo se consideran ofertas que mencionen al menos una de estas palabras"
+            valores={prefs.palabrasIncluir}
+            onChange={(v) => setPrefs((p) => ({ ...p, palabrasIncluir: v }))}
+            placeholder="vendedor, retail… y Enter"
+          />
+          <TagInput
+            modo="descarta"
+            etiqueta="Descarta si menciona"
+            descripcion="Se botan las ofertas que mencionen cualquiera de estas, aunque calcen en lo demás"
+            valores={prefs.palabrasExcluir}
+            onChange={(v) => setPrefs((p) => ({ ...p, palabrasExcluir: v }))}
+            placeholder="comisión pura… y Enter"
+          />
         </div>
 
-        <div>
-          <div className="ap-section ap-animate-in" style={{ animationDelay: "0.15s" }}>
-            <div
-              style={{
-                width: 34, height: 34, borderRadius: 8, marginBottom: 10,
-                background: "var(--accent)", color: "var(--accent-contrast)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}
-            >
-              <Filter size={16} />
-            </div>
-            <p className="ap-section-title">Cómo funciona</p>
-            <p className="ap-section-sub" style={{ marginBottom: 0 }}>
-              Antes de postular a una oferta, la extensión revisa estos filtros. Si no calza, la salta
-              sin gastar tiempo ni cupo de IA en ella. "Sugerir con IA" los arma a partir de tu CV y de
-              lo que conversaste en "Conversación IA".
+        <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.05s" }}>
+          <p className="ap-section-title">Modalidad</p>
+          <p className="ap-section-sub">Dónde estás dispuesto a trabajar</p>
+          <div className="ap-segmento" style={{ marginBottom: 20 }}>
+            {OPCIONES_MODALIDAD.map((o) => (
+              <button
+                key={o.valor}
+                type="button"
+                className="ap-segmento__op"
+                aria-pressed={prefs.modalidad === o.valor}
+                onClick={() => setPrefs((p) => ({ ...p, modalidad: o.valor }))}
+              >
+                {o.titulo}
+              </button>
+            ))}
+          </div>
+
+          <p className="ap-section-title">Jornada</p>
+          <p className="ap-section-sub">Cuántas horas te acomodan</p>
+          <div className="ap-segmento">
+            {OPCIONES_JORNADA.map((o) => (
+              <button
+                key={o.valor}
+                type="button"
+                className="ap-segmento__op"
+                aria-pressed={prefs.jornada === o.valor}
+                onClick={() => setPrefs((p) => ({ ...p, jornada: o.valor }))}
+              >
+                {o.titulo}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <p className="ap-nota">
+          <Filter size={15} />
+          Antes de postular a una oferta, la extensión revisa estos filtros. Si no calza, la salta sin
+          gastar tiempo ni cupo de IA. &ldquo;Sugerir con IA&rdquo; los arma a partir de tu CV y de lo
+          que conversaste en Conversación IA.
+        </p>
+
+        <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.1s", borderColor: "color-mix(in oklch, var(--chart-3) 35%, transparent)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <Target size={15} color="var(--chart-3)" />
+          <p className="ap-section-title" style={{ marginBottom: 0 }}>Objetivo laboral</p>
+        </div>
+        <p className="ap-section-sub">
+          Tu CV describe de dónde vienes. Esto es a dónde vas — puede ser distinto, sobre todo si te
+          estás cambiando de rubro. El motor nuevo de abajo usa esto (no tu CV) para decidir qué
+          ofertas te calzan.
+        </p>
+
+        {!objetivoConfirmado && sugerenciaCv && (
+          <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
+            Por tu CV, parece que buscas <strong>{sugerenciaCv}</strong> — puedes dejarlo así o cambiarlo abajo.
+          </p>
+        )}
+
+        {mensajeObjetivo && (
+          <p style={{ fontSize: 12.5, color: mensajeObjetivo.startsWith("Objetivo guardado") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
+            {mensajeObjetivo}
+          </p>
+        )}
+
+        {sugerirRetriaje && (
+          <div className="nota" style={{ marginBottom: 12 }}>
+            <p style={{ margin: 0 }}>
+              Cambiaste de rubro. Vale la pena rehacer el triaje de onboarding para recalibrar qué
+              ofertas te mostramos — desde tu perfil puedes volver a hacerlo cuando quieras.
             </p>
           </div>
+        )}
+
+        {objetivos.map((o, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <input
+              className="ap-input"
+              style={{ flex: 1 }}
+              value={o.etiqueta}
+              placeholder={i === 0 ? "Ej: vendedor" : "Ej: desarrollador de software (segundo objetivo)"}
+              onChange={(e) => {
+                const copia = [...objetivos];
+                copia[i] = { ...copia[i], etiqueta: e.target.value };
+                setObjetivos(copia);
+              }}
+            />
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.1}
+              className="ap-input"
+              style={{ width: 72 }}
+              title="Peso: 1.0 = objetivo principal, menos si lo aceptarías pero no lo buscas activamente"
+              value={o.peso}
+              onChange={(e) => {
+                const copia = [...objetivos];
+                copia[i] = { ...copia[i], peso: Math.max(0, Math.min(1, Number(e.target.value))) };
+                setObjetivos(copia);
+              }}
+            />
+            {objetivos.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setObjetivos(objetivos.filter((_, j) => j !== i))}
+                style={{ display: "flex", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: 4 }}
+                aria-label="Quitar objetivo"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        ))}
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {objetivos.length < 4 && (
+            <button
+              type="button"
+              className="ap-button-ghost"
+              style={{ display: "flex", alignItems: "center", gap: 6 }}
+              onClick={() => setObjetivos([...objetivos, { ciuo: null, etiqueta: "", peso: 0.5 }])}
+            >
+              <Plus size={14} /> Agregar otro objetivo
+            </button>
+          )}
+          <button className="ap-button" disabled={guardandoObjetivo} onClick={guardarObjetivos}>
+            {guardandoObjetivo ? "Guardando..." : "Guardar objetivo"}
+          </button>
         </div>
       </div>
 
@@ -367,7 +495,7 @@ export default function FiltrosPage() {
         {perfilCompilado && (
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
             <div>
-              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6 }}>ROLES</p>
+              <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Roles</p>
               {perfilCompilado.roles.map((r) => (
                 <p key={r.canonico} style={{ fontSize: 12.5, marginBottom: 3 }}>
                   <strong>{r.canonico}</strong> ({Math.round(r.peso * 100)}%) — {r.sinonimos.join(", ")}
@@ -376,7 +504,7 @@ export default function FiltrosPage() {
             </div>
             {perfilCompilado.vetos.length > 0 && (
               <div>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6 }}>VETOS</p>
+                <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Vetos</p>
                 {perfilCompilado.vetos.map((v) => (
                   <p key={v.patron} style={{ fontSize: 12.5, marginBottom: 3 }}>
                     <strong>{v.patron}</strong> — {v.razon}
@@ -386,7 +514,7 @@ export default function FiltrosPage() {
             )}
             {perfilCompilado.senales.length > 0 && (
               <div>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6 }}>SEÑALES</p>
+                <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Señales</p>
                 {perfilCompilado.senales.map((s) => (
                   <p key={s.patron} style={{ fontSize: 12.5, marginBottom: 3 }}>
                     {s.delta >= 0 ? "+" : ""}{s.delta} por <strong>{s.patron}</strong>
@@ -396,6 +524,18 @@ export default function FiltrosPage() {
             )}
           </div>
         )}
+        </div>
+
+        <div className="ap-guardar">
+          <button className="ap-button" disabled={guardando} onClick={guardar}>
+            {guardando ? "Guardando…" : "Guardar filtros"}
+          </button>
+          {guardado && (
+            <span className="ap-guardar__nota">
+              Guardado. La extensión ya usa estos filtros.
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

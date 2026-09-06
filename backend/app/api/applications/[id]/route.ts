@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { limpiarTitulo } from "@/lib/text";
 
 export async function GET(
   request: Request,
@@ -29,7 +30,7 @@ export async function GET(
 
   return NextResponse.json({
     id: application.id,
-    titulo: application.jobOffer.titulo,
+    titulo: limpiarTitulo(application.jobOffer.titulo),
     empresa: application.jobOffer.empresa,
     portal: application.jobOffer.platform.nombre,
     url: application.jobOffer.url,

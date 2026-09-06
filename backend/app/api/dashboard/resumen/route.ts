@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { limpiarTitulo } from "@/lib/text";
 
 export async function GET() {
   const session = await auth();
@@ -94,6 +95,28 @@ export async function GET() {
     actividad.push({ etiqueta, enviadas, respuestas });
   }
 
+  // Embudo: cada escalón contiene al siguiente. "Vista" es toda la que
+  // avanzó de ENVIADO, "en proceso" la que pasó de vista, y así. RECHAZADO
+  // no es un escalón del avance sino una salida, por eso va aparte.
+  const enEstado = (...estados: string[]) =>
+    todas.filter((a) => estados.includes(a.estadoActual)).length;
+
+  // INCOMPLETA no es "vista": significa que la postulación quedó a medias y
+  // nunca llegó a la empresa. Se nombran los estados uno por uno en vez de
+  // usar "distinto de ENVIADO", que es lo que la metía por error.
+  const vistas = enEstado("VISTO", "EN_PROCESO", "FINALISTA", "FINALIZADO", "RECHAZADO");
+  const enProceso = enEstado("EN_PROCESO", "FINALISTA", "FINALIZADO");
+  const finalistas = enEstado("FINALISTA", "FINALIZADO");
+  const rechazadas = enEstado("RECHAZADO");
+
+  const embudo = [
+    { etiqueta: "Enviadas", cantidad: total },
+    { etiqueta: "Vistas", cantidad: vistas },
+    { etiqueta: "En proceso", cantidad: enProceso },
+    { etiqueta: "Finalistas", cantidad: finalistas },
+    { etiqueta: "Rechazadas", cantidad: rechazadas },
+  ];
+
   // Distribución por portal
   const porPortalMap = new Map<string, number>();
   todas.forEach((a) => {
@@ -112,12 +135,13 @@ export async function GET() {
     entrevistasEsteMes,
     matchPromedio,
     actividad,
+    embudo,
     porPortal,
     perfilEntrenado: styleProfile?.confianzaPorcentaje ?? 0,
     portalesActivos,
     recientes: recientes.map((a) => ({
       id: a.id,
-      titulo: a.jobOffer.titulo,
+      titulo: limpiarTitulo(a.jobOffer.titulo),
       empresa: a.jobOffer.empresa,
       portal: a.platformAccount.platform.nombre,
       estado: a.estadoActual,

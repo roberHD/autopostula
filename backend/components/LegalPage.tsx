@@ -3,11 +3,11 @@ import Link from "next/link";
 // Shell compartido por /privacidad y /terminos. Estas páginas son públicas y
 // viven fuera de /dashboard, así que no reciben theme.css — usan la misma
 // paleta inline que /login y /registro para no depender de ese import.
-const ACCENT = "oklch(0.53 0.2 280)";
-const BG = "oklch(0.985 0.003 275)";
-const BORDER = "oklch(0.91 0.008 275)";
-const TEXT = "oklch(0.25 0.02 275)";
-const TEXT_MUTED = "oklch(0.52 0.02 275)";
+const ACCENT = "var(--accent)";
+const BG = "var(--bg)";
+const BORDER = "var(--border)";
+const TEXT = "var(--text)";
+const TEXT_MUTED = "var(--text-muted)";
 
 export function LegalPage({
   titulo,

@@ -166,7 +166,7 @@ export default function ConversacionPage() {
       )}
 
       {resultado ? (
-        <div style={{ maxWidth: 920 }}>
+        <div className="ap-hoja">
           <div
             className="ap-assistant-card ap-animate-in"
             style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 14 }}
@@ -188,7 +188,7 @@ export default function ConversacionPage() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: 20, gridTemplateColumns: "2fr 1fr" }} className="ap-charts-row">
+          <div className="ap-split">
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.05s" }}>
                 <p className="ap-section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -291,166 +291,99 @@ export default function ConversacionPage() {
           )}
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 24, alignItems: "start" }}>
-          {/* Tarjeta de chat */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              minHeight: 480,
-              background: "var(--bg-elevated)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius)",
-              overflow: "hidden",
-            }}
-          >
-            {/* Header del chat */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                borderBottom: "1px solid var(--border)",
-                padding: "14px 20px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span
-                  style={{
-                    width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                    background: "var(--accent)", color: "var(--accent-contrast)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                >
-                  <Sparkles size={16} />
-                </span>
-                <div>
-                  <p style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.2 }}>Asistente AutoPostula</p>
-                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                    Conociéndote · {mensajesUsuario} de {MINIMO_MENSAJES_PARA_FINALIZAR} respuestas
-                  </p>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, width: 110 }}>
-                <div style={{ flex: 1, height: 6, borderRadius: 999, background: "var(--border)", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: pct + "%", background: "var(--accent)", transition: "width .3s" }} />
-                </div>
-                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)" }}>{pct}%</span>
-              </div>
+        <div className="ap-chat">
+          <div className="ap-chat__cab">
+            <span className="ap-chat__ico"><Sparkles size={16} /></span>
+            <div style={{ minWidth: 0 }}>
+              <p className="ap-chat__quien">Asistente AutoPostula</p>
+              <p className="ap-chat__estado">
+                {mensajesUsuario === 0
+                  ? "Empecemos: responde con tus palabras"
+                  : `${mensajesUsuario} de ${MINIMO_MENSAJES_PARA_FINALIZAR} respuestas`}
+              </p>
             </div>
+            <div className="ap-chat__avance">
+              <span className="ap-chat__avance-barra">
+                <span
+                  className="ap-chat__avance-relleno"
+                  style={{ width: pct + "%" }}
+                  data-lleno={pct >= 100 ? "1" : undefined}
+                />
+              </span>
+              <span className="ap-chat__avance-pct">{pct}%</span>
+            </div>
+          </div>
 
-            {/* Mensajes */}
-            <div style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 14, maxHeight: 420 }}>
-              {cargando && <p className="ap-section-sub">Cargando...</p>}
+          <div className="ap-chat__hilo">
+            <div className="ap-chat__lista">
+              {cargando && <Burbuja role="assistant" text="Cargando la conversación…" muted />}
               {conversacion.map((m, i) => (
-                <MessageBubble key={i} role={m.role} text={m.content} />
+                <Burbuja key={i} role={m.role} text={m.content} />
               ))}
-              {enviando && <MessageBubble role="assistant" text="Escribiendo…" muted />}
+              {enviando && <Burbuja role="assistant" escribiendo />}
               <div ref={finRef} />
             </div>
+          </div>
 
-            {/* Chips + composer */}
-            <div style={{ borderTop: "1px solid var(--border)", padding: "14px 20px" }}>
+          <div className="ap-chat__pie">
+            <div className="ap-chat__pie-in">
               {bloqueada && (
-                <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-                  Llegaste al máximo de mensajes de esta conversación — finaliza tu perfil para seguir.
+                <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 11 }}>
+                  Llegaste al máximo de mensajes de esta conversación. Finaliza tu perfil para seguir.
                 </p>
               )}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                {CHIPS_RESPUESTA_RAPIDA.map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => enviarMensaje(chip)}
-                    disabled={enviando || bloqueada}
-                    style={{
-                      borderRadius: 999, border: "1px solid var(--border)", background: "var(--bg-elevated-2)",
-                      padding: "5px 12px", fontSize: 12, fontWeight: 500, color: "var(--text-muted)", cursor: "pointer",
-                    }}
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
-              <form onSubmit={handleEnviar} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+
+              {!bloqueada && (
+                <div className="ap-chips">
+                  {CHIPS_RESPUESTA_RAPIDA.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      className="ap-chip"
+                      onClick={() => enviarMensaje(chip)}
+                      disabled={enviando}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <form onSubmit={handleEnviar} className="ap-redactor">
                 <input
                   className="ap-input"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Escribe tu respuesta…"
                   disabled={enviando || bloqueada}
-                  style={{ flex: 1 }}
                 />
                 <button
-                  className="ap-button"
+                  className="ap-button ap-redactor__enviar"
                   type="submit"
                   disabled={enviando || bloqueada || !input.trim()}
-                  style={{ width: 38, height: 38, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-                  aria-label="Enviar"
+                  aria-label="Enviar respuesta"
                 >
                   <Send size={16} />
                 </button>
               </form>
 
               {puedeFinalizar && (
-                <div style={{ marginTop: 12 }}>
-                  <button className="ap-button" style={{ width: "100%" }} disabled={finalizando} onClick={finalizar}>
-                    {finalizando ? "Generando tu perfil..." : "✨ Ya tienes suficiente — Finalizar y generar mi perfil"}
-                  </button>
-                  <p style={{ fontSize: 11.5, color: "var(--text-muted)", textAlign: "center", marginTop: 6 }}>
-                    Puedes seguir conversando si quieres, pero ya puedes terminar cuando quieras.
-                  </p>
-                </div>
+                <button
+                  className="ap-btn ap-btn--mark"
+                  style={{ width: "100%", marginTop: 11 }}
+                  disabled={finalizando}
+                  onClick={finalizar}
+                >
+                  {finalizando ? "Generando tu perfil…" : "Finalizar y generar mi perfil"}
+                </button>
               )}
-            </div>
-          </div>
 
-          {/* Panel "lo que aprendí de ti" */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div
-              style={{
-                background: "color-mix(in srgb, var(--accent) 8%, var(--bg-elevated))",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius)",
-                padding: 18,
-              }}
-            >
-              <div
-                style={{
-                  width: 34, height: 34, borderRadius: 8,
-                  background: "var(--accent)", color: "var(--accent-contrast)",
-                  display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
-                }}
-              >
-                <Sparkles size={17} />
-              </div>
-              <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Lo que aprendí de ti</h3>
-
-              {/* Todavía no hay un endpoint que devuelva hechos aprendidos a medida que
-                  se conversa — solo al finalizar (ver "resultado" más arriba). Por eso
-                  acá se muestra un estado de progreso genérico en vez de inventar datos. */}
-              {mensajesUsuario === 0 ? (
-                <p style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-                  A medida que converses, la IA va afinando cómo escribe por ti.
-                </p>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--text)" }}>
-                  <span
-                    style={{
-                      width: 16, height: 16, borderRadius: 999, flexShrink: 0,
-                      background: "var(--accent)", color: "var(--accent-contrast)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}
-                  >
-                    <Check size={10} strokeWidth={3} />
-                  </span>
-                  {mensajesUsuario} {mensajesUsuario === 1 ? "respuesta registrada" : "respuestas registradas"}
-                </div>
-              )}
+              <p className="ap-nota-pie">
+                {puedeFinalizar
+                  ? "Puedes seguir conversando si quieres: mientras más cuentes, más tuyas suenan las respuestas."
+                  : "Tus respuestas no se comparten. Solo se usan para redactar postulaciones parecidas a tu forma de escribir."}
+              </p>
             </div>
-            <p style={{ padding: "0 4px", fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.6 }}>
-              Tus respuestas no se comparten. Solo se usan para redactar postulaciones más parecidas a tu forma de escribir.
-            </p>
           </div>
         </div>
       )}
@@ -458,48 +391,28 @@ export default function ConversacionPage() {
   );
 }
 
-function MessageBubble({ role, text, muted }: { role: "user" | "assistant"; text: string; muted?: boolean }) {
-  const isIa = role === "assistant";
+function Burbuja({
+  role, text, muted, escribiendo,
+}: {
+  role: "user" | "assistant";
+  text?: string;
+  muted?: boolean;
+  escribiendo?: boolean;
+}) {
+  const esIa = role === "assistant";
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 8, justifyContent: isIa ? "flex-start" : "flex-end" }}>
-      {isIa && (
-        <span
-          style={{
-            width: 26, height: 26, borderRadius: 8, flexShrink: 0,
-            background: "var(--accent)", color: "var(--accent-contrast)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-        >
-          <Sparkles size={13} />
-        </span>
-      )}
-      <div
-        style={{
-          maxWidth: "80%",
-          padding: "9px 14px",
-          borderRadius: 14,
-          borderBottomLeftRadius: isIa ? 4 : 14,
-          borderBottomRightRadius: isIa ? 14 : 4,
-          fontSize: 13.5,
-          lineHeight: 1.5,
-          background: isIa ? "var(--bg-elevated-2)" : "var(--accent)",
-          color: isIa ? (muted ? "var(--text-muted)" : "var(--text)") : "var(--accent-contrast)",
-        }}
-      >
-        {text}
+    <div className="ap-burbuja" data-de={esIa ? "ia" : "tu"}>
+      {esIa && <span className="ap-burbuja__quien"><Sparkles size={13} /></span>}
+      <div className="ap-burbuja__texto" data-tenue={muted ? "1" : undefined}>
+        {escribiendo ? (
+          <span className="ap-escribiendo" aria-label="La IA está escribiendo">
+            <i /><i /><i />
+          </span>
+        ) : (
+          text
+        )}
       </div>
-      {!isIa && (
-        <span
-          style={{
-            width: 26, height: 26, borderRadius: 8, flexShrink: 0,
-            background: "var(--bg-elevated-2)", color: "var(--text-muted)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 10.5, fontWeight: 700,
-          }}
-        >
-          Tú
-        </span>
-      )}
+      {!esIa && <span className="ap-burbuja__quien">Tú</span>}
     </div>
   );
 }

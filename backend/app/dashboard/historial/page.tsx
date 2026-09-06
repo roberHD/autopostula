@@ -163,46 +163,46 @@ export default function HistorialPage() {
             </p>
           </div>
         ) : (
-          <table className="ap-table">
-            <thead>
-              <tr>
-                <th>Cargo / Empresa</th>
-                <th>Portal</th>
-                <th>Estado</th>
-                <th>Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtradas.map((a) => (
-                <tr
+          <div className="ap-log">
+            <div className="ap-log__cab">
+              <span />
+              <span>Cargo</span>
+              <span>Portal</span>
+              <span>Estado</span>
+              <span>Fecha</span>
+            </div>
+            {filtradas.map((a) => {
+              const color = COLOR_ESTADO[a.estado] ?? "var(--text-muted)";
+              return (
+                <button
                   key={a.id}
+                  type="button"
+                  className="ap-log__fila"
+                  style={{ ["--c" as string]: color }}
                   onClick={() => (window.location.href = `/dashboard/historial/${a.id}`)}
-                  style={{ cursor: "pointer" }}
                 >
-                  <td>
-                    <div className="ap-cargo">{a.titulo}</div>
-                    <div className="ap-empresa">{a.empresa ?? "Empresa no especificada"}</div>
-                  </td>
-                  <td style={{ color: "var(--text-muted)" }}>{a.portal}</td>
-                  <td>
+                  <span className="ap-log__filo" />
+                  <span className="ap-log__cargo">
+                    <b>{a.titulo}</b>
+                    <span>{a.empresa ?? "Empresa no especificada"}</span>
+                  </span>
+                  <span className="ap-log__meta">{a.portal}</span>
+                  <span>
                     <span
                       className="ap-badge"
-                      style={{
-                        color: COLOR_ESTADO[a.estado] ?? "var(--text-muted)",
-                        background: `color-mix(in srgb, ${COLOR_ESTADO[a.estado] ?? "#8b93a7"} 15%, transparent)`,
-                      }}
+                      style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)` }}
                     >
                       <span className="ap-badge-dot" />
                       {ETIQUETA_ESTADO[a.estado] ?? a.estado}
                     </span>
-                  </td>
-                  <td style={{ color: "var(--text-muted)" }}>
-                    {new Date(a.enviadaEn).toLocaleDateString("es-CL")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </span>
+                  <span className="ap-log__fecha">
+                    {new Date(a.enviadaEn).toLocaleDateString("es-CL", { day: "2-digit", month: "short" })}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

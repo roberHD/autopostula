@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
-import { seleccionarTitulosTriaje } from "@/lib/triaje";
+import { seleccionarTitulosTriaje, type ObjetivoTriaje } from "@/lib/triaje";
 
 // Triaje de onboarding (docs/rediseno-filtrado-ofertas.md §8.1/§8.3): la misma
 // interacción "¿postularías a esto? Sí/No" que después reaparece como banda
@@ -14,9 +14,26 @@ export async function GET() {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  const cv = await prisma.cvProfile.findUnique({ where: { userId }, select: { cargoObjetivo: true } });
+  const [usuario, objetivos, cv] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { objetivoConfirmado: true } }),
+    prisma.objetivoLaboral.findMany({ where: { userId }, orderBy: { orden: "asc" } }),
+    prisma.cvProfile.findUnique({ where: { userId }, select: { cargoObjetivo: true } }),
+  ]);
+
+  // docs/objetivo-laboral.md §7.4: el triaje se ancla en lo que la persona
+  // declaró, no en lo que la IA infirió del CV. Sin nada confirmado todavía
+  // (usuario nuevo a medio onboarding, o cuenta antigua de antes de que
+  // existiera esto), cae al cargoObjetivo del CV como objetivo único --
+  // mismo comportamiento de siempre, nada se rompe (§11, criterio 6).
+  const objetivosTriaje: ObjetivoTriaje[] =
+    usuario?.objetivoConfirmado && objetivos.length
+      ? objetivos.map((o) => ({ etiqueta: o.etiqueta, ciuo: o.ciuo, peso: o.peso }))
+      : cv?.cargoObjetivo
+      ? [{ etiqueta: cv.cargoObjetivo, ciuo: null, peso: 1 }]
+      : [];
+
   const [titulos, totalDecisiones] = await Promise.all([
-    seleccionarTitulosTriaje(userId, cv?.cargoObjetivo ?? null),
+    seleccionarTitulosTriaje(userId, objetivosTriaje),
     prisma.decisionOferta.count({ where: { userId, fuente: "TRIAJE_ONBOARDING" } }),
   ]);
 

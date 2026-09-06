@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
+import PestanasEntrenar from "../PestanasEntrenar";
 
 const OPCIONES_TONO = [
   { valor: "formal", titulo: "Formal", desc: "Serio y protocolar" },
@@ -112,8 +113,10 @@ export default function EntrenarIAPage() {
     <div className="ap-glow-bg">
       <div className="ap-page-header">
         <h1 className="ap-page-title">Entrenar IA</h1>
-        <p className="ap-page-sub">Ajusta el tono y las respuestas de tu asistente</p>
+        <p className="ap-page-sub">Ajusta a mano el tono y el largo de las respuestas</p>
       </div>
+
+      <PestanasEntrenar />
 
       {mensaje && (
         <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>
@@ -121,12 +124,12 @@ export default function EntrenarIAPage() {
         </p>
       )}
 
-      <div className="ap-two-col">
+      <div className="ap-hoja ap-split">
         <div>
           <div className="ap-section ap-animate-in" style={{ animationDelay: "0s" }}>
             <p className="ap-section-title">Tono de las respuestas</p>
             <p className="ap-section-sub">Define cómo se expresa tu asistente al responder formularios</p>
-            <div className="ap-option-group">
+            <div className="ap-opciones">
               {OPCIONES_TONO.map((o) => (
                 <button
                   key={o.valor}
@@ -140,15 +143,17 @@ export default function EntrenarIAPage() {
             </div>
 
             <p className="ap-section-title" style={{ marginTop: 4 }}>Extensión de las respuestas</p>
-            <div className="ap-option-group" style={{ marginBottom: 0 }}>
+            <p className="ap-section-sub">Qué tan largo responde cuando el formulario da espacio</p>
+            <div className="ap-segmento">
               {OPCIONES_LONGITUD.map((o) => (
                 <button
                   key={o.valor}
-                  className={"ap-option-card" + (longitudRespuesta === o.valor ? " ap-option-card-active" : "")}
+                  type="button"
+                  className="ap-segmento__op"
+                  aria-pressed={longitudRespuesta === o.valor}
                   onClick={() => setLongitudRespuesta(o.valor)}
-                  style={{ flex: "0 0 auto", minWidth: 90, textAlign: "center" }}
                 >
-                  <div className="ap-option-title">{o.titulo}</div>
+                  {o.titulo}
                 </button>
               ))}
             </div>
@@ -158,16 +163,11 @@ export default function EntrenarIAPage() {
             <p className="ap-section-title">Instrucciones personalizadas</p>
             <p className="ap-section-sub">Indícale a la IA cómo quieres que te represente</p>
             {instruccionesBloqueadas && (
-              <div
-                style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  marginBottom: 10, padding: "10px 14px", borderRadius: 8, fontSize: 12.5,
-                  background: "var(--bg-elevated-2)", color: "var(--text-muted)",
-                }}
-              >
-                <Lock size={14} style={{ flexShrink: 0 }} />
-                Escribir instrucciones propias es una función premium — el tono y la extensión de arriba siguen libres.
-              </div>
+              <p className="ap-candado">
+                <Lock size={14} />
+                Escribir instrucciones propias es una función premium. El tono y la extensión de
+                arriba siguen libres.
+              </p>
             )}
             <textarea
               className="ap-textarea"
@@ -196,15 +196,16 @@ export default function EntrenarIAPage() {
                   Así respondería tu asistente con la configuración actual
                 </p>
               </div>
-              <button className="ap-button-ghost" disabled={generando} onClick={generarPreview}>
-                {generando ? "Generando..." : "Regenerar"}
+              <button className="ap-button-ghost" disabled={generando} onClick={generarPreview} style={{ flexShrink: 0 }}>
+                {generando ? "Generando…" : respuestas.length === 0 ? "Ver un ejemplo" : "Generar otro"}
               </button>
             </div>
 
             <div style={{ marginTop: 14 }}>
               {respuestas.length === 0 && !generando && (
-                <p style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-                  Haz clic en "Regenerar" para ver cómo respondería tu asistente ahora mismo.
+                <p style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.6, maxWidth: "60ch" }}>
+                  Genera un ejemplo para ver, antes de postular, cómo suena tu asistente con esta
+                  configuración.
                 </p>
               )}
               {respuestas.map((r, i) => (
