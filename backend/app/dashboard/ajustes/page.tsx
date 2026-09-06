@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Zap, Lock, Mail, BadgeCheck, TriangleAlert, LogOut } from "lucide-react";
+import { Zap, Lock, Mail, BadgeCheck, TriangleAlert, LogOut, LifeBuoy, ChevronRight } from "lucide-react";
 
 export default function AjustesPage() {
+  const router = useRouter();
   const [activa, setActiva] = useState(false);
   const [disponibleEnPlan, setDisponibleEnPlan] = useState(false);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
@@ -279,6 +281,45 @@ export default function AjustesPage() {
             </button>
           </div>
         )}
+      </div>
+
+      <div
+        className="ap-section ap-animate-in"
+        style={{ animationDelay: "0.1s", cursor: "pointer" }}
+        role="link"
+        tabIndex={0}
+        onClick={() => router.push("/dashboard/contacto")}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            router.push("/dashboard/contacto");
+          }
+        }}
+      >
+        <p className="ap-section-title">Soporte</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div
+            style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: "var(--accent-soft)", color: "var(--accent)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <LifeBuoy size={15} />
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <p style={{ fontSize: 13, fontWeight: 600 }}>Contáctanos</p>
+            <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.5 }}>
+              ¿Algo falla o tienes una idea? Escríbenos y adjunta una captura o un PDF.
+            </p>
+          </div>
+          <span
+            className="ap-button-ghost"
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}
+          >
+            Escribirnos <ChevronRight size={14} />
+          </span>
+        </div>
       </div>
 
       <div
