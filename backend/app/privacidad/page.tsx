@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function PrivacidadPage() {
   return (
-    <LegalPage titulo="Política de privacidad" actualizado="3 de septiembre de 2026">
+    <LegalPage titulo="Política de privacidad" actualizado="4 de septiembre de 2026">
       <p>
         Esta política explica qué datos personales recolecta AutoPostula, con qué finalidad los
         usa, con quién los comparte y cómo puedes ejercer tus derechos sobre ellos. Aplica al
@@ -75,7 +75,46 @@ export default function PrivacidadPage() {
         <li>Registro de las llamadas a la IA realizadas, para controlar los límites de tu plan.</li>
       </ul>
 
-      <h3>2.5 Datos de pago</h3>
+      <h3>2.5 Ofertas que la extensión revisa</h3>
+      <p>
+        Para poder decidir a qué postular, la extensión revisa las ofertas que aparecen en los
+        resultados de búsqueda de los portales. De cada una guardamos el título, la empresa, el
+        enlace y el portal, <strong>aunque no postules a ella</strong>.
+      </p>
+      <p>Esa información se usa para dos cosas:</p>
+      <ul>
+        <li>
+          <strong>No mostrarte ni postular dos veces a la misma oferta.</strong>
+        </li>
+        <li>
+          <strong>Mejorar el reconocimiento de cargos.</strong> Los títulos de las ofertas —sin
+          ningún dato tuyo asociado— alimentan un diccionario compartido que nos permite entender
+          que, por ejemplo, &ldquo;asesor comercial&rdquo; y &ldquo;vendedor&rdquo; son lo mismo.
+          Ese diccionario contiene solo nombres de cargos publicados por las empresas en avisos
+          públicos, nunca información de usuarios.
+        </li>
+      </ul>
+      <div className="nota">
+        <p>
+          Las ofertas revisadas a las que <strong>nunca postulaste</strong> se eliminan
+          automáticamente a los <strong>90 días</strong>.
+        </p>
+      </div>
+
+      <h3>2.6 Tus preferencias sobre qué ofertas te interesan</h3>
+      <p>
+        Cuando marcas si postularías o no a una oferta —en el paso de preferencias al crear tu
+        cuenta, o en la lista de ofertas que quedan pendientes de tu decisión— guardamos esa
+        respuesta junto con el título, la empresa y el enlace de la oferta.
+      </p>
+      <p>
+        Con esas respuestas, más tu CV y lo que hayas conversado con la IA, armamos un{" "}
+        <strong>perfil de búsqueda</strong>: una lista de los cargos que te interesan, los que
+        quieres evitar y tus preferencias de comuna, jornada y modalidad. Ese perfil es lo que la
+        extensión usa para decidir a qué postular, y se recalcula cuando cambias algo.
+      </p>
+
+      <h3>2.7 Datos de pago</h3>
       <p>
         Si contratas un plan de pago, guardamos un identificador de cliente de la pasarela de
         pagos, el monto, la fecha y el estado de cada cobro.
@@ -88,7 +127,7 @@ export default function PrivacidadPage() {
         </p>
       </div>
 
-      <h3>2.6 Lo que NO recolectamos</h3>
+      <h3>2.8 Lo que NO recolectamos</h3>
       <ul>
         <li>
           <strong>No pedimos ni almacenamos las contraseñas de Computrabajo ni de Laborum.</strong>{" "}
@@ -121,8 +160,18 @@ export default function PrivacidadPage() {
             <td>Completar automáticamente los formularios de postulación y generar respuestas.</td>
           </tr>
           <tr>
-            <td>Filtros de búsqueda</td>
+            <td>Filtros y perfil de búsqueda</td>
             <td>Decidir a qué ofertas postular y cuáles descartar.</td>
+          </tr>
+          <tr>
+            <td>Ofertas revisadas</td>
+            <td>
+              No repetir postulaciones y mejorar el reconocimiento de cargos.
+            </td>
+          </tr>
+          <tr>
+            <td>Tus preferencias sobre ofertas</td>
+            <td>Aprender qué cargos te interesan y afinar el perfil de búsqueda.</td>
           </tr>
           <tr>
             <td>Perfil de estilo</td>
@@ -153,10 +202,22 @@ export default function PrivacidadPage() {
         <li>El texto extraído de tu CV.</li>
         <li>Los datos de tu perfil profesional y tu perfil de estilo.</li>
         <li>El texto del aviso de trabajo y las preguntas del formulario.</li>
+        <li>
+          Tu perfil de búsqueda (ver 2.6), cuando lo recalculamos a partir de tus preferencias.
+        </li>
       </ul>
       <p>
-        Estos datos se envían únicamente en el momento de procesar una postulación y con el solo
-        propósito de generar tus respuestas. Puedes revisar las políticas de Anthropic en{" "}
+        Estos datos se envían únicamente en el momento de procesar una postulación o de recalcular
+        tu perfil, y con el solo propósito de generar tus respuestas y decidir qué ofertas te
+        sirven.
+      </p>
+      <p>
+        <strong>Aparte de eso</strong>, y sin ningún dato tuyo asociado, enviamos títulos de
+        ofertas publicadas por las empresas para clasificarlos por tipo de cargo (ver 2.5). Son
+        textos públicos de los avisos, no información de usuarios.
+      </p>
+      <p>
+        Puedes revisar las políticas de Anthropic en{" "}
         <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noreferrer">
           anthropic.com/legal/privacy
         </a>
@@ -241,15 +302,23 @@ export default function PrivacidadPage() {
           postulación para poder completarlos.
         </li>
         <li>
-          <strong>Envía</strong> a nuestros servidores el registro de las postulaciones realizadas.
+          <strong>Envía</strong> a nuestros servidores el registro de las postulaciones realizadas
+          y de las ofertas revisadas (ver 2.5).
         </li>
       </ul>
       <h3>Búsqueda automática</h3>
       <p>
         Si activas la búsqueda automática, la extensión abre cada dos horas una pestaña en segundo
         plano con los resultados de búsqueda de los portales que conectaste, revisa las ofertas
-        nuevas, postula a las que calzan con tus filtros y cierra la pestaña sola. Puedes
-        desactivarla en cualquier momento desde el panel de la extensión o desde tu cuenta.
+        nuevas, postula a las que calzan con tu perfil de búsqueda y cierra la pestaña sola.
+        Puedes desactivarla en cualquier momento desde el panel de la extensión o desde tu cuenta.
+      </p>
+      <h3>Ofertas que quedan esperando tu decisión</h3>
+      <p>
+        Cuando una oferta no calza claramente con tu perfil ni queda claramente fuera, la
+        extensión <strong>no postula</strong>: la deja en una lista en tu cuenta para que tú
+        decidas. Si la apruebas, la extensión abre esa oferta específica en una pestaña en segundo
+        plano y postula por ti. Si no la revisas, se descarta sola a los pocos días.
       </p>
 
       <h2>7. Por cuánto tiempo conservamos tus datos</h2>
@@ -258,8 +327,21 @@ export default function PrivacidadPage() {
           <strong>Mientras tu cuenta esté activa</strong>, conservamos todos los datos descritos.
         </li>
         <li>
-          <strong>Si eliminas tu cuenta</strong>, borramos tus datos personales dentro de los 30
-          días siguientes.
+          <strong>Las ofertas revisadas a las que nunca postulaste</strong> (ver 2.5) se eliminan
+          automáticamente a los <strong>90 días</strong>.
+        </li>
+        <li>
+          <strong>Las ofertas que quedan esperando tu decisión</strong> vencen solas a los pocos
+          días si no las revisas.
+        </li>
+        <li>
+          <strong>Si eliminas tu cuenta</strong>, borramos tus datos personales de inmediato: el
+          borrado es en cascada y arrastra tu perfil, tu CV, tus postulaciones, tus respuestas y
+          tus preferencias.
+        </li>
+        <li>
+          <strong>El diccionario de cargos</strong> (ver 2.5) se conserva, porque no contiene
+          datos personales: son títulos de avisos públicos sin ninguna asociación a personas.
         </li>
         <li>
           <strong>Los registros de pago</strong> se conservan por el plazo que exija la normativa

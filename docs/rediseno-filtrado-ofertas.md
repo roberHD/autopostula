@@ -737,6 +737,11 @@ Es un número graficable que dice si el rediseño funciona.
 
 ### 8.3 Cuáles 20 títulos se muestran en el triaje
 
+> **⚠️ De dónde sale el `cargoObjetivo` que ancla todo esto cambió.** Ver
+> `docs/objetivo-laboral.md`: el objetivo deja de inferirse del CV y pasa a declararlo la
+> persona, eligiéndolo del catálogo. Eso resuelve la ambigüedad de más abajo en el origen y
+> permite anclar en más de un rol a la vez.
+
 No al azar. Se busca **máxima información por swipe**, y eso significa mostrar **casos de frontera**, no casos obvios:
 
 | Cuántos | De dónde | Qué enseña |
