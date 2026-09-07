@@ -26,24 +26,78 @@ AP.log = [];
 AP.escanear = null;
 AP.onInit = null;
 
-// ── Overlay (igual en cualquier sitio) ───────────────────────────
-let ov = null;
-AP.msg = function (texto, color) {
-  color = color || '#16A34A';
+// ── Overlay: la máquina hablando dentro del portal ────────────────
+//
+// Vive dentro del sitio de Computrabajo/Laborum, así que tiene dos
+// trabajos: leerse como AutoPostula y NO confundirse con el portal. Por
+// eso va sobre tinta (el portal es blanco) y con la marca al lado.
+//
+// Va en un shadow root: antes eran estilos en línea sobre el DOM del
+// portal, y cualquier regla suya (un `* { font-size }`, un reset) podía
+// deformarlo. Adentro del shadow, su CSS no nos llega.
+let ov = null, ovRaiz = null;
+
+const AP_ESTADOS = {
+  ok:         { punto: '#5BD59B', late: true },
+  trabajando: { punto: '#D6F24B', late: true },
+  error:      { punto: '#FF8A9B', late: false },
+};
+
+// Los colores viejos se siguen aceptando: hay llamadas con hex por todo
+// el archivo y no vale la pena tocarlas todas.
+const AP_HEX_A_ESTADO = { '#16A34A': 'ok', '#DC2626': 'error', '#D97706': 'trabajando' };
+
+AP.msg = function (texto, estado) {
+  const clave = AP_ESTADOS[estado] ? estado : (AP_HEX_A_ESTADO[estado] || 'ok');
+  const cfg = AP_ESTADOS[clave];
+
   if (!ov) {
     ov = document.createElement('div');
     ov.id = 'ap-ov';
-    Object.assign(ov.style, {
-      position: 'fixed', bottom: '16px', right: '16px', zIndex: '2147483647',
-      background: '#fff', border: '1px solid #ddd', borderRadius: '10px',
-      padding: '10px 14px', fontFamily: 'system-ui,sans-serif', fontSize: '12px',
-      boxShadow: '0 4px 12px rgba(0,0,0,.15)', minWidth: '200px'
-    });
+    // Reset propio: que el portal no nos empuje ni nos herede nada.
+    ov.style.cssText = 'all:initial;position:fixed;bottom:16px;right:16px;z-index:2147483647';
+    ovRaiz = ov.attachShadow({ mode: 'open' });
+    ovRaiz.innerHTML =
+      '<style>' +
+      ':host,*{box-sizing:border-box}' +
+      '.chip{display:flex;align-items:center;gap:10px;min-width:216px;max-width:320px;' +
+        'padding:10px 14px 10px 11px;border-radius:12px;background:#1B1A2E;color:#ECECF3;' +
+        'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12.5px;line-height:1.4;' +
+        'box-shadow:0 12px 30px -10px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.1);' +
+        'animation:entra .28s cubic-bezier(.2,.8,.3,1)}' +
+      '@keyframes entra{from{opacity:0;transform:translateY(8px)}}' +
+      '.marca{width:26px;height:26px;flex:none;border-radius:7px;background:#5A2FD6;display:grid;place-items:center}' +
+      '.marca svg{width:15px;height:15px;display:block}' +
+      '.marca path{fill:none;stroke:#D6F24B;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}' +
+      '.cuerpo{min-width:0;flex:1}' +
+      '.quien{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#9998AC;margin-bottom:1px}' +
+      '.punto{width:6px;height:6px;border-radius:50%;flex:none}' +
+      '.punto.late{animation:late 1.6s ease-out infinite}' +
+      '@keyframes late{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}' +
+      '.texto{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '@media (prefers-reduced-motion:reduce){.chip,.punto.late{animation:none}}' +
+      '</style>' +
+      '<div class="chip">' +
+        '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
+        '<span class="cuerpo">' +
+          '<span class="quien"><i class="punto" id="ap-ov-punto"></i>AutoPostula</span>' +
+          '<span class="texto" id="ap-ov-texto"></span>' +
+        '</span>' +
+      '</div>';
     document.body.appendChild(ov);
   }
-  ov.innerHTML = '<b style="color:' + color + '">● AutoPostula</b><br><span style="color:#666">' + texto + '</span>';
+
+  const punto = ovRaiz.getElementById('ap-ov-punto');
+  punto.style.color = cfg.punto;
+  punto.style.background = cfg.punto;
+  punto.className = 'punto' + (cfg.late ? ' late' : '');
+
+  const nodo = ovRaiz.getElementById('ap-ov-texto');
+  nodo.textContent = texto;
+  nodo.title = texto;
 };
-AP.limpiarOverlay = function () { if (ov) { ov.remove(); ov = null; } };
+
+AP.limpiarOverlay = function () { if (ov) { ov.remove(); ov = null; ovRaiz = null; } };
 
 // ── Helpers básicos ───────────────────────────────────────────────
 AP.sleep = function (ms) { return new Promise(r => setTimeout(r, ms)); };
@@ -569,135 +623,196 @@ AP.analizarYResponder = async function (contexto, preguntas) {
 
 // ── Panel de revisión antes de enviar (editable) — genérico, cualquier
 //    adaptador puede mostrarlo pasándole su propio respuestasLog ──────
+//
+// Igual que el overlay: vive dentro del portal, así que va en un shadow
+// root para que su CSS no nos deforme, y sobre tinta para que no se
+// confunda con la página de abajo.
 AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
   return new Promise(resolve => {
     document.getElementById('ap-revision-panel')?.remove();
-    const div = document.createElement('div');
-    div.id = 'ap-revision-panel';
-    Object.assign(div.style, {
-      position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-      zIndex: '2147483648', background: '#fff', border: '1px solid #e4e7ef',
-      borderRadius: '12px', padding: '0', width: '640px', maxWidth: '94vw',
-      maxHeight: '86vh', display: 'flex', flexDirection: 'column',
-      boxShadow: '0 20px 60px rgba(0,0,0,.25)', fontFamily: 'system-ui,sans-serif'
-    });
+
+    const host = document.createElement('div');
+    host.id = 'ap-revision-panel';
+    host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483648';
+    const raiz = host.attachShadow({ mode: 'open' });
+
+    const esc = t => (t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     const filas = respuestasLog.map((r, idx) => {
       // r.errorIA solo viene seteado cuando la llamada a la IA falló (límite del plan,
       // timeout, red, etc.) -- se distingue de r.vacia sin errorIA, que es cuando la IA
       // sí respondió pero no tenía el dato pedido.
       const esLimite = r.errorIA && /l[ií]mite/i.test(r.errorIA);
-      const color = esLimite ? '#D97706' : (r.vacia ? '#DC2626' : '#16A34A');
-      const icon = esLimite ? 'LÍMITE' : (r.vacia ? 'ADVERTENCIA' : 'OK');
-      let leyenda = '';
-      if (esLimite) leyenda = ' Límite mensual de IA alcanzado — complétala manualmente';
-      else if (r.errorIA) leyenda = ' Error de IA (' + r.errorIA + ') - puedes completarla';
-      else if (r.vacia) leyenda = ' Sin respuesta - puedes completarla';
-      else if (r.fueIA) leyenda = ' Generada por IA - puedes editarla';
+      let tono, etiqueta;
+      if (esLimite) { tono = 'aviso'; etiqueta = 'Se acabó tu cupo de IA este mes: complétala tú'; }
+      else if (r.errorIA) { tono = 'malo'; etiqueta = 'La IA no pudo responder (' + esc(r.errorIA) + '): complétala tú'; }
+      else if (r.vacia) { tono = 'malo'; etiqueta = 'Quedó vacía: complétala antes de enviar'; }
+      else if (r.fueIA) { tono = 'bueno'; etiqueta = 'La escribió la IA con tu perfil: puedes editarla'; }
+      else { tono = 'bueno'; etiqueta = 'Lista'; }
+
       const cabecera =
-        '<div style="font-size:11px;font-weight:700;color:#4b5563;margin-bottom:5px">' + (r.pregunta || '').slice(0, 90) + '</div>' +
-        '<div style="font-size:10px;color:' + color + ';margin-bottom:5px">' + icon + leyenda + '</div>';
+        '<p class="preg">' + esc((r.pregunta || '').slice(0, 140)) + '</p>' +
+        '<p class="estado" data-tono="' + tono + '"><i></i>' + etiqueta + '</p>';
 
       if (r.tipo === 'opcion') {
         const opts = (r.opciones || []).map((o, oi) => {
           const sel = r.elegidoEl && o.el === r.elegidoEl ? ' selected' : '';
-          return '<option value="' + oi + '"' + sel + '>' + (o.texto || '(opcion sin texto)').slice(0, 80) + '</option>';
+          return '<option value="' + oi + '"' + sel + '>' + esc((o.texto || '(opción sin texto)').slice(0, 80)) + '</option>';
         }).join('');
-        return '<div class="ap-rev-item" data-idx="' + idx + '" data-tipo="opcion" style="margin-bottom:12px;padding:8px 10px;background:#f8f9fc;border-radius:8px;border:1px solid #e4e7ef">' +
-          cabecera +
-          '<select class="ap-rev-select" data-idx="' + idx + '" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;font-family:inherit">' +
-            '<option value="-1"' + (r.elegidoEl ? '' : ' selected') + '>-- Sin seleccion --</option>' + opts +
-          '</select>' +
-        '</div>';
+        return '<div class="item" data-idx="' + idx + '" data-tipo="opcion">' + cabecera +
+          '<select class="ap-rev-select" data-idx="' + idx + '">' +
+            '<option value="-1"' + (r.elegidoEl ? '' : ' selected') + '>Sin elegir</option>' + opts +
+          '</select></div>';
       }
 
-      // tipo texto (o sin tipo, por compatibilidad)
       const max = (r.el && r.el.maxLength && r.el.maxLength > 0 && r.el.maxLength < 10000) ? r.el.maxLength : 500;
-      const valorEsc = (r.respuesta || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return '<div class="ap-rev-item" data-idx="' + idx + '" data-tipo="texto" style="margin-bottom:12px;padding:8px 10px;background:#f8f9fc;border-radius:8px;border:1px solid #e4e7ef">' +
-        cabecera +
-        '<textarea class="ap-rev-textarea" data-idx="' + idx + '" maxlength="' + max + '" rows="3" ' +
-          'style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;font-family:inherit;resize:vertical">' + valorEsc + '</textarea>' +
-        '<div class="ap-rev-counter" data-idx="' + idx + '" style="font-size:10px;color:#9ca3af;text-align:right;margin-top:2px">' + (r.respuesta || '').length + ' / ' + max + '</div>' +
+      return '<div class="item" data-idx="' + idx + '" data-tipo="texto">' + cabecera +
+        '<textarea class="ap-rev-textarea" data-idx="' + idx + '" maxlength="' + max + '" rows="3">' +
+          esc(r.respuesta || '') + '</textarea>' +
+        '<p class="cuenta ap-rev-counter" data-idx="' + idx + '">' + (r.respuesta || '').length + ' / ' + max + '</p>' +
       '</div>';
     }).join('');
 
-    const avisoEsc = (contexto || 'Sin texto del aviso disponible.').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    raiz.innerHTML =
+      '<style>' +
+      ':host,*{box-sizing:border-box}' +
+      '.velo{position:fixed;inset:0;background:rgba(15,14,22,.5);display:grid;place-items:center;padding:20px;' +
+        'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}' +
+      '.panel{width:660px;max-width:100%;max-height:86vh;display:flex;flex-direction:column;' +
+        'background:#F2F3EE;color:#1B1A2E;border-radius:14px;overflow:hidden;' +
+        'box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:sube .3s cubic-bezier(.2,.8,.3,1)}' +
+      '@keyframes sube{from{opacity:0;transform:translateY(12px)}}' +
 
-    div.innerHTML =
-      // Cabecera arrastrable
-      '<div id="ap-rev-header" style="cursor:move;user-select:none;display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #e4e7ef">' +
-        '<span style="font-size:20px">*</span>' +
-        '<div style="flex:1"><div style="font-weight:700;font-size:14px">Revisar antes de enviar</div>' +
-        '<div style="font-size:11px;color:#6b7280">' + titulo.slice(0, 60) + ' - arrastra desde aqui para mover</div></div>' +
-      '</div>' +
-      // Pestanas
-      '<div style="display:flex;gap:4px;padding:10px 20px 0">' +
-        '<button class="ap-tab-btn" data-tab="aviso" style="padding:8px 14px;border:none;border-radius:8px 8px 0 0;background:#2563eb;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Aviso completo</button>' +
-        '<button class="ap-tab-btn" data-tab="respuestas" style="padding:8px 14px;border:none;border-radius:8px 8px 0 0;background:#f3f4f6;color:#4b5563;font-size:12px;font-weight:700;cursor:pointer">Preguntas y respuestas (' + respuestasLog.length + ')</button>' +
-      '</div>' +
-      '<div style="flex:1;overflow-y:auto;padding:16px 20px">' +
-        '<div class="ap-tab-content" data-tab-content="aviso" style="white-space:pre-wrap;font-size:12px;line-height:1.6;color:#374151">' + avisoEsc + '</div>' +
-        '<div class="ap-tab-content" data-tab-content="respuestas" style="display:none">' +
-          (filas || '<div style="color:#9ca3af;font-style:italic;text-align:center;padding:12px">Sin campos que mostrar</div>') +
+      /* Cabecera de tinta: se lee al tiro como algo que no es el portal */
+      '.cab{display:flex;align-items:center;gap:11px;padding:15px 20px;background:#1B1A2E;color:#ECECF3;cursor:move;user-select:none}' +
+      '.marca{width:30px;height:30px;flex:none;border-radius:8px;background:#5A2FD6;display:grid;place-items:center}' +
+      '.marca svg{width:17px;height:17px;display:block}' +
+      '.marca path{fill:none;stroke:#D6F24B;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}' +
+      '.cab h2{margin:0;font-size:14.5px;font-weight:700;letter-spacing:-.01em}' +
+      '.cab p{margin:1px 0 0;font-size:11.5px;color:#9998AC;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.agarre{margin-left:auto;flex:none;color:#5F5D77;letter-spacing:2px;font-size:13px}' +
+
+      /* Pestañas con el filo de destacador, igual que en el tablero */
+      '.pest{display:flex;gap:2px;padding:0 20px;background:#F2F3EE;border-bottom:1px solid #DFE0D8}' +
+      '.pest button{border:none;background:none;font:inherit;font-size:12.5px;font-weight:600;color:#6B6A7D;' +
+        'padding:11px 13px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}' +
+      '.pest button:hover{color:#1B1A2E}' +
+      '.pest button[aria-selected="true"]{color:#1B1A2E;border-bottom-color:#D6F24B}' +
+
+      '.cuerpo{flex:1;overflow-y:auto;padding:18px 20px}' +
+      '.aviso{white-space:pre-wrap;font-size:12.5px;line-height:1.7;color:#43415A;max-width:74ch}' +
+
+      '.item{margin-bottom:12px;padding:13px 14px;background:#fff;border:1px solid #DFE0D8;border-radius:10px}' +
+      '.item:last-child{margin-bottom:0}' +
+      '.preg{margin:0 0 7px;font-size:12.5px;font-weight:700;line-height:1.45}' +
+      '.estado{margin:0 0 9px;display:flex;align-items:center;gap:6px;font-size:11px}' +
+      '.estado i{width:6px;height:6px;border-radius:50%;flex:none;background:currentColor}' +
+      '.estado[data-tono="bueno"]{color:#17784F}' +
+      '.estado[data-tono="aviso"]{color:#9A5B00}' +
+      '.estado[data-tono="malo"]{color:#B3283C}' +
+
+      'textarea,select{width:100%;padding:9px 11px;font:inherit;font-size:12.5px;color:#1B1A2E;' +
+        'background:#FAFAF6;border:1px solid #DFE0D8;border-radius:8px;resize:vertical}' +
+      'textarea:focus,select:focus{outline:none;border-color:#5A2FD6;box-shadow:0 0 0 3px #EEE9FD}' +
+      '.cuenta{margin:4px 0 0;font-size:10.5px;color:#6B6A7D;text-align:right;font-variant-numeric:tabular-nums}' +
+      '.vacio{color:#6B6A7D;font-size:12.5px;text-align:center;padding:20px}' +
+
+      '.pie{display:flex;align-items:center;gap:10px;padding:14px 20px;background:#fff;border-top:1px solid #DFE0D8}' +
+      '.btn{font:inherit;font-size:13px;font-weight:600;border-radius:9px;padding:11px 16px;cursor:pointer;' +
+        'border:1px solid transparent;transition:transform .15s,box-shadow .2s}' +
+      '.btn:active{transform:translateY(1px)}' +
+      /* El destacador se gasta acá: es la decisión de la pantalla */
+      '.btn.enviar{flex:1;background:#D6F24B;color:#1B1A2E;border-color:#B9D62E}' +
+      '.btn.enviar:hover{transform:translateY(-1px);box-shadow:0 10px 20px -12px #B9D62E}' +
+      '.btn.saltar{background:#fff;color:#1B1A2E;border-color:#C9CABF}' +
+      '.btn.saltar:hover{border-color:#1B1A2E}' +
+      '.reloj{font-size:11.5px;color:#6B6A7D;font-variant-numeric:tabular-nums}' +
+      '.reloj b{color:#B3283C}' +
+      '@media (prefers-reduced-motion:reduce){.panel{animation:none}}' +
+      '</style>' +
+
+      '<div class="velo">' +
+        '<div class="panel" id="panel">' +
+          '<div class="cab" id="ap-rev-header" title="Arrastra para mover el panel">' +
+            '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
+            '<span style="min-width:0">' +
+              '<h2>Revisa antes de enviar</h2>' +
+              '<p>' + esc(titulo.slice(0, 80)) + '</p>' +
+            '</span>' +
+            '<span class="agarre" aria-hidden="true">⋮⋮</span>' +
+          '</div>' +
+
+          '<div class="pest" role="tablist">' +
+            '<button role="tab" aria-selected="true" class="ap-tab-btn" data-tab="respuestas">' +
+              'Respuestas (' + respuestasLog.length + ')</button>' +
+            '<button role="tab" aria-selected="false" class="ap-tab-btn" data-tab="aviso">El aviso completo</button>' +
+          '</div>' +
+
+          '<div class="cuerpo">' +
+            '<div class="ap-tab-content" data-tab-content="respuestas">' +
+              (filas || '<p class="vacio">Este formulario no tenía preguntas que responder.</p>') +
+            '</div>' +
+            '<div class="ap-tab-content" data-tab-content="aviso" style="display:none">' +
+              '<div class="aviso">' + esc(contexto || 'El portal no entregó el texto del aviso.') + '</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="pie">' +
+            '<button class="btn enviar" id="ap-rev-confirm">Confirmar y enviar</button>' +
+            '<button class="btn saltar" id="ap-rev-skip">Saltar esta oferta</button>' +
+            '<span class="reloj" id="ap-rev-reloj"></span>' +
+          '</div>' +
         '</div>' +
-      '</div>' +
-      '<div style="display:flex;gap:8px;padding:16px 20px;border-top:1px solid #e4e7ef">' +
-        '<button id="ap-rev-confirm" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">Confirmar y enviar</button>' +
-        '<button id="ap-rev-skip" style="background:#f3f4f6;color:#4b5563;border:1px solid #e4e7ef;border-radius:8px;padding:10px 16px;font-size:13px;cursor:pointer">Saltar</button>' +
       '</div>';
 
-    document.body.appendChild(div);
+    document.body.appendChild(host);
 
-    // -- Pestanas: alternar entre "Aviso completo" y "Preguntas y respuestas" --
-    div.querySelectorAll('.ap-tab-btn').forEach(btn => {
+    const panel = raiz.getElementById('panel');
+
+    // -- Pestañas: por defecto se abren las respuestas, que es lo que hay
+    //    que revisar. Antes abría el aviso completo, que es contexto. --
+    raiz.querySelectorAll('.ap-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        div.querySelectorAll('.ap-tab-btn').forEach(b => {
-          b.style.background = '#f3f4f6'; b.style.color = '#4b5563';
-        });
-        btn.style.background = '#2563eb'; btn.style.color = '#fff';
-        div.querySelectorAll('.ap-tab-content').forEach(c => {
+        raiz.querySelectorAll('.ap-tab-btn').forEach(b => b.setAttribute('aria-selected', String(b === btn)));
+        raiz.querySelectorAll('.ap-tab-content').forEach(c => {
           c.style.display = (c.dataset.tabContent === btn.dataset.tab) ? '' : 'none';
         });
       });
     });
 
-    // -- Arrastrar el panel desde la cabecera --
-    const header = div.querySelector('#ap-rev-header');
+    // -- Arrastrar desde la cabecera --
+    const header = raiz.getElementById('ap-rev-header');
     let arrastrando = false, offX = 0, offY = 0;
     const onMouseMove = e => {
       if (!arrastrando) return;
-      div.style.left = (e.clientX - offX) + 'px';
-      div.style.top = (e.clientY - offY) + 'px';
+      panel.style.left = (e.clientX - offX) + 'px';
+      panel.style.top = (e.clientY - offY) + 'px';
     };
     const onMouseUp = () => { arrastrando = false; };
     header.addEventListener('mousedown', e => {
+      const rect = panel.getBoundingClientRect();
       arrastrando = true;
-      const rect = div.getBoundingClientRect();
-      div.style.transform = 'none';
-      div.style.left = rect.left + 'px';
-      div.style.top = rect.top + 'px';
+      panel.style.position = 'fixed';
+      panel.style.margin = '0';
+      panel.style.left = rect.left + 'px';
+      panel.style.top = rect.top + 'px';
       offX = e.clientX - rect.left;
       offY = e.clientY - rect.top;
       e.preventDefault();
     });
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-    function limpiarListeners() {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    }
 
     // Contador de caracteres en vivo
-    div.querySelectorAll('.ap-rev-textarea').forEach(ta => {
+    raiz.querySelectorAll('.ap-rev-textarea').forEach(ta => {
       ta.addEventListener('input', () => {
-        const counter = div.querySelector('.ap-rev-counter[data-idx="' + ta.dataset.idx + '"]');
-        if (counter) counter.textContent = ta.value.length + ' / ' + ta.maxLength;
+        const c = raiz.querySelector('.ap-rev-counter[data-idx="' + ta.dataset.idx + '"]');
+        if (c) c.textContent = ta.value.length + ' / ' + ta.maxLength;
       });
     });
 
     function aplicarEdiciones() {
-      div.querySelectorAll('.ap-rev-textarea').forEach(ta => {
+      raiz.querySelectorAll('.ap-rev-textarea').forEach(ta => {
         const idx = +ta.dataset.idx;
         const entry = respuestasLog[idx];
         if (!entry) return;
@@ -706,7 +821,7 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
         entry.respuesta = val;
         entry.vacia = !val;
       });
-      div.querySelectorAll('.ap-rev-select').forEach(sel => {
+      raiz.querySelectorAll('.ap-rev-select').forEach(sel => {
         const idx = +sel.dataset.idx;
         const entry = respuestasLog[idx];
         if (!entry) return;
@@ -724,11 +839,37 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
       });
     }
 
-    document.getElementById('ap-rev-confirm').onclick = () => { limpiarListeners(); aplicarEdiciones(); div.remove(); resolve('confirm'); };
-    document.getElementById('ap-rev-skip').onclick = () => { limpiarListeners(); div.remove(); resolve('skip'); };
-    // Auto-confirmar tras 3 minutos (aplicando lo que se haya editado hasta ese momento) --
-    // se amplio el tiempo porque ahora tambien hay que leer el aviso completo antes de decidir.
-    setTimeout(() => { if (document.getElementById('ap-revision-panel')) { limpiarListeners(); aplicarEdiciones(); div.remove(); resolve('confirm'); } }, 180000);
+    // -- Cuenta regresiva --
+    // El panel se auto-confirma y ENVÍA a los 3 minutos. Antes eso pasaba
+    // en silencio: te ibas a buscar un café y volvías con la postulación
+    // mandada. Ahora se ve, y los últimos 30 segundos se marcan en rojo.
+    const LIMITE_MS = 180000;
+    const vence = Date.now() + LIMITE_MS;
+    const reloj = raiz.getElementById('ap-rev-reloj');
+    let tic = null;
+
+    function pintarReloj() {
+      const restan = Math.max(0, Math.round((vence - Date.now()) / 1000));
+      const mm = Math.floor(restan / 60), ss = String(restan % 60).padStart(2, '0');
+      reloj.innerHTML = restan <= 30
+        ? 'Se envía sola en <b>' + mm + ':' + ss + '</b>'
+        : 'Se envía sola en ' + mm + ':' + ss;
+      if (restan <= 0) cerrar('confirm');
+    }
+    pintarReloj();
+    tic = setInterval(pintarReloj, 1000);
+
+    function cerrar(resultado) {
+      clearInterval(tic);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      if (resultado === 'confirm') aplicarEdiciones();
+      host.remove();
+      resolve(resultado);
+    }
+
+    raiz.getElementById('ap-rev-confirm').onclick = () => cerrar('confirm');
+    raiz.getElementById('ap-rev-skip').onclick = () => cerrar('skip');
   });
 };
 
