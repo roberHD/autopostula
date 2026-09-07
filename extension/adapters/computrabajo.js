@@ -31,6 +31,55 @@ function extraerTextoAviso() {
   return texto.slice(0, 4000);
 }
 
+// ── Facetas estructuradas del aviso (docs/visibilidad-y-etapa2.md §B) ──────
+// Selectores verificados a mano contra el sitio real el 2026-09-07 (varias
+// ofertas, con y sin sueldo, presencial/remoto/híbrido) -- no adivinados.
+// Computrabajo etiqueta sueldo/contrato/jornada/modalidad como una lista de
+// <p class="dFlex mb10"> dentro de "div.mbB", cada uno con un ícono que
+// identifica el tipo -- salvo modalidad, que usa un ícono distinto según el
+// valor (i_company para presencial, i_home_office para mixto, i_home para
+// 100% remoto): por eso se identifica sueldo/contrato/jornada por su ícono
+// exacto y todo lo que sobra (el único que queda) es la modalidad, en vez de
+// enumerar cada variante posible de ese ícono.
+function extraerFacetasAviso() {
+  const panel = document.querySelector('.box_detail,[data-offers-grid-box-detail]');
+  if (!panel) return {};
+  const facetas = {};
+
+  panel.querySelectorAll('div.mbB p.dFlex.mb10').forEach((p) => {
+    const icono = p.querySelector('span.icon');
+    const claseIcono = (icono && icono.className) || '';
+    const texto = p.textContent.trim();
+    if (!texto) return;
+    if (claseIcono.includes('i_money')) facetas.sueldo = texto;
+    else if (claseIcono.includes('i_find')) facetas.contrato = texto;
+    else if (claseIcono.includes('i_clock')) facetas.jornada = texto;
+    else facetas.modalidad = texto;
+  });
+
+  // Rating de la empresa: "<span class=fwB>4</span>" + "<span class=fc_aux_light>103 evaluaciones</span>"
+  // dentro de ".header_detail" -- ausente en avisos de empresas sin evaluaciones (no revienta).
+  const ratingEl = panel.querySelector('.header_detail .mr10 .fwB');
+  const evaluacionesEl = panel.querySelector('.header_detail .fc_aux_light');
+  if (ratingEl && ratingEl.textContent.trim()) {
+    const num = parseFloat(ratingEl.textContent.trim().replace(',', '.'));
+    if (!isNaN(num)) facetas.ratingEmpresa = num;
+  }
+  if (evaluacionesEl && evaluacionesEl.textContent.trim()) {
+    const m = evaluacionesEl.textContent.match(/\d+/);
+    if (m) facetas.evaluaciones = parseInt(m[0], 10);
+  }
+
+  // Extracto de la descripción real -- "div.fs16.t_word_wrap" es el único
+  // nodo con esa combinación de clases dentro del panel de detalle.
+  const desc = panel.querySelector('div.fs16.t_word_wrap');
+  if (desc && desc.textContent.trim()) {
+    facetas.extracto = desc.textContent.trim().split(/\s+/).slice(0, 300).join(' ');
+  }
+
+  return facetas;
+}
+
 // ── ID único de tarjeta ───────────────────────────────────────
 function getId(tarjeta, idx) {
   const did = tarjeta.getAttribute('data-id') || tarjeta.getAttribute('data-blind') || '';

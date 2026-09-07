@@ -125,6 +125,66 @@ function extraerTextoAviso() {
   return texto.slice(0, 4000) || (document.body.innerText || '').slice(0, 4000);
 }
 
+// ── Facetas estructuradas del aviso (docs/visibilidad-y-etapa2.md §B) ──────
+// Selectores verificados a mano contra el sitio real el 2026-09-07 (varias
+// ofertas, con y sin sueldo, remoto/presencial). Laborum es un SPA hecho con
+// styled-components: las clases son hashes que cambian en cada build (a
+// diferencia de Computrabajo, acá NO hay ningún ícono ni atributo data-*
+// estable para identificar cada faceta), así que en vez de las clases se usa
+// #ficha-detalle (id fijo, delimita el aviso principal y excluye la barra de
+// "empleos relacionados") y, dentro de ese contenedor, el único elemento con
+// aria-label="Información adicional del aviso" -- ese sí es estable porque
+// es semántico (accesibilidad), no de estilo. Cada <li> de esa lista se
+// clasifica por su propio texto (vocabulario cerrado que el portal ya
+// etiquetó -- remoto/presencial/híbrido, "full-time, indeterminado", "$..."
+// -- no es grepear la descripción libre del aviso).
+function extraerFacetasAviso() {
+  const ficha = document.getElementById('ficha-detalle') || document.body;
+  const facetas = {};
+
+  const ul = ficha.querySelector('ul[aria-label="Información adicional del aviso"]');
+  if (ul) {
+    for (const li of ul.querySelectorAll('li')) {
+      const texto = li.textContent.trim();
+      if (!texto) continue;
+      if (/^(remoto|presencial|h[ií]brido)/i.test(texto)) {
+        facetas.modalidad = texto;
+      } else if (texto.includes('$')) {
+        facetas.sueldo = texto;
+      } else if (/full-?time|part-?time|por horas|jornada/i.test(texto)) {
+        // Laborum junta jornada y contrato en un solo <li>, separados por coma
+        // (ej: "Full-time, Indeterminado").
+        const partes = texto.split(',').map((s) => s.trim()).filter(Boolean);
+        if (partes[0]) facetas.jornada = partes[0];
+        if (partes[1]) facetas.contrato = partes[1];
+      }
+    }
+  }
+
+  // "Publicado hace X" / "Actualizado hace X" -- sin selector propio (mismo
+  // problema de clases hasheadas), se busca por el texto completo de la
+  // etiqueta dentro de #ficha-detalle (no del body entero, que trae los
+  // "hace" de los avisos relacionados en la barra lateral).
+  const walker = document.createTreeWalker(ficha, NodeFilter.SHOW_TEXT);
+  let nodo;
+  while ((nodo = walker.nextNode())) {
+    const t = nodo.textContent.trim();
+    if (/^(Publicado|Actualizado)( el)? hace /i.test(t)) { facetas.publicadaHace = t; break; }
+  }
+
+  // Rating de empresa: no verificado -- en los avisos revisados Laborum no
+  // mostraba calificación de la empresa en la página del aviso (a diferencia
+  // de Computrabajo). Se deja sin implementar en vez de adivinar un selector
+  // nunca visto (§B: "no inventarlos").
+
+  const desc = ficha.querySelector('#descripcion-aviso');
+  if (desc && desc.textContent.trim()) {
+    facetas.extracto = desc.textContent.trim().split(/\s+/).slice(0, 300).join(' ');
+  }
+
+  return facetas;
+}
+
 // AP.vistos vive solo en memoria y core.js lo resetea cada vez que el content
 // script se vuelve a inyectar — cosa que en Laborum pasa en CADA navegación
 // real (a diferencia de Computrabajo, que nunca sale de la página). Por eso
