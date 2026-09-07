@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Landmark, ShieldCheck, CreditCard, Lock } from "lucide-react";
+import { ArrowLeft, Landmark, ShieldCheck, CreditCard, Lock, TriangleAlert } from "lucide-react";
 import { useAvisos } from "@/components/Avisos";
 
 const PRECIO = "$3.990";
@@ -111,6 +111,20 @@ export default function PagoPremiumPage() {
         <p className="ap-page-sub">
           Cargo automático mensual a tu cuenta bancaria. Puedes cancelarlo cuando quieras desde Ajustes.
         </p>
+      </div>
+
+      {/* Esta pantalla se ve igual que una que funciona. Sin el cartel, alguien
+          puede escribir su cuenta de verdad creyendo que se esta suscribiendo.
+          Se quita cuando el cobro quede conectado. */}
+      <div className="ap-cartel-maqueta" role="status">
+        <TriangleAlert size={17} />
+        <div>
+          <p className="ap-cartel-maqueta__t">Vista previa — todavía no funciona</p>
+          <p className="ap-cartel-maqueta__d">
+            Esta pantalla es solo el diseño. No escribas datos bancarios reales: nada de lo que
+            pongas acá se envía, se cobra ni se guarda.
+          </p>
+        </div>
       </div>
 
       <div className="ap-fila-2">
