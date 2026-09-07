@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Building2, TriangleAlert } from "lucide-react";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
+import { formatearRazon } from "@/lib/formatear-razon";
 
 type DecisionGris = {
   id: string;
@@ -11,7 +12,9 @@ type DecisionGris = {
   empresa: string | null;
   plataforma: string | null;
   scoreLocal: number | null;
-  razones: string[] | null;
+  // Json?: strings de filas viejas, u objetos estructurados nuevos (§C) --
+  // formatearRazon() acepta ambas formas.
+  razones: unknown[] | null;
   venceEn: string | null;
 };
 
@@ -137,8 +140,8 @@ export default function PorDecidirPage() {
                 </div>
                 {Array.isArray(item.razones) && item.razones.length > 0 && (
                   <ul className="ap-razones">
-                    {(item.razones as string[]).map((r, i) => (
-                      <li key={i}>{r}</li>
+                    {(item.razones as unknown[]).map((r, i) => (
+                      <li key={i}>{formatearRazon(r)}</li>
                     ))}
                   </ul>
                 )}

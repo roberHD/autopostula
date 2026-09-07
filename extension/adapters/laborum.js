@@ -418,11 +418,14 @@ async function escanear() {
         scoreLocal: resultado.score, razones: resultado.razones,
       });
     } else {
+      // §C: la razón del scorer es un objeto estructurado -- se guarda tal
+      // cual para el desglose del overlay (agrupa por tipo) y se formatea
+      // recién para el log.
       conteos.descartar++;
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
       AP.vistos.add(id);
-      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: razon });
+      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: AP.formatearRazonCorta(razon) });
     }
   });
   reportarTitulosVistos(titulosVistos, 'Laborum');
