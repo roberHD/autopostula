@@ -72,7 +72,6 @@ export default function PagoPremiumPage() {
   const [numeroCuenta, setNumeroCuenta] = useState("");
   const [email, setEmail] = useState("");
   const [autoriza, setAutoriza] = useState(false);
-  const [redirigiendo, setRedirigiendo] = useState(false);
 
   const errores = {
     titular: titular.trim().length > 0 && titular.trim().length < 5,
@@ -89,23 +88,13 @@ export default function PagoPremiumPage() {
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
     autoriza;
 
-  // El checkout con tarjeta sigue siendo el de Flow: es su página alojada, los
-  // datos de la tarjeta no pasan por acá.
-  async function pagarConTarjeta() {
-    setRedirigiendo(true);
-    try {
-      const res = await fetch("/api/flow/checkout", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || !data.url) {
-        avisarError("No pudimos continuar", data.error ?? "Intenta de nuevo en un momento.");
-        setRedirigiendo(false);
-        return;
-      }
-      window.location.href = data.url;
-    } catch {
-      avisarError("No pudimos continuar", "Revisa tu conexión y vuelve a intentar.");
-      setRedirigiendo(false);
-    }
+  // MAQUETA: ningún botón de esta pantalla manda datos a ninguna parte. No hay
+  // fetch, ni endpoint, ni escritura en base. Solo avisa y no hace nada más.
+  function soloMaqueta() {
+    avisarError(
+      "Todavía es una maqueta",
+      "Esta pantalla es solo el diseño — no envía ni guarda ningún dato."
+    );
   }
 
   return (
@@ -140,7 +129,7 @@ export default function PagoPremiumPage() {
                 value={titular}
                 onChange={(e) => setTitular(e.target.value)}
                 placeholder="Como aparece en tu cuenta"
-                autoComplete="name"
+                autoComplete="off"
               />
               {errores.titular && <p className="ap-error-campo">Escribe el nombre completo.</p>}
             </div>
@@ -155,6 +144,7 @@ export default function PagoPremiumPage() {
                   onChange={(e) => setRut(formatearRut(e.target.value))}
                   placeholder="12.345.678-5"
                   inputMode="text"
+                  autoComplete="off"
                 />
                 {errores.rut && <p className="ap-error-campo">Ese RUT no es válido.</p>}
               </div>
@@ -201,6 +191,7 @@ export default function PagoPremiumPage() {
                 onChange={(e) => setNumeroCuenta(e.target.value.replace(/[^\d\s-]/g, ""))}
                 placeholder="Solo números, sin puntos ni guiones"
                 inputMode="numeric"
+                autoComplete="off"
               />
               {errores.numeroCuenta && <p className="ap-error-campo">Revisa el número — parece incompleto.</p>}
             </div>
@@ -214,7 +205,7 @@ export default function PagoPremiumPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="tu@correo.com"
-                autoComplete="email"
+                autoComplete="off"
               />
               {errores.email && <p className="ap-error-campo">Ese correo no se ve bien.</p>}
             </div>
@@ -254,14 +245,7 @@ export default function PagoPremiumPage() {
             <button
               className="ap-gradient-accent ap-boton-pagar"
               disabled={!completo}
-              onClick={() => {
-                // Todavía no hay a dónde mandarlo: falta decidir si el mandato
-                // de cargo automático se registra por Flow o por otro medio.
-                avisarError(
-                  "Falta conectar el cobro",
-                  "El formulario está listo, pero el registro del cargo automático todavía no está enchufado."
-                );
-              }}
+              onClick={soloMaqueta}
             >
               <Lock size={13} /> Autorizar el cargo
             </button>
@@ -278,12 +262,10 @@ export default function PagoPremiumPage() {
             </p>
             <button
               className="ap-button-ghost"
-              onClick={pagarConTarjeta}
-              disabled={redirigiendo}
+              onClick={soloMaqueta}
               style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "center" }}
             >
-              <CreditCard size={14} />
-              {redirigiendo ? "Un momento…" : "Pagar con tarjeta"}
+              <CreditCard size={14} /> Pagar con tarjeta
             </button>
           </div>
 
