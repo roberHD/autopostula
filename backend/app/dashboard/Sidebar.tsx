@@ -78,10 +78,10 @@ export default function Sidebar({ userName }: { userName: string }) {
   return (
     <>
       <div className="ap-mobile-topbar">
-        <div className="ap-mobile-topbar-brand">
+        <Link href="/dashboard" className="ap-mobile-topbar-brand ap-brand-link" aria-label="AutoPostula — ir al inicio">
           <Marca tam={26} />
           AutoPostula
-        </div>
+        </Link>
         <button
           type="button"
           className="ap-mobile-menu-btn"
@@ -99,11 +99,13 @@ export default function Sidebar({ userName }: { userName: string }) {
 
       <aside className={"ap-sidebar" + (menuAbierto ? " ap-sidebar-open" : "")}>
       <div className="ap-brand">
-        <Marca tam={32} />
-        <div>
-          <div className="ap-brand-name">AutoPostula</div>
-          <div className="ap-brand-sub">Chile</div>
-        </div>
+        <Link href="/dashboard" className="ap-brand-link" aria-label="AutoPostula — ir al inicio">
+          <Marca tam={32} />
+          <div>
+            <div className="ap-brand-name">AutoPostula</div>
+            <div className="ap-brand-sub">Chile</div>
+          </div>
+        </Link>
         <button
           type="button"
           className="ap-mobile-menu-btn"
