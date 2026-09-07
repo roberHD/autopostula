@@ -709,9 +709,15 @@ async function escanear() {
     }
   }
 
-  // Filtro inteligente con IA: descarta ofertas que no calzan con el cargo que busca el
-  // candidato aunque el titulo no comparta ninguna palabra clave literal con los tags.
-  if (AP.cfg.usarIAFiltros && AP.iaDisponible && pendientes.length) {
+  // Filtro inteligente con IA (legacy): descarta ofertas que no calzan con el cargo que
+  // busca el candidato aunque el titulo no comparta ninguna palabra clave literal con
+  // los tags. Reemplazado por el scorer local + Etapa 2 (docs/visibilidad-y-etapa2.md
+  // §G) -- si el scorer está activo, correr los dos es plata (esto cobra por llamada) y
+  // el objetivo-como-texto-libre de acá puede vetar algo que el scorer ya aprobó con el
+  // objetivo declarado (§C). Solo tiene sentido como red de respaldo cuando el scorer
+  // está apagado.
+  const usarScorerLocal = !!(AP.cfg.scorer && AP.cfg.scorer.usarScorerLocal);
+  if (!usarScorerLocal && AP.cfg.usarIAFiltros && AP.iaDisponible && pendientes.length) {
     const objetivo = await obtenerObjetivoLaboral();
     if (objetivo) {
       msg('IA filtrando ' + pendientes.length + ' ofertas…', '#7C3AED');

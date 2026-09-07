@@ -11,8 +11,8 @@
 |---|---|---|
 | [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ✅ **Implementado** |
 | [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ✅ **Implementado** |
-| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | 🔨 **Pendiente — es lo que sigue** |
-| [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 Pendiente |
+| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ✅ **Implementado** |
+| [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 Pendiente — §3 (capturar la corrección) ya está |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -59,6 +59,22 @@ sistema hoy.
 - **`perfilDesactualizado`** — si la recompilación falla, todo va a banda gris en vez de
   descartarse en silencio.
 
+### Visibilidad y Etapa 2
+
+- **Desglose del overlay** (`AP.mensajeEscaneo`, `extension/core.js`) — "2 postuladas · 6 por
+  decidir · 12 descartadas" en vez de "0 de 20 coinciden", con la razón de descarte más frecuente.
+- **Razones estructuradas** — el scorer emite objetos (`{tipo, ...}`) en vez de texto ya
+  formateado; cada superficie (log, overlay, tarjeta) los renderiza a su manera
+  (`backend/lib/formatear-razon.ts`). Las filas viejas en string siguen renderizando.
+- **Etapa 2** (`extraerFacetasAviso()`) — antes de mandar una oferta gris a la cola de decisión,
+  la extensión abre el aviso (facetas + cuerpo real) y vuelve a puntuar; si resuelve, se aplica
+  esa banda; si sigue en gris, se guarda con el detalle del aviso (`DecisionOferta.detalleAviso`).
+- **Tarjeta de "Por decidir" enriquecida** — comuna real, chips de jornada/modalidad/contrato,
+  sueldo, antigüedad, rating de la empresa, extracto, y las razones como intercambio
+  "a favor / en contra". Degrada bien en filas sin Etapa 2 o de antes del cambio.
+- **Filtro de IA viejo** — solo corre si el scorer local está desactivado (`!usarScorerLocal`);
+  antes podía vetar ofertas que el scorer ya había aprobado con el objetivo declarado.
+
 ### Costos
 
 El rediseño llevó el costo de IA de **~US$3,40 a ~US$0,58 por usuario premium al mes**
@@ -68,34 +84,21 @@ El rediseño llevó el costo de IA de **~US$3,40 a ~US$0,58 por usuario premium 
 
 ## Lo que sigue
 
-### 1. Visibilidad y Etapa 2 — [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md)
+### 1. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 
-En orden. Los pasos 1, 2 y 3 son independientes entre sí.
+El paso 1 (§3, capturar `respuestaIa`/`fueEditada` de verdad) ya está — era chico y urgente,
+se hizo fuera de orden. Queda el resto, en orden:
 
-| # | Tarea | §  |
-|---|---|---|
-| **1** | **Desglose en el overlay** — "2 postuladas · 6 por decidir · 12 descartadas" en vez de "0 de 20 coinciden" | §A |
-| 2 | Razones estructuradas — hoy dicen "fuera de las comunas que buscas" sin decir cuál comuna | §C |
-| 3 | `extraerFacetasAviso()` con selectores verificados contra el sitio real | §B |
-| 4 | Etapa 2 en el bucle de escaneo, solo para banda gris | §B |
-| 5 | `detalleAviso` en el esquema y en el reporte de banda gris | §E |
-| 6 | Tarjeta de "Por decidir" enriquecida | §D |
-| 7 | Sacar el filtro de IA viejo del bucle de escaneo | §G |
-
-> **El paso 1 va primero.** Sin él no se puede verificar nada de lo demás: el overlay no dice si
-> una oferta se descartó o quedó en gris, así que cualquier prueba es a ciegas.
-
-### 1b. Capturar las correcciones — [`banco-de-preguntas.md`](banco-de-preguntas.md) §3
-
-**Fuera de orden a propósito: es de pocas líneas y hay que hacerlo ya.**
-
-Hoy `applications/route.ts:161` guarda `respuestaIa` y `respuestaFinal` con el mismo valor y
-`fueEditada` siempre en `false`. Cada vez que alguien edita una respuesta en el modo revisión, se
-está generando un dataset de correcciones etiquetadas —lo más caro de conseguir en un sistema
-así— y se pierde.
-
-Todo el resto de ese documento se construye encima de este dato. Mientras no esté, cada
-postulación revisada es señal perdida para siempre.
+| # | Tarea | § | Depende de |
+|---|---|---|---|
+| ~~1~~ | ~~Capturar `respuestaIa` / `fueEditada` de verdad~~ | §3 | ✅ Hecho |
+| 2 | Normalización determinista de preguntas | §4.1 | — |
+| 3 | Semilla de ~20 preguntas canónicas escrita a mano | §4.2 | Lo escribe Roberto |
+| 4 | Clasificador de preguntas contra la semilla, con `ninguna` | §4.2 | 2, 3 |
+| 5 | `PreguntaCanonica` + `RespuestaGuardada` en el esquema | §10 | 3 |
+| 6 | Pantalla de pre-respuestas + reuso en el flujo de postulación | §5 | 4, 5 — **el pago de todo** |
+| 7 | Detección de patrones → `StyleRefinement` | §6 | 1 |
+| 8 | Chequeo de coherencia | §7 | 5 |
 
 ### 2. Lanzamiento
 
