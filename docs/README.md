@@ -12,6 +12,7 @@
 | [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ✅ **Implementado** |
 | [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ✅ **Implementado** |
 | [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | 🔨 **Pendiente — es lo que sigue** |
+| [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 Pendiente |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -83,6 +84,18 @@ En orden. Los pasos 1, 2 y 3 son independientes entre sí.
 
 > **El paso 1 va primero.** Sin él no se puede verificar nada de lo demás: el overlay no dice si
 > una oferta se descartó o quedó en gris, así que cualquier prueba es a ciegas.
+
+### 1b. Capturar las correcciones — [`banco-de-preguntas.md`](banco-de-preguntas.md) §3
+
+**Fuera de orden a propósito: es de pocas líneas y hay que hacerlo ya.**
+
+Hoy `applications/route.ts:161` guarda `respuestaIa` y `respuestaFinal` con el mismo valor y
+`fueEditada` siempre en `false`. Cada vez que alguien edita una respuesta en el modo revisión, se
+está generando un dataset de correcciones etiquetadas —lo más caro de conseguir en un sistema
+así— y se pierde.
+
+Todo el resto de ese documento se construye encima de este dato. Mientras no esté, cada
+postulación revisada es señal perdida para siempre.
 
 ### 2. Lanzamiento
 
