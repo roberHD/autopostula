@@ -209,5 +209,34 @@ const perfil = {
   check('veto solo en el cuerpo sí penaliza (no postula directo)', r.banda !== 'postular');
 }
 
+// 16. AP.mensajeEscaneo / AP.razonMasFrecuente (docs/visibilidad-y-etapa2.md
+// §A): el overlay pasó de "X de Y coinciden" (solo contaba postular) a un
+// desglose de las tres bandas más la razón de descarte más frecuente.
+{
+  const r = AP.mensajeEscaneo({ postular: 2, gris: 6, descartar: 12 }, 'no calza con "desarrollador de software"');
+  check('desglose: cuenta las tres bandas', r.texto === '2 postuladas · 6 por decidir · 12 descartadas — la mayoría: no calza con "desarrollador de software"');
+  check('desglose: estado ok cuando hubo postulaciones', r.estado === 'ok');
+}
+{
+  const r = AP.mensajeEscaneo({ postular: 0, gris: 3, descartar: 5 }, 'fuera de tus comunas');
+  check('sin postulaciones pero con grises -> estado pendiente (no ok, no neutral)', r.estado === 'pendiente');
+}
+{
+  const r = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 8 }, 'no calza con tus filtros');
+  check('todo descartado -> estado neutral (no es un error)', r.estado === 'neutral');
+}
+{
+  const r = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 0 }, null);
+  check('nada visto -> mensaje "Sin ofertas nuevas" sin razón', r.texto === 'Sin ofertas nuevas' && r.estado === 'neutral');
+}
+{
+  const razon = AP.razonMasFrecuente(['fuera de tus comunas', 'no calza con tus filtros', 'fuera de tus comunas']);
+  check('razón más frecuente cuenta repeticiones, no solo la primera', razon === 'fuera de tus comunas');
+}
+{
+  const razon = AP.razonMasFrecuente([]);
+  check('lista vacía de razones no revienta, devuelve null', razon === null);
+}
+
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));
 process.exit(fallos === 0 ? 0 : 1);

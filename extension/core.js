@@ -41,6 +41,12 @@ const AP_ESTADOS = {
   ok:         { punto: '#5BD59B', late: true },
   trabajando: { punto: '#D6F24B', late: true },
   error:      { punto: '#FF8A9B', late: false },
+  // docs/visibilidad-y-etapa2.md §A: el resumen de un escaneo necesita un
+  // tercer y cuarto matiz que 'ok'/'trabajando'/'error' no cubrían -- "hay
+  // banda gris pendiente" no es ni éxito ni error, y "todo se descartó" no
+  // es un error tampoco, solo no hubo nada que hacer.
+  pendiente:  { punto: '#60A5FA', late: false },
+  neutral:    { punto: '#8B8AA0', late: false },
 };
 
 // Los colores viejos se siguen aceptando: hay llamadas con hex por todo
@@ -98,6 +104,41 @@ AP.msg = function (texto, estado) {
 };
 
 AP.limpiarOverlay = function () { if (ov) { ov.remove(); ov = null; ovRaiz = null; } };
+
+// ── Mensaje de resumen al terminar un escaneo (docs/visibilidad-y-etapa2.md §A) ──
+// Antes cada adaptador decía "X de 20 coinciden", contando solo la banda
+// 'postular' -- "0 de 20" podía ser 20 descartadas, 20 en gris, o cualquier
+// mezcla, y la razón real ya se calculaba (iba a addLog por oferta) pero
+// nunca se mostraba donde la persona está mirando. Compartido entre los dos
+// adaptadores para no duplicar el armado del texto ni los umbrales de color.
+AP.mensajeEscaneo = function (conteos, razonTop) {
+  const c = conteos || {};
+  const partes = [];
+  if (c.postular) partes.push(c.postular + (c.postular === 1 ? ' postulada' : ' postuladas'));
+  if (c.gris) partes.push(c.gris + ' por decidir');
+  if (c.descartar) partes.push(c.descartar + (c.descartar === 1 ? ' descartada' : ' descartadas'));
+
+  let texto = partes.length ? partes.join(' · ') : 'Sin ofertas nuevas';
+  if (razonTop) texto += ' — la mayoría: ' + razonTop;
+
+  const estado = c.postular > 0 ? 'ok' : c.gris > 0 ? 'pendiente' : 'neutral';
+  return { texto: texto, estado: estado };
+};
+
+// Cuenta la razón más frecuente de una lista (las de descarte, típicamente).
+// Toma solo la PRIMERA razón de cada oferta -- razones[] puede traer varias
+// (§C: futuro), pero para "la razón más frecuente" alcanza con la principal.
+AP.razonMasFrecuente = function (razones) {
+  const conteo = new Map();
+  let top = null, topN = 0;
+  for (const r of razones) {
+    if (!r) continue;
+    const n = (conteo.get(r) || 0) + 1;
+    conteo.set(r, n);
+    if (n > topN) { topN = n; top = r; }
+  }
+  return top;
+};
 
 // ── Helpers básicos ───────────────────────────────────────────────
 AP.sleep = function (ms) { return new Promise(r => setTimeout(r, ms)); };

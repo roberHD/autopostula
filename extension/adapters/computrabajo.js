@@ -563,6 +563,10 @@ async function escanear() {
   let pendientes = [];
   const titulosVistos = [];
   const avistamientos = [];
+  // Desglose del escaneo (§A): se cuentan las tres bandas y se junta la razón
+  // de cada descarte, para poder mostrar cuál fue la más frecuente al final.
+  const conteos = { postular: 0, gris: 0, descartar: 0 };
+  const razonesDescartadas = [];
   tarjetas.forEach((t, idx) => {
     const id = getId(t, idx);
     if (AP.vistos.has(id)) return;
@@ -587,6 +591,7 @@ async function escanear() {
     } else if (resultado.banda === 'gris') {
       // Banda gris (§8): no se descarta ni se postula sola -- va a la cola de
       // decisión del usuario en el dashboard.
+      conteos.gris++;
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'En banda gris — revisar en el dashboard'});
       AP.reportarBandaGris({
@@ -596,8 +601,11 @@ async function escanear() {
     } else {
       // Descartada -- con razón real si vino del scorer (§13: "el log de
       // descarte hoy no explica nada"), o el mensaje genérico del filtro viejo.
+      conteos.descartar++;
+      const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
+      razonesDescartadas.push(razon);
       AP.vistos.add(id);
-      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:(resultado.razones && resultado.razones[0]) || 'No calza con tus filtros'});
+      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:razon});
     }
   });
   reportarTitulosVistos(titulosVistos, 'Computrabajo');
@@ -618,7 +626,14 @@ async function escanear() {
     }
   }
 
-  msg(pendientes.length + ' de ' + tarjetas.length + ' coinciden', '#16A34A');
+  {
+    // conteos.postular se fija recién acá, después del filtro de IA viejo (si
+    // estuviera activo) -- para que el mensaje nunca diga más de lo que
+    // realmente va a pasar.
+    conteos.postular = pendientes.length;
+    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas));
+    msg(resumen.texto, resumen.estado);
+  }
   if (!pendientes.length) {
     if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return; // navegando a la página siguiente
     return;

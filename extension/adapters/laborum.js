@@ -389,6 +389,10 @@ async function escanear() {
   const pendientes = [];
   const titulosVistos = [];
   const avistamientos = [];
+  // Desglose del escaneo (§A): se cuentan las tres bandas y se junta la razón
+  // de cada descarte, para poder mostrar cuál fue la más frecuente al final.
+  const conteos = { postular: 0, gris: 0, descartar: 0 };
+  const razonesDescartadas = [];
   candidatas.forEach(a => {
     const id = getIdDeTarjeta(a);
     if (yaProcesada(id)) return;
@@ -406,6 +410,7 @@ async function escanear() {
     if (resultado.banda === 'postular') {
       pendientes.push({ a, id, titulo, url: a.href });
     } else if (resultado.banda === 'gris') {
+      conteos.gris++;
       AP.vistos.add(id);
       addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: 'En banda gris — revisar en el dashboard' });
       AP.reportarBandaGris({
@@ -413,14 +418,21 @@ async function escanear() {
         scoreLocal: resultado.score, razones: resultado.razones,
       });
     } else {
+      conteos.descartar++;
+      const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
+      razonesDescartadas.push(razon);
       AP.vistos.add(id);
-      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros' });
+      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: razon });
     }
   });
   reportarTitulosVistos(titulosVistos, 'Laborum');
   AP.reportarAvistamientos(avistamientos, 'Laborum');
 
-  msg(pendientes.length + ' de ' + candidatas.length + ' coinciden', '#16A34A');
+  conteos.postular = pendientes.length;
+  {
+    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas));
+    msg(resumen.texto, resumen.estado);
+  }
   if (!pendientes.length) {
     // Nada más que hacer en esta página -- si es una búsqueda automática
     // (pestaña oculta), sigue a la próxima página del listado en vez de
