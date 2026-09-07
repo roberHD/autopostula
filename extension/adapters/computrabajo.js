@@ -300,12 +300,12 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
     if (elegida) {
       if (seleccionarOpcion(elegida.el)) {
         interacciones++;
-        respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
+        respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       }
     } else if (AP.iaDisponible && pregunta.length > 5) {
       pendientesIA.push({ pregunta, opciones });
     } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
+      respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
     }
   }
 
@@ -328,12 +328,12 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
       if (elegida) {
         if (!elegida.el.checked && seleccionarOpcion(elegida.el)) {
           interacciones++;
-          respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
+          respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
         }
       } else if (AP.iaDisponible && pregunta.length > 5) {
         pendientesIA.push({ pregunta, opciones });
       } else if (pregunta) {
-        respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
+        respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
       }
     }
   }
@@ -354,12 +354,12 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
     if (elegida) {
       if (seleccionarOpcion(elegida.el)) {
         interacciones++;
-        respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
+        respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       }
     } else if (AP.iaDisponible && pregunta.length > 5) {
       pendientesIA.push({ pregunta, opciones });
     } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
+      respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
     }
   }
 
@@ -380,9 +380,9 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
       }
       if (elegida && seleccionarOpcion(elegida.el)) {
         interacciones++;
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
       } else {
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
       }
       await sleep(250);
     }
@@ -395,7 +395,11 @@ function aplicarValorTexto(el, val, labelRaw, fueIA, respuestasLog) {
   val = limitarTexto(val, el);
   el.scrollIntoView({ block:'nearest' });
   setVal(el, val);
-  respuestasLog.push({ pregunta: labelRaw, respuesta: val, fueIA, tipo:'texto', el });
+  // respuestaIa se escribe una vez acá y no se vuelve a tocar -- aplicarEdiciones()
+  // (core.js) solo pisa `respuesta` cuando el modo revisión corrige el texto. Sin
+  // esto, la corrección de la persona pisaba también lo que generó la IA y esa
+  // señal (docs/banco-de-preguntas.md §3) se perdía para siempre.
+  respuestasLog.push({ pregunta: labelRaw, respuesta: val, respuestaIa: val, fueIA, tipo:'texto', el });
 }
 
 // ── Rellenar formulario ───────────────────────────────────────
@@ -452,7 +456,7 @@ async function rellenar(contexto) {
     } else if (AP.iaDisponible && labelRaw.length > 5) {
       pendientesTexto.push({ el, labelRaw });
     } else if (labelRaw.length > 5) {
-      respuestasLog.push({ pregunta: labelRaw, respuesta: '', vacia: true, tipo:'texto', el, errorIA: null });
+      respuestasLog.push({ pregunta: labelRaw, respuesta: '', respuestaIa: '', vacia: true, tipo:'texto', el, errorIA: null });
     }
   }
 
@@ -473,7 +477,7 @@ async function rellenar(contexto) {
         n2++;
         aplicarValorTexto(pd.el, pd.fallback, pd.labelRaw, false, respuestasLog);
       } else {
-        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', vacia: true, tipo:'texto', el: pd.el, errorIA: resultado.error });
+        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', respuestaIa: '', vacia: true, tipo:'texto', el: pd.el, errorIA: resultado.error });
       }
       await sleep(250);
     }
@@ -560,8 +564,11 @@ async function postular(url, id, titulo, decisionOfertaId) {
       btnEnviar.click();
       await sleep(2000);
       // Log con resumen de respuestas
-      // Quitar referencias al DOM (el, elegidoEl, opciones) antes de guardar — no son serializables
-      const respuestasParaLog = respuestasLog.map(r => ({ pregunta:r.pregunta, respuesta:r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
+      // Quitar referencias al DOM (el, elegidoEl, opciones) antes de guardar — no son serializables.
+      // respuestaIa/fueEditada (docs/banco-de-preguntas.md §3): sin esto el backend
+      // guardaba respuestaIa == respuestaFinal siempre, y la corrección de la
+      // persona en modo revisión (la señal más valiosa del dataset) se perdía.
+      const respuestasParaLog = respuestasLog.map(r => ({ pregunta:r.pregunta, respuestaIa:r.respuestaIa, respuesta:r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
       const resumen = respuestasParaLog.filter(r => r.respuesta).map(r => r.pregunta.slice(0,30) + ': ' + r.respuesta.slice(0,40)).join(' | ');
       addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id,
         reason:'Enviado (' + n2 + ' campos)',

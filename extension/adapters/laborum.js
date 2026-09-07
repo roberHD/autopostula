@@ -292,9 +292,13 @@ async function rellenarYEnviarPreguntas(contexto) {
       // el botón sigue deshabilitado.
       info.ta.blur();
       info.ta.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-      respuestasLog.push({ pregunta: info.pregunta, respuesta: valLimitado, fueIA: true, tipo: 'texto', el: info.ta });
+      // respuestaIa se escribe una vez acá y nunca se vuelve a tocar --
+      // aplicarEdiciones() (core.js) solo pisa `respuesta` en modo revisión
+      // (docs/banco-de-preguntas.md §3: sin esto la corrección de la persona
+      // pisaba también lo que generó la IA).
+      respuestasLog.push({ pregunta: info.pregunta, respuesta: valLimitado, respuestaIa: valLimitado, fueIA: true, tipo: 'texto', el: info.ta });
     } else {
-      respuestasLog.push({ pregunta: info.pregunta, respuesta: '', vacia: true, tipo: 'texto', el: info.ta, errorIA: resultado.error });
+      respuestasLog.push({ pregunta: info.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo: 'texto', el: info.ta, errorIA: resultado.error });
     }
     await sleep(300);
   }
@@ -310,9 +314,9 @@ async function rellenarYEnviarPreguntas(contexto) {
     }
     if (elegida && seleccionarOpcion(elegida.el)) {
       elegida.el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: elegida.texto, fueIA: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: elegida.el });
+      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, fueIA: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: elegida.el });
     } else {
-      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: '', vacia: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: null, errorIA: resultado.error });
+      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: null, errorIA: resultado.error });
     }
     await sleep(300);
   }
@@ -393,21 +397,27 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
       addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: 'Saltada en revisión manual' });
       return { ok: false, expirada: false };
     }
+    // respuestaIa/fueEditada (docs/banco-de-preguntas.md §3): sin esto el
+    // backend guardaba respuestaIa == respuestaFinal siempre, y la corrección
+    // de la persona en modo revisión (la señal más valiosa del dataset) se
+    // perdía para siempre.
+    const paraLog = (r) => ({ pregunta: r.pregunta, respuestaIa: r.respuestaIa, respuesta: r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia: r.vacia, fueIA: r.fueIA });
+
     if (resultado.errorEnvio) {
-      const respuestasParaLog = resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia }));
+      const respuestasParaLog = resultado.respuestasLog.map(paraLog);
       marcarIncompleta(id, titulo, url, resultado.errorEnvio, respuestasParaLog, decisionOfertaId);
       return { ok: false, expirada: false };
     }
 
     const ok = await esperarConfirmacion();
     if (ok) {
-      const respuestasParaLog = resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia, fueIA: r.fueIA }));
+      const respuestasParaLog = resultado.respuestasLog.map(paraLog);
       addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación con preguntas enviada', respuestas: respuestasParaLog });
       reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, matchScore: resultado.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
       msg('✓ ' + titulo.slice(0, 40), '#16A34A');
       return { ok: true, expirada: false };
     }
-    marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia })), decisionOfertaId);
+    marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(paraLog), decisionOfertaId);
     return { ok: false, expirada: false };
   }
 
