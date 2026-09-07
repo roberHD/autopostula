@@ -1,11 +1,15 @@
 'use strict';
 
 const statusCfg = {
-  ok:      { label: 'Postulada',  color: '#17784F', bg: '#E2F3EA' },
-  pending: { label: 'Pendiente',  color: '#9A5B00', bg: '#FBF0DC' },
-  err:     { label: 'Con error',  color: '#B3283C', bg: '#FBE9EC' },
-  skip:    { label: 'Omitida',    color: '#6B6A7D', bg: '#FAFAF6' },
-  working: { label: 'En proceso', color: '#5A2FD6', bg: '#EEE9FD' },
+  ok:        { label: 'Postulada',  color: '#17784F', bg: '#E2F3EA' },
+  pending:   { label: 'Pendiente',  color: '#9A5B00', bg: '#FBF0DC' },
+  err:       { label: 'Con error',  color: '#B3283C', bg: '#FBE9EC' },
+  skip:      { label: 'Omitida',    color: '#6B6A7D', bg: '#FAFAF6' },
+  working:   { label: 'En proceso', color: '#5A2FD6', bg: '#EEE9FD' },
+  // docs/modo-solo-observar.md §3.3: no es una postulación real -- necesita
+  // su propio color para no confundirse con "Postulada" (verde) ni con
+  // "En proceso" (el mismo morado que la IA usa mientras trabaja de verdad).
+  observado: { label: '👁 Observada', color: '#1D4ED8', bg: '#DBEAFE' },
 };
 
 function escapeHtml(s) {

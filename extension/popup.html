@@ -119,6 +119,27 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .pulse-label.active  { color: #5BD59B; }
 .pulse-label.working { color: var(--marker); }
 
+/* ── Solo observar (docs/modo-solo-observar.md §3.4) ────────────────────
+   Va pegado al toggle master, con su propio fondo, para que sea imposible
+   no verlo -- "la persona nunca puede quedar en duda sobre si la extensión
+   está postulando o no". */
+.observar-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  background: #EFF6FF;
+  border-bottom: 1px solid var(--border);
+}
+.observar-left .label {
+  font-size: 12.5px; font-weight: 700; color: #1D4ED8;
+  display: flex; align-items: center; gap: 5px;
+}
+.observar-left .hint { font-size: 10.5px; color: var(--text-2); margin-top: 1px; }
+.observar-row .toggle input:checked ~ .toggle-track { background: #1D4ED8; }
+/* §4.4: observar le gana a "revisar antes de enviar" -- no hay nada que
+   revisar si no se envía nada, así que ese toggle se ve pero no importa. */
+.opcion-atenuada { opacity: .45; }
+.opcion-atenuada .toggle { pointer-events: none; }
+
 /* ── Toggle master ───────────────────────────────────────── */
 .master-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -366,6 +387,19 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   </label>
 </div>
 
+<!-- SOLO OBSERVAR -->
+<div class="observar-row">
+  <div class="observar-left">
+    <div class="label">👁 Solo observar</div>
+    <div class="hint" id="observar-hint">Escanea y puntúa, pero no postula ni gasta cupo</div>
+  </div>
+  <label class="toggle">
+    <input type="checkbox" id="toggle-observar">
+    <div class="toggle-track"></div>
+    <div class="toggle-thumb"></div>
+  </label>
+</div>
+
 <!-- STATS -->
 <div class="stats">
   <div class="stat">
@@ -470,10 +504,10 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
     <span class="section-title">Opciones de IA</span>
   </div>
   <div style="display:flex;flex-direction:column;gap:8px;">
-    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+    <label id="opcion-revision" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
       <div>
         <div style="font-size:12px;font-weight:600;color:var(--text-1);">Revisar antes de enviar</div>
-        <div style="font-size:10px;color:var(--text-3);">Muestra las respuestas y pide confirmación</div>
+        <div style="font-size:10px;color:var(--text-3);" id="revision-hint">Muestra las respuestas y pide confirmación</div>
       </div>
       <label class="toggle"><input type="checkbox" id="toggle-revision"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
     </label>

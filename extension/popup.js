@@ -347,9 +347,27 @@ function construirConfig(activeOverride) {
     info: infoItems,
     modoRevision: document.getElementById('toggle-revision')?.checked || false,
     usarIAFiltros: document.getElementById('toggle-ia-filtros')?.checked || false,
+    soloObservar: document.getElementById('toggle-observar')?.checked || false,
     perfil: perfilRemoto || {},
   };
 }
+
+// docs/modo-solo-observar.md §3.4/§4.4: mientras el modo esté puesto, "revisar
+// antes de enviar" se atenúa (no hay nada que revisar si no se envía nada) y
+// el hint de observar deja explícito que está mandando por sobre revisión.
+function actualizarModoObservar(activo) {
+  const opcionRevision = document.getElementById('opcion-revision');
+  const revisionHint = document.getElementById('revision-hint');
+  const observarHint = document.getElementById('observar-hint');
+  if (opcionRevision) opcionRevision.classList.toggle('opcion-atenuada', activo);
+  if (revisionHint) revisionHint.textContent = activo
+    ? 'No aplica mientras "solo observar" esté activo'
+    : 'Muestra las respuestas y pide confirmación';
+  if (observarHint) observarHint.textContent = activo
+    ? 'Activo — no se va a enviar ninguna postulación'
+    : 'Escanea y puntúa, pero no postula ni gasta cupo';
+}
+document.getElementById('toggle-observar')?.addEventListener('change', (e) => actualizarModoObservar(e.target.checked));
 
 function guardarConfigLocal() {
   chrome.storage.local.set({ config: construirConfig() });
@@ -435,8 +453,11 @@ function loadState() {
 
     const toggleRevision = document.getElementById('toggle-revision');
     const toggleIAFiltros = document.getElementById('toggle-ia-filtros');
+    const toggleObservar = document.getElementById('toggle-observar');
     if (toggleRevision) toggleRevision.checked = cfg.modoRevision || false;
     if (toggleIAFiltros) toggleIAFiltros.checked = cfg.usarIAFiltros || false;
+    if (toggleObservar) toggleObservar.checked = cfg.soloObservar || false;
+    actualizarModoObservar(cfg.soloObservar || false);
 
     const active = data.active ?? cfg.active ?? false;
     toggleMain.checked = active;
