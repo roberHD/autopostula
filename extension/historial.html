@@ -7,27 +7,47 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:       #F8F9FC;
-  --surface:  #FFFFFF;
-  --border:   #E4E7EF;
-  --accent:   #2563EB;
-  --accent-h: #1D4ED8;
-  --accent-s: #EFF4FF;
-  --danger:   #DC2626;
-  --danger-s: #FEF2F2;
-  --success:  #16A34A;
-  --success-s:#F0FDF4;
-  --warn:     #D97706;
-  --text-1:   #111827;
-  --text-2:   #4B5563;
-  --text-3:   #9CA3AF;
-  --radius:   10px;
-  --shadow:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  /* Misma paleta que el popup y la web. Antes esta pantalla seguía en el
+     azul #2563EB, que ya no usa ninguna otra parte del producto. */
+  --bg:        #F2F3EE;
+  --surface:   #FFFFFF;
+  --surface-2: #FAFAF6;
+  --border:    #DFE0D8;
+  --ink:       #1B1A2E;
+  --accent:    #5A2FD6;
+  --accent-h:  #4A24B8;
+  --accent-s:  #EEE9FD;
+  --marker:    #D6F24B;
+  --danger:    #B3283C;
+  --danger-s:  #FBE9EC;
+  --success:   #17784F;
+  --success-s: #E2F3EA;
+  --warn:      #9A5B00;
+  --text-1:    #1B1A2E;
+  --text-2:    #4A4960;
+  --text-3:    #6B6A7D;
+  --radius:    10px;
+  --shadow:    0 1px 0 var(--border), 0 12px 28px -20px rgba(27,26,46,.45);
 }
 
 html { font-size: 15px; }
+
+:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+.marca { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+.marca-ico {
+  width: 30px; height: 30px; flex: none; border-radius: 8px;
+  background: var(--accent); display: grid; place-items: center;
+}
+.marca-ico svg { width: 17px; height: 17px; display: block; }
+.marca-ico path {
+  fill: none; stroke: var(--marker); stroke-width: 2.6;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.marca b { font-size: 15px; font-weight: 700; letter-spacing: -.015em; }
+.marca span { font-size: 12px; color: var(--text-3); }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--text-1);
   min-height: 100vh;
@@ -46,7 +66,7 @@ body {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow);
 }
-.header-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.header-title { font-size: 19px; font-weight: 800; letter-spacing: -.02em; margin-bottom: 6px; }
 .header-meta { font-size: 12px; color: var(--text-3); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .status-pill {
   font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
@@ -69,7 +89,14 @@ body {
 </head>
 <body>
   <div class="wrap">
-    <button class="back-link" onclick="window.close()">← Cerrar</button>
+    <div class="marca">
+      <span class="marca-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>
+      <span>
+        <b style="display:block">AutoPostula</b>
+        <span>Lo que respondimos en esta postulación</span>
+      </span>
+    </div>
+    <button class="back-link" onclick="window.close()">← Cerrar esta pestaña</button>
     <div id="content"><div class="empty-state">Cargando…</div></div>
   </div>
   <script src="historial.js"></script>

@@ -1,11 +1,11 @@
 'use strict';
 
 const statusCfg = {
-  ok:      { label: 'Postulada',  color: '#16A34A', bg: '#F0FDF4' },
-  pending: { label: 'Pendiente',  color: '#D97706', bg: '#FFFBEB' },
-  err:     { label: 'Error',      color: '#DC2626', bg: '#FEF2F2' },
-  skip:    { label: 'Omitida',    color: '#9CA3AF', bg: '#F3F4F6' },
-  working: { label: 'En proceso', color: '#2563EB', bg: '#EFF4FF' },
+  ok:      { label: 'Postulada',  color: '#17784F', bg: '#E2F3EA' },
+  pending: { label: 'Pendiente',  color: '#9A5B00', bg: '#FBF0DC' },
+  err:     { label: 'Con error',  color: '#B3283C', bg: '#FBE9EC' },
+  skip:    { label: 'Omitida',    color: '#6B6A7D', bg: '#FAFAF6' },
+  working: { label: 'En proceso', color: '#5A2FD6', bg: '#EEE9FD' },
 };
 
 function escapeHtml(s) {
