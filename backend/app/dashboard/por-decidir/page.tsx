@@ -1,9 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, Building2, TriangleAlert } from "lucide-react";
+import { ExternalLink, Building2, TriangleAlert, Star } from "lucide-react";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
-import { formatearRazon } from "@/lib/formatear-razon";
+import { formatearRazon, esRazonPositiva } from "@/lib/formatear-razon";
+
+// Facetas leídas en la Etapa 2 (docs/visibilidad-y-etapa2.md §B/§E) -- todos
+// opcionales, una fila sin Etapa 2 (o de antes del cambio) simplemente no
+// tiene ninguno y la tarjeta degrada sola (§H criterio 4).
+type DetalleAviso = {
+  jornada?: string;
+  modalidad?: string;
+  contrato?: string;
+  sueldo?: string;
+  publicadaHace?: string;
+  ratingEmpresa?: number;
+  evaluaciones?: number;
+  extracto?: string;
+} | null;
 
 type DecisionGris = {
   id: string;
@@ -15,8 +29,19 @@ type DecisionGris = {
   // Json?: strings de filas viejas, u objetos estructurados nuevos (§C) --
   // formatearRazon() acepta ambas formas.
   razones: unknown[] | null;
+  detalleAviso: DetalleAviso;
   venceEn: string | null;
 };
+
+// La razón de ubicación (§C) trae la comuna real de la oferta -- es la queja
+// concreta del criterio de aceptación §H.2 ("la razón debe nombrar la comuna").
+function comunaDeRazones(razones: unknown[] | null): string | null {
+  if (!Array.isArray(razones)) return null;
+  const r = razones.find(
+    (x) => x && typeof x === "object" && (x as { tipo?: string }).tipo === "ubicacion"
+  ) as { ofertaEn?: string | null } | undefined;
+  return r?.ofertaEn || null;
+}
 
 function diasRestantes(venceEn: string | null): string {
   if (!venceEn) return "";
@@ -71,6 +96,7 @@ export default function PorDecidirPage() {
       empresa: d.empresa,
       plataforma: d.plataforma,
       razones: d.razones,
+      detalleAviso: d.detalleAviso,
       venceEn: d.venceEn,
     })) ?? [];
 
@@ -116,37 +142,76 @@ export default function PorDecidirPage() {
             onDecidir={decidir}
             onTerminar={cargar}
             pregunta={(titulo) => `¿Postularías a "${titulo}"?`}
-            renderDetalle={(item) => (
-              <div style={{ textAlign: "center" }}>
-                {!!item.empresa && (
-                  <p style={{ fontSize: 12.5, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 6 }}>
-                    <Building2 size={13} /> {String(item.empresa)}
-                  </p>
-                )}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap" }}>
-                  {!!item.url && (
-                    <a
-                      href={String(item.url)}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ fontSize: 12, color: "var(--accent)", display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}
-                    >
-                      Ver oferta <ExternalLink size={12} />
-                    </a>
+            renderDetalle={(item) => {
+              const detalle = (item.detalleAviso as DetalleAviso) || null;
+              const razones = Array.isArray(item.razones) ? (item.razones as unknown[]) : [];
+              const comuna = comunaDeRazones(item.razones as unknown[] | null);
+              // Chips de facetas (§D): deciden solas en la mayoría de los
+              // casos -- solo las que el aviso trajo (Etapa 2 no siempre corrió).
+              const chips = [detalle?.jornada, detalle?.contrato, detalle?.modalidad].filter(
+                (v): v is string => !!v
+              );
+
+              return (
+                <div style={{ textAlign: "center" }}>
+                  {!!item.empresa && (
+                    <p style={{ fontSize: 12.5, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 6 }}>
+                      <Building2 size={13} /> {String(item.empresa)}
+                      {!!detalle?.ratingEmpresa && (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                          <Star size={12} style={{ fill: "var(--chart-4)", color: "var(--chart-4)" }} />
+                          {detalle.ratingEmpresa}
+                          {!!detalle.evaluaciones && ` · ${detalle.evaluaciones} evaluaciones`}
+                        </span>
+                      )}
+                    </p>
                   )}
-                  {!!item.venceEn && (
-                    <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{diasRestantes(item.venceEn as string)}</span>
+                  {!!comuna && (
+                    <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 6 }}>{comuna}</p>
+                  )}
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap" }}>
+                    {!!item.url && (
+                      <a
+                        href={String(item.url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: 12, color: "var(--accent)", display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}
+                      >
+                        Ver oferta <ExternalLink size={12} />
+                      </a>
+                    )}
+                    {!!item.venceEn && (
+                      <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{diasRestantes(item.venceEn as string)}</span>
+                    )}
+                    {!!detalle?.publicadaHace && (
+                      <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{detalle.publicadaHace}</span>
+                    )}
+                  </div>
+
+                  {(chips.length > 0 || !!detalle?.sueldo) && (
+                    <div className="ap-tags" style={{ justifyContent: "center", marginTop: 10 }}>
+                      {!!detalle?.sueldo && <span className="ap-tag">{detalle.sueldo}</span>}
+                      {chips.map((c, i) => (
+                        <span className="ap-tag" key={i}>{c}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {!!detalle?.extracto && <p className="ap-extracto">{detalle.extracto}</p>}
+
+                  {razones.length > 0 && (
+                    <ul className="ap-razones">
+                      {razones.map((r, i) => {
+                        const positiva = esRazonPositiva(r);
+                        const clase = positiva === true ? "positiva" : positiva === false ? "negativa" : undefined;
+                        return <li key={i} className={clase}>{formatearRazon(r)}</li>;
+                      })}
+                    </ul>
                   )}
                 </div>
-                {Array.isArray(item.razones) && item.razones.length > 0 && (
-                  <ul className="ap-razones">
-                    {(item.razones as unknown[]).map((r, i) => (
-                      <li key={i}>{formatearRazon(r)}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+              );
+            }}
           />
         )}
       </div>

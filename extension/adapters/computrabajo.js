@@ -616,6 +616,10 @@ async function escanear() {
   // de cada descarte, para poder mostrar cuál fue la más frecuente al final.
   const conteos = { postular: 0, gris: 0, descartar: 0 };
   const razonesDescartadas = [];
+  // Candidatas a banda gris de la Etapa 1 (solo tarjeta) -- no se reportan
+  // todavía: primero pasan por la Etapa 2 (§B), que abre el aviso y puede
+  // resolverlas con más datos antes de mandarlas a la cola de decisión.
+  const candidatosGris = [];
   tarjetas.forEach((t, idx) => {
     const id = getId(t, idx);
     if (AP.vistos.has(id)) return;
@@ -638,15 +642,8 @@ async function escanear() {
     if (resultado.banda === 'postular') {
       pendientes.push({t, id, idx, titulo});
     } else if (resultado.banda === 'gris') {
-      // Banda gris (§8): no se descarta ni se postula sola -- va a la cola de
-      // decisión del usuario en el dashboard.
-      conteos.gris++;
       AP.vistos.add(id);
-      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'En banda gris — revisar en el dashboard'});
-      AP.reportarBandaGris({
-        titulo, url, plataforma: 'Computrabajo', empresa,
-        scoreLocal: resultado.score, razones: resultado.razones,
-      });
+      candidatosGris.push({t, id, idx, titulo, url, empresa, resultado});
     } else {
       // Descartada -- con razón real si vino del scorer (§13: "el log de
       // descarte hoy no explica nada"), o el mensaje genérico del filtro viejo.
@@ -662,6 +659,48 @@ async function escanear() {
   });
   reportarTitulosVistos(titulosVistos, 'Computrabajo');
   AP.reportarAvistamientos(avistamientos, 'Computrabajo');
+
+  // Etapa 2 (§B): antes de mandar cada gris a la cola de decisión, se abre el
+  // aviso (facetas + cuerpo real, no solo la tarjeta) y se vuelve a puntuar --
+  // "resuelve → postular/descartar, sigue dudosa → banda gris, ahora con
+  // datos". Solo las grises: las de postular/descartar ya tenían certeza
+  // suficiente con la tarjeta sola, así que abrirlas ahí sería gasto sin
+  // beneficio (el costo neto son solo las grises que terminan rechazadas,
+  // justo donde la información vale más -- ver §B "Costo").
+  for (const cand of candidatosGris) {
+    if (!AP.activo) break;
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    const btn = await activar(cand.t);
+    let resultadoFinal = null;
+    let detalleAviso = null;
+    if (btn) {
+      detalleAviso = extraerFacetasAviso();
+      const camposCompletos = {
+        titulo: cand.titulo, empresa: cand.empresa,
+        cuerpo: extraerTextoAviso(), ubicacion: extraerUbicacion(cand.t),
+      };
+      resultadoFinal = AP.evaluarOferta(camposCompletos);
+    }
+    // Si el panel no cargó, se degrada con lo que ya se tenía de la Etapa 1
+    // (§H criterio 4: "una oferta gris sin Etapa 2 se sigue viendo bien").
+    const resultado = resultadoFinal || cand.resultado;
+
+    if (resultadoFinal && resultadoFinal.banda === 'postular') {
+      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo});
+    } else if (resultadoFinal && resultadoFinal.banda === 'descartar') {
+      conteos.descartar++;
+      const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
+      razonesDescartadas.push(razon);
+      addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:AP.formatearRazonCorta(razon)});
+    } else {
+      conteos.gris++;
+      addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:'En banda gris — revisar en el dashboard'});
+      AP.reportarBandaGris({
+        titulo: cand.titulo, url: cand.url, plataforma: 'Computrabajo', empresa: cand.empresa,
+        scoreLocal: resultado.score, razones: resultado.razones, detalleAviso,
+      });
+    }
+  }
 
   // Filtro inteligente con IA: descarta ofertas que no calzan con el cargo que busca el
   // candidato aunque el titulo no comparta ninguna palabra clave literal con los tags.

@@ -12,6 +12,21 @@ export type RazonEstructurada =
   | { tipo: "senal"; patron: string; delta: number }
   | { tipo: "sin_senales" };
 
+// §D: la tarjeta de "Por decidir" ya no lista las razones como bullets del
+// cálculo, sino como el intercambio que se le pide decidir a la persona
+// ("Calza contigo... / Pero..."). Solo los objetos estructurados saben si
+// son a favor o en contra -- un string legacy no trae esa información, así
+// que no se puede clasificar (se muestra aparte, sin ✓/✗).
+export function esRazonPositiva(r: unknown): boolean | null {
+  if (typeof r === "string") return null;
+  if (!r || typeof r !== "object" || !("tipo" in r)) return null;
+  const razon = r as RazonEstructurada;
+  if (razon.tipo === "rol") return true;
+  if (razon.tipo === "senal") return razon.delta >= 0;
+  if (razon.tipo === "sin_rol" || razon.tipo === "veto" || razon.tipo === "ubicacion" || razon.tipo === "sin_senales") return false;
+  return null;
+}
+
 export function formatearRazon(r: unknown): string {
   if (typeof r === "string") return r;
   if (!r || typeof r !== "object" || !("tipo" in r)) return "sin razón";

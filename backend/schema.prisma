@@ -457,6 +457,13 @@ model DecisionOferta {
   plataforma  String?
   scoreLocal  Int?           @map("score_local") // el puntaje que la dejó en gris (§6)
   razones     Json? // por qué cayó ahí -- para mostrárselo al usuario
+  // Facetas leídas al abrir el aviso en la Etapa 2 (docs/visibilidad-y-etapa2.md
+  // §B/§E): { jornada, modalidad, contrato, sueldo, publicadaHace,
+  // ratingEmpresa, evaluaciones, extracto } -- todos opcionales, la tarjeta
+  // degrada sola si falta (escaneo cortado, portal cambió, fila vieja).
+  // Json y no columnas porque cada portal expone facetas distintas y esto
+  // solo se lee para pintar la tarjeta, nunca para filtrar ni agrupar.
+  detalleAviso Json?         @map("detalle_aviso")
   fuente      FuenteDecision
   veredicto   Veredicto      @default(PENDIENTE)
   venceEn     DateTime?      @map("vence_en")

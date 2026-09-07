@@ -424,9 +424,67 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
   return { ok: false, expirada: false };
 }
 
+// ── Etapa 2 para banda gris (§B) ─────────────────────────────────────────
+// Laborum no tiene un panel lateral como Computrabajo -- cada aviso es su
+// propia página, así que "abrir el aviso" significa navegar ahí y volver.
+// sessionStorage sobrevive esa navegación (misma pestaña) y se pierde sola
+// si se cierra, así que sirve para pasarse la posta entre las dos pasadas:
+// qué oferta se fue a revisar, y qué resultado trajo al volver.
+const CLAVE_ETAPA2_PENDIENTE = 'ap_etapa2_pendiente';
+const CLAVE_ETAPA2_RESULTADO = 'ap_etapa2_resultado';
+
+// Ya estamos en la página del aviso que se fue a revisar -- se vuelve a
+// puntuar con el cuerpo y las facetas reales. Si ahora resuelve a postular,
+// se postula directo acá mismo (ya está abierto, no tiene sentido volver al
+// listado para reabrirlo); si no, el resultado se guarda para que la vuelta
+// al listado lo procese (banda gris con más datos, o descarte con razón real).
+async function resolverEtapa2Gris(pendiente) {
+  try {
+    await esperar('button');
+    const cuerpo = extraerTextoAviso();
+    const detalleAviso = extraerFacetasAviso();
+    AP.vistos.add(pendiente.id);
+    const resultadoFinal = AP.evaluarOferta({
+      titulo: pendiente.titulo, empresa: pendiente.empresa, cuerpo, ubicacion: pendiente.ubicacion || '',
+    });
+
+    if (resultadoFinal.banda === 'postular') {
+      AP.procesando = true;
+      await postularEnPagina(pendiente.id, pendiente.titulo, location.href);
+      await sleep(DELAY);
+      AP.procesando = false;
+    } else {
+      sessionStorage.setItem(CLAVE_ETAPA2_RESULTADO, JSON.stringify({
+        id: pendiente.id, titulo: pendiente.titulo, url: pendiente.url, empresa: pendiente.empresa,
+        banda: resultadoFinal.banda, score: resultadoFinal.score, razones: resultadoFinal.razones, detalleAviso,
+      }));
+    }
+  } finally {
+    // Pase lo que pase (una excepción acá no debe dejar la bandera pegada --
+    // si quedara puesta, la próxima vez que esta pestaña llegue a CUALQUIER
+    // aviso, por la razón que sea, se procesaría como si fuera la revisión
+    // de ESTA oferta vieja).
+    AP.procesando = false;
+    sessionStorage.removeItem(CLAVE_ETAPA2_PENDIENTE);
+  }
+
+  if (history.length > 1) {
+    history.back();
+    setTimeout(() => { if (AP.activo) escanear(); }, 1800);
+  }
+}
+
 // ── Escanear el listado ────────────────────────────────────────────
 async function escanear() {
   if (!AP.activo || AP.procesando || !AP.cfg) return;
+
+  // ¿Esta página de detalle es la vuelta de haber ido a revisar una gris
+  // (Etapa 2), y no una navegación normal a postular? Se revisa antes que
+  // nada porque cambia a qué función se delega.
+  const etapa2Pendiente = sessionStorage.getItem(CLAVE_ETAPA2_PENDIENTE);
+  if (etapa2Pendiente && /\/empleos\/.+-\d+\.html/.test(location.pathname)) {
+    return resolverEtapa2Gris(JSON.parse(etapa2Pendiente));
+  }
 
   // En una página de detalle (no listado), postular directo si corresponde
   // -- pero solo si se llegó navegando desde un listado (history real: la
@@ -453,6 +511,36 @@ async function escanear() {
   // de cada descarte, para poder mostrar cuál fue la más frecuente al final.
   const conteos = { postular: 0, gris: 0, descartar: 0 };
   const razonesDescartadas = [];
+  // Candidatas a banda gris de la Etapa 1 (solo tarjeta) -- no se reportan
+  // todavía: primero pasan por la Etapa 2 (§B) si no hay nada más urgente
+  // que hacer en esta pasada (ver el final de la función).
+  const candidatosGris = [];
+
+  // Si esta pasada es la vuelta de haber ido a revisar una gris, se procesa
+  // el resultado que dejó guardado ANTES del forEach -- así el addLog() de
+  // acá abajo actualiza AP.log a tiempo para que yaProcesada() la excluya
+  // cuando el forEach la vuelva a encontrar en el listado.
+  const etapa2Resultado = sessionStorage.getItem(CLAVE_ETAPA2_RESULTADO);
+  if (etapa2Resultado) {
+    sessionStorage.removeItem(CLAVE_ETAPA2_RESULTADO);
+    try {
+      const r = JSON.parse(etapa2Resultado);
+      if (r.banda === 'descartar') {
+        conteos.descartar++;
+        const razon = (r.razones && r.razones[0]) || 'No calza con tus filtros';
+        razonesDescartadas.push(razon);
+        addLog({ ts: Date.now(), status: 'skip', title: r.titulo, url: r.url, uid: r.id, reason: AP.formatearRazonCorta(razon) });
+      } else {
+        conteos.gris++;
+        addLog({ ts: Date.now(), status: 'skip', title: r.titulo, url: r.url, uid: r.id, reason: 'En banda gris — revisar en el dashboard' });
+        AP.reportarBandaGris({
+          titulo: r.titulo, url: r.url, plataforma: 'Laborum', empresa: r.empresa,
+          scoreLocal: r.score, razones: r.razones, detalleAviso: r.detalleAviso,
+        });
+      }
+    } catch (e) { /* sessionStorage corrupto -- se ignora, no bloquea el resto del escaneo */ }
+  }
+
   candidatas.forEach(a => {
     const id = getIdDeTarjeta(a);
     if (yaProcesada(id)) return;
@@ -470,13 +558,7 @@ async function escanear() {
     if (resultado.banda === 'postular') {
       pendientes.push({ a, id, titulo, url: a.href });
     } else if (resultado.banda === 'gris') {
-      conteos.gris++;
-      AP.vistos.add(id);
-      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: 'En banda gris — revisar en el dashboard' });
-      AP.reportarBandaGris({
-        titulo, url: a.href, plataforma: 'Laborum', empresa,
-        scoreLocal: resultado.score, razones: resultado.razones,
-      });
+      candidatosGris.push({ id, titulo, url: a.href, empresa, ubicacion: getUbicacionDeTarjeta(a), resultado });
     } else {
       // §C: la razón del scorer es un objeto estructurado -- se guarda tal
       // cual para el desglose del overlay (agrupa por tipo) y se formatea
@@ -496,23 +578,39 @@ async function escanear() {
     const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas));
     msg(resumen.texto, resumen.estado);
   }
-  if (!pendientes.length) {
-    // Nada más que hacer en esta página -- si es una búsqueda automática
-    // (pestaña oculta), sigue a la próxima página del listado en vez de
-    // quedarse pegada acá para siempre (los listados no son infinitos).
-    if (siguientePagina(candidatas.length, urlPaginaLaborum)) return;
+
+  if (pendientes.length) {
+    AP.procesando = true;
+    const primera = pendientes[0];
+    AP.vistos.add(primera.id);
+    msg('Abriendo: ' + primera.titulo.slice(0, 35) + '…', '#D97706');
+    // Se abre en la misma pestaña — más simple y confiable que coordinar
+    // pestañas nuevas entre content scripts independientes. El resto de
+    // pendientes se procesa en las siguientes pasadas de escanear(), que
+    // el propio flujo re-dispara al volver al listado (ver más abajo).
+    location.href = primera.url;
     return;
   }
 
-  AP.procesando = true;
-  const primera = pendientes[0];
-  AP.vistos.add(primera.id);
-  msg('Abriendo: ' + primera.titulo.slice(0, 35) + '…', '#D97706');
-  // Se abre en la misma pestaña — más simple y confiable que coordinar
-  // pestañas nuevas entre content scripts independientes. El resto de
-  // pendientes se procesa en las siguientes pasadas de escanear(), que
-  // el propio flujo re-dispara al volver al listado (ver más abajo).
-  location.href = primera.url;
+  // Nada que postular en esta pasada -- si quedó alguna gris de la Etapa 1
+  // sin revisar, se va a revisar antes de dar el escaneo por terminado
+  // (§B: "las de postular se abren igual para postular, así que ahí es
+  // gratis; el costo neto son solo las grises").
+  if (candidatosGris.length) {
+    const cand = candidatosGris[0];
+    AP.vistos.add(cand.id);
+    sessionStorage.setItem(CLAVE_ETAPA2_PENDIENTE, JSON.stringify({
+      id: cand.id, titulo: cand.titulo, url: cand.url, empresa: cand.empresa, ubicacion: cand.ubicacion,
+    }));
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    location.href = cand.url;
+    return;
+  }
+
+  // Nada más que hacer en esta página -- si es una búsqueda automática
+  // (pestaña oculta), sigue a la próxima página del listado en vez de
+  // quedarse pegada acá para siempre (los listados no son infinitos).
+  siguientePagina(candidatas.length, urlPaginaLaborum);
 }
 
 // Cuando escanear() navega a una oferta puntual, este es el flujo que sigue
