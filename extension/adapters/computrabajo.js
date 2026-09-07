@@ -31,6 +31,55 @@ function extraerTextoAviso() {
   return texto.slice(0, 4000);
 }
 
+// ── Facetas estructuradas del aviso (docs/visibilidad-y-etapa2.md §B) ──────
+// Selectores verificados a mano contra el sitio real el 2026-09-07 (varias
+// ofertas, con y sin sueldo, presencial/remoto/híbrido) -- no adivinados.
+// Computrabajo etiqueta sueldo/contrato/jornada/modalidad como una lista de
+// <p class="dFlex mb10"> dentro de "div.mbB", cada uno con un ícono que
+// identifica el tipo -- salvo modalidad, que usa un ícono distinto según el
+// valor (i_company para presencial, i_home_office para mixto, i_home para
+// 100% remoto): por eso se identifica sueldo/contrato/jornada por su ícono
+// exacto y todo lo que sobra (el único que queda) es la modalidad, en vez de
+// enumerar cada variante posible de ese ícono.
+function extraerFacetasAviso() {
+  const panel = document.querySelector('.box_detail,[data-offers-grid-box-detail]');
+  if (!panel) return {};
+  const facetas = {};
+
+  panel.querySelectorAll('div.mbB p.dFlex.mb10').forEach((p) => {
+    const icono = p.querySelector('span.icon');
+    const claseIcono = (icono && icono.className) || '';
+    const texto = p.textContent.trim();
+    if (!texto) return;
+    if (claseIcono.includes('i_money')) facetas.sueldo = texto;
+    else if (claseIcono.includes('i_find')) facetas.contrato = texto;
+    else if (claseIcono.includes('i_clock')) facetas.jornada = texto;
+    else facetas.modalidad = texto;
+  });
+
+  // Rating de la empresa: "<span class=fwB>4</span>" + "<span class=fc_aux_light>103 evaluaciones</span>"
+  // dentro de ".header_detail" -- ausente en avisos de empresas sin evaluaciones (no revienta).
+  const ratingEl = panel.querySelector('.header_detail .mr10 .fwB');
+  const evaluacionesEl = panel.querySelector('.header_detail .fc_aux_light');
+  if (ratingEl && ratingEl.textContent.trim()) {
+    const num = parseFloat(ratingEl.textContent.trim().replace(',', '.'));
+    if (!isNaN(num)) facetas.ratingEmpresa = num;
+  }
+  if (evaluacionesEl && evaluacionesEl.textContent.trim()) {
+    const m = evaluacionesEl.textContent.match(/\d+/);
+    if (m) facetas.evaluaciones = parseInt(m[0], 10);
+  }
+
+  // Extracto de la descripción real -- "div.fs16.t_word_wrap" es el único
+  // nodo con esa combinación de clases dentro del panel de detalle.
+  const desc = panel.querySelector('div.fs16.t_word_wrap');
+  if (desc && desc.textContent.trim()) {
+    facetas.extracto = desc.textContent.trim().split(/\s+/).slice(0, 300).join(' ');
+  }
+
+  return facetas;
+}
+
 // ── ID único de tarjeta ───────────────────────────────────────
 function getId(tarjeta, idx) {
   const did = tarjeta.getAttribute('data-id') || tarjeta.getAttribute('data-blind') || '';
@@ -251,12 +300,12 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
     if (elegida) {
       if (seleccionarOpcion(elegida.el)) {
         interacciones++;
-        respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
+        respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       }
     } else if (AP.iaDisponible && pregunta.length > 5) {
       pendientesIA.push({ pregunta, opciones });
     } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
+      respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
     }
   }
 
@@ -279,12 +328,12 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
       if (elegida) {
         if (!elegida.el.checked && seleccionarOpcion(elegida.el)) {
           interacciones++;
-          respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
+          respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
         }
       } else if (AP.iaDisponible && pregunta.length > 5) {
         pendientesIA.push({ pregunta, opciones });
       } else if (pregunta) {
-        respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
+        respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
       }
     }
   }
@@ -305,12 +354,12 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
     if (elegida) {
       if (seleccionarOpcion(elegida.el)) {
         interacciones++;
-        respuestasLog.push({ pregunta, respuesta: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
+        respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
       }
     } else if (AP.iaDisponible && pregunta.length > 5) {
       pendientesIA.push({ pregunta, opciones });
     } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
+      respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
     }
   }
 
@@ -331,9 +380,9 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
       }
       if (elegida && seleccionarOpcion(elegida.el)) {
         interacciones++;
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
       } else {
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', vacia: true, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
       }
       await sleep(250);
     }
@@ -346,7 +395,11 @@ function aplicarValorTexto(el, val, labelRaw, fueIA, respuestasLog) {
   val = limitarTexto(val, el);
   el.scrollIntoView({ block:'nearest' });
   setVal(el, val);
-  respuestasLog.push({ pregunta: labelRaw, respuesta: val, fueIA, tipo:'texto', el });
+  // respuestaIa se escribe una vez acá y no se vuelve a tocar -- aplicarEdiciones()
+  // (core.js) solo pisa `respuesta` cuando el modo revisión corrige el texto. Sin
+  // esto, la corrección de la persona pisaba también lo que generó la IA y esa
+  // señal (docs/banco-de-preguntas.md §3) se perdía para siempre.
+  respuestasLog.push({ pregunta: labelRaw, respuesta: val, respuestaIa: val, fueIA, tipo:'texto', el });
 }
 
 // ── Rellenar formulario ───────────────────────────────────────
@@ -403,7 +456,7 @@ async function rellenar(contexto) {
     } else if (AP.iaDisponible && labelRaw.length > 5) {
       pendientesTexto.push({ el, labelRaw });
     } else if (labelRaw.length > 5) {
-      respuestasLog.push({ pregunta: labelRaw, respuesta: '', vacia: true, tipo:'texto', el, errorIA: null });
+      respuestasLog.push({ pregunta: labelRaw, respuesta: '', respuestaIa: '', vacia: true, tipo:'texto', el, errorIA: null });
     }
   }
 
@@ -424,7 +477,7 @@ async function rellenar(contexto) {
         n2++;
         aplicarValorTexto(pd.el, pd.fallback, pd.labelRaw, false, respuestasLog);
       } else {
-        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', vacia: true, tipo:'texto', el: pd.el, errorIA: resultado.error });
+        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', respuestaIa: '', vacia: true, tipo:'texto', el: pd.el, errorIA: resultado.error });
       }
       await sleep(250);
     }
@@ -511,8 +564,11 @@ async function postular(url, id, titulo, decisionOfertaId) {
       btnEnviar.click();
       await sleep(2000);
       // Log con resumen de respuestas
-      // Quitar referencias al DOM (el, elegidoEl, opciones) antes de guardar — no son serializables
-      const respuestasParaLog = respuestasLog.map(r => ({ pregunta:r.pregunta, respuesta:r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
+      // Quitar referencias al DOM (el, elegidoEl, opciones) antes de guardar — no son serializables.
+      // respuestaIa/fueEditada (docs/banco-de-preguntas.md §3): sin esto el backend
+      // guardaba respuestaIa == respuestaFinal siempre, y la corrección de la
+      // persona en modo revisión (la señal más valiosa del dataset) se perdía.
+      const respuestasParaLog = respuestasLog.map(r => ({ pregunta:r.pregunta, respuestaIa:r.respuestaIa, respuesta:r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
       const resumen = respuestasParaLog.filter(r => r.respuesta).map(r => r.pregunta.slice(0,30) + ': ' + r.respuesta.slice(0,40)).join(' | ');
       addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id,
         reason:'Enviado (' + n2 + ' campos)',
@@ -563,6 +619,14 @@ async function escanear() {
   let pendientes = [];
   const titulosVistos = [];
   const avistamientos = [];
+  // Desglose del escaneo (§A): se cuentan las tres bandas y se junta la razón
+  // de cada descarte, para poder mostrar cuál fue la más frecuente al final.
+  const conteos = { postular: 0, gris: 0, descartar: 0 };
+  const razonesDescartadas = [];
+  // Candidatas a banda gris de la Etapa 1 (solo tarjeta) -- no se reportan
+  // todavía: primero pasan por la Etapa 2 (§B), que abre el aviso y puede
+  // resolverlas con más datos antes de mandarlas a la cola de decisión.
+  const candidatosGris = [];
   tarjetas.forEach((t, idx) => {
     const id = getId(t, idx);
     if (AP.vistos.has(id)) return;
@@ -585,27 +649,75 @@ async function escanear() {
     if (resultado.banda === 'postular') {
       pendientes.push({t, id, idx, titulo});
     } else if (resultado.banda === 'gris') {
-      // Banda gris (§8): no se descarta ni se postula sola -- va a la cola de
-      // decisión del usuario en el dashboard.
       AP.vistos.add(id);
-      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'En banda gris — revisar en el dashboard'});
-      AP.reportarBandaGris({
-        titulo, url, plataforma: 'Computrabajo', empresa,
-        scoreLocal: resultado.score, razones: resultado.razones,
-      });
+      candidatosGris.push({t, id, idx, titulo, url, empresa, resultado});
     } else {
       // Descartada -- con razón real si vino del scorer (§13: "el log de
       // descarte hoy no explica nada"), o el mensaje genérico del filtro viejo.
+      // §C: la razón del scorer ahora es un objeto estructurado, no un string
+      // ya formateado -- se guarda tal cual para el desglose del overlay
+      // (que agrupa por tipo) y se formatea recién para el log.
+      conteos.descartar++;
+      const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
+      razonesDescartadas.push(razon);
       AP.vistos.add(id);
-      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:(resultado.razones && resultado.razones[0]) || 'No calza con tus filtros'});
+      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:AP.formatearRazonCorta(razon)});
     }
   });
   reportarTitulosVistos(titulosVistos, 'Computrabajo');
   AP.reportarAvistamientos(avistamientos, 'Computrabajo');
 
-  // Filtro inteligente con IA: descarta ofertas que no calzan con el cargo que busca el
-  // candidato aunque el titulo no comparta ninguna palabra clave literal con los tags.
-  if (AP.cfg.usarIAFiltros && AP.iaDisponible && pendientes.length) {
+  // Etapa 2 (§B): antes de mandar cada gris a la cola de decisión, se abre el
+  // aviso (facetas + cuerpo real, no solo la tarjeta) y se vuelve a puntuar --
+  // "resuelve → postular/descartar, sigue dudosa → banda gris, ahora con
+  // datos". Solo las grises: las de postular/descartar ya tenían certeza
+  // suficiente con la tarjeta sola, así que abrirlas ahí sería gasto sin
+  // beneficio (el costo neto son solo las grises que terminan rechazadas,
+  // justo donde la información vale más -- ver §B "Costo").
+  for (const cand of candidatosGris) {
+    if (!AP.activo) break;
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    const btn = await activar(cand.t);
+    let resultadoFinal = null;
+    let detalleAviso = null;
+    if (btn) {
+      detalleAviso = extraerFacetasAviso();
+      const camposCompletos = {
+        titulo: cand.titulo, empresa: cand.empresa,
+        cuerpo: extraerTextoAviso(), ubicacion: extraerUbicacion(cand.t),
+      };
+      resultadoFinal = AP.evaluarOferta(camposCompletos);
+    }
+    // Si el panel no cargó, se degrada con lo que ya se tenía de la Etapa 1
+    // (§H criterio 4: "una oferta gris sin Etapa 2 se sigue viendo bien").
+    const resultado = resultadoFinal || cand.resultado;
+
+    if (resultadoFinal && resultadoFinal.banda === 'postular') {
+      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo});
+    } else if (resultadoFinal && resultadoFinal.banda === 'descartar') {
+      conteos.descartar++;
+      const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
+      razonesDescartadas.push(razon);
+      addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:AP.formatearRazonCorta(razon)});
+    } else {
+      conteos.gris++;
+      addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:'En banda gris — revisar en el dashboard'});
+      AP.reportarBandaGris({
+        titulo: cand.titulo, url: cand.url, plataforma: 'Computrabajo', empresa: cand.empresa,
+        scoreLocal: resultado.score, razones: resultado.razones, detalleAviso,
+      });
+    }
+  }
+
+  // Filtro inteligente con IA (legacy): descarta ofertas que no calzan con el cargo que
+  // busca el candidato aunque el titulo no comparta ninguna palabra clave literal con
+  // los tags. Reemplazado por el scorer local + Etapa 2 (docs/visibilidad-y-etapa2.md
+  // §G) -- si el scorer está activo, correr los dos es plata (esto cobra por llamada) y
+  // el objetivo-como-texto-libre de acá puede vetar algo que el scorer ya aprobó con el
+  // objetivo declarado (§C). Solo tiene sentido como red de respaldo cuando el scorer
+  // está apagado.
+  const usarScorerLocal = !!(AP.cfg.scorer && AP.cfg.scorer.usarScorerLocal);
+  if (!usarScorerLocal && AP.cfg.usarIAFiltros && AP.iaDisponible && pendientes.length) {
     const objetivo = await obtenerObjetivoLaboral();
     if (objetivo) {
       msg('IA filtrando ' + pendientes.length + ' ofertas…', '#7C3AED');
@@ -618,7 +730,14 @@ async function escanear() {
     }
   }
 
-  msg(pendientes.length + ' de ' + tarjetas.length + ' coinciden', '#16A34A');
+  {
+    // conteos.postular se fija recién acá, después del filtro de IA viejo (si
+    // estuviera activo) -- para que el mensaje nunca diga más de lo que
+    // realmente va a pasar.
+    conteos.postular = pendientes.length;
+    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas));
+    msg(resumen.texto, resumen.estado);
+  }
   if (!pendientes.length) {
     if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return; // navegando a la página siguiente
     return;

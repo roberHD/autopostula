@@ -158,11 +158,15 @@ export async function POST(request: Request) {
           .map((r: any) => ({
             applicationId: application.id,
             pregunta: r.pregunta,
-            // Por ahora respuestaIa y respuestaFinal son iguales — todavía no
-            // capturamos el valor antes/después de la edición en el panel de revisión.
-            respuestaIa: r.respuesta || "",
+            // docs/banco-de-preguntas.md §3: la extensión ahora manda el valor
+            // que generó la IA por separado del que quedó después del modo
+            // revisión -- es el dataset de correcciones etiquetadas, lo más
+            // caro de conseguir en un sistema así, y antes se perdía guardando
+            // los dos campos iguales. Si viene de una extensión vieja sin
+            // respuestaIa, cae al valor final (mismo comportamiento de antes).
+            respuestaIa: r.respuestaIa ?? r.respuesta ?? "",
             respuestaFinal: r.respuesta || "",
-            fueEditada: false,
+            fueEditada: typeof r.fueEditada === "boolean" ? r.fueEditada : false,
           })),
       });
     }

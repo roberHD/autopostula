@@ -125,6 +125,66 @@ function extraerTextoAviso() {
   return texto.slice(0, 4000) || (document.body.innerText || '').slice(0, 4000);
 }
 
+// ── Facetas estructuradas del aviso (docs/visibilidad-y-etapa2.md §B) ──────
+// Selectores verificados a mano contra el sitio real el 2026-09-07 (varias
+// ofertas, con y sin sueldo, remoto/presencial). Laborum es un SPA hecho con
+// styled-components: las clases son hashes que cambian en cada build (a
+// diferencia de Computrabajo, acá NO hay ningún ícono ni atributo data-*
+// estable para identificar cada faceta), así que en vez de las clases se usa
+// #ficha-detalle (id fijo, delimita el aviso principal y excluye la barra de
+// "empleos relacionados") y, dentro de ese contenedor, el único elemento con
+// aria-label="Información adicional del aviso" -- ese sí es estable porque
+// es semántico (accesibilidad), no de estilo. Cada <li> de esa lista se
+// clasifica por su propio texto (vocabulario cerrado que el portal ya
+// etiquetó -- remoto/presencial/híbrido, "full-time, indeterminado", "$..."
+// -- no es grepear la descripción libre del aviso).
+function extraerFacetasAviso() {
+  const ficha = document.getElementById('ficha-detalle') || document.body;
+  const facetas = {};
+
+  const ul = ficha.querySelector('ul[aria-label="Información adicional del aviso"]');
+  if (ul) {
+    for (const li of ul.querySelectorAll('li')) {
+      const texto = li.textContent.trim();
+      if (!texto) continue;
+      if (/^(remoto|presencial|h[ií]brido)/i.test(texto)) {
+        facetas.modalidad = texto;
+      } else if (texto.includes('$')) {
+        facetas.sueldo = texto;
+      } else if (/full-?time|part-?time|por horas|jornada/i.test(texto)) {
+        // Laborum junta jornada y contrato en un solo <li>, separados por coma
+        // (ej: "Full-time, Indeterminado").
+        const partes = texto.split(',').map((s) => s.trim()).filter(Boolean);
+        if (partes[0]) facetas.jornada = partes[0];
+        if (partes[1]) facetas.contrato = partes[1];
+      }
+    }
+  }
+
+  // "Publicado hace X" / "Actualizado hace X" -- sin selector propio (mismo
+  // problema de clases hasheadas), se busca por el texto completo de la
+  // etiqueta dentro de #ficha-detalle (no del body entero, que trae los
+  // "hace" de los avisos relacionados en la barra lateral).
+  const walker = document.createTreeWalker(ficha, NodeFilter.SHOW_TEXT);
+  let nodo;
+  while ((nodo = walker.nextNode())) {
+    const t = nodo.textContent.trim();
+    if (/^(Publicado|Actualizado)( el)? hace /i.test(t)) { facetas.publicadaHace = t; break; }
+  }
+
+  // Rating de empresa: no verificado -- en los avisos revisados Laborum no
+  // mostraba calificación de la empresa en la página del aviso (a diferencia
+  // de Computrabajo). Se deja sin implementar en vez de adivinar un selector
+  // nunca visto (§B: "no inventarlos").
+
+  const desc = ficha.querySelector('#descripcion-aviso');
+  if (desc && desc.textContent.trim()) {
+    facetas.extracto = desc.textContent.trim().split(/\s+/).slice(0, 300).join(' ');
+  }
+
+  return facetas;
+}
+
 // AP.vistos vive solo en memoria y core.js lo resetea cada vez que el content
 // script se vuelve a inyectar — cosa que en Laborum pasa en CADA navegación
 // real (a diferencia de Computrabajo, que nunca sale de la página). Por eso
@@ -232,9 +292,13 @@ async function rellenarYEnviarPreguntas(contexto) {
       // el botón sigue deshabilitado.
       info.ta.blur();
       info.ta.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-      respuestasLog.push({ pregunta: info.pregunta, respuesta: valLimitado, fueIA: true, tipo: 'texto', el: info.ta });
+      // respuestaIa se escribe una vez acá y nunca se vuelve a tocar --
+      // aplicarEdiciones() (core.js) solo pisa `respuesta` en modo revisión
+      // (docs/banco-de-preguntas.md §3: sin esto la corrección de la persona
+      // pisaba también lo que generó la IA).
+      respuestasLog.push({ pregunta: info.pregunta, respuesta: valLimitado, respuestaIa: valLimitado, fueIA: true, tipo: 'texto', el: info.ta });
     } else {
-      respuestasLog.push({ pregunta: info.pregunta, respuesta: '', vacia: true, tipo: 'texto', el: info.ta, errorIA: resultado.error });
+      respuestasLog.push({ pregunta: info.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo: 'texto', el: info.ta, errorIA: resultado.error });
     }
     await sleep(300);
   }
@@ -250,9 +314,9 @@ async function rellenarYEnviarPreguntas(contexto) {
     }
     if (elegida && seleccionarOpcion(elegida.el)) {
       elegida.el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: elegida.texto, fueIA: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: elegida.el });
+      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, fueIA: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: elegida.el });
     } else {
-      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: '', vacia: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: null, errorIA: resultado.error });
+      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: null, errorIA: resultado.error });
     }
     await sleep(300);
   }
@@ -333,21 +397,27 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
       addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: 'Saltada en revisión manual' });
       return { ok: false, expirada: false };
     }
+    // respuestaIa/fueEditada (docs/banco-de-preguntas.md §3): sin esto el
+    // backend guardaba respuestaIa == respuestaFinal siempre, y la corrección
+    // de la persona en modo revisión (la señal más valiosa del dataset) se
+    // perdía para siempre.
+    const paraLog = (r) => ({ pregunta: r.pregunta, respuestaIa: r.respuestaIa, respuesta: r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia: r.vacia, fueIA: r.fueIA });
+
     if (resultado.errorEnvio) {
-      const respuestasParaLog = resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia }));
+      const respuestasParaLog = resultado.respuestasLog.map(paraLog);
       marcarIncompleta(id, titulo, url, resultado.errorEnvio, respuestasParaLog, decisionOfertaId);
       return { ok: false, expirada: false };
     }
 
     const ok = await esperarConfirmacion();
     if (ok) {
-      const respuestasParaLog = resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia, fueIA: r.fueIA }));
+      const respuestasParaLog = resultado.respuestasLog.map(paraLog);
       addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación con preguntas enviada', respuestas: respuestasParaLog });
       reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, matchScore: resultado.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
       msg('✓ ' + titulo.slice(0, 40), '#16A34A');
       return { ok: true, expirada: false };
     }
-    marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(r => ({ pregunta: r.pregunta, respuesta: r.respuesta, vacia: r.vacia })), decisionOfertaId);
+    marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(paraLog), decisionOfertaId);
     return { ok: false, expirada: false };
   }
 
@@ -364,9 +434,67 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
   return { ok: false, expirada: false };
 }
 
+// ── Etapa 2 para banda gris (§B) ─────────────────────────────────────────
+// Laborum no tiene un panel lateral como Computrabajo -- cada aviso es su
+// propia página, así que "abrir el aviso" significa navegar ahí y volver.
+// sessionStorage sobrevive esa navegación (misma pestaña) y se pierde sola
+// si se cierra, así que sirve para pasarse la posta entre las dos pasadas:
+// qué oferta se fue a revisar, y qué resultado trajo al volver.
+const CLAVE_ETAPA2_PENDIENTE = 'ap_etapa2_pendiente';
+const CLAVE_ETAPA2_RESULTADO = 'ap_etapa2_resultado';
+
+// Ya estamos en la página del aviso que se fue a revisar -- se vuelve a
+// puntuar con el cuerpo y las facetas reales. Si ahora resuelve a postular,
+// se postula directo acá mismo (ya está abierto, no tiene sentido volver al
+// listado para reabrirlo); si no, el resultado se guarda para que la vuelta
+// al listado lo procese (banda gris con más datos, o descarte con razón real).
+async function resolverEtapa2Gris(pendiente) {
+  try {
+    await esperar('button');
+    const cuerpo = extraerTextoAviso();
+    const detalleAviso = extraerFacetasAviso();
+    AP.vistos.add(pendiente.id);
+    const resultadoFinal = AP.evaluarOferta({
+      titulo: pendiente.titulo, empresa: pendiente.empresa, cuerpo, ubicacion: pendiente.ubicacion || '',
+    });
+
+    if (resultadoFinal.banda === 'postular') {
+      AP.procesando = true;
+      await postularEnPagina(pendiente.id, pendiente.titulo, location.href);
+      await sleep(DELAY);
+      AP.procesando = false;
+    } else {
+      sessionStorage.setItem(CLAVE_ETAPA2_RESULTADO, JSON.stringify({
+        id: pendiente.id, titulo: pendiente.titulo, url: pendiente.url, empresa: pendiente.empresa,
+        banda: resultadoFinal.banda, score: resultadoFinal.score, razones: resultadoFinal.razones, detalleAviso,
+      }));
+    }
+  } finally {
+    // Pase lo que pase (una excepción acá no debe dejar la bandera pegada --
+    // si quedara puesta, la próxima vez que esta pestaña llegue a CUALQUIER
+    // aviso, por la razón que sea, se procesaría como si fuera la revisión
+    // de ESTA oferta vieja).
+    AP.procesando = false;
+    sessionStorage.removeItem(CLAVE_ETAPA2_PENDIENTE);
+  }
+
+  if (history.length > 1) {
+    history.back();
+    setTimeout(() => { if (AP.activo) escanear(); }, 1800);
+  }
+}
+
 // ── Escanear el listado ────────────────────────────────────────────
 async function escanear() {
   if (!AP.activo || AP.procesando || !AP.cfg) return;
+
+  // ¿Esta página de detalle es la vuelta de haber ido a revisar una gris
+  // (Etapa 2), y no una navegación normal a postular? Se revisa antes que
+  // nada porque cambia a qué función se delega.
+  const etapa2Pendiente = sessionStorage.getItem(CLAVE_ETAPA2_PENDIENTE);
+  if (etapa2Pendiente && /\/empleos\/.+-\d+\.html/.test(location.pathname)) {
+    return resolverEtapa2Gris(JSON.parse(etapa2Pendiente));
+  }
 
   // En una página de detalle (no listado), postular directo si corresponde
   // -- pero solo si se llegó navegando desde un listado (history real: la
@@ -389,6 +517,40 @@ async function escanear() {
   const pendientes = [];
   const titulosVistos = [];
   const avistamientos = [];
+  // Desglose del escaneo (§A): se cuentan las tres bandas y se junta la razón
+  // de cada descarte, para poder mostrar cuál fue la más frecuente al final.
+  const conteos = { postular: 0, gris: 0, descartar: 0 };
+  const razonesDescartadas = [];
+  // Candidatas a banda gris de la Etapa 1 (solo tarjeta) -- no se reportan
+  // todavía: primero pasan por la Etapa 2 (§B) si no hay nada más urgente
+  // que hacer en esta pasada (ver el final de la función).
+  const candidatosGris = [];
+
+  // Si esta pasada es la vuelta de haber ido a revisar una gris, se procesa
+  // el resultado que dejó guardado ANTES del forEach -- así el addLog() de
+  // acá abajo actualiza AP.log a tiempo para que yaProcesada() la excluya
+  // cuando el forEach la vuelva a encontrar en el listado.
+  const etapa2Resultado = sessionStorage.getItem(CLAVE_ETAPA2_RESULTADO);
+  if (etapa2Resultado) {
+    sessionStorage.removeItem(CLAVE_ETAPA2_RESULTADO);
+    try {
+      const r = JSON.parse(etapa2Resultado);
+      if (r.banda === 'descartar') {
+        conteos.descartar++;
+        const razon = (r.razones && r.razones[0]) || 'No calza con tus filtros';
+        razonesDescartadas.push(razon);
+        addLog({ ts: Date.now(), status: 'skip', title: r.titulo, url: r.url, uid: r.id, reason: AP.formatearRazonCorta(razon) });
+      } else {
+        conteos.gris++;
+        addLog({ ts: Date.now(), status: 'skip', title: r.titulo, url: r.url, uid: r.id, reason: 'En banda gris — revisar en el dashboard' });
+        AP.reportarBandaGris({
+          titulo: r.titulo, url: r.url, plataforma: 'Laborum', empresa: r.empresa,
+          scoreLocal: r.score, razones: r.razones, detalleAviso: r.detalleAviso,
+        });
+      }
+    } catch (e) { /* sessionStorage corrupto -- se ignora, no bloquea el resto del escaneo */ }
+  }
+
   candidatas.forEach(a => {
     const id = getIdDeTarjeta(a);
     if (yaProcesada(id)) return;
@@ -406,38 +568,59 @@ async function escanear() {
     if (resultado.banda === 'postular') {
       pendientes.push({ a, id, titulo, url: a.href });
     } else if (resultado.banda === 'gris') {
-      AP.vistos.add(id);
-      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: 'En banda gris — revisar en el dashboard' });
-      AP.reportarBandaGris({
-        titulo, url: a.href, plataforma: 'Laborum', empresa,
-        scoreLocal: resultado.score, razones: resultado.razones,
-      });
+      candidatosGris.push({ id, titulo, url: a.href, empresa, ubicacion: getUbicacionDeTarjeta(a), resultado });
     } else {
+      // §C: la razón del scorer es un objeto estructurado -- se guarda tal
+      // cual para el desglose del overlay (agrupa por tipo) y se formatea
+      // recién para el log.
+      conteos.descartar++;
+      const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
+      razonesDescartadas.push(razon);
       AP.vistos.add(id);
-      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros' });
+      addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: AP.formatearRazonCorta(razon) });
     }
   });
   reportarTitulosVistos(titulosVistos, 'Laborum');
   AP.reportarAvistamientos(avistamientos, 'Laborum');
 
-  msg(pendientes.length + ' de ' + candidatas.length + ' coinciden', '#16A34A');
-  if (!pendientes.length) {
-    // Nada más que hacer en esta página -- si es una búsqueda automática
-    // (pestaña oculta), sigue a la próxima página del listado en vez de
-    // quedarse pegada acá para siempre (los listados no son infinitos).
-    if (siguientePagina(candidatas.length, urlPaginaLaborum)) return;
+  conteos.postular = pendientes.length;
+  {
+    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas));
+    msg(resumen.texto, resumen.estado);
+  }
+
+  if (pendientes.length) {
+    AP.procesando = true;
+    const primera = pendientes[0];
+    AP.vistos.add(primera.id);
+    msg('Abriendo: ' + primera.titulo.slice(0, 35) + '…', '#D97706');
+    // Se abre en la misma pestaña — más simple y confiable que coordinar
+    // pestañas nuevas entre content scripts independientes. El resto de
+    // pendientes se procesa en las siguientes pasadas de escanear(), que
+    // el propio flujo re-dispara al volver al listado (ver más abajo).
+    location.href = primera.url;
     return;
   }
 
-  AP.procesando = true;
-  const primera = pendientes[0];
-  AP.vistos.add(primera.id);
-  msg('Abriendo: ' + primera.titulo.slice(0, 35) + '…', '#D97706');
-  // Se abre en la misma pestaña — más simple y confiable que coordinar
-  // pestañas nuevas entre content scripts independientes. El resto de
-  // pendientes se procesa en las siguientes pasadas de escanear(), que
-  // el propio flujo re-dispara al volver al listado (ver más abajo).
-  location.href = primera.url;
+  // Nada que postular en esta pasada -- si quedó alguna gris de la Etapa 1
+  // sin revisar, se va a revisar antes de dar el escaneo por terminado
+  // (§B: "las de postular se abren igual para postular, así que ahí es
+  // gratis; el costo neto son solo las grises").
+  if (candidatosGris.length) {
+    const cand = candidatosGris[0];
+    AP.vistos.add(cand.id);
+    sessionStorage.setItem(CLAVE_ETAPA2_PENDIENTE, JSON.stringify({
+      id: cand.id, titulo: cand.titulo, url: cand.url, empresa: cand.empresa, ubicacion: cand.ubicacion,
+    }));
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    location.href = cand.url;
+    return;
+  }
+
+  // Nada más que hacer en esta página -- si es una búsqueda automática
+  // (pestaña oculta), sigue a la próxima página del listado en vez de
+  // quedarse pegada acá para siempre (los listados no son infinitos).
+  siguientePagina(candidatas.length, urlPaginaLaborum);
 }
 
 // Cuando escanear() navega a una oferta puntual, este es el flujo que sigue

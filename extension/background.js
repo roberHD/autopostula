@@ -391,6 +391,20 @@ async function escanearAutomatico() {
       demora += ESPACIO_MS;
     }
   }
+
+  // Además de buscar ofertas nuevas, hay que revisar cómo van las que ya se
+  // enviaron -- sin esto, "Mis postulaciones" de Computrabajo (Vista, En
+  // proceso, Finalista, ...) solo se refrescaba si la persona entraba ahí ella
+  // misma con la extensión activa, y las analíticas del dashboard se quedaban
+  // pegadas para siempre en ENVIADO. escanearMisPostulaciones() (ver
+  // adapters/computrabajo.js) se autodispara sola al cargar esta página --
+  // no hace falta mandarle AUTO_SCAN a propósito para eso, abrirYEscanear ya
+  // manda ese mensaje igual, y ahí simplemente no encuentra tarjetas de
+  // listado y no hace nada (es inofensivo).
+  if (plataformas.includes('Computrabajo')) {
+    setTimeout(() => abrirYEscanear('https://cl.computrabajo.com/candidate/match'), demora);
+    demora += ESPACIO_MS;
+  }
 }
 
 // Abre una pestaña oculta en la URL de búsqueda, dispara el escaneo cuando

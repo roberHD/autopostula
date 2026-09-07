@@ -41,6 +41,12 @@ const AP_ESTADOS = {
   ok:         { punto: '#5BD59B', late: true },
   trabajando: { punto: '#D6F24B', late: true },
   error:      { punto: '#FF8A9B', late: false },
+  // docs/visibilidad-y-etapa2.md §A: el resumen de un escaneo necesita un
+  // tercer y cuarto matiz que 'ok'/'trabajando'/'error' no cubrían -- "hay
+  // banda gris pendiente" no es ni éxito ni error, y "todo se descartó" no
+  // es un error tampoco, solo no hubo nada que hacer.
+  pendiente:  { punto: '#60A5FA', late: false },
+  neutral:    { punto: '#8B8AA0', late: false },
 };
 
 // Los colores viejos se siguen aceptando: hay llamadas con hex por todo
@@ -98,6 +104,69 @@ AP.msg = function (texto, estado) {
 };
 
 AP.limpiarOverlay = function () { if (ov) { ov.remove(); ov = null; ovRaiz = null; } };
+
+// ── Mensaje de resumen al terminar un escaneo (docs/visibilidad-y-etapa2.md §A) ──
+// Antes cada adaptador decía "X de 20 coinciden", contando solo la banda
+// 'postular' -- "0 de 20" podía ser 20 descartadas, 20 en gris, o cualquier
+// mezcla, y la razón real ya se calculaba (iba a addLog por oferta) pero
+// nunca se mostraba donde la persona está mirando. Compartido entre los dos
+// adaptadores para no duplicar el armado del texto ni los umbrales de color.
+AP.mensajeEscaneo = function (conteos, razonTop) {
+  const c = conteos || {};
+  const partes = [];
+  if (c.postular) partes.push(c.postular + (c.postular === 1 ? ' postulada' : ' postuladas'));
+  if (c.gris) partes.push(c.gris + ' por decidir');
+  if (c.descartar) partes.push(c.descartar + (c.descartar === 1 ? ' descartada' : ' descartadas'));
+
+  let texto = partes.length ? partes.join(' · ') : 'Sin ofertas nuevas';
+  if (razonTop) texto += ' — la mayoría: ' + razonTop;
+
+  const estado = c.postular > 0 ? 'ok' : c.gris > 0 ? 'pendiente' : 'neutral';
+  return { texto: texto, estado: estado };
+};
+
+// Cuenta la razón más frecuente de una lista (las de descarte, típicamente).
+// Toma solo la PRIMERA razón de cada oferta -- razones[] puede traer varias
+// (§C), pero para "la razón más frecuente" alcanza con la principal.
+AP.razonMasFrecuente = function (razones) {
+  // §C: las razones ahora son objetos estructurados (`{tipo, ...}`), no
+  // strings ya formateados -- agrupar por tipo en vez de por texto exacto es
+  // lo que tiene sentido acá (dos descartes por ubicación en comunas
+  // distintas siguen siendo "la misma razón" a efectos del resumen). Las
+  // filas legacy en string siguen agrupándose por su texto tal cual.
+  const conteo = new Map();
+  for (const r of razones) {
+    if (!r) continue;
+    const clave = typeof r === 'string' ? r : (r.tipo || 'otro');
+    const actual = conteo.get(clave) || { n: 0, ejemplo: r };
+    actual.n++;
+    conteo.set(clave, actual);
+  }
+  let top = null, topN = 0;
+  for (const v of conteo.values()) {
+    if (v.n > topN) { topN = v.n; top = v.ejemplo; }
+  }
+  return top ? AP.formatearRazonCorta(top) : null;
+};
+
+// Formatea una razón (string legacy, u objeto estructurado nuevo del scorer
+// -- ver AP.puntuarOferta) en una línea corta, para el log de la extensión y
+// para el resumen del overlay. La versión rica para la tarjeta de "Por
+// decidir" vive en el dashboard (docs/visibilidad-y-etapa2.md §D), que lee
+// los mismos objetos desde `DecisionOferta.razones` (Json, sin migración).
+AP.formatearRazonCorta = function (r) {
+  if (typeof r === 'string') return r;
+  if (!r || !r.tipo) return 'sin razón';
+  switch (r.tipo) {
+    case 'rol': return 'calza con "' + r.rol + '" (' + r.termino + ')';
+    case 'sin_rol': return 'no se encontró ninguno de los roles buscados';
+    case 'veto': return r.razon + (r.donde === 'cuerpo' ? ' (mención en el cuerpo del aviso, no en título/empresa)' : '');
+    case 'ubicacion': return r.ofertaEn ? (r.ofertaEn + ' no está en tus comunas') : 'fuera de las comunas que buscas';
+    case 'senal': return (r.delta >= 0 ? '+' : '') + r.delta + ' por "' + r.patron + '"';
+    case 'sin_senales': return 'sin señales claras';
+    default: return 'sin razón';
+  }
+};
 
 // ── Helpers básicos ───────────────────────────────────────────────
 AP.sleep = function (ms) { return new Promise(r => setTimeout(r, ms)); };
@@ -327,15 +396,20 @@ AP.puntuarOferta = function (campos, perfil) {
   // Center SpA" con la misma certeza que si apareciera en el título.
   const vetos = perfil.vetos || [];
   let penalizacionVetoCuerpo = 0;
-  let razonVetoCuerpo = null;
+  let vetoCuerpo = null;
   for (const veto of vetos) {
     const resultado = buscar(veto.patron);
     if (!resultado.coincide) continue;
     if (resultado.enTitulo || resultado.enEmpresa) {
-      return { score: 0, banda: 'descartar', razones: [veto.razon || ('no cumple: ' + veto.patron)] };
+      // §C: objeto estructurado con el patrón y dónde matcheó, no un string
+      // ya armado -- para que cada superficie lo formatee a su manera.
+      return {
+        score: 0, banda: 'descartar',
+        razones: [{ tipo: 'veto', patron: veto.patron, razon: veto.razon || ('no cumple: ' + veto.patron), donde: resultado.enTitulo ? 'titulo' : 'empresa' }],
+      };
     }
     penalizacionVetoCuerpo = 60;
-    razonVetoCuerpo = veto.razon || ('posible: ' + veto.patron);
+    vetoCuerpo = { patron: veto.patron, razon: veto.razon || ('posible: ' + veto.patron) };
   }
 
   // 2. Roles -- puntaje del mejor match (canónico o sinónimo) × peso del rol,
@@ -357,23 +431,24 @@ AP.puntuarOferta = function (campos, perfil) {
     for (const termino of terminos) {
       const resultado = buscar(termino);
       if (!resultado.coincide) continue;
+      const campo = resultado.enTitulo ? 'titulo' : resultado.enEmpresa ? 'empresa' : 'cuerpo';
       const multiplicadorCampo = resultado.enTitulo ? 1 : resultado.enEmpresa ? 0.35 : 0.3;
       const puntaje = peso * 100 * multiplicadorCampo;
       if (puntaje > score) {
         score = puntaje;
-        mejorRol = { rol: rol.canonico, termino: termino };
+        mejorRol = { rol: rol.canonico, termino: termino, campo: campo };
       }
     }
   }
   score = Math.min(100, score);
   if (mejorRol) {
-    razones.push('calza con "' + mejorRol.rol + '" (' + mejorRol.termino + ')');
+    razones.push({ tipo: 'rol', rol: mejorRol.rol, termino: mejorRol.termino, campo: mejorRol.campo });
   } else if (roles.length) {
-    razones.push('no se encontró ninguno de los roles buscados');
+    razones.push({ tipo: 'sin_rol' });
   }
   if (penalizacionVetoCuerpo) {
     score = Math.max(0, score - penalizacionVetoCuerpo);
-    razones.push(razonVetoCuerpo + ' (mención en el cuerpo del aviso, no en título/empresa)');
+    razones.push({ tipo: 'veto', patron: vetoCuerpo.patron, razon: vetoCuerpo.razon, donde: 'cuerpo' });
   }
 
   // 3. Ubicación -- penalización fuerte si hay comunas configuradas, ninguna
@@ -388,7 +463,12 @@ AP.puntuarOferta = function (campos, perfil) {
     const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo);
     if (!matcheaComuna && !(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
       score = Math.max(0, score - 40);
-      razones.push('fuera de las comunas que buscas');
+      // §C: se guarda la comuna real de la oferta (sin normalizar, para
+      // mostrarla tal como la escribió el portal) y las comunas buscadas --
+      // antes el string decía "fuera de las comunas que buscas" sin decir
+      // cuál, así que dos ofertas descartadas por ubicación distinta se
+      // veían idénticas en la tarjeta de "Por decidir".
+      razones.push({ tipo: 'ubicacion', ofertaEn: (campos && campos.ubicacion) || null, buscadas: comunas });
     }
   }
 
@@ -398,7 +478,7 @@ AP.puntuarOferta = function (campos, perfil) {
     if (buscar(senal.patron).coincide) {
       const delta = senal.delta || 0;
       score += delta;
-      razones.push((delta >= 0 ? '+' : '') + delta + ' por "' + senal.patron + '"');
+      razones.push({ tipo: 'senal', patron: senal.patron, delta: delta });
     }
   }
 
@@ -411,7 +491,7 @@ AP.puntuarOferta = function (campos, perfil) {
   else if (score <= umbralGris) banda = 'descartar';
   else banda = 'gris';
 
-  if (!razones.length) razones.push('sin señales claras');
+  if (!razones.length) razones.push({ tipo: 'sin_senales' });
 
   return { score: score, banda: banda, razones: razones };
 };

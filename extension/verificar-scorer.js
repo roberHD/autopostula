@@ -74,14 +74,14 @@ const perfil = {
 {
   const r = AP.puntuarOferta({ titulo: 'Asesor Comercial Part Time', empresa: '', cuerpo: '', ubicacion: 'Providencia' }, perfil);
   check('sinónimo "asesor comercial" matchea', r.banda === 'postular');
-  check('señal part time sumó puntaje', r.razones.some((x) => x.includes('part time')));
+  check('señal part time sumó puntaje', r.razones.some((x) => x.tipo === 'senal' && x.patron === 'part time'));
 }
 
 // 3. Veto corta todo, sin importar que el rol matchee.
 {
   const r = AP.puntuarOferta({ titulo: 'Vendedor con comision pura', empresa: '', cuerpo: '', ubicacion: 'Ñuñoa' }, perfil);
   check('veto descarta aunque el rol matchee', r.banda === 'descartar');
-  check('razón del veto es la real, no genérica', r.razones[0] === 'no acepta renta 100% variable');
+  check('razón del veto es la real, no genérica', r.razones[0].tipo === 'veto' && r.razones[0].razon === 'no acepta renta 100% variable');
 }
 
 // 4. Sin ningún rol relacionado -> banda descartar (score 0), con razón.
@@ -109,14 +109,17 @@ const perfil = {
 // 7. Ubicación: fuera de las comunas configuradas, no remoto -> penalización fuerte.
 {
   const r = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Trabajo presencial', ubicacion: 'Puente Alto' }, perfil);
-  check('fuera de comuna y no remoto -> penalización aplicada', r.razones.some((x) => x.includes('comunas')));
+  const razonUbicacion = r.razones.find((x) => x.tipo === 'ubicacion');
+  check('fuera de comuna y no remoto -> penalización aplicada', !!razonUbicacion);
+  check('la razón de ubicación trae la comuna real de la oferta, no un string genérico', razonUbicacion && razonUbicacion.ofertaEn === 'Puente Alto');
+  check('la razón de ubicación trae las comunas buscadas', razonUbicacion && JSON.stringify(razonUbicacion.buscadas) === JSON.stringify(perfil.ubicacion.comunas));
   check('score bajó por ubicación (no llega a postular)', r.score < 100);
 }
 
 // 8. Ubicación: remoto explícito sí pasa aunque no esté en las comunas.
 {
   const r = AP.puntuarOferta({ titulo: 'Vendedor 100% remoto', empresa: '', cuerpo: 'Trabajo remoto para todo Chile', ubicacion: 'Cualquier región' }, perfil);
-  check('remoto explícito no penaliza por ubicación', !r.razones.some((x) => x.includes('comunas')));
+  check('remoto explícito no penaliza por ubicación', !r.razones.some((x) => x.tipo === 'ubicacion'));
 }
 
 // 9. Perfil vacío/incompleto no debe reventar.
@@ -207,6 +210,65 @@ const perfil = {
   const r = AP.puntuarOferta({ titulo: 'Analista de datos', empresa: 'Konecta', cuerpo: 'Nuestro call center queda en el centro', ubicacion: '' }, perfilVetoCuerpo);
   check('veto solo en el cuerpo NO corta duro (no da score 0)', r.score > 0);
   check('veto solo en el cuerpo sí penaliza (no postula directo)', r.banda !== 'postular');
+  const razonVeto = r.razones.find((x) => x.tipo === 'veto');
+  check('la razón del veto en cuerpo es un objeto estructurado con donde:"cuerpo"', razonVeto && razonVeto.donde === 'cuerpo');
+  check('AP.formatearRazonCorta distingue que el veto fue en el cuerpo, no en título/empresa', AP.formatearRazonCorta(razonVeto).includes('cuerpo del aviso'));
+}
+
+// 16. AP.mensajeEscaneo / AP.razonMasFrecuente (docs/visibilidad-y-etapa2.md
+// §A): el overlay pasó de "X de Y coinciden" (solo contaba postular) a un
+// desglose de las tres bandas más la razón de descarte más frecuente.
+{
+  const r = AP.mensajeEscaneo({ postular: 2, gris: 6, descartar: 12 }, 'no calza con "desarrollador de software"');
+  check('desglose: cuenta las tres bandas', r.texto === '2 postuladas · 6 por decidir · 12 descartadas — la mayoría: no calza con "desarrollador de software"');
+  check('desglose: estado ok cuando hubo postulaciones', r.estado === 'ok');
+}
+{
+  const r = AP.mensajeEscaneo({ postular: 0, gris: 3, descartar: 5 }, 'fuera de tus comunas');
+  check('sin postulaciones pero con grises -> estado pendiente (no ok, no neutral)', r.estado === 'pendiente');
+}
+{
+  const r = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 8 }, 'no calza con tus filtros');
+  check('todo descartado -> estado neutral (no es un error)', r.estado === 'neutral');
+}
+{
+  const r = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 0 }, null);
+  check('nada visto -> mensaje "Sin ofertas nuevas" sin razón', r.texto === 'Sin ofertas nuevas' && r.estado === 'neutral');
+}
+{
+  const razon = AP.razonMasFrecuente(['fuera de tus comunas', 'no calza con tus filtros', 'fuera de tus comunas']);
+  check('razón más frecuente cuenta repeticiones, no solo la primera', razon === 'fuera de tus comunas');
+}
+{
+  const razon = AP.razonMasFrecuente([]);
+  check('lista vacía de razones no revienta, devuelve null', razon === null);
+}
+
+// 17. Integración §A + §C: el flujo real de un adaptador es
+// `resultado = AP.puntuarOferta(...)` -> `razonesDescartadas.push(resultado.razones[0])`
+// -> `AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas))`.
+// Prueba las tres piezas encadenadas, no cada una por separado, para agarrar
+// un desajuste de forma entre lo que produce el scorer y lo que consume el
+// resumen (p.ej. si alguna dejara de pasar objetos y volviera a strings).
+{
+  const ofertas = [
+    { titulo: 'Ingeniero de software senior', empresa: '', cuerpo: '', ubicacion: 'Las Condes' }, // sin_rol -> descartar (score 0)
+    { titulo: 'Gerente de finanzas', empresa: '', cuerpo: '', ubicacion: 'Vitacura' }, // sin_rol -> descartar (score 0)
+    { titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Trabajo presencial', ubicacion: 'Puente Alto' }, // rol ok, ubicacion penaliza -> score 60 -> gris
+  ];
+  const conteos = { postular: 0, gris: 0, descartar: 0 };
+  const razonesDescartadas = [];
+  ofertas.forEach((campos) => {
+    const r = AP.puntuarOferta(campos, perfil);
+    if (r.banda === 'postular') conteos.postular++;
+    else if (r.banda === 'gris') conteos.gris++;
+    else { conteos.descartar++; razonesDescartadas.push(r.razones[0]); }
+  });
+  const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas));
+  check('integración: 2 descartadas (sin rol) y 1 en gris (ubicación)', conteos.descartar === 2 && conteos.gris === 1 && conteos.postular === 0);
+  check('integración: el resumen desglosa las dos bandas', resumen.texto.includes('1 por decidir') && resumen.texto.includes('2 descartadas'));
+  check('integración: la razón más frecuente es "sin_rol" (2 de 2 descartes), no la de ubicación (que ni se descartó)', resumen.texto.includes('no se encontró ninguno de los roles buscados'));
+  check('integración: estado pendiente (nada postulado, pero hay 1 en gris)', resumen.estado === 'pendiente');
 }
 
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
   }
 
-  const { titulo, url, empresa, plataforma, scoreLocal, razones } = await request.json().catch(() => ({}));
+  const { titulo, url, empresa, plataforma, scoreLocal, razones, detalleAviso } = await request.json().catch(() => ({}));
   if (!titulo) {
     return NextResponse.json({ error: "Falta titulo" }, { status: 400 });
   }
