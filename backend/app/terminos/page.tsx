@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function TerminosPage() {
   return (
-    <LegalPage titulo="Términos y condiciones" actualizado="3 de septiembre de 2026">
+    <LegalPage titulo="Términos y condiciones" actualizado="4 de septiembre de 2026">
       <p>
         Estos términos regulan el uso de AutoPostula: el sitio web, el panel de usuario y la
         extensión de Chrome. Al crear una cuenta o instalar la extensión, aceptas lo que sigue.
@@ -99,6 +99,11 @@ export default function TerminosPage() {
           de que se envíe. Te recomendamos usarlo, sobre todo al principio.
         </li>
         <li>
+          Cuando una oferta no calza claramente con tu perfil, AutoPostula{" "}
+          <strong>no postula por su cuenta</strong>: la deja esperando tu decisión y solo postula
+          si tú la apruebas. Esas postulaciones se envían por instrucción expresa tuya.
+        </li>
+        <li>
           <strong>Eres responsable de la veracidad de la información de tu CV y tu perfil</strong>,
           que es la base de todo lo que se genera.
         </li>
@@ -162,6 +167,11 @@ export default function TerminosPage() {
       <p>No puedes usar AutoPostula para:</p>
       <ul>
         <li>Postular con información falsa, suplantando a otra persona o usando un CV ajeno.</li>
+        <li>
+          Postular de forma masiva e indiscriminada a ofertas que no tienen relación con tu
+          perfil, de un modo que entorpezca el funcionamiento de los portales o el trabajo de
+          quienes revisan las postulaciones.
+        </li>
         <li>Revender, sublicenciar o redistribuir el servicio.</li>
         <li>
           Intentar vulnerar, descompilar o eludir los límites técnicos del servicio o de los

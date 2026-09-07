@@ -12,7 +12,16 @@ const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos, llama
         cargarCV, construirMensajesCV, cargarEstiloProfesional,
         obtenerObjetivoLaboral, clasificarOfertasIA,
         actualizarEstadoPostulacion, analizarYResponder,
-        mostrarRevision, setVal, limitarTexto, esVisible, seleccionarOpcion } = window.AP;
+        mostrarRevision, setVal, limitarTexto, esVisible, seleccionarOpcion,
+        siguientePagina } = window.AP;
+
+// El listado de Computrabajo pagina con ?p={n} (page 1 no lleva el parámetro) --
+// verificado a mano contra el sitio real (ver backend/scripts/scrape-corpus.ts).
+function urlPaginaComputrabajo(pagina) {
+  const u = new URL(location.href);
+  u.searchParams.set('p', String(pagina));
+  return u.toString();
+}
 
 // ── Extraer el texto completo del aviso (no todo el body con menús/ruido) ─
 function extraerTextoAviso() {
@@ -610,7 +619,10 @@ async function escanear() {
   }
 
   msg(pendientes.length + ' de ' + tarjetas.length + ' coinciden', '#16A34A');
-  if (!pendientes.length) return;
+  if (!pendientes.length) {
+    if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return; // navegando a la página siguiente
+    return;
+  }
 
   AP.procesando = true;
   for (const {t, id, titulo} of pendientes) {
@@ -627,6 +639,11 @@ async function escanear() {
     await sleep(DELAY);
   }
   AP.procesando = false;
+
+  // Ya se postuló a todo lo que calzaba en esta página -- si es una búsqueda
+  // automática (pestaña oculta) sigue a la próxima página en vez de darse por
+  // terminada, para no dejar sin revisar el resto del listado.
+  if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return;
   msg('Escaneo completo', '#16A34A');
 }
 

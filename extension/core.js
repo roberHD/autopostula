@@ -51,6 +51,35 @@ AP.n = function (s) { return (s || '').toLowerCase().normalize('NFD').replace(/[
 AP.safeSet = function (data) { try { chrome.storage.local.set(data); } catch (e) {} };
 AP.safeSend = function (m) { try { chrome.runtime.sendMessage(m).catch(() => {}); } catch (e) {} };
 
+// Avanza al listado paginado de la siguiente p\u00e1gina, cuando escanear() ya no
+// tiene nada m\u00e1s que hacer en la p\u00e1gina actual (\u00a7: los listados de CT/Laborum
+// no son infinitos -- ~20 ofertas por p\u00e1gina -- y sin esto la b\u00fasqueda
+// autom\u00e1tica se quedaba pegada para siempre en la primera p\u00e1gina).
+//
+// Solo navega en pesta\u00f1as OCULTAS (document.hidden): la b\u00fasqueda autom\u00e1tica de
+// background.js abre la pesta\u00f1a con active:false, as\u00ed que ah\u00ed es seguro. Si en
+// cambio la persona est\u00e1 mirando la pesta\u00f1a ella misma (toggle "Activo" manual),
+// nunca se le navega la p\u00e1gina sola sin que lo pida -- ser\u00eda muy invasivo.
+//
+// sessionStorage (no chrome.storage) a prop\u00f3sito: el contador de p\u00e1gina debe
+// resetearse solo, una vez por pesta\u00f1a -- no debe sobrevivir a que la pesta\u00f1a
+// se cierre y background.js abra una nueva para el siguiente ciclo.
+AP.MAX_PAGINAS_AUTOMATICO = 3;
+AP.LLAVE_PAGINA = 'ap_pagina_actual';
+
+AP.siguientePagina = function (cantidadEnPagina, construirUrlPagina) {
+  if (!document.hidden) return false;
+  if (!cantidadEnPagina) return false; // p\u00e1gina vac\u00eda -- ya se pas\u00f3 del final del listado
+
+  const actual = Number(sessionStorage.getItem(AP.LLAVE_PAGINA) || '1');
+  if (actual >= AP.MAX_PAGINAS_AUTOMATICO) return false;
+
+  const siguiente = actual + 1;
+  sessionStorage.setItem(AP.LLAVE_PAGINA, String(siguiente));
+  location.href = construirUrlPagina(siguiente);
+  return true;
+};
+
 AP.addLog = function (entry) {
   AP.log.push(entry);
   if (AP.log.length > 200) AP.log = AP.log.slice(-200);

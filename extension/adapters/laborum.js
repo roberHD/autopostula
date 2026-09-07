@@ -16,7 +16,16 @@
 
 const DELAY = 3000;
 const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos,
-        analizarYResponder, mostrarRevision, setVal, limitarTexto, seleccionarOpcion } = window.AP;
+        analizarYResponder, mostrarRevision, setVal, limitarTexto, seleccionarOpcion,
+        siguientePagina } = window.AP;
+
+// El listado de Laborum pagina con ?page={n} (page 1 no lleva el parámetro) --
+// verificado a mano contra el sitio real (ver backend/scripts/scrape-corpus.ts).
+function urlPaginaLaborum(pagina) {
+  const u = new URL(location.href);
+  u.searchParams.set('page', String(pagina));
+  return u.toString();
+}
 
 // ── Esperar a que aparezca al menos un elemento que matchee el selector ──
 // Necesario porque Laborum pinta el listado/la oferta después de cargar la
@@ -412,7 +421,13 @@ async function escanear() {
   AP.reportarAvistamientos(avistamientos, 'Laborum');
 
   msg(pendientes.length + ' de ' + candidatas.length + ' coinciden', '#16A34A');
-  if (!pendientes.length) return;
+  if (!pendientes.length) {
+    // Nada más que hacer en esta página -- si es una búsqueda automática
+    // (pestaña oculta), sigue a la próxima página del listado en vez de
+    // quedarse pegada acá para siempre (los listados no son infinitos).
+    if (siguientePagina(candidatas.length, urlPaginaLaborum)) return;
+    return;
+  }
 
   AP.procesando = true;
   const primera = pendientes[0];
