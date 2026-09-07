@@ -52,6 +52,26 @@
   font-size: 13px;
 }
 
+/* La marca lleva al inicio. Es un <a> real, no un onClick: así funciona el
+   clic con rueda / ctrl+clic para abrir en otra pestaña, y el teclado lo
+   alcanza sin que haya que agregarle nada. */
+.ap-brand-link {
+  display: flex;
+  align-items: center;
+  gap: inherit;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: opacity 0.15s ease;
+}
+
+.ap-brand-link:hover { opacity: 0.75; }
+
+.ap-brand-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .ap-brand-name {
   font-weight: 600;
   font-size: 14px;
