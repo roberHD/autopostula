@@ -2152,3 +2152,137 @@
 @media (max-width: 1180px) {
   .ap-fila-2 { grid-template-columns: 1fr; }
 }
+
+/* ── Pago Premium: formulario de cuenta bancaria ─────────
+   Reusa los tokens de siempre (--bg-elevated-2, --border, --accent) para que
+   la pantalla de pago no se sienta de otra app justo en el momento en que la
+   persona tiene que confiar. */
+
+/* El select no existía en el proyecto -- se calca de .ap-input y se le agrega
+   la flecha como background-image, porque appearance:none la borra. */
+.ap-select {
+  width: 100%;
+  padding: 9px 34px 9px 12px;
+  background-color: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 15px;
+}
+
+.ap-select:focus,
+.ap-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ap-error-campo {
+  font-size: 11.5px;
+  color: var(--status-rechazado);
+  margin-top: 5px;
+}
+
+/* Dos campos por fila en escritorio; apilados apenas falta ancho, para que el
+   RUT y el número de cuenta nunca queden ilegibles. */
+.ap-fila-campos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 620px) {
+  .ap-fila-campos { grid-template-columns: 1fr; }
+}
+
+.ap-autoriza {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ap-autoriza input {
+  margin-top: 2px;
+  flex: none;
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.ap-autoriza b { color: var(--text); }
+
+.ap-resumen-fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+  padding: 7px 0;
+}
+
+.ap-resumen-fila--tenue { color: var(--text-muted); font-size: 12.5px; }
+
+.ap-resumen-fila--total {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 12px;
+  font-size: 14px;
+}
+
+.ap-boton-pagar {
+  width: 100%;
+  margin-top: 16px;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.ap-boton-pagar:hover:not(:disabled) { transform: translateY(-1px); }
+
+.ap-boton-pagar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ap-nota-pago {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 10px;
+  justify-content: center;
+}
+
+.ap-aviso-banco {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.ap-aviso-banco svg { flex: none; margin-top: 1px; }

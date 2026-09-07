@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Check, Sparkles, PartyPopper } from "lucide-react";
 
 type Fila = { texto: string; free: string | boolean; premium: string | boolean };
@@ -27,11 +28,10 @@ function Celda({ valor, destacar }: { valor: string | boolean; destacar?: boolea
 }
 
 export default function PremiumPage() {
+  const router = useRouter();
   const [cargando, setCargando] = useState(true);
   const [esPremium, setEsPremium] = useState(false);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
-  const [redirigiendo, setRedirigiendo] = useState(false);
-  const [mensaje, setMensaje] = useState("");
 
   useEffect(() => {
     async function cargar() {
@@ -49,23 +49,11 @@ export default function PremiumPage() {
     cargar();
   }, []);
 
-  async function pasarAPremium() {
-    setRedirigiendo(true);
-    setMensaje("");
-    try {
-      const res = await fetch("/api/flow/checkout", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || !data.url) {
-        setMensaje(data.error ?? "No se pudo continuar — intenta de nuevo");
-        setRedirigiendo(false);
-        return;
-      }
-      window.location.href = data.url;
-    } catch (err) {
-      console.error("Error abriendo Flow:", err);
-      setMensaje("No se pudo continuar — revisa la consola");
-      setRedirigiendo(false);
-    }
+  // Antes esto saltaba directo a Flow. Ahora pasa por /dashboard/premium/pago,
+  // donde se eligen los datos de cobro -- ahí adentro sigue estando el botón
+  // que abre el checkout de Flow para quien prefiera pagar con tarjeta.
+  function pasarAPremium() {
+    router.push("/dashboard/premium/pago");
   }
 
   if (cargando) {
@@ -123,12 +111,6 @@ export default function PremiumPage() {
         </p>
       </div>
 
-      {mensaje && (
-        <p style={{ color: "var(--status-rechazado)", fontSize: 13, textAlign: "center", marginBottom: 16 }}>
-          {mensaje}
-        </p>
-      )}
-
       <div className="ap-pricing-grid" style={{ maxWidth: 760, margin: "0 auto 28px" }}>
         {/* Free */}
         <div className="ap-section ap-animate-in" style={{ marginBottom: 0 }}>
@@ -169,10 +151,9 @@ export default function PremiumPage() {
                 width: "100%", border: "none", borderRadius: 8, padding: "9px 16px",
                 fontSize: 13, fontWeight: 600, cursor: "pointer",
               }}
-              disabled={redirigiendo}
               onClick={pasarAPremium}
             >
-              {redirigiendo ? "Un momento..." : "✨ Pasar a Premium"}
+              ✨ Pasar a Premium
             </button>
           </div>
         </div>
