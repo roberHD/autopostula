@@ -518,6 +518,8 @@ async function reportarTitulosVistosBackend(titulos, plataforma) {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       console.warn('[AP] Backend rechazó títulos vistos:', data.error || res.status);
+    } else {
+      console.log('[AP] Títulos vistos reportados: ' + titulos.length);
     }
   } catch (e) {
     console.warn('[AP] Error de red reportando títulos vistos:', e);
@@ -543,6 +545,9 @@ async function reportarAvistamientosBackend(avistamientos, plataforma) {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       console.warn('[AP] Backend rechazó avistamientos:', data.error || res.status);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      console.log('[AP] Avistamientos guardados: ' + (data.guardados ?? '?') + '/' + avistamientos.length);
     }
   } catch (e) {
     console.warn('[AP] Error de red reportando avistamientos:', e);
@@ -581,17 +586,29 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
     processQueue();
     sendResponse({ queued: true });
   }
+  // Las 4 de acá abajo hacían fire-and-forget (sin return true) -- en MV3 eso
+  // le dice a Chrome "esta llamada ya terminó", y el service worker se puede
+  // suspender a mitad del fetch() sin avisar: ni el .then ni el .catch llegan
+  // a correr, así que no queda ni un log de error. Nada se reportaba y no
+  // había ninguna señal de que algo estuviera mal (ver docs/rediseno-filtrado-ofertas.md,
+  // §9.3 -- "el corpus se llena sola" solo si esto de verdad corre hasta el final).
+  // El return true mantiene vivo el listener (y con él, el service worker)
+  // hasta que el fetch realmente termine.
   if (msg.type === 'REPORTAR_POSTULACION') {
-    reportarPostulacionBackend(msg.oferta);
+    reportarPostulacionBackend(msg.oferta).then(() => sendResponse({ ok: true }));
+    return true;
   }
   if (msg.type === 'REPORTAR_TITULOS_VISTOS') {
-    reportarTitulosVistosBackend(msg.titulos, msg.plataforma);
+    reportarTitulosVistosBackend(msg.titulos, msg.plataforma).then(() => sendResponse({ ok: true }));
+    return true;
   }
   if (msg.type === 'REPORTAR_BANDA_GRIS') {
-    reportarBandaGrisBackend(msg.oferta);
+    reportarBandaGrisBackend(msg.oferta).then(() => sendResponse({ ok: true }));
+    return true;
   }
   if (msg.type === 'REPORTAR_AVISTAMIENTOS') {
-    reportarAvistamientosBackend(msg.avistamientos, msg.plataforma);
+    reportarAvistamientosBackend(msg.avistamientos, msg.plataforma).then(() => sendResponse({ ok: true }));
+    return true;
   }
   if (msg.type === 'ACTUALIZAR_ESTADO') {
     actualizarEstadoBackend(msg.datos).then(sendResponse);
