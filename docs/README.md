@@ -13,6 +13,7 @@
 | [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ✅ **Implementado** |
 | [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ✅ **Implementado** |
 | [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 Pendiente — §3 (capturar la corrección) ya está |
+| [`modo-solo-observar.md`](modo-solo-observar.md) | Escanear y cosechar sin postular. Destraba la recolección de corpus y es el modo "pruébalo antes de dejarlo actuar" para usuarios nuevos | ✅ **Implementado** |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -74,6 +75,18 @@ sistema hoy.
   "a favor / en contra". Degrada bien en filas sin Etapa 2 o de antes del cambio.
 - **Filtro de IA viejo** — solo corre si el scorer local está desactivado (`!usarScorerLocal`);
   antes podía vetar ofertas que el scorer ya había aprobado con el objetivo declarado.
+
+### Modo solo observar
+
+- **`soloObservar`** (`AP.cfg`, popup con su propio toggle azul junto al maestro) — escanea,
+  puntúa y corre la Etapa 2 igual que siempre, pero no abre el aviso para postular ni llama a la
+  IA de postulación. Gana sobre "revisar antes de enviar" (no hay nada que revisar si no se
+  envía nada) y bloquea también las aprobaciones de banda gris (`DO_APPLY`, `core.js`) — sin
+  reintento silencioso: la decisión queda pendiente hasta que se apague el modo.
+- **Log con status propio** (`observado`, `extension/historial.js`) — nunca se ve ni se cuenta
+  como una postulación real.
+- Desbloquea el protocolo de recolección de corpus del Apéndice de
+  [`modo-solo-observar.md`](modo-solo-observar.md), para `scripts/solapamiento-portales.ts`.
 
 ### Costos
 

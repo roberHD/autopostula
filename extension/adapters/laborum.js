@@ -363,6 +363,16 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
     return { ok: false, expirada: false };
   }
 
+  // docs/modo-solo-observar.md §3.2/§4.3: único punto por el que pasan los
+  // tres caminos que terminan acá -- Etapa 1 directo, Etapa 2 de una gris
+  // que resolvió a postular, y una aprobación de banda gris (aunque esa ya
+  // se corta antes, en el handler de DO_APPLY de core.js). Ni se toca el
+  // botón ni se envía nada.
+  if (AP.cfg && AP.cfg.soloObservar) {
+    addLog({ ts: Date.now(), status: 'observado', title: titulo, url, uid: id, reason: 'Habría postulado — modo solo observar' });
+    return { ok: false, expirada: false };
+  }
+
   // El texto del botón cambia según el tipo de oferta: "Postulación rápida"
   // para las de un clic, "Postularme" para las que abren el modal de preguntas.
   const btn = [...document.querySelectorAll('button')]
@@ -583,13 +593,27 @@ async function escanear() {
   reportarTitulosVistos(titulosVistos, 'Laborum');
   AP.reportarAvistamientos(avistamientos, 'Laborum');
 
-  conteos.postular = pendientes.length;
+  // docs/modo-solo-observar.md §3.2: estas son ofertas que SE HABRÍAN
+  // postulado -- se cuentan aparte para que el mensaje no mienta.
+  const soloObservar = !!(AP.cfg && AP.cfg.soloObservar);
+  if (soloObservar) conteos.observado = pendientes.length;
+  else conteos.postular = pendientes.length;
   {
-    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas));
+    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
     msg(resumen.texto, resumen.estado);
   }
 
-  if (pendientes.length) {
+  if (pendientes.length && soloObservar) {
+    // A diferencia de Computrabajo, acá "abrir el aviso para postular" es
+    // navegar a la página completa -- en vez de eso, directamente no se
+    // navega: se deja constancia de las tres con su propio status y se
+    // sigue de largo a la Etapa 2 de las grises (más abajo), que sí corre
+    // igual (§4.1).
+    pendientes.forEach(p => {
+      AP.vistos.add(p.id);
+      addLog({ ts: Date.now(), status: 'observado', title: p.titulo, url: p.url, uid: p.id, reason: 'Habría postulado — modo solo observar' });
+    });
+  } else if (pendientes.length) {
     AP.procesando = true;
     const primera = pendientes[0];
     AP.vistos.add(primera.id);

@@ -111,17 +111,28 @@ AP.limpiarOverlay = function () { if (ov) { ov.remove(); ov = null; ovRaiz = nul
 // mezcla, y la razón real ya se calculaba (iba a addLog por oferta) pero
 // nunca se mostraba donde la persona está mirando. Compartido entre los dos
 // adaptadores para no duplicar el armado del texto ni los umbrales de color.
-AP.mensajeEscaneo = function (conteos, razonTop) {
+// soloObservar (docs/modo-solo-observar.md §3.4): en ese modo nada se
+// postula de verdad, así que el mensaje tiene que decirlo explícito -- la
+// persona nunca puede quedar en duda sobre si la extensión está enviando
+// postulaciones o no. c.observado reemplaza a c.postular en el desglose.
+AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
   const c = conteos || {};
   const partes = [];
-  if (c.postular) partes.push(c.postular + (c.postular === 1 ? ' postulada' : ' postuladas'));
+  if (soloObservar) {
+    if (c.observado) partes.push(c.observado + ' habría postulado');
+  } else if (c.postular) {
+    partes.push(c.postular + (c.postular === 1 ? ' postulada' : ' postuladas'));
+  }
   if (c.gris) partes.push(c.gris + ' por decidir');
   if (c.descartar) partes.push(c.descartar + (c.descartar === 1 ? ' descartada' : ' descartadas'));
 
   let texto = partes.length ? partes.join(' · ') : 'Sin ofertas nuevas';
+  if (soloObservar) texto = '👁 Solo observar · ' + texto;
   if (razonTop) texto += ' — la mayoría: ' + razonTop;
 
-  const estado = c.postular > 0 ? 'ok' : c.gris > 0 ? 'pendiente' : 'neutral';
+  const estado = soloObservar
+    ? (c.observado > 0 || c.gris > 0 ? 'pendiente' : 'neutral')
+    : (c.postular > 0 ? 'ok' : c.gris > 0 ? 'pendiente' : 'neutral');
   return { texto: texto, estado: estado };
 };
 
@@ -212,6 +223,7 @@ AP.addLog = function (entry) {
   // así que un error o un salto pasaban totalmente desapercibidos al depurar.
   if (entry.status === 'err') console.warn('[AP] postulación con error:', entry.title, '—', entry.reason, entry);
   else if (entry.status === 'skip') console.log('[AP] postulación saltada:', entry.title, '—', entry.reason);
+  else if (entry.status === 'observado') console.log('[AP] solo observar — habría postulado:', entry.title);
 };
 
 // ── Reportar postulación al backend de AutoPostula (web) ─────────
@@ -992,6 +1004,15 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
   // porque la postulación real toma varios segundos -- hay que devolver
   // true para que Chrome no cierre el canal antes del sendResponse.
   if (m.type === 'DO_APPLY') {
+    // docs/modo-solo-observar.md §4.3: "solo observar" tiene que significar
+    // lo que dice -- una aprobación de banda gris NO puede postular por esta
+    // puerta mientras el modo esté activo. No se marca expirada (expirada:
+    // false): queda pendiente para reintentarse en el próximo ciclo, cuando
+    // la persona salga del modo observar.
+    if (AP.cfg && AP.cfg.soloObservar) {
+      sendResponse({ success: false, expirada: false, motivo: 'Estás en modo solo observar' });
+      return true;
+    }
     if (!AP.aplicarDirecto) { sendResponse({ success: false, expirada: false }); return true; }
     AP.aplicarDirecto(m.decisionId).then(sendResponse);
     return true;

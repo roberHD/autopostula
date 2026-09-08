@@ -107,6 +107,13 @@ export default function PorDecidirPage() {
         <p className="ap-page-sub">
           Ofertas que el scorer no pudo ubicar con confianza — tu sí o no ayuda a que tu perfil aprenda.
         </p>
+        {/* docs/modo-solo-observar.md §4.3: si la extensión tiene "solo observar"
+            activado, un "sí" acá queda pendiente hasta que se desactive -- no
+            hay forma de saber desde el dashboard si está prendido, así que se
+            avisa siempre en vez de dejarlo como una sorpresa silenciosa. */}
+        <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>
+          Si tienes "Solo observar" activado en la extensión, un "sí" acá queda pendiente hasta que lo desactives.
+        </p>
       </div>
 
       {mensaje && <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>{mensaje}</p>}

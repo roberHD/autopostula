@@ -730,12 +730,17 @@ async function escanear() {
     }
   }
 
+  // docs/modo-solo-observar.md §3.2: en modo observar esto no cuenta como
+  // "postular" -- son ofertas que SE HABRÍAN postulado, se cuentan aparte
+  // para que el mensaje no mienta.
+  const soloObservar = !!(AP.cfg && AP.cfg.soloObservar);
   {
-    // conteos.postular se fija recién acá, después del filtro de IA viejo (si
-    // estuviera activo) -- para que el mensaje nunca diga más de lo que
-    // realmente va a pasar.
-    conteos.postular = pendientes.length;
-    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas));
+    // conteos.postular/observado se fija recién acá, después del filtro de
+    // IA viejo (si estuviera activo) -- para que el mensaje nunca diga más
+    // de lo que realmente va a pasar.
+    if (soloObservar) conteos.observado = pendientes.length;
+    else conteos.postular = pendientes.length;
+    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
     msg(resumen.texto, resumen.estado);
   }
   if (!pendientes.length) {
@@ -748,6 +753,14 @@ async function escanear() {
     if (!AP.activo) break;
     const a = t.querySelector('h2 a, a[href*="oferta"], a[href*="trabajo"]') || t.querySelector('a');
     const url = a && a.href.split('#')[0] || '';
+    // Modo solo observar: ni se abre el aviso ni se postula -- se deja
+    // constancia en el log con su propio status, distinto de 'ok'/'skip',
+    // para que nunca se confunda con una postulación real.
+    if (soloObservar) {
+      AP.vistos.add(id);
+      addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:'Habría postulado — modo solo observar'});
+      continue;
+    }
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
     if (btn) await postular(url, id, titulo);
