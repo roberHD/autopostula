@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, Check, MessageSquare, PenLine, Target, Heart, Lock } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Sparkles, Send, Check, MessageSquare, PenLine, Target, Heart, Lock, Mic, Square } from "lucide-react";
 import { quitarMarkdown } from "@/lib/text";
+import { usarDictado } from "@/lib/usar-dictado";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
 
@@ -119,9 +120,21 @@ export default function ConversacionPage() {
     }
   }
 
+  // El dictado lee el input por ref y no por closure: si leyera la variable
+  // del render, al apretar el micrófono tomaría un valor viejo.
+  const inputRef = useRef("");
+  useEffect(() => { inputRef.current = input; }, [input]);
+
+  const dictado = usarDictado(
+    setInput,
+    useCallback(() => inputRef.current, []),
+    useCallback((m: string) => setMensaje(m), [])
+  );
+
   async function handleEnviar(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || enviando) return;
+    dictado.detener();
     const texto = input.trim();
     setInput("");
     await enviarMensaje(texto);
@@ -357,6 +370,19 @@ export default function ConversacionPage() {
                   placeholder="Escribe tu respuesta…"
                   disabled={enviando || bloqueada}
                 />
+                {dictado.soportado && (
+                  <button
+                    type="button"
+                    className={"ap-redactor__mic" + (dictado.escuchando ? " ap-redactor__mic--activo" : "")}
+                    onClick={dictado.alternar}
+                    disabled={enviando || bloqueada}
+                    aria-label={dictado.escuchando ? "Detener el dictado" : "Dictar por voz"}
+                    aria-pressed={dictado.escuchando}
+                    title={dictado.escuchando ? "Detener el dictado" : "Dictar por voz"}
+                  >
+                    {dictado.escuchando ? <Square size={14} /> : <Mic size={16} />}
+                  </button>
+                )}
                 <button
                   className="ap-button ap-redactor__enviar"
                   type="submit"
@@ -366,6 +392,13 @@ export default function ConversacionPage() {
                   <Send size={16} />
                 </button>
               </form>
+
+              {dictado.escuchando && (
+                <p className="ap-dictando">
+                  <span className="ap-dictando__punto" />
+                  Escuchando… habla y revisa el texto antes de enviarlo.
+                </p>
+              )}
 
               {puedeFinalizar && (
                 <button
