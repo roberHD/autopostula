@@ -15,20 +15,7 @@ export const metadata: Metadata = {
     "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo, Laborum y Trabajando.com con tus palabras. Tú revisas y envías, o lo dejas corriendo solo.",
 };
 
-// Cargos reales de los portales chilenos: la tira es textura, pero textura
-// del rubro de la persona que está mirando.
-const CARGOS = [
-  ["Operario/a de bodega", "Quilicura"],
-  ["Ejecutivo/a de call center", "Santiago Centro"],
-  ["Auxiliar de aseo", "Providencia"],
-  ["Vendedor/a integral", "Maipú"],
-  ["Cajero/a part time", "La Florida"],
-  ["Asistente contable", "Las Condes"],
-  ["Conductor clase B", "San Bernardo"],
-  ["Guardia de seguridad OS10", "Puente Alto"],
-  ["Reponedor/a de sala", "Ñuñoa"],
-  ["Secretaria administrativa", "Viña del Mar"],
-];
+const PORTALES = ["Computrabajo", "Laborum", "Trabajando.com"];
 
 const PASOS = [
   {
@@ -109,15 +96,9 @@ export default function LandingPage() {
         <section className="lp-hero">
           <div className="lp-wrap lp-hero__grid">
             <div>
-              <span className="lp-flag lp-rise lp-rise--1">
-                <i />
-                Computrabajo, Laborum y Trabajando.com
-              </span>
-
               <h1 className="lp-rise lp-rise--2">
                 Postula 80 veces al mes.
-                <br />
-                <span className="ap-swipe ap-swipe--auto">Escribe una sola.</span>
+                <span className="lp-fino">Escribe una sola.</span>
               </h1>
 
               <p className="lp-hero__sub lp-rise lp-rise--3">
@@ -134,12 +115,18 @@ export default function LandingPage() {
                 </a>
               </div>
 
-              <div className="lp-terms lp-rise lp-rise--5">
-                <span className="lp-term">
-                  <Check strokeWidth={2.6} /> 20 postulaciones gratis al mes
+              <div className="lp-datos lp-rise lp-rise--5">
+                <span>
+                  <span className="lp-dato__n">20</span>
+                  <span className="lp-dato__l">gratis al mes</span>
                 </span>
-                <span className="lp-term">
-                  <Check strokeWidth={2.6} /> Sin tarjeta de crédito
+                <span>
+                  <span className="lp-dato__n">3</span>
+                  <span className="lp-dato__l">portales conectados</span>
+                </span>
+                <span>
+                  <span className="lp-dato__n">0</span>
+                  <span className="lp-dato__l">datos de tarjeta</span>
                 </span>
               </div>
             </div>
@@ -148,14 +135,12 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── Tira de avisos ───────────────────────────────────── */}
-        <div className="lp-tira" aria-hidden="true">
-          <div className="lp-tira__row">
-            {/* Duplicada para que el loop no corte al llegar al final. */}
-            {[...CARGOS, ...CARGOS].map(([cargo, comuna], i) => (
-              <span className="lp-tira__item" key={`${cargo}-${i}`}>
-                <b>{cargo}</b> {comuna}
-              </span>
+        {/* ── Dónde funciona ───────────────────────────────────── */}
+        <div className="lp-portales">
+          <div className="lp-wrap lp-portales__in">
+            <span className="lp-portales__l">Funciona dentro de</span>
+            {PORTALES.map((n) => (
+              <span className="lp-portales__n" key={n}>{n}</span>
             ))}
           </div>
         </div>
@@ -165,7 +150,7 @@ export default function LandingPage() {
           <div className="lp-wrap">
             <Revelar className="lp-head">
               <div className="lp-head__rule" />
-              <h2>La misma pregunta, dos respuestas.</h2>
+              <h2>La misma pregunta. <span className="lp-fino">Dos respuestas.</span></h2>
               <p>
                 Todos los portales preguntan lo mismo. La diferencia está en si la respuesta
                 podría ser de cualquiera, o solamente tuya.
@@ -236,7 +221,7 @@ export default function LandingPage() {
           <div className="lp-wrap">
             <Revelar className="lp-head">
               <div className="lp-head__rule" />
-              <h2>Sabes en qué quedó cada una.</h2>
+              <h2>Sabes en qué quedó <span className="lp-fino">cada una.</span></h2>
               <p>
                 Cada postulación queda registrada con su estado real, actualizado desde el portal.
                 Se acabó el &ldquo;¿a esta ya postulé?&rdquo;.
@@ -252,7 +237,10 @@ export default function LandingPage() {
               <div className="lp-tablero__in">
                 <div className="lp-pipe">
                   {PIPELINE.map(({ estado, n, w, color }) => (
-                    <div className="lp-pipe__row" key={estado}>
+                    <div
+                      className={`lp-pipe__row${estado === "Finalista" ? " lp-pipe__row--clave" : ""}`}
+                      key={estado}
+                    >
                       <span className="lp-pipe__lab">
                         <i style={{ color }} />
                         {estado}

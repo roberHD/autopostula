@@ -22,7 +22,7 @@ export default function Imagen() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          background: "#1B1A2E",
+          background: "#16181A",
           padding: "72px 80px",
           fontFamily: "sans-serif",
         }}
@@ -34,7 +34,8 @@ export default function Imagen() {
               width: 64,
               height: 64,
               borderRadius: 17,
-              background: "#5A2FD6",
+              background: "#1D2023",
+              border: "1.5px solid #3C4145",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -51,21 +52,21 @@ export default function Imagen() {
               />
             </svg>
           </div>
-          <span style={{ fontSize: 34, fontWeight: 700, color: "#ECECF3", letterSpacing: "-0.5px" }}>
+          <span style={{ fontSize: 34, fontWeight: 700, color: "#E9EBEA", letterSpacing: "-0.5px" }}>
             AutoPostula
           </span>
         </div>
 
         {/* El titular, con el destacador sobre la línea que remata */}
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontSize: 76, fontWeight: 800, color: "#ECECF3", letterSpacing: "-2.5px" }}>
+          <span style={{ fontSize: 76, fontWeight: 800, color: "#E9EBEA", letterSpacing: "-2.5px" }}>
             Postula 80 veces al mes.
           </span>
           <span
             style={{
               fontSize: 76,
               fontWeight: 800,
-              color: "#1B1A2E",
+              color: "#16181A",
               background: "#D6F24B",
               letterSpacing: "-2.5px",
               padding: "2px 14px",
@@ -78,9 +79,9 @@ export default function Imagen() {
         </div>
 
         {/* Los datos concretos, no adjetivos */}
-        <div style={{ display: "flex", alignItems: "center", gap: 28, fontSize: 26, color: "#9998AC" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 28, fontSize: 26, color: "#8E9599" }}>
           <span>Computrabajo, Laborum y Trabajando.com</span>
-          <span style={{ color: "#443F5E" }}>|</span>
+          <span style={{ color: "#3C4145" }}>|</span>
           <span>20 postulaciones gratis al mes</span>
         </div>
       </div>
