@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AutoPostula",
-  "version": "2.8.2",
-  "description": "Postulaci\u00f3n autom\u00e1tica inteligente para Computrabajo y Laborum. Powered by IA.",
+  "version": "2.9.0",
+  "description": "Postulaci\u00f3n autom\u00e1tica inteligente para Computrabajo, Laborum y Trabajando.com. Powered by IA.",
   "permissions": [
     "storage",
     "tabs",
@@ -14,6 +14,7 @@
     "https://computrabajo.cl/*",
     "https://computrabajo.com/*",
     "https://www.laborum.cl/*",
+    "https://www.trabajando.cl/*",
     "https://autopostula.cl/*"
   ],
   "background": {
@@ -40,6 +41,16 @@
       "js": [
         "core.js",
         "adapters/laborum.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.trabajando.cl/*"
+      ],
+      "js": [
+        "core.js",
+        "adapters/trabajando.js"
       ],
       "run_at": "document_idle"
     },

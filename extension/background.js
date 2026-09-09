@@ -268,6 +268,20 @@ const URL_BUSQUEDA_POR_PORTAL = {
     archivo += 'busqueda-' + slug + '.html';
     return 'https://www.laborum.cl/' + prefijo + archivo;
   },
+  // Verificado en vivo el 2026-09-08: el único facet de portal que Trabajando
+  // expone como parámetro de URL navegable es la comuna (?ubicacion={slug},
+  // funciona igual para cualquier comuna de Chile, no solo RM). El filtro de
+  // "Jornadas" del sitio (que ahí mezcla jornada y modalidad en una sola
+  // lista) corre contra su propia API interna sin reflejarse en la URL --
+  // no se inventa un parámetro que no existe, se deja sin ese facet acá.
+  'Trabajando': (slug, filtros) => {
+    let url = 'https://www.trabajando.cl/trabajo-empleo/' + slug;
+    const comuna = filtros && filtros.comunas && filtros.comunas[0];
+    if (comuna && (!filtros || filtros.modalidad !== 'remoto')) {
+      url += '?ubicacion=' + comunaParaUrl(comuna);
+    }
+    return url;
+  },
 };
 
 // Trae los filtros de búsqueda (palabras, modalidad, jornada) del dashboard y
