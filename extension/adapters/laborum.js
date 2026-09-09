@@ -79,8 +79,17 @@ function getUbicacionDeTarjeta(a) {
 function getEmpresaDeTarjeta(a) {
   const id = getIdDeTarjeta(a);
   const contenedor = a.querySelector('#header-col-job-posting-' + id) || a;
+  // El primer <h3> siempre es la fecha ("Publicado hace 6 horas", "Publicado
+  // ayer", "Actualizado hace 8 días", "Actualizado hace más de 15 días", ...)
+  // y el segundo siempre es la empresa -- verificado contra 20 tarjetas reales
+  // del sitio, todas con exactamente 2 <h3>. Antes se intentaba distinguirlos
+  // por contenido (regex negativo excluyendo "hace \d"), pero eso se rompía con
+  // cualquier variante que no calzara exacto ese patrón -- "Publicado ayer",
+  // "Actualizado ayer" y "hace más de 15 días" (con una palabra entre "hace" y
+  // el número) se colaban como si fueran el nombre de la empresa. La posición
+  // no depende del texto ni del hash de estilo (que sí cambia entre builds).
   const h3s = [...contenedor.querySelectorAll('h3')];
-  const candidato = h3s.find((h) => !/hace\s+\d/i.test(h.textContent || ''));
+  const candidato = h3s[1];
   return (candidato && candidato.textContent.trim()) || '';
 }
 
