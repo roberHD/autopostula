@@ -52,7 +52,7 @@ const EXPLICACION: Record<string, { t: string; d: string; ir?: { href: string; t
   },
   "sin-portales": {
     t: "Sin portales conectados",
-    d: "Conecta Computrabajo o Laborum para que empiece.",
+    d: "Conecta Computrabajo, Laborum o Trabajando.com para que empiece.",
     ir: { href: "/dashboard/portales", txt: "Conectar" },
   },
 };

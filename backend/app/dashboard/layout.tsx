@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import "./theme.css";
 import Sidebar from "./Sidebar";
+
+export const metadata: Metadata = {
+  title: "Tu tablero",
+  // Detrás de la sesión: no hay nada acá que Google deba indexar.
+  robots: { index: false, follow: false },
+};
 import BarraMaquina from "./BarraMaquina";
 
 export default async function DashboardLayout({

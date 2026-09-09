@@ -4,12 +4,13 @@ const statusCfg = {
   ok:        { label: 'Postulada',  color: '#17784F', bg: '#E2F3EA' },
   pending:   { label: 'Pendiente',  color: '#9A5B00', bg: '#FBF0DC' },
   err:       { label: 'Con error',  color: '#B3283C', bg: '#FBE9EC' },
-  skip:      { label: 'Omitida',    color: '#6B6A7D', bg: '#FAFAF6' },
-  working:   { label: 'En proceso', color: '#5A2FD6', bg: '#EEE9FD' },
+  skip:      { label: 'Omitida',    color: '#5D6468', bg: '#FAFAF9' },
+  working:   { label: 'En proceso', color: '#D6F24B', bg: '#26292D' },
   // docs/modo-solo-observar.md §3.3: no es una postulación real -- necesita
-  // su propio color para no confundirse con "Postulada" (verde) ni con
-  // "En proceso" (el mismo morado que la IA usa mientras trabaja de verdad).
-  observado: { label: '👁 Observada', color: '#1D4ED8', bg: '#DBEAFE' },
+  // Gris a propósito: observar es la AUSENCIA de acción, y eso en una
+  // paleta monocroma se dice con gris. Verde es postulada, ámbar en
+  // proceso, rojo rechazada; gris es "solo la miramos".
+  observado: { label: 'Observada', color: '#5D6468', bg: '#EDEEEB' },
 };
 
 function escapeHtml(s) {

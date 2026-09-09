@@ -45,8 +45,8 @@ const AP_ESTADOS = {
   // tercer y cuarto matiz que 'ok'/'trabajando'/'error' no cubrían -- "hay
   // banda gris pendiente" no es ni éxito ni error, y "todo se descartó" no
   // es un error tampoco, solo no hubo nada que hacer.
-  pendiente:  { punto: '#60A5FA', late: false },
-  neutral:    { punto: '#8B8AA0', late: false },
+  pendiente:  { punto: '#C7CBCC', late: false },
+  neutral:    { punto: '#8E9599', late: false },
 };
 
 // Los colores viejos se siguen aceptando: hay llamadas con hex por todo
@@ -67,16 +67,16 @@ AP.msg = function (texto, estado) {
       '<style>' +
       ':host,*{box-sizing:border-box}' +
       '.chip{display:flex;align-items:center;gap:10px;min-width:216px;max-width:320px;' +
-        'padding:10px 14px 10px 11px;border-radius:12px;background:#1B1A2E;color:#ECECF3;' +
+        'padding:10px 14px 10px 11px;border-radius:12px;background:#16181A;color:#E9EBEA;' +
         'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12.5px;line-height:1.4;' +
         'box-shadow:0 12px 30px -10px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.1);' +
         'animation:entra .28s cubic-bezier(.2,.8,.3,1)}' +
       '@keyframes entra{from{opacity:0;transform:translateY(8px)}}' +
-      '.marca{width:26px;height:26px;flex:none;border-radius:7px;background:#5A2FD6;display:grid;place-items:center}' +
+      '.marca{width:26px;height:26px;flex:none;border-radius:7px;background:#26292D;border:1.5px solid #3C4145;display:grid;place-items:center}' +
       '.marca svg{width:15px;height:15px;display:block}' +
       '.marca path{fill:none;stroke:#D6F24B;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}' +
       '.cuerpo{min-width:0;flex:1}' +
-      '.quien{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#9998AC;margin-bottom:1px}' +
+      '.quien{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#8E9599;margin-bottom:1px}' +
       '.punto{width:6px;height:6px;border-radius:50%;flex:none}' +
       '.punto.late{animation:late 1.6s ease-out infinite}' +
       '@keyframes late{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}' +
@@ -789,30 +789,30 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
       '.velo{position:fixed;inset:0;background:rgba(15,14,22,.5);display:grid;place-items:center;padding:20px;' +
         'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}' +
       '.panel{width:660px;max-width:100%;max-height:86vh;display:flex;flex-direction:column;' +
-        'background:#F2F3EE;color:#1B1A2E;border-radius:14px;overflow:hidden;' +
+        'background:#F4F5F3;color:#16181A;border-radius:14px;overflow:hidden;' +
         'box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:sube .3s cubic-bezier(.2,.8,.3,1)}' +
       '@keyframes sube{from{opacity:0;transform:translateY(12px)}}' +
 
       /* Cabecera de tinta: se lee al tiro como algo que no es el portal */
-      '.cab{display:flex;align-items:center;gap:11px;padding:15px 20px;background:#1B1A2E;color:#ECECF3;cursor:move;user-select:none}' +
-      '.marca{width:30px;height:30px;flex:none;border-radius:8px;background:#5A2FD6;display:grid;place-items:center}' +
+      '.cab{display:flex;align-items:center;gap:11px;padding:15px 20px;background:#16181A;color:#E9EBEA;cursor:move;user-select:none}' +
+      '.marca{width:30px;height:30px;flex:none;border-radius:8px;background:#26292D;border:1.5px solid #3C4145;display:grid;place-items:center}' +
       '.marca svg{width:17px;height:17px;display:block}' +
       '.marca path{fill:none;stroke:#D6F24B;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}' +
       '.cab h2{margin:0;font-size:14.5px;font-weight:700;letter-spacing:-.01em}' +
-      '.cab p{margin:1px 0 0;font-size:11.5px;color:#9998AC;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-      '.agarre{margin-left:auto;flex:none;color:#5F5D77;letter-spacing:2px;font-size:13px}' +
+      '.cab p{margin:1px 0 0;font-size:11.5px;color:#8E9599;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.agarre{margin-left:auto;flex:none;color:#3C4145;letter-spacing:2px;font-size:13px}' +
 
       /* Pestañas con el filo de destacador, igual que en el tablero */
-      '.pest{display:flex;gap:2px;padding:0 20px;background:#F2F3EE;border-bottom:1px solid #DFE0D8}' +
-      '.pest button{border:none;background:none;font:inherit;font-size:12.5px;font-weight:600;color:#6B6A7D;' +
+      '.pest{display:flex;gap:2px;padding:0 20px;background:#F4F5F3;border-bottom:1px solid #DFE1DE}' +
+      '.pest button{border:none;background:none;font:inherit;font-size:12.5px;font-weight:600;color:#5D6468;' +
         'padding:11px 13px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}' +
-      '.pest button:hover{color:#1B1A2E}' +
-      '.pest button[aria-selected="true"]{color:#1B1A2E;border-bottom-color:#D6F24B}' +
+      '.pest button:hover{color:#16181A}' +
+      '.pest button[aria-selected="true"]{color:#16181A;border-bottom-color:#D6F24B}' +
 
       '.cuerpo{flex:1;overflow-y:auto;padding:18px 20px}' +
       '.aviso{white-space:pre-wrap;font-size:12.5px;line-height:1.7;color:#43415A;max-width:74ch}' +
 
-      '.item{margin-bottom:12px;padding:13px 14px;background:#fff;border:1px solid #DFE0D8;border-radius:10px}' +
+      '.item{margin-bottom:12px;padding:13px 14px;background:#fff;border:1px solid #DFE1DE;border-radius:10px}' +
       '.item:last-child{margin-bottom:0}' +
       '.preg{margin:0 0 7px;font-size:12.5px;font-weight:700;line-height:1.45}' +
       '.estado{margin:0 0 9px;display:flex;align-items:center;gap:6px;font-size:11px}' +
@@ -821,22 +821,22 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
       '.estado[data-tono="aviso"]{color:#9A5B00}' +
       '.estado[data-tono="malo"]{color:#B3283C}' +
 
-      'textarea,select{width:100%;padding:9px 11px;font:inherit;font-size:12.5px;color:#1B1A2E;' +
-        'background:#FAFAF6;border:1px solid #DFE0D8;border-radius:8px;resize:vertical}' +
-      'textarea:focus,select:focus{outline:none;border-color:#5A2FD6;box-shadow:0 0 0 3px #EEE9FD}' +
-      '.cuenta{margin:4px 0 0;font-size:10.5px;color:#6B6A7D;text-align:right;font-variant-numeric:tabular-nums}' +
-      '.vacio{color:#6B6A7D;font-size:12.5px;text-align:center;padding:20px}' +
+      'textarea,select{width:100%;padding:9px 11px;font:inherit;font-size:12.5px;color:#16181A;' +
+        'background:#FAFAF9;border:1px solid #DFE1DE;border-radius:8px;resize:vertical}' +
+      'textarea:focus,select:focus{outline:none;border-color:#D6F24B;box-shadow:0 0 0 3px #26292D}' +
+      '.cuenta{margin:4px 0 0;font-size:10.5px;color:#5D6468;text-align:right;font-variant-numeric:tabular-nums}' +
+      '.vacio{color:#5D6468;font-size:12.5px;text-align:center;padding:20px}' +
 
-      '.pie{display:flex;align-items:center;gap:10px;padding:14px 20px;background:#fff;border-top:1px solid #DFE0D8}' +
+      '.pie{display:flex;align-items:center;gap:10px;padding:14px 20px;background:#fff;border-top:1px solid #DFE1DE}' +
       '.btn{font:inherit;font-size:13px;font-weight:600;border-radius:9px;padding:11px 16px;cursor:pointer;' +
         'border:1px solid transparent;transition:transform .15s,box-shadow .2s}' +
       '.btn:active{transform:translateY(1px)}' +
       /* El destacador se gasta acá: es la decisión de la pantalla */
-      '.btn.enviar{flex:1;background:#D6F24B;color:#1B1A2E;border-color:#B9D62E}' +
-      '.btn.enviar:hover{transform:translateY(-1px);box-shadow:0 10px 20px -12px #B9D62E}' +
-      '.btn.saltar{background:#fff;color:#1B1A2E;border-color:#C9CABF}' +
-      '.btn.saltar:hover{border-color:#1B1A2E}' +
-      '.reloj{font-size:11.5px;color:#6B6A7D;font-variant-numeric:tabular-nums}' +
+      '.btn.enviar{flex:1;background:#D6F24B;color:#16181A;border-color:#A8C023}' +
+      '.btn.enviar:hover{transform:translateY(-1px);box-shadow:0 10px 20px -12px #A8C023}' +
+      '.btn.saltar{background:#fff;color:#16181A;border-color:#C6C9C5}' +
+      '.btn.saltar:hover{border-color:#16181A}' +
+      '.reloj{font-size:11.5px;color:#5D6468;font-variant-numeric:tabular-nums}' +
       '.reloj b{color:#B3283C}' +
       '@media (prefers-reduced-motion:reduce){.panel{animation:none}}' +
       '</style>' +

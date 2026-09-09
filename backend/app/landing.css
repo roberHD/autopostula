@@ -58,21 +58,9 @@
   white-space: nowrap;
   transition: color 0.2s ease;
 }
-.lp-navlink::after {
-  content: "";
-  position: absolute;
-  left: 12px; right: 12px; bottom: 5px;
-  height: 7px;
-  background: var(--marker);
-  border-radius: 2px;
-  z-index: -1;
-  opacity: 0.85;
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.3, 1);
-}
+/* Sin subrayado citron al pasar el mouse: repetir el unico color de la
+   pagina en cada enlace del menu lo convertia en decoracion. */
 .lp-navlink:hover { color: var(--text); }
-.lp-navlink:hover::after { transform: scaleX(1); }
 
 .lp-navlink--fuerte { color: var(--text); font-weight: 600; }
 
@@ -101,7 +89,17 @@
 }
 @media (max-width: 940px) { .lp-hero__grid { grid-template-columns: 1fr; } }
 
-.lp-hero h1 { font-size: clamp(34px, 5.1vw, 58px); }
+/* El titular no lleva destacador: lleva contraste de pesos. Un color
+   sobre una palabra es el recurso de todas las paginas del rubro. */
+.lp-hero h1 { font-size: clamp(36px, 5.4vw, 62px); font-variation-settings: "wdth" 100; }
+.lp-hero h1 .lp-fino {
+  display: block;
+  font-weight: 300;
+  color: var(--text-muted);
+  letter-spacing: -0.02em;
+}
+
+.lp-head h2 .lp-fino { font-weight: 300; color: var(--text-muted); }
 
 .lp-flag {
   display: inline-flex;
@@ -132,9 +130,25 @@
 .lp-hero__cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
 .lp-hero__cta .ap-btn { padding: 14px 24px; font-size: 14.5px; }
 
-.lp-terms { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 24px; }
-.lp-term { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-muted); }
-.lp-term svg { width: 15px; height: 15px; color: var(--ok); flex: none; }
+.lp-datos {
+  display: flex;
+  gap: 34px;
+  flex-wrap: wrap;
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
+}
+.lp-datos > span { display: block; }
+.lp-dato__n {
+  display: block;
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 100;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.lp-dato__l { display: block; font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
 
 /* Entrada escalonada del hero: el único momento orquestado de la página. */
 .lp-rise { opacity: 0; transform: translateY(14px); animation: lp-rise 0.62s var(--ease) forwards; }
@@ -345,34 +359,30 @@
   100% { opacity: 0.92; transform: rotate(-14deg) scale(1); }
 }
 
-/* ── Tira de avisos ──────────────────────────────────────────────── */
+/* ── Franja de portales ────────────────────────────────────────────
+   Antes era una marquesina de cargos moviendose sola. Movimiento que
+   nadie pidio y que no dice nada: se cambia por una linea quieta que
+   nombra donde funciona el producto. */
 
-.lp-tira {
+.lp-portales {
   border-block: 1px solid var(--border);
-  background: var(--bg-elevated);
-  padding-block: 15px;
-  overflow: hidden;
+  padding-block: 26px;
 }
-.lp-tira__row { display: flex; width: max-content; animation: lp-slide 46s linear infinite; }
-.lp-tira:hover .lp-tira__row { animation-play-state: paused; }
-@keyframes lp-slide { to { transform: translateX(-50%); } }
-
-.lp-tira__item {
-  display: inline-flex;
+.lp-portales__in {
+  display: flex;
   align-items: center;
-  gap: 9px;
-  padding-inline: 22px;
-  font-size: 13.5px;
-  color: var(--text-muted);
-  white-space: nowrap;
+  gap: 34px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
-.lp-tira__item b { color: var(--text); font-weight: 600; }
-.lp-tira__item::after {
-  content: "";
-  width: 4px; height: 4px;
-  border-radius: 50%;
-  background: var(--border-strong);
-  margin-left: 22px;
+.lp-portales__l { font-size: 12.5px; color: var(--text-muted); }
+.lp-portales__n {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 100;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-muted);
 }
 
 /* ── Encabezado de sección ───────────────────────────────────────── */
@@ -520,6 +530,9 @@
   transition: width 0.8s var(--ease);
 }
 .is-in .lp-pipe__fill { width: var(--w); }
+
+/* Solo el escalon que importa lleva color; el resto es la rampa de grises. */
+.lp-pipe__row--clave .lp-pipe__fill { background: var(--marker) !important; }
 .lp-pipe__n { font-size: 12.5px; font-weight: 600; text-align: right; }
 
 .lp-semana { display: flex; align-items: flex-end; gap: 8px; height: 118px; }

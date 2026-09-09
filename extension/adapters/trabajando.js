@@ -578,14 +578,22 @@ async function postular(url, id, titulo, decisionOfertaId) {
 // comparando identidad de nodo antes/después de un clic. Mismo patrón que
 // Computrabajo: esperar a que el nodo cambie es la señal de "ya cargó".
 async function activar(tarjeta) {
-  const btnAntes = document.getElementById('applyOfferSticky');
+  // #applyOfferSticky es un botón "sticky": un único nodo persistente que la
+  // SPA reutiliza para cada oferta (le actualiza el binding, no lo recrea).
+  // Comparar btnDespues !== btnAntes (identidad de nodo) nunca detecta un
+  // cambio real -- por eso esto fallaba el 100% de las veces, no a ratos. La
+  // señal que sí cambia por oferta es el título del panel (SELECTOR_PANEL h3),
+  // así que se compara ESE texto antes/después en vez de la identidad del botón.
+  const tituloAntes = (document.querySelector(SELECTOR_PANEL + ' h3') || {}).textContent || '';
   const a = tarjeta.querySelector('h2 a') || tarjeta.querySelector('a');
   if (!a) return null;
   a.click();
   for (let i = 0; i < 25; i++) {
     await sleep(350);
-    const btnDespues = document.getElementById('applyOfferSticky');
-    if (btnDespues && btnDespues !== btnAntes && btnDespues.offsetParent) return btnDespues;
+    const btn = document.getElementById('applyOfferSticky');
+    const tituloEl = document.querySelector(SELECTOR_PANEL + ' h3');
+    const tituloAhora = tituloEl ? tituloEl.textContent : '';
+    if (btn && btn.offsetParent && tituloAhora && tituloAhora !== tituloAntes) return btn;
   }
   return null;
 }

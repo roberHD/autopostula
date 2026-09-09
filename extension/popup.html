@@ -8,36 +8,37 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Misma paleta que la web y el dashboard: papel bond, tinta índigo y
-     un destacador citrón que se gasta en un solo lugar por pantalla. */
-  --bg:        #F2F3EE;
+  /* Misma paleta que la web: monocroma, con el citrón como único color.
+     Fuera el morado — era la firma visual de página hecha con IA.
+     --accent es el par de contraste del tema, no un tono. */
+  --bg:        #F4F5F3;
   --surface:   #FFFFFF;
-  --surface-2: #FAFAF6;
-  --border:    #DFE0D8;
-  --border-2:  #C9CABF;
+  --surface-2: #FAFAF9;
+  --border:    #DFE1DE;
+  --border-2:  #C6C9C5;
 
-  --ink:       #1B1A2E;
-  --accent:    #5A2FD6;
-  --accent-h:  #4A24B8;
-  --accent-s:  #EEE9FD;
+  --ink:       #16181A;
+  --accent:    #16181A;
+  --accent-h:  #000000;
+  --accent-s:  #EDEEEB;
 
   --marker:    #D6F24B;
-  --marker-d:  #B9D62E;
-  --on-marker: #1B1A2E;
+  --marker-d:  #A8C023;
+  --on-marker: #16181A;
 
   --danger:    #B3283C;
-  --danger-s:  #FBE9EC;
+  --danger-s:  #FAEAEC;
   --success:   #17784F;
-  --success-s: #E2F3EA;
-  --warn:      #9A5B00;
-  --warn-s:    #FBF0DC;
+  --success-s: #E4F1E9;
+  --warn:      #8A5200;
+  --warn-s:    #F7EFDF;
 
-  --text-1:    #1B1A2E;
-  --text-2:    #4A4960;
-  --text-3:    #6B6A7D;
+  --text-1:    #16181A;
+  --text-2:    #3F4448;
+  --text-3:    #5D6468;
 
   --radius:    9px;
-  --shadow:    0 1px 0 var(--border), 0 10px 24px -18px rgba(27,26,46,.5);
+  --shadow:    0 1px 0 var(--border), 0 10px 24px -18px rgba(22,24,26,.5);
 }
 
 html { font-size: 13px; }
@@ -68,7 +69,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
    se lee al instante como AutoPostula y no como parte del sitio. */
 .header {
   background: var(--ink);
-  color: #ECECF3;
+  color: #E9EBEA;
   padding: 14px 16px;
   display: flex;
   align-items: center;
@@ -79,7 +80,8 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 }
 .header-logo {
   width: 32px; height: 32px;
-  background: var(--accent);
+  background: var(--surface-2);
+  border: 1.5px solid var(--border-2);
   border-radius: 9px;
   display: grid; place-items: center;
   flex-shrink: 0;
@@ -96,7 +98,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .header-info { flex: 1; min-width: 0; }
 .header-title { font-size: 14px; font-weight: 700; letter-spacing: -.2px; }
 .header-sub {
-  font-size: 11px; color: #9998AC;
+  font-size: 11px; color: #8E9599;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -105,7 +107,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .pulse {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: #5F5D77;
+  background: #3C4145;
   transition: background .3s;
 }
 .pulse.active  { background: #5BD59B; color: #5BD59B; animation: pulse-ring 1.6s ease-out infinite; }
@@ -115,7 +117,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   70%  { box-shadow: 0 0 0 5px transparent; }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
-.pulse-label { font-size: 11px; font-weight: 600; color: #9998AC; }
+.pulse-label { font-size: 11px; font-weight: 600; color: #8E9599; }
 .pulse-label.active  { color: #5BD59B; }
 .pulse-label.working { color: var(--marker); }
 
@@ -126,15 +128,17 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .observar-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 16px;
-  background: #EFF6FF;
+  background: var(--surface-2);
+  /* El filo dice "esta fila es distinta" sin inventar un color. */
+  border-left: 3px solid var(--border-2);
   border-bottom: 1px solid var(--border);
 }
 .observar-left .label {
-  font-size: 12.5px; font-weight: 700; color: #1D4ED8;
+  font-size: 12.5px; font-weight: 700; color: var(--text-1);
   display: flex; align-items: center; gap: 5px;
 }
 .observar-left .hint { font-size: 10.5px; color: var(--text-2); margin-top: 1px; }
-.observar-row .toggle input:checked ~ .toggle-track { background: #1D4ED8; }
+.observar-row .toggle input:checked ~ .toggle-track { background: var(--text-1); }
 /* §4.4: observar le gana a "revisar antes de enviar" -- no hay nada que
    revisar si no se envía nada, así que ese toggle se ve pero no importa. */
 .opcion-atenuada { opacity: .45; }

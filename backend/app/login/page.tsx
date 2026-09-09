@@ -144,7 +144,7 @@ export default function LoginPage() {
         hechos={[
           "Cada oferta con el estado real que devuelve el portal",
           "Respuestas escritas con tus palabras, no con plantillas",
-          "Computrabajo y Laborum, en el mismo lugar",
+          "Computrabajo, Laborum y Trabajando.com en el mismo lugar",
         ]}
         nota="¿Problemas para entrar? Escríbenos a hola@autopostula.cl"
       />
