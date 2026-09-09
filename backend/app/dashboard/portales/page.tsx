@@ -20,6 +20,7 @@ type Cuenta = {
 const ESTILO_PORTAL: Record<string, { color: string; mono: string }> = {
   Computrabajo: { color: "#0057B8", mono: "CT" },
   Laborum: { color: "#7000C8", mono: "LB" },
+  Trabajando: { color: "#00A99D", mono: "TJ" },
 };
 const ESTILO_DEFAULT = { color: "var(--accent)", mono: "??" };
 

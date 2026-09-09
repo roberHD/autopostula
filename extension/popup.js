@@ -298,7 +298,11 @@ toggleMain.addEventListener('change', () => {
   setActiveUI(active);
   chrome.storage.local.set({ active });
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-    if (tabs[0]?.url?.includes('computrabajo.cl')) {
+    // Antes solo miraba computrabajo.cl -- el toggle maestro no avisaba al
+    // content script si la pestaña activa era de Laborum (y ahora Trabajando),
+    // así que activar/desactivar desde ahí no surtía efecto hasta el próximo
+    // load. Portales conocidos (ver extension/manifest.json content_scripts).
+    if (/computrabajo\.(cl|com)|laborum\.cl|trabajando\.cl/.test(tabs[0]?.url || '')) {
       chrome.tabs.sendMessage(tabs[0].id, { type: 'TOGGLE', active }).catch(() => {});
     }
   });
@@ -309,7 +313,7 @@ function setActiveUI(active) {
     pulse.className = 'pulse active';
     pulseLabel.className = 'pulse-label active';
     pulseLabel.textContent = 'Activo';
-    toggleHint.textContent = 'Escaneando ofertas en Computrabajo…';
+    toggleHint.textContent = 'Escaneando ofertas…';
   } else {
     pulse.className = 'pulse';
     pulseLabel.className = 'pulse-label';
@@ -376,8 +380,16 @@ function guardarConfigLocal() {
 saveBtn.addEventListener('click', () => {
   const config = construirConfig();
   chrome.storage.local.set({ config }, () => {
-    // Notificar a TODAS las pestañas de Computrabajo abiertas con la nueva config
-    chrome.tabs.query({ url: ['*://*.computrabajo.com/*', '*://*.computrabajo.cl/*'] }, tabs => {
+    // Notificar a TODAS las pestañas abiertas de cualquier portal soportado
+    // con la nueva config -- antes solo cubría Computrabajo, así que
+    // Laborum (y ahora Trabajando) se quedaban con la config vieja hasta el
+    // próximo load de esa pestaña.
+    chrome.tabs.query({
+      url: [
+        '*://*.computrabajo.com/*', '*://*.computrabajo.cl/*',
+        '*://*.laborum.cl/*', '*://*.trabajando.cl/*',
+      ],
+    }, tabs => {
       tabs.forEach(t => chrome.tabs.sendMessage(t.id, { type: 'CONFIG_UPDATED', config }).catch(() => {}));
     });
     toast('✓ Cambios guardados');
@@ -449,7 +461,7 @@ function loadState() {
       perfilRemoto = cfg.perfil;
     }
     cvTextoCache = data.cvTexto || '';
-    if (cfg.perfil?.nombre) headerSub.textContent = cfg.perfil.nombre + ' · Computrabajo';
+    if (cfg.perfil?.nombre) headerSub.textContent = cfg.perfil.nombre;
 
     const toggleRevision = document.getElementById('toggle-revision');
     const toggleIAFiltros = document.getElementById('toggle-ia-filtros');

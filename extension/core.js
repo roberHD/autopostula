@@ -214,6 +214,24 @@ AP.siguientePagina = function (cantidadEnPagina, construirUrlPagina) {
   return true;
 };
 
+// Igual que AP.siguientePagina, pero para portales que paginan con un botón
+// "cargar más" que agrega tarjetas a la misma página (Trabajando) en vez de
+// navegar a una URL nueva -- mismo contador y mismo límite, solo cambia
+// CÓMO se avanza. No hace falta relanzar el escaneo a mano después del
+// click: el MutationObserver de más abajo detecta las tarjetas nuevas en el
+// DOM y dispara AP.escanear() solo.
+AP.siguientePaginaClick = function (cantidadEnPagina, boton) {
+  if (!document.hidden) return false;
+  if (!cantidadEnPagina || !boton) return false;
+
+  const actual = Number(sessionStorage.getItem(AP.LLAVE_PAGINA) || '1');
+  if (actual >= AP.MAX_PAGINAS_AUTOMATICO) return false;
+
+  sessionStorage.setItem(AP.LLAVE_PAGINA, String(actual + 1));
+  boton.click();
+  return true;
+};
+
 AP.addLog = function (entry) {
   AP.log.push(entry);
   if (AP.log.length > 200) AP.log = AP.log.slice(-200);
