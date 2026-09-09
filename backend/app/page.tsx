@@ -12,7 +12,7 @@ import "./landing.css";
 export const metadata: Metadata = {
   title: "Postula 80 veces al mes. Escribe una sola.",
   description:
-    "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo y Laborum con tus palabras. Tú revisas y envías, o lo dejas corriendo solo.",
+    "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo, Laborum y Trabajando.com con tus palabras. Tú revisas y envías, o lo dejas corriendo solo.",
 };
 
 // Cargos reales de los portales chilenos: la tira es textura, pero textura
@@ -37,7 +37,7 @@ const PASOS = [
   },
   {
     titulo: "Instala la extensión",
-    desc: "Conecta tu cuenta de Computrabajo o Laborum. La extensión trabaja dentro del portal, con tu sesión.",
+    desc: "Conecta tu cuenta de Computrabajo, Laborum o Trabajando.com. La extensión trabaja dentro del portal, con tu sesión.",
   },
   {
     titulo: "Define qué te sirve",
@@ -69,7 +69,7 @@ const PLAN_LIBRE = [
 
 const PLAN_PRO = [
   "80 postulaciones al mes",
-  "Computrabajo y Laborum conectados a la vez",
+  "Los tres portales conectados a la vez",
   "Busca y postula sola, según tus filtros",
   "Perfil dinámico e instrucciones propias",
 ];
@@ -78,9 +78,30 @@ function Tilde({ color }: { color?: string }) {
   return <Check size={15} color={color} strokeWidth={2.6} />;
 }
 
+const DATOS_ESTRUCTURADOS = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "AutoPostula",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Chrome",
+  inLanguage: "es-CL",
+  description:
+    "Extensión y panel que responden los formularios de postulación de Computrabajo, Laborum y Trabajando.com con tu CV y tu forma de escribir.",
+  url: "https://autopostula.cl",
+  offers: [
+    { "@type": "Offer", name: "Gratis", price: "0", priceCurrency: "CLP" },
+    { "@type": "Offer", name: "Premium", price: "3990", priceCurrency: "CLP" },
+  ],
+  areaServed: { "@type": "Country", name: "Chile" },
+};
+
 export default function LandingPage() {
   return (
     <div className="lp">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(DATOS_ESTRUCTURADOS) }}
+      />
       <NavLanding />
 
       <main id="inicio">
@@ -90,7 +111,7 @@ export default function LandingPage() {
             <div>
               <span className="lp-flag lp-rise lp-rise--1">
                 <i />
-                Computrabajo y Laborum, conectados
+                Computrabajo, Laborum y Trabajando.com
               </span>
 
               <h1 className="lp-rise lp-rise--2">
