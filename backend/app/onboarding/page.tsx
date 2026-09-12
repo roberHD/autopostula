@@ -944,8 +944,13 @@ function PasoTriaje({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
 
 function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   const [plataformas, setPlataformas] = useState<{ id: string; nombre: string }[]>([]);
-  const [conectada, setConectada] = useState(false);
+  // Antes era un solo boolean compartido por las tres plataformas -- al
+  // conectar una, la UI mostraba "Conectado ✓" en TODAS (la fila de la BD sí
+  // quedaba bien, era puramente un bug de esta pantalla). Un Set por
+  // platformId hace que cada fila refleje su propio estado.
+  const [conectadas, setConectadas] = useState<Set<string>>(new Set());
   const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     async function cargar() {
@@ -953,7 +958,7 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
         const res = await fetch("/api/platform-accounts");
         const data = await parsearRespuesta(res);
         setPlataformas(data.plataformas ?? []);
-        setConectada((data.cuentas ?? []).some((c: any) => c.activa));
+        setConectadas(new Set((data.cuentas ?? []).filter((c: any) => c.activa).map((c: any) => c.platformId)));
       } finally {
         setCargando(false);
       }
@@ -962,12 +967,18 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
   }, []);
 
   async function conectar(platformId: string) {
+    setError("");
     const res = await fetch("/api/platform-accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ platformId }),
     });
-    if (res.ok) setConectada(true);
+    const data = await parsearRespuesta(res);
+    if (res.ok) {
+      setConectadas((prev) => new Set(prev).add(platformId));
+    } else {
+      setError(data.error ?? "No se pudo conectar el portal");
+    }
   }
 
   return (
@@ -980,7 +991,7 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
           {plataformas.map((p) => (
             <div key={p.id} className="ap-toggle-row">
               <span style={{ fontSize: 13.5, fontWeight: 500 }}>{p.nombre}</span>
-              {conectada ? (
+              {conectadas.has(p.id) ? (
                 <span style={{ fontSize: 12, color: "var(--status-finalizado)" }}>Conectado ✓</span>
               ) : (
                 <button className="ap-button-ghost" onClick={() => conectar(p.id)}>Conectar</button>
@@ -989,6 +1000,8 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
           ))}
         </div>
       )}
+
+      {error && <p style={{ fontSize: 12.5, color: "var(--status-rechazado)", marginBottom: 12 }}>{error}</p>}
 
       <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} />
     </>

@@ -288,7 +288,9 @@ function calcularRespuesta(preguntaTexto, opciones, perfil) {
 async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
   let interacciones = 0;
   await esperarOpciones(SELECTOR_OPCIONES, { timeout:2500 });
-  const panelForm = document.querySelector(SELECTOR_PANEL) || document;
+  // document, no SELECTOR_PANEL: el formulario de preguntas vive en
+  // #modalConfirmarPreguntas, un modal aparte del panel de detalle.
+  const panelForm = document;
   const pendientesIA = [];
 
   const gruposRadioVistos = new Set();
@@ -413,9 +415,11 @@ async function rellenar(contexto) {
   const { interacciones, analisis: analisisDeOpciones } = await manejarGruposDeOpciones(p, respuestasLog, contexto);
   n2 += interacciones;
 
-  const panelForm = document.querySelector(SELECTOR_PANEL) || document;
+  // document, no SELECTOR_PANEL: el formulario de preguntas vive en
+  // #modalConfirmarPreguntas, un modal aparte del panel de detalle (ver nota
+  // de más abajo en postular()).
   const pendientesTexto = [];
-  for (const el of panelForm.querySelectorAll('textarea:not([style*="display:none"]),input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=file]):not([type=radio]):not([type=checkbox]):not([type=password])')) {
+  for (const el of document.querySelectorAll('textarea:not([style*="display:none"]),input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=file]):not([type=radio]):not([type=checkbox]):not([type=password])')) {
     if (!el.offsetParent) continue;
     const labelRaw = getLabel(el);
     const lbl = n(labelRaw);
@@ -519,13 +523,28 @@ async function postular(url, id, titulo, decisionOfertaId) {
   btn.click();
   await sleep(2000);
 
+  // Cuando el aviso trae preguntas del reclutador, antes del formulario real
+  // aparece un modal intermedio de solo "Comenzar" (data-bs-target=
+  // "#modalConfirmarPreguntas") -- las preguntas (textarea) recién se montan
+  // al hacer clic ahí. Sin este paso, hayForm nunca las encontraba, se caía
+  // a la rama de "postulación directa" y quedaba reportado como enviado con
+  // el botón Postular real todavía deshabilitado sin responder nada.
+  const btnComenzar = document.querySelector('[data-bs-target="#modalConfirmarPreguntas"]')
+    || [...document.querySelectorAll('button')].find(el => n(el.textContent || '') === 'comenzar' && el.offsetParent);
+  if (btnComenzar && btnComenzar.offsetParent) {
+    btnComenzar.click();
+    await sleep(1200);
+  }
+
   if (document.querySelector('input[type=password]')) {
     addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Pide iniciar sesión en Trabajando.com -- revisa que la cuenta siga conectada'});
     return { ok: false, expirada: false };
   }
 
-  const panelPostForm = document.querySelector(SELECTOR_PANEL) || document;
-  const hayForm = [...panelPostForm.querySelectorAll('textarea,input[type=radio]')].some(el => el.offsetParent && !el.closest('.hide'));
+  // Se busca en todo el documento, no solo en SELECTOR_PANEL: el formulario
+  // de preguntas (cuando las hay) vive en #modalConfirmarPreguntas, un modal
+  // de Bootstrap montado aparte del panel de detalle, no adentro de él.
+  const hayForm = [...document.querySelectorAll('textarea,input[type=radio]')].some(el => el.offsetParent && !el.closest('.hide'));
 
   if (hayForm) {
     msg('Rellenando formulario…', '#D97706');
@@ -573,10 +592,6 @@ async function postular(url, id, titulo, decisionOfertaId) {
 }
 
 // ── Activar tarjeta ───────────────────────────────────────────
-// Trabajando reemplaza el nodo del botón "Postular" (id="applyOfferSticky")
-// cada vez que se selecciona una oferta distinta -- verificado en vivo
-// comparando identidad de nodo antes/después de un clic. Mismo patrón que
-// Computrabajo: esperar a que el nodo cambie es la señal de "ya cargó".
 async function activar(tarjeta) {
   // #applyOfferSticky es un botón "sticky": un único nodo persistente que la
   // SPA reutiliza para cada oferta (le actualiza el binding, no lo recrea).
