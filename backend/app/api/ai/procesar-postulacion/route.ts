@@ -153,7 +153,7 @@ export async function POST(request: Request) {
     const maxTokens = Math.min(2200, 350 + listaPreguntas.length * 150);
 
     const respuestaIA = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-haiku-4-5",
       max_tokens: maxTokens,
       messages,
     });

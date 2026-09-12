@@ -278,7 +278,7 @@ model TituloCanonico {
   @@map("titulos_canonicos")
 }
 
-// Los 430 grupos primarios del CIUO-08.CL, con su jerarquía. Tabla chica y fija.
+// Los 444 grupos primarios del CIUO-08.CL, con su jerarquía. Tabla chica y fija.
 // Sirve para nombrar roles de forma legible y para calcular vecindad entre
 // roles en el triaje (§8.3) -- dos códigos del mismo subgrupo son vecinos por
 // construcción, sin IA ni embeddings.

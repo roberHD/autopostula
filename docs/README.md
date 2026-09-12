@@ -144,8 +144,15 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 | Plan de Flow con el `urlCallback` del dominio propio | ⚠️ Verificar | Renovaciones |
 | Ficha y envío a la Chrome Web Store | Pendiente | — |
 
-> **Ojo con Resend:** mientras el `from` sea el dominio de prueba, los correos de recuperación de
-> contraseña **solo llegan a la propia cuenta** y fallan en silencio para todos los demás.
+> **Plazo legal real:** la **Ley 21.719** (protección de datos personales) entra en vigencia a
+> fines de 2026 y es bastante más exigente que la 19.628 — ver `preguntas-abogado.md` §B. Es la
+> única fecha límite dura detectada en toda la documentación; conviene que el abogado la tenga
+> presente al responder, no solo las preguntas bloqueantes de la Chrome Web Store.
+
+> **Resend:** confirmar en el panel de Vercel que `RESEND_FROM_EMAIL` esté seteado en producción
+> con el dominio verificado (`323f2a4` lo resolvió en el código: `lib/correo.ts` ya falla
+> ruidosamente si falta la variable, en vez de mandar correos que nadie recibe). No hay forma de
+> comprobar esto desde el repo — es un valor de entorno en Vercel.
 
 ---
 
