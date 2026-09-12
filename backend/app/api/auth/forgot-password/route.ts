@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/base-url";
+import { remitente } from "@/lib/correo";
 
 // Instanciado en el handler (no a nivel de módulo) -- si se crea acá arriba,
 // falta RESEND_API_KEY tira en cuanto Next intenta cargar el módulo para
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
 
     try {
       await getResend().emails.send({
-        from: process.env.RESEND_FROM_EMAIL || "AutoPostula <onboarding@resend.dev>",
+        from: remitente(),
         to: user.email,
         subject: "Recupera tu contraseña de AutoPostula",
         html: `
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
               Recibimos una solicitud para restablecer tu contraseña. Si fuiste tú, haz clic en el siguiente enlace (válido por 1 hora):
             </p>
             <p style="margin: 24px 0;">
-              <a href="${resetUrl}" style="background: #7C3AED; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+              <a href="${resetUrl}" style="background: #16181A; color: #F4F5F3; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
                 Restablecer contraseña
               </a>
             </p>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
+import { remitente } from "@/lib/correo";
 
 // Igual que en forgot-password: se instancia adentro del handler. Si se crea a
 // nivel de módulo y falta RESEND_API_KEY, revienta apenas Next carga el módulo
@@ -120,9 +121,11 @@ export async function POST(request: Request) {
       select: { email: true, nombre: true },
     });
 
-    const destino = process.env.SOPORTE_EMAIL || process.env.RESEND_FROM_EMAIL;
+    // Sin fallback a RESEND_FROM_EMAIL: ese remitente no tiene buzón (no hay MX
+    // en el dominio raíz), así que caer ahí sería perder los reportes en silencio.
+    const destino = process.env.SOPORTE_EMAIL;
     if (!destino) {
-      console.error("Falta SOPORTE_EMAIL/RESEND_FROM_EMAIL — no hay a dónde mandar el reporte");
+      console.error("Falta SOPORTE_EMAIL — no hay a dónde mandar el reporte");
       return NextResponse.json(
         { error: "El canal de soporte no está configurado. Escríbenos por correo mientras lo arreglamos." },
         { status: 500 }
@@ -133,7 +136,7 @@ export async function POST(request: Request) {
 
     try {
       await getResend().emails.send({
-        from: process.env.RESEND_FROM_EMAIL || "AutoPostula <onboarding@resend.dev>",
+        from: remitente(),
         to: destino,
         // Contestar el correo le responde directo a la persona, sin tener que
         // copiar la dirección a mano.
@@ -147,7 +150,7 @@ export async function POST(request: Request) {
               <span style="color:#9CA3AF;">id ${escapar(userId)}</span>
               ${donde ? `<br><span style="color:#9CA3AF;">Desde: ${escapar(donde)}</span>` : ""}
             </p>
-            <div style="background:#F9FAFB; border-left:3px solid #7C3AED; padding:12px 16px; margin:16px 0; white-space:pre-wrap; color:#111827; line-height:1.6; font-size:14px;">${escapar(mensaje)}</div>
+            <div style="background:#F9FAFB; border-left:3px solid #16181A; padding:12px 16px; margin:16px 0; white-space:pre-wrap; color:#111827; line-height:1.6; font-size:14px;">${escapar(mensaje)}</div>
             <p style="color:#9CA3AF; font-size:12px;">
               ${adjuntos.length ? `${adjuntos.length} archivo(s) adjunto(s).` : "Sin adjuntos."}
             </p>
