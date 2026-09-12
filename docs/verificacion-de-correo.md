@@ -1,9 +1,8 @@
 # Verificación de correo — especificación
 
-> **Estado:** diseño aprobado, sin implementar.
+> **Estado:** ✅ Implementado (2026-09-12). El §1 (dominio en Resend) se resolvió en `323f2a4`.
 > **Para:** el chat de producción.
 > **Fecha:** 2026-09-09.
-> **Bloqueado por:** verificar el dominio en Resend (§1). **No se puede implementar antes.**
 
 ---
 

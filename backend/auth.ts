@@ -51,7 +51,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       // Con Google: si el correo no existe en la base, se crea el usuario ahí mismo
       if (account?.provider === "google" && user.email) {
         const existente = await prisma.user.findUnique({
@@ -64,6 +64,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               email: user.email,
               nombre: user.name,
               oauthProvider: "google",
+              // docs/verificacion-de-correo.md: Google ya confirma sus
+              // correos -- no le pedimos a la persona que verifique de nuevo
+              // algo que el proveedor ya verificó. Salvedad: si Google mismo
+              // manda email_verified=false (cuenta corporativa sin confirmar,
+              // por ejemplo), no se lo damos por verificado igual.
+              emailVerificado: (profile as any)?.email_verified === false ? null : new Date(),
             },
           });
         }

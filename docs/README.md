@@ -1,6 +1,6 @@
 # Documentos de diseño de AutoPostula
 
-> Índice y estado del trabajo. **Actualizado: 2026-09-07.**
+> Índice y estado del trabajo. **Actualizado: 2026-09-12.**
 > Si vas a implementar algo, empieza por acá: dice qué está hecho, qué falta y en qué orden.
 
 ---
@@ -14,7 +14,7 @@
 | [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ✅ **Implementado** |
 | [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 Pendiente — §3 (capturar la corrección) ya está |
 | [`modo-solo-observar.md`](modo-solo-observar.md) | Escanear y cosechar sin postular. Destraba la recolección de corpus y es el modo "pruébalo antes de dejarlo actuar" para usuarios nuevos | ✅ **Implementado** |
-| [`verificacion-de-correo.md`](verificacion-de-correo.md) | Verificar el correo antes de dejar que la cuenta actúe (token de la extensión, checkout), no antes de dejarla mirar | 🔨 Pendiente — **bloqueado por Resend** |
+| [`verificacion-de-correo.md`](verificacion-de-correo.md) | Verificar el correo antes de dejar que la cuenta actúe (token de la extensión, checkout), no antes de dejarla mirar | ✅ **Implementado** |
 | [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Pendiente |
 | [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
@@ -91,6 +91,21 @@ sistema hoy.
 - Desbloquea el protocolo de recolección de corpus del Apéndice de
   [`modo-solo-observar.md`](modo-solo-observar.md), para `scripts/solapamiento-portales.ts`.
 
+### Verificación de correo
+
+- **`emailVerificado`** (`User`, null = sin verificar) — se gatea "que la cuenta actúe", no "que
+  mire": sin verificar se puede registrar, subir CV, hacer el triaje y conversar con la IA, pero
+  no conectar la extensión (`/api/account/token`) ni contratar Premium (`/api/flow/checkout`).
+  Login nunca se bloquea, para no crear cuentas muertas por un typo de correo.
+- **Cuentas de Google se dan por verificadas solas** (`backend/auth.ts`) — Google ya confirma sus
+  correos, no se le vuelve a pedir a la persona.
+- **Reenvío con límite** (`/api/auth/reenviar-verificacion`) — un intervalo mínimo entre envíos
+  hace de tope tanto al "1 por minuto" como al "5 por hora" del diseño original con un solo campo
+  (`verifyUltimoEnvio`). El límite solo se quema si el correo salió de verdad.
+- **Banner persistente en el dashboard** y aviso en el paso "Extensión" del onboarding, ambos con
+  botón de reenviar. Página `/verificar` con sus tres estados (verificado / vencido / inválido).
+- Cuentas existentes se dieron por verificadas en la migración — nadie quedó bloqueado de golpe.
+
 ### Costos
 
 El rediseño llevó el costo de IA de **~US$3,40 a ~US$0,58 por usuario premium al mes**
@@ -124,7 +139,7 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 |---|---|---|
 | Revisión legal de privacidad y términos | ⏸ Con el abogado | Chrome Web Store |
 | Definir la política de devolución (`§7.2` de Términos, hoy en borrador) | ⏸ Con el abogado | Chrome Web Store |
-| Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ⚠️ **Verificar** | Recuperación de contraseña real |
+| Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ✅ Resuelto en `323f2a4` | Recuperación de contraseña real |
 | Cuenta de comercio Flow aprobada + `FLOW_SANDBOX=false` | ⚠️ Verificar | Cobrar de verdad |
 | Plan de Flow con el `urlCallback` del dominio propio | ⚠️ Verificar | Renovaciones |
 | Ficha y envío a la Chrome Web Store | Pendiente | — |

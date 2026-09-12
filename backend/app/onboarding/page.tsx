@@ -753,6 +753,12 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
   const [extConectada, setExtConectada] = useState(false);
   const [errorConexion, setErrorConexion] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  // docs/verificacion-de-correo.md §7: si /api/account/token responde 403
+  // con requiereVerificacion, no es un error cualquiera -- se explica acá
+  // mismo por qué está bloqueado, con el botón de reenviar a mano.
+  const [necesitaVerificacion, setNecesitaVerificacion] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const [avisoReenvio, setAvisoReenvio] = useState<string | null>(null);
 
   // bridge.js (extension/bridge.js) avisa con estos eventos si está instalada,
   // y si la conexión del token se completó o falló.
@@ -801,6 +807,10 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
   async function generarToken(): Promise<string | null> {
     const res = await fetch("/api/account/token", { method: "POST" });
     const data = await parsearRespuesta(res);
+    if (data.requiereVerificacion) {
+      setNecesitaVerificacion(true);
+      return null;
+    }
     setToken(data.apiToken ?? null);
     return data.apiToken ?? null;
   }
@@ -811,7 +821,7 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
     const t = token ?? (await generarToken());
     if (!t) {
       setConectandoExt(false);
-      setErrorConexion("No se pudo generar el token.");
+      if (!necesitaVerificacion) setErrorConexion("No se pudo generar el token.");
       return;
     }
     window.dispatchEvent(new CustomEvent("autopostula:conectar", { detail: { token: t } }));
@@ -822,6 +832,20 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
         return false;
       });
     }, 4000);
+  }
+
+  async function reenviarVerificacion() {
+    setReenviando(true);
+    setAvisoReenvio(null);
+    try {
+      const res = await fetch("/api/auth/reenviar-verificacion", { method: "POST" });
+      const data = await parsearRespuesta(res);
+      setAvisoReenvio(res.ok ? "Te enviamos un nuevo enlace — revisa tu correo." : (data.error ?? "No se pudo reenviar el correo."));
+    } catch {
+      setAvisoReenvio("No pudimos conectar con el servidor.");
+    } finally {
+      setReenviando(false);
+    }
   }
 
   return (
@@ -837,6 +861,18 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
           <p style={{ fontSize: 13, color: "var(--status-finalizado)", fontWeight: 500 }}>
             Extensión conectada ✓
           </p>
+        </div>
+      ) : necesitaVerificacion ? (
+        <div className="ap-section" style={{ marginBottom: 20 }}>
+          <p className="ap-section-title">Confirma tu correo primero</p>
+          <p className="ap-section-sub">
+            No dejamos que una identidad sin verificar postule a trabajos en tu nombre. Te
+            mandamos un enlace al registrarte — revisa tu bandeja (y spam), o pide uno nuevo.
+          </p>
+          <button className="ap-button-ghost" onClick={reenviarVerificacion} disabled={reenviando}>
+            {reenviando ? "Enviando..." : "Reenviar correo de verificación"}
+          </button>
+          {avisoReenvio && <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>{avisoReenvio}</p>}
         </div>
       ) : extensionDetectada ? (
         <div className="ap-section" style={{ marginBottom: 20 }}>

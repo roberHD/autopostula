@@ -125,6 +125,18 @@ model User {
   // ── recuperación de contraseña ──
   resetToken       String?   @unique @map("reset_token")
   resetTokenExpiry DateTime? @map("reset_token_expiry")
+  // ── verificación de correo (docs/verificacion-de-correo.md) ──
+  // Campos propios, no se reusan los de arriba: una persona puede tener los
+  // dos flujos abiertos a la vez (pidió reset Y todavía no verifica) y se
+  // pisarían. null = sin verificar; con fecha = cuándo (más útil que un
+  // booleano para soporte y métricas de conversión del registro).
+  emailVerificado   DateTime? @map("email_verificado")
+  verifyToken       String?   @unique @map("verify_token")
+  verifyTokenExpiry DateTime? @map("verify_token_expiry")
+  // Último envío del correo de verificación, para el límite de reenvíos
+  // (docs/verificacion-de-correo.md §6) -- sin esto, ese endpoint es un
+  // vector para bombardear de correos una dirección ajena.
+  verifyUltimoEnvio DateTime? @map("verify_ultimo_envio")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
