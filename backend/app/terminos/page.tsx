@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function TerminosPage() {
   return (
-    <LegalPage titulo="Términos y condiciones" actualizado="4 de septiembre de 2026">
+    <LegalPage titulo="Términos y condiciones" actualizado="13 de septiembre de 2026">
       <p>
         Estos términos regulan el uso de AutoPostula: el sitio web, el panel de usuario y la
         extensión de Chrome. Al crear una cuenta o instalar la extensión, aceptas lo que sigue.
@@ -28,6 +28,7 @@ export default function TerminosPage() {
         AutoPostula es una herramienta que automatiza la postulación a ofertas de empleo en
         portales de trabajo chilenos. A partir de tu CV y tus filtros, busca ofertas, completa los
         formularios de postulación con ayuda de inteligencia artificial y los envía en tu nombre.
+        Si lo prefieres, puede limitarse a revisar y clasificar ofertas sin postular a ninguna.
       </p>
       <p>
         AutoPostula <strong>no es una agencia de empleo, ni una bolsa de trabajo, ni un
@@ -38,6 +39,11 @@ export default function TerminosPage() {
       <h2>3. Tu cuenta</h2>
       <ul>
         <li>Debes ser mayor de 18 años y entregar información veraz.</li>
+        <li>
+          Debes confirmar tu correo electrónico antes de conectar la extensión o contratar un plan
+          de pago. Si entras con Google y Google ya confirmó tu correo, no hace falta hacerlo de
+          nuevo.
+        </li>
         <li>
           Eres responsable de mantener la confidencialidad de tu contraseña y de toda la actividad
           que ocurra bajo tu cuenta.
@@ -51,7 +57,7 @@ export default function TerminosPage() {
         <p>
           <strong>
             AutoPostula no tiene relación, afiliación, patrocinio ni convenio alguno con
-            Computrabajo, Laborum ni ningún otro portal de empleo.
+            Computrabajo, Laborum, Trabajando.com ni ningún otro portal de empleo.
           </strong>{" "}
           Los nombres y marcas de esos portales pertenecen a sus respectivos titulares y se
           mencionan solo para identificar dónde opera la herramienta.
@@ -97,6 +103,10 @@ export default function TerminosPage() {
         <li>
           Puedes activar el <strong>modo revisión</strong> para leer y editar cada respuesta antes
           de que se envíe. Te recomendamos usarlo, sobre todo al principio.
+        </li>
+        <li>
+          Puedes activar el <strong>modo solo observar</strong> para ver qué ofertas elegiría la
+          herramienta sin que postule a ninguna.
         </li>
         <li>
           Cuando una oferta no calza claramente con tu perfil, AutoPostula{" "}
@@ -154,14 +164,11 @@ export default function TerminosPage() {
         No hay penalizaciones ni plazos mínimos de permanencia. Al terminar el período, tu cuenta
         vuelve automáticamente al plan gratuito, sin que pierdas tu historial ni tu perfil.
       </p>
-      <div className="nota">
-        <p>
-          <strong>[REVISAR CON ABOGADO]</strong> — El derecho a retracto del artículo 3° bis de la
-          Ley N° 19.496 sobre protección de los derechos de los consumidores puede aplicar a esta
-          contratación. Define y declara aquí expresamente tu política de retracto y reembolsos
-          antes de publicar.
-        </p>
-      </div>
+      <p>
+        Lo anterior no limita el derecho a retracto ni los demás derechos que te reconoce la Ley N°
+        19.496 sobre protección de los derechos de los consumidores, en los casos en que
+        correspondan.
+      </p>
 
       <h2>8. Uso aceptable</h2>
       <p>No puedes usar AutoPostula para:</p>

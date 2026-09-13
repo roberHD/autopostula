@@ -224,7 +224,7 @@ documentado como salida para quien insista, no como estrategia.
 
 **Postular desde el servidor.** Requeriría guardar las credenciales de los portales del usuario
 — justo lo que el diseño evita a propósito y lo que la política de privacidad promete no hacer
-(§2.8). Además es el camino que ya devolvió un 403 de Computrabajo. Descartado.
+(§2.9). Además es el camino que ya devolvió un 403 de Computrabajo. Descartado.
 
 ---
 
