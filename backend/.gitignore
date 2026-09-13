@@ -7,3 +7,9 @@ node_modules
 # Salida cruda del scrape semilla (docs/rediseno-filtrado-ofertas.md, §7.1) --
 # local, no versionado, se regenera corriendo scripts/scrape-corpus.ts.
 scripts/data/
+# Cache incremental de tsc: cambia en cada compilación y solo genera
+# conflictos de merge entre quienes compilan.
+dist/
+
+# Configuración personal del editor, no del proyecto.
+*.code-workspace
