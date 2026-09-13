@@ -8,7 +8,8 @@ import { getUsuarioSesion } from "@/lib/auth-helpers";
 // pueda entrar a su cuenta, pero para quien sí puede, esto es inmediato.
 //
 // onDelete: Cascade en schema.prisma se encarga de todo lo que cuelga del
-// usuario (postulaciones, perfiles, preferencias, tokens, etc.) -- acá solo
+// usuario (postulaciones, perfiles, preferencias, tokens, etc.), salvo las
+// suscripciones y pagos, que se conservan sin dueño -- acá solo
 // hay que cancelar la suscripción en Flow ANTES de borrar, para no dejar un
 // cobro recurrente corriendo del lado de la pasarela de pago sobre una cuenta
 // que ya no existe.
@@ -47,7 +48,16 @@ export async function DELETE(request: Request) {
     }
   }
 
-  await prisma.user.delete({ where: { id: userId } });
+  // Las suscripciones y sus pagos sobreviven al borrado como registro contable
+  // (onDelete: SetNull en schema.prisma). Se marcan canceladas en la misma
+  // transacción para que no quede ninguna "ACTIVA" sin dueño.
+  await prisma.$transaction([
+    prisma.subscription.updateMany({
+      where: { userId, estado: "ACTIVA" },
+      data: { estado: "CANCELADA" },
+    }),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

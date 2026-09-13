@@ -200,14 +200,19 @@ model Plan {
 
 model Subscription {
   id                     String            @id @default(uuid())
-  userId                 String            @map("user_id")
+  // Opcional a propósito. Al borrar una cuenta, la suscripción y sus pagos NO
+  // se borran en cascada: quedan como registro contable sin dueño (SetNull).
+  // La normativa tributaria exige conservarlos y la política de privacidad §7
+  // lo promete. Sin userId ya no quedan ligados a ningún dato personal en
+  // nuestra base.
+  userId                 String?           @map("user_id")
   planId                 String            @map("plan_id")
   estado                 EstadoSuscripcion @default(ACTIVA)
   flowSubscriptionId     String?           @map("flow_subscription_id")
   periodoInicio          DateTime?         @map("periodo_inicio")
   periodoFin             DateTime?         @map("periodo_fin")
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   plan     Plan      @relation(fields: [planId], references: [id])
   payments Payment[]
 
