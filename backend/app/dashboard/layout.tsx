@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 import BarraMaquina from "./BarraMaquina";
+import BannerVerificacion from "./BannerVerificacion";
 
 export default async function DashboardLayout({
   children,
@@ -26,7 +27,7 @@ export default async function DashboardLayout({
   const userId = (session.user as any).id;
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { onboardingCompletado: true },
+    select: { onboardingCompletado: true, emailVerificado: true },
   });
 
   // Se consulta la base directo (no la sesión/JWT) para que el chequeo esté
@@ -40,7 +41,10 @@ export default async function DashboardLayout({
       <Sidebar userName={session.user.name ?? session.user.email ?? "Usuario"} />
       <div className="ap-col">
         <BarraMaquina />
-        <main className="ap-main">{children}</main>
+        <main className="ap-main">
+          <BannerVerificacion verificadoAlCargar={!!dbUser.emailVerificado} />
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -152,7 +152,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
 
   try {
     const respuesta = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-haiku-4-5",
       max_tokens: 1200,
       messages,
     });

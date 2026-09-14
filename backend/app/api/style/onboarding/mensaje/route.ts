@@ -166,7 +166,7 @@ export async function POST(request: Request) {
   const systemPrompt = construirSystemPrompt(resumirCvParaContexto(cv));
 
   const respuesta = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-haiku-4-5",
     max_tokens: 220,
     system: systemPrompt,
     messages: conversacion.length

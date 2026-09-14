@@ -11,10 +11,19 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, nombre: true, flowCustomerId: true },
+    select: { email: true, nombre: true, flowCustomerId: true, emailVerificado: true },
   });
   if (!user) {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+  }
+
+  // docs/verificacion-de-correo.md §5: no se le cobra a una dirección que no
+  // existe -- el comprobante y la confirmación de cancelación van por correo.
+  if (!user.emailVerificado) {
+    return NextResponse.json(
+      { error: "Verifica tu correo para contratar Premium", requiereVerificacion: true },
+      { status: 403 }
+    );
   }
 
   const yaEsPremium = await prisma.subscription.findFirst({

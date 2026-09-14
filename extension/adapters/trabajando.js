@@ -473,6 +473,23 @@ async function rellenar(contexto) {
   return { n2, respuestasLog, analisis };
 }
 
+// ── Botón de postular ────────────────────────────────────────────
+// #applyOfferSticky NO sirve como selector: es un botón "sticky" (header
+// que se fija al hacer scroll) que el propio sitio deja con
+// display:none en un ancestro (.stickyOfferHeader) hasta que el usuario
+// scrollea el panel -- verificado en vivo el 2026-09-11, nunca se vuelve
+// visible en una pestaña que no scrollea (el caso normal de un escaneo
+// automático). Hay un segundo botón "Postula fácil" (sin id, dentro de
+// #columnaPostular) que hace lo mismo y SÍ está visible desde que carga
+// el panel -- confirmado en vivo que al hacerle clic sin sesión redirige
+// a /ingresa-a-tu-cuenta, el mismo comportamiento esperado del botón real
+// de postular. Por eso se busca por texto + visibilidad en vez de por id.
+function obtenerBotonPostular() {
+  const panel = document.querySelector(SELECTOR_PANEL) || document;
+  return [...panel.querySelectorAll('button, a')]
+    .find(el => n(el.textContent || '').includes('postul') && el.offsetParent && !el.disabled) || null;
+}
+
 // ── Postular ──────────────────────────────────────────────────
 // Devuelve { ok, expirada } -- expirada=true SOLO cuando no hay ningún botón
 // de postular (la oferta ya no existe o no acepta postulantes).
@@ -508,8 +525,8 @@ async function postular(url, id, titulo, decisionOfertaId) {
     return { ok: false, expirada: false };
   }
 
-  const btn = document.getElementById('applyOfferSticky');
-  if (!btn || !btn.offsetParent) {
+  const btn = obtenerBotonPostular();
+  if (!btn) {
     addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'No se encontró botón Postular'});
     return { ok: false, expirada: true };
   }
@@ -593,22 +610,19 @@ async function postular(url, id, titulo, decisionOfertaId) {
 
 // ── Activar tarjeta ───────────────────────────────────────────
 async function activar(tarjeta) {
-  // #applyOfferSticky es un botón "sticky": un único nodo persistente que la
-  // SPA reutiliza para cada oferta (le actualiza el binding, no lo recrea).
-  // Comparar btnDespues !== btnAntes (identidad de nodo) nunca detecta un
-  // cambio real -- por eso esto fallaba el 100% de las veces, no a ratos. La
-  // señal que sí cambia por oferta es el título del panel (SELECTOR_PANEL h3),
-  // así que se compara ESE texto antes/después en vez de la identidad del botón.
+  // El título del panel (SELECTOR_PANEL h3) es la señal de "cambió de
+  // oferta" -- ver obtenerBotonPostular() más arriba para por qué el botón
+  // ya no se identifica por id.
   const tituloAntes = (document.querySelector(SELECTOR_PANEL + ' h3') || {}).textContent || '';
   const a = tarjeta.querySelector('h2 a') || tarjeta.querySelector('a');
   if (!a) return null;
   a.click();
   for (let i = 0; i < 25; i++) {
     await sleep(350);
-    const btn = document.getElementById('applyOfferSticky');
+    const btn = obtenerBotonPostular();
     const tituloEl = document.querySelector(SELECTOR_PANEL + ' h3');
     const tituloAhora = tituloEl ? tituloEl.textContent : '';
-    if (btn && btn.offsetParent && tituloAhora && tituloAhora !== tituloAntes) return btn;
+    if (btn && tituloAhora && tituloAhora !== tituloAntes) return btn;
   }
   return null;
 }
