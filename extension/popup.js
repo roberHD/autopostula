@@ -371,19 +371,17 @@ function actualizarModoObservar(activo) {
     ? 'Activo — no se va a enviar ninguna postulación'
     : 'Escanea y puntúa, pero no postula ni gasta cupo';
 }
-document.getElementById('toggle-observar')?.addEventListener('change', (e) => actualizarModoObservar(e.target.checked));
-
 function guardarConfigLocal() {
   chrome.storage.local.set({ config: construirConfig() });
 }
 
-saveBtn.addEventListener('click', () => {
+// Persiste la config y avisa a TODAS las pestañas abiertas de cualquier portal
+// soportado -- antes solo cubría Computrabajo, así que Laborum (y ahora
+// Trabajando) se quedaban con la config vieja hasta el próximo load de esa
+// pestaña.
+function guardarYAvisar(mostrarToast) {
   const config = construirConfig();
   chrome.storage.local.set({ config }, () => {
-    // Notificar a TODAS las pestañas abiertas de cualquier portal soportado
-    // con la nueva config -- antes solo cubría Computrabajo, así que
-    // Laborum (y ahora Trabajando) se quedaban con la config vieja hasta el
-    // próximo load de esa pestaña.
     chrome.tabs.query({
       url: [
         '*://*.computrabajo.com/*', '*://*.computrabajo.cl/*',
@@ -392,9 +390,26 @@ saveBtn.addEventListener('click', () => {
     }, tabs => {
       tabs.forEach(t => chrome.tabs.sendMessage(t.id, { type: 'CONFIG_UPDATED', config }).catch(() => {}));
     });
-    toast('✓ Cambios guardados');
+    if (mostrarToast) toast('✓ Cambios guardados');
   });
+}
+
+// Bug real (2026-09-14): estos tres switches solo actualizaban el DOM (el
+// hint de texto) -- la config real quedaba sin guardar y sin avisarle a las
+// pestañas abiertas hasta que alguien apretaba "Guardar cambios" más abajo.
+// El toggle maestro "Activo" sí aplica al instante, así que quien apagaba
+// "Solo observar" acá y no se acordaba de guardar, seguía viendo el
+// comportamiento de antes -- exactamente como si el toggle nunca hubiera
+// funcionado. Ahora los tres guardan y avisan de inmediato, igual que el
+// toggle maestro.
+document.getElementById('toggle-observar')?.addEventListener('change', (e) => {
+  actualizarModoObservar(e.target.checked);
+  guardarYAvisar(false);
 });
+document.getElementById('toggle-revision')?.addEventListener('change', () => guardarYAvisar(false));
+document.getElementById('toggle-ia-filtros')?.addEventListener('change', () => guardarYAvisar(false));
+
+saveBtn.addEventListener('click', () => guardarYAvisar(true));
 
 // ── Abrir CT ───────────────────────────────────────────────────
 openCtBtn.addEventListener('click', () => {
