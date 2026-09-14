@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target, Search, Plus, X } from "lucide-react";
+import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target, Search, Plus, X, Download } from "lucide-react";
 import { quitarMarkdown } from "@/lib/text";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import { Marca } from "@/components/Marca";
@@ -23,6 +23,12 @@ async function parsearRespuesta(res: Response): Promise<any> {
     return { error: `El servidor respondió con un error inesperado (${res.status}) — intenta de nuevo en un momento.` };
   }
 }
+
+// Ficha real en Chrome Web Store, publicada 2026-09. Chrome no deja que una
+// página instale una extensión sola (la instalación "inline" está retirada
+// hace años) -- lo único que se puede ofrecer es un enlace a la ficha; ahí
+// la persona hace clic en "Agregar a Chrome" ella misma.
+const URL_CHROME_WEB_STORE = "https://chromewebstore.google.com/detail/autopostula/ecdhfiaepilljcpcidahkoppdomobhgb";
 
 const PASOS = [
   { titulo: "Bienvenida", Icon: Sparkles },
@@ -887,11 +893,23 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
         <div className="ap-section" style={{ marginBottom: 20 }}>
           <p className="ap-section-title">Todavía no la detectamos</p>
           <p className="ap-section-sub">
-            Instala la extensión de AutoPostula en tu navegador y vuelve a intentar.
-            Si prefieres dejarlo para después, omite este paso y conéctala cuando
-            quieras desde Portales — hasta entonces no podremos postular por ti.
+            Instálala desde Chrome Web Store y vuelve a esta página. Si prefieres dejarlo
+            para después, omite este paso y conéctala cuando quieras desde Portales —
+            hasta entonces no podremos postular por ti.
           </p>
-          <button className="ap-button-ghost" onClick={() => window.location.reload()}>
+          <a
+            href={URL_CHROME_WEB_STORE}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ap-button"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              textDecoration: "none", marginBottom: 10,
+            }}
+          >
+            <Download size={15} /> Descargar extensión
+          </a>
+          <button className="ap-button-ghost" style={{ display: "block" }} onClick={() => window.location.reload()}>
             Ya la instalé, verificar
           </button>
         </div>
