@@ -389,13 +389,23 @@ function apPatronPalabra(palabra) {
   return escapada;
 }
 
+// Bug real encontrado en vivo el 2026-09-14: avisos chilenos marcan el género
+// pegado a la PRIMERA palabra de una frase de varias ("Ejecutivo(a) de
+// Ventas", "Asesor/a de Ventas") -- el "(a)"/"/a" quedaba justo donde este
+// patrón exigía "\s+" entre palabras, así que la frase completa nunca
+// coincidía aunque el título calzara perfecto (se verificó contra
+// Computrabajo real: "Ejecutivo(a) de Ventas Retail" caía a "sin_rol" pese a
+// tener "ejecutivo de ventas" como sinónimo exacto configurado). Se permite
+// este ruido de género, opcional, entre cada par de palabras.
+const AP_RUIDO_GENERO = '(?:\\s*[/(][ao]s?\\)?)?';
+
 // Frase completa con límites de palabra, nunca subcadena (§6, mismo bug que
 // tenía coincideFiltros con "aseo"/"paseo"). El texto de entrada ya debe venir
 // normalizado con AP.n antes de construir/usar este patrón.
 function apConstruirPatron(patronNormalizado) {
   const palabras = patronNormalizado.split(/\s+/).filter(Boolean).map(apPatronPalabra);
   if (!palabras.length) return null;
-  return new RegExp('\\b' + palabras.join('\\s+') + '\\b');
+  return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + '\\s+') + '\\b');
 }
 
 AP.puntuarOferta = function (campos, perfil) {
