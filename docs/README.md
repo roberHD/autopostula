@@ -1,7 +1,11 @@
 # Documentos de diseño de AutoPostula
 
-> Índice y estado del trabajo. **Actualizado: 2026-09-12.**
+> Índice y estado del trabajo. **Actualizado: 2026-09-16.**
 > Si vas a implementar algo, empieza por acá: dice qué está hecho, qué falta y en qué orden.
+
+> 🔴 **Antes que cualquier otra cosa: [`revision-2026-09-16.md`](revision-2026-09-16.md).** Una cuenta
+> nueva postula al 100% de las ofertas que ve (55 de 55 en la prueba), y varias cosas marcadas abajo
+> como implementadas no funcionan en producción. Su §6 dice en qué orden arreglarlo.
 
 ---
 
@@ -9,14 +13,15 @@
 
 | Documento | De qué trata | Estado |
 |---|---|---|
-| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ✅ **Implementado** |
-| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ✅ **Implementado** |
-| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ✅ **Implementado** |
+| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ⚠️ Implementado, **apagado por defecto para cuentas nuevas** — revisión §1.4 |
+| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ⚠️ Implementado, **autocompletado caído en producción** — revisión §2.4 |
+| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ⚠️ Parcial — **`detalleAviso` no se guarda** — revisión §2.3 |
 | [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 Pendiente — §3 (capturar la corrección) ya está |
 | [`modo-solo-observar.md`](modo-solo-observar.md) | Escanear y cosechar sin postular. Destraba la recolección de corpus y es el modo "pruébalo antes de dejarlo actuar" para usuarios nuevos | ✅ **Implementado** |
 | [`verificacion-de-correo.md`](verificacion-de-correo.md) | Verificar el correo antes de dejar que la cuenta actúe (token de la extensión, checkout), no antes de dejarla mirar | ✅ **Implementado** |
-| [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Pendiente |
-| [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente |
+| [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Pendiente — ⚠️ verificado el 16-09: **son los 3 portales**, Computrabajo tampoco sincroniza (revisión §8.2) |
+| [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente — verificado el 16-09: la parte A no está |
+| [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | 🔴 **Prioridad 1** |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -115,6 +120,12 @@ El rediseño llevó el costo de IA de **~US$3,40 a ~US$0,58 por usuario premium 
 
 ## Lo que sigue
 
+### 0. Revisión del 16-09 — [`revision-2026-09-16.md`](revision-2026-09-16.md)
+
+Va antes que todo lo demás. Los pasos 1 a 4 de su §6 (sin perfil no se postula, cuentas nuevas en
+modo prueba, límites antes de enviar, motor nuevo para todos) salen juntos en la misma versión de la
+extensión, **antes de cualquier publicidad**.
+
 ### 1. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 
 El paso 1 (§3, capturar `respuestaIa`/`fueEditada` de verdad) ya está — era chico y urgente,
@@ -158,7 +169,7 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 
 ## Principios que se repiten
 
-Cinco ideas que atraviesan todos los documentos. Si hay que decidir algo que no está escrito,
+Seis ideas que atraviesan todos los documentos. Si hay que decidir algo que no está escrito,
 decidir con esto:
 
 1. **Compilar vs. ejecutar.** Lo caro y con IA corre una vez, cuando la persona cambia algo. Lo
@@ -178,3 +189,8 @@ decidir con esto:
 5. **Nunca descartar en silencio.** Toda decisión trae su razón, con los valores adentro, y la
    razón se muestra donde la persona está mirando. Una oferta que desaparece sin explicación es
    el peor modo de falla del producto. *(§6, y `visibilidad-y-etapa2.md` §A y §C.)*
+
+6. **Nunca actuar sin saber.** Sin perfil no se postula; una lista vacía significa "no sé qué
+   buscas", no "acepto todo". Lo que la persona tiene que declarar (objetivo, ubicación) se le
+   pregunta, no se infiere del CV. Un límite se revisa antes de enviar, no después.
+   *(`revision-2026-09-16.md` §0.)*
