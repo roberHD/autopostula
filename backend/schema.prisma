@@ -400,9 +400,11 @@ model SearchPreferences {
   versionPerfil   Int      @default(0) @map("version_perfil")
   // Flag de transición (§13: "no borrar coincideFiltros hasta que el scorer
   // esté validado -- dejar las dos rutas conviviendo detrás de un flag").
-  // Default false a propósito: activar el scorer nuevo no debe cambiarle el
-  // comportamiento a nadie hasta que lo prenda a propósito.
-  usarScorerLocal Boolean  @default(false) @map("usar_scorer_local")
+  // docs/revision-2026-09-16.md §1.4: pasa a default(true) -- el motor nuevo
+  // ya no es opcional, es lo único que decide 'postular' (§1.1 ya sacó al
+  // filtro viejo de esa decisión). El campo se conserva por si hiciera falta
+  // apagarlo para una cuenta puntual, no como flag de adopción gradual.
+  usarScorerLocal Boolean  @default(true) @map("usar_scorer_local")
   // true si un cambio de objetivo laboral disparó una recompilación forzada
   // (docs/objetivo-laboral.md §6) que falló -- perfilCompilado sigue
   // reflejando el objetivo VIEJO mientras esto esté prendido. Sin esta
