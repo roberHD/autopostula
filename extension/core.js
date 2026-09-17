@@ -189,6 +189,7 @@ AP.formatearRazonCorta = function (r) {
     case 'sin_rol': return 'no se encontró ninguno de los roles buscados';
     case 'veto': return r.razon + (r.donde === 'cuerpo' ? ' (mención en el cuerpo del aviso, no en título/empresa)' : '');
     case 'ubicacion': return r.ofertaEn ? (r.ofertaEn + ' no está en tus comunas') : 'fuera de las comunas que buscas';
+    case 'ubicacion_desconocida': return 'no se pudo saber en qué comuna es';
     case 'senal': return (r.delta >= 0 ? '+' : '') + r.delta + ' por "' + r.patron + '"';
     case 'sin_senales': return 'sin señales claras';
     default: return 'sin razón';
@@ -467,6 +468,41 @@ function apConstruirPatron(patronNormalizado) {
   return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + '\\s+') + '\\b');
 }
 
+// ── Comuna conocida de una oferta (docs/revision-2026-09-16.md §2.1, punto 4) ──
+// AP.COMUNAS_CL (data/comunas-cl.js, cargado antes que este archivo) trae las
+// comunas normalizadas (minúsculas, sin tildes) con su región. ubicacionNorm
+// y tituloNorm ya deben venir normalizados con AP.n.
+//
+// Formatos reales verificados en vivo (2026-09-16/17): Computrabajo
+// "santiago - providencia, r.metropolitana" (con guion) o "san bernardo,
+// r.metropolitana" (sin guion); Laborum "providencia, región metropolitana";
+// Trabajando "pudahuel, metropolitana de santiago" -- los tres calzan con
+// UNA sola regla: si hay " - ", la comuna es lo que sigue al ÚLTIMO " - ";
+// si no, es lo que va antes de la primera coma. Sin campo o sin calce ahí,
+// se busca cualquier comuna conocida como palabra completa en el título.
+function apExtraerComunaConocida(ubicacionNorm, tituloNorm) {
+  const comunas = AP.COMUNAS_CL;
+  if (!comunas || !comunas.length) return null;
+
+  if (ubicacionNorm) {
+    const idxGuion = ubicacionNorm.lastIndexOf(' - ');
+    let candidato = idxGuion >= 0 ? ubicacionNorm.slice(idxGuion + 3) : ubicacionNorm;
+    const idxComa = candidato.indexOf(',');
+    if (idxComa >= 0) candidato = candidato.slice(0, idxComa);
+    candidato = candidato.trim();
+    const match = comunas.find((c) => c.nombre === candidato);
+    if (match) return match;
+  }
+
+  if (tituloNorm) {
+    for (const c of comunas) {
+      const rx = apConstruirPatron(c.nombre);
+      if (rx && rx.test(tituloNorm)) return c;
+    }
+  }
+  return null;
+}
+
 AP.puntuarOferta = function (campos, perfil) {
   const titulo = AP.n((campos && campos.titulo) || '');
   const empresa = AP.n((campos && campos.empresa) || '');
@@ -550,24 +586,38 @@ AP.puntuarOferta = function (campos, perfil) {
     razones.push({ tipo: 'veto', patron: vetoCuerpo.patron, razon: vetoCuerpo.razon, donde: 'cuerpo' });
   }
 
-  // 3. Ubicación -- penalización fuerte si hay comunas configuradas, ninguna
-  // matchea, y no acepta remoto (o el aviso no parece remoto).
+  // 3. Ubicación (docs/revision-2026-09-16.md §2.1). Antes: penalización de
+  // -40 si NINGUNA comuna declarada aparecía como texto libre en cualquier
+  // campo -- un "fuera de lo declarado" y un "no se pudo saber dónde es"
+  // se trataban exactamente igual (los dos caían en gris), y llenaban "Por
+  // decidir" de ofertas de regiones que la persona nunca pidió. Ahora se
+  // usa AP.COMUNAS_CL para reconocer la comuna REAL de la oferta cuando se
+  // puede, y los dos casos se separan:
+  //   comuna reconocida y DENTRO de lo declarado -> sin penalización
+  //   comuna reconocida y FUERA de lo declarado  -> DESCARTAR de una (no
+  //     "por decidir": la persona ya dijo que esa zona no le sirve)
+  //   no se pudo reconocer ninguna comuna                -> gris, como
+  //     siempre ("no sé" no es lo mismo que "no calza")
+  //   remoto + aceptaRemoto -> sin penalización
   const ubicacionCfg = perfil.ubicacion || {};
-  const comunas = ubicacionCfg.comunas || [];
-  if (comunas.length) {
-    const matcheaComuna = comunas.some((c) => {
-      const rx = apConstruirPatron(AP.n(c));
-      return rx && (rx.test(ubicacion) || rx.test(titulo) || rx.test(cuerpo));
-    });
-    const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo);
-    if (!matcheaComuna && !(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
-      score = Math.max(0, score - 40);
-      // §C: se guarda la comuna real de la oferta (sin normalizar, para
-      // mostrarla tal como la escribió el portal) y las comunas buscadas --
-      // antes el string decía "fuera de las comunas que buscas" sin decir
-      // cuál, así que dos ofertas descartadas por ubicación distinta se
-      // veían idénticas en la tarjeta de "Por decidir".
-      razones.push({ tipo: 'ubicacion', ofertaEn: (campos && campos.ubicacion) || null, buscadas: comunas });
+  const comunasDeclaradas = ubicacionCfg.comunas || [];
+  if (comunasDeclaradas.length || ubicacionCfg.aceptaRemoto) {
+    const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo) || /\bremot[oa]\b/.test(ubicacion);
+    if (!(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
+      const comunaOferta = apExtraerComunaConocida(ubicacion, titulo);
+      if (comunaOferta) {
+        const dentro = comunasDeclaradas.some((c) => AP.n(c) === comunaOferta.nombre);
+        if (!dentro) {
+          return {
+            score: 0,
+            banda: 'descartar',
+            razones: [{ tipo: 'ubicacion', ofertaEn: comunaOferta.nombre, buscadas: comunasDeclaradas }],
+          };
+        }
+      } else {
+        score = Math.max(0, score - 40);
+        razones.push({ tipo: 'ubicacion_desconocida', ofertaEn: (campos && campos.ubicacion) || null });
+      }
     }
   }
 

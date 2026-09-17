@@ -412,6 +412,16 @@ model SearchPreferences {
   // equivocado hasta la próxima recompilación exitosa (reabre P2 por la
   // vía de excepción). Se limpia sola en la próxima compilación exitosa.
   perfilDesactualizado Boolean @default(false) @map("perfil_desactualizado")
+  // docs/revision-2026-09-16.md §2.1: la ubicación se DECLARA, no se infiere.
+  // Antes compilar-perfil.ts le pasaba a la IA la comuna del CV y le pedía
+  // adivinar ubicacion.comunas -- en la cuenta de prueba, la persona pidió
+  // "Maipú, Cerrillos o Estación Central" y el perfil compilado terminó con
+  // ["maipu","pudahuel","santiago"] (agregó la comuna de su trabajo ANTERIOR,
+  // que quería evitar, omitió dos de las que pidió, y sumó "santiago" porque
+  // eso decía su CV). Forma: { regiones: string[] (códigos), comunas:
+  // string[], todaLaRegion: boolean, aceptaRemoto: boolean }. Opciones
+  // cerradas (ver /api/regiones-comunas) -- nunca texto libre.
+  ubicacionDeclarada Json? @map("ubicacion_declarada")
   actualizadoEn   DateTime @updatedAt @map("actualizado_en")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

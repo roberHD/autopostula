@@ -23,7 +23,7 @@ export async function PUT(request: Request) {
   if (!userId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const body = await request.json();
-  const { palabrasIncluir, palabrasExcluir, modalidad, jornada, usarScorerLocal } = body || {};
+  const { palabrasIncluir, palabrasExcluir, modalidad, jornada, usarScorerLocal, ubicacionDeclarada } = body || {};
 
   await getOrCreatePreferencias(userId);
 
@@ -37,6 +37,9 @@ export async function PUT(request: Request) {
       // Solo se toca si vino explícitamente en el body -- así el PUT que ya
       // usaba la página de filtros (sin este campo) no lo pisa con undefined.
       ...(typeof usarScorerLocal === "boolean" ? { usarScorerLocal } : {}),
+      // §2.1 (docs/revision-2026-09-16.md): Filtros edita la ubicación
+      // declarada con el mismo selector del onboarding.
+      ...(ubicacionDeclarada !== undefined ? { ubicacionDeclarada } : {}),
     },
   });
 

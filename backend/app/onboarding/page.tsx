@@ -8,6 +8,7 @@ import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import { Marca } from "@/components/Marca";
 import { Skel } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
+import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -399,11 +400,19 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
   const [resultados, setResultados] = useState<ResultadoCatalogo[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+  // §2.1 (docs/revision-2026-09-16.md): la ubicación se declara acá, en el
+  // mismo paso -- nunca se infería del CV, y cuando se hacía con IA (más
+  // abajo, antes de este cambio) salía mal: agregaba la comuna del trabajo
+  // ANTERIOR de la persona (la que quería evitar) y omitía las que sí pidió.
+  const [ubicacion, setUbicacion] = useState<UbicacionValor>(ubicacionVacia());
 
   useEffect(() => {
     async function cargar() {
       try {
-        const res = await fetch("/api/objetivos");
+        const [res, resPrefs] = await Promise.all([
+          fetch("/api/objetivos"),
+          fetch("/api/preferencias-busqueda"),
+        ]);
         const data = await parsearRespuesta(res);
         setSugerenciaCv(data.sugerenciaCv ?? null);
         if (Array.isArray(data.objetivos) && data.objetivos.length) {
@@ -418,6 +427,12 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
         } else {
           setObjetivos([{ ciuo: null, etiqueta: "", peso: 1 }]);
           setModo("editar");
+        }
+        try {
+          const prefs = await parsearRespuesta(resPrefs);
+          if (prefs?.ubicacionDeclarada) setUbicacion({ ...ubicacionVacia(), ...prefs.ubicacionDeclarada });
+        } catch {
+          // Sin preferencias todavía -- se queda con ubicacionVacia().
         }
       } catch (e) {
         console.error("Error cargando objetivo:", e);
@@ -466,13 +481,21 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
       setError("Escribe o elige al menos un objetivo.");
       return;
     }
+    if (!ubicacion.regiones.length) {
+      setError("Elige al menos una región donde quieres trabajar.");
+      return;
+    }
+    if (!ubicacion.todaLaRegion && !ubicacion.comunas.length && !ubicacion.aceptaRemoto) {
+      setError("Elige comunas específicas, marca \"toda la región\", o acepta remoto.");
+      return;
+    }
     setGuardando(true);
     setError("");
     try {
       const res = await fetch("/api/objetivos", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ objetivos: limpios }),
+        body: JSON.stringify({ objetivos: limpios, ubicacionDeclarada: ubicacion }),
       });
       const data = await parsearRespuesta(res);
       if (!res.ok) {
@@ -499,6 +522,13 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
         titulo="¿Qué buscas?"
         sub="Tu CV describe de dónde vienes. Esto es a dónde vas — puede ser distinto, sobre todo si te estás cambiando de rubro."
       />
+
+      <div style={{ marginBottom: 20, paddingBottom: 18, borderBottom: "1px solid var(--border)" }}>
+        <label className="ap-label" style={{ marginBottom: 6, display: "block" }}>¿Dónde quieres trabajar?</label>
+        <UbicacionPicker valor={ubicacion} onChange={setUbicacion} />
+      </div>
+
+      {error && <p style={{ fontSize: 12.5, color: "var(--status-rechazado)", marginBottom: 12 }}>{error}</p>}
 
       {modo === "sugerencia" && sugerenciaCv ? (
         <div>
@@ -578,8 +608,6 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
               <Plus size={14} /> También me interesa...
             </button>
           )}
-
-          {error && <p style={{ fontSize: 12.5, color: "var(--status-rechazado)", marginBottom: 12 }}>{error}</p>}
 
           <Footer onSiguiente={guardar} onOmitir={onOmitir} siguienteTexto={guardando ? "Guardando..." : "Continuar"} deshabilitado={guardando} />
         </>

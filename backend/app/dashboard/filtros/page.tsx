@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, FlaskConical, Target, Plus } from "lucide-react";
+import { X, FlaskConical, Target, Plus, MapPin } from "lucide-react";
+import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 
 type PerfilCompilado = {
   version: number;
@@ -29,17 +30,30 @@ export default function FiltrosPage() {
   const [mensajeObjetivo, setMensajeObjetivo] = useState("");
   const [sugerirRetriaje, setSugerirRetriaje] = useState(false);
 
+  // §2.1 (docs/revision-2026-09-16.md): mismo picker que el onboarding, para
+  // que corregir la ubicación después sea tan fácil como declararla la
+  // primera vez.
+  const [ubicacion, setUbicacion] = useState<UbicacionValor>(ubicacionVacia());
+  const [guardandoUbicacion, setGuardandoUbicacion] = useState(false);
+  const [mensajeUbicacion, setMensajeUbicacion] = useState("");
+
   useEffect(() => {
     async function cargar() {
       try {
-        const [resPerfil, resObjetivos] = await Promise.all([
+        const [resPerfil, resObjetivos, resPrefs] = await Promise.all([
           fetch("/api/ai/compilar-perfil"),
           fetch("/api/objetivos"),
+          fetch("/api/preferencias-busqueda"),
         ]);
 
         if (resPerfil.ok) {
           const perfilData = await resPerfil.json();
           setPerfilCompilado(perfilData.perfilCompilado ?? null);
+        }
+
+        if (resPrefs.ok) {
+          const prefsData = await resPrefs.json();
+          if (prefsData?.ubicacionDeclarada) setUbicacion({ ...ubicacionVacia(), ...prefsData.ubicacionDeclarada });
         }
 
         if (resObjetivos.ok) {
@@ -79,6 +93,26 @@ export default function FiltrosPage() {
       setMensajeScorer("No se pudo compilar — revisa la consola");
     } finally {
       setCompilando(false);
+    }
+  }
+
+  async function guardarUbicacion() {
+    setGuardandoUbicacion(true);
+    setMensajeUbicacion("");
+    try {
+      const res = await fetch("/api/preferencias-busqueda", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ubicacionDeclarada: ubicacion }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setMensajeUbicacion(data.error ?? "No se pudo guardar"); return; }
+      setMensajeUbicacion("Guardado. Recompila tu perfil (más abajo) para que el motor de búsqueda la use.");
+    } catch (err) {
+      console.error("Error guardando ubicación:", err);
+      setMensajeUbicacion("No se pudo guardar — revisa la consola");
+    } finally {
+      setGuardandoUbicacion(false);
     }
   }
 
@@ -213,6 +247,31 @@ export default function FiltrosPage() {
           )}
           <button className="ap-button" disabled={guardandoObjetivo} onClick={guardarObjetivos}>
             {guardandoObjetivo ? "Guardando..." : "Guardar objetivo"}
+          </button>
+        </div>
+      </div>
+
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.08s", borderColor: "color-mix(in oklch, var(--chart-4, var(--chart-2)) 35%, transparent)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <MapPin size={15} />
+          <p className="ap-section-title" style={{ marginBottom: 0 }}>Ubicación</p>
+        </div>
+        <p className="ap-section-sub">
+          Dónde estás dispuesto a trabajar. Antes esto se adivinaba con IA a partir de tu CV — se
+          declara acá para no equivocarse (agregar una comuna que quieres evitar, u omitir una que sí pediste).
+        </p>
+
+        {mensajeUbicacion && (
+          <p style={{ fontSize: 12.5, color: mensajeUbicacion.startsWith("Guardado") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
+            {mensajeUbicacion}
+          </p>
+        )}
+
+        <UbicacionPicker valor={ubicacion} onChange={setUbicacion} />
+
+        <div style={{ marginTop: 14 }}>
+          <button className="ap-button-ghost" disabled={guardandoUbicacion} onClick={guardarUbicacion}>
+            {guardandoUbicacion ? "Guardando..." : "Guardar ubicación"}
           </button>
         </div>
       </div>
