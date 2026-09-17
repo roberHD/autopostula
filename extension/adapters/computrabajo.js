@@ -46,6 +46,15 @@ function extraerFacetasAviso() {
   if (!panel) return {};
   const facetas = {};
 
+  // Ubicación del AVISO, no de la tarjeta (docs/revision-2026-09-16.md §2.3):
+  // verificado en vivo el 2026-09-17 contra 3 avisos reales (con rating, sin
+  // rating, sin empresa con perfil) -- '.header_detail p.fs16.mb5' es
+  // estable y único en el panel de detalle en los tres casos. La Etapa 2
+  // usa esto cuando existe, y la de la tarjeta (extraerUbicacion) solo como
+  // respaldo -- ver el llamado más abajo en escanear().
+  const ubicacionEl = panel.querySelector('.header_detail p.fs16.mb5');
+  if (ubicacionEl && ubicacionEl.textContent.trim()) facetas.ubicacion = n(ubicacionEl.textContent);
+
   panel.querySelectorAll('div.mbB p.dFlex.mb10').forEach((p) => {
     const icono = p.querySelector('span.icon');
     const claseIcono = (icono && icono.className) || '';
@@ -105,30 +114,38 @@ function tituloDeTarjeta(tarjeta) {
 }
 
 // ── Ubicación de una tarjeta (comuna/ciudad) ───────────────────
-// Intenta leer el elemento específico de ubicación de la tarjeta con los
-// selectores que suele usar Computrabajo; si ninguno calza, cae de vuelta
-// a todo el texto de la tarjeta (menos preciso, pero nunca deja de filtrar).
+// Bug real encontrado en revisión el 2026-09-16, verificado en vivo el
+// 2026-09-17 contra 20/20 tarjetas reales de
+// cl.computrabajo.com/trabajo-de-vendedor-en-rmetropolitana: el primer
+// selector de la lista vieja, '.fs16.fc_base' (querySelector devuelve el
+// PRIMERO que calza), agarraba la línea de "nota + empresa"
+// (<p class="dFlex vm_fx fs16 fc_base mt5">4,4 MD Soluciones</p>), no la de
+// ubicación -- las dos comparten esas dos clases, y la de nota/empresa viene
+// primero en el DOM. Eso hacía que "Por decidir" dijera cosas como "md
+// soluciones no está en tus comunas". La línea de ubicación es la OTRA
+// '.fs16.fc_base', la que NO tiene la clase 'dFlex' de la nota. Se quita
+// también el fallback a tarjeta.innerText: hacía calzar comunas que
+// aparecen en cualquier parte de la tarjeta (título, descripción), no solo
+// en el campo de ubicación real -- vacío es mejor que un falso calce.
 function extraerUbicacion(tarjeta) {
-  const candidatos = [
-    '.fs16.fc_base',
-    '[class*="location"]',
-    'p.fs16.t_ellipsis',
-    '.list_icons li'
-  ];
-  for (const sel of candidatos) {
-    const el = tarjeta.querySelector(sel);
-    if (el && el.textContent && el.textContent.trim().length > 1) return n(el.textContent);
-  }
-  return n(tarjeta.innerText || '');
+  const el = tarjeta.querySelector('p.fs16.fc_base:not(.dFlex)');
+  return el ? n(el.textContent) : '';
 }
 
 // ── Empresa de una tarjeta ──────────────────────────────────────
 // Verificado a mano contra el sitio real (2026-09-04): el link de la empresa
 // trae el atributo offer-grid-article-company-url, estable independiente del
-// hash de estilo del momento.
+// hash de estilo del momento. Pero ese atributo NO existe cuando la empresa
+// no tiene perfil propio en el sitio (ej. "Importante empresa del sector") --
+// verificado en vivo el 2026-09-17: esos casos SÍ tienen la línea
+// 'p.dFlex.fs16.fc_base' (la misma que en el caso normal trae la nota +
+// nombre de empresa, ej. "4,4 MD Soluciones"), solo que sin nota. Se le
+// quita el prefijo numérico de nota si lo trae; si no lo trae, queda igual.
 function extraerEmpresa(tarjeta) {
-  const el = tarjeta.querySelector('[offer-grid-article-company-url]');
-  return (el && el.textContent && el.textContent.trim()) || '';
+  const conLink = tarjeta.querySelector('[offer-grid-article-company-url]');
+  if (conLink && conLink.textContent.trim()) return conLink.textContent.trim();
+  const linea = tarjeta.querySelector('p.dFlex.fs16.fc_base');
+  return linea ? linea.textContent.trim().replace(/^\d+(?:,\d+)?\s+/, '') : '';
 }
 
 // ── Evaluar tarjeta (scorer local si está activo, si no el filtro viejo) ──
@@ -719,9 +736,12 @@ async function escanear() {
     let detalleAviso = null;
     if (btn) {
       detalleAviso = extraerFacetasAviso();
+      // §2.3: la ubicación del aviso (más completa/confiable que la de la
+      // tarjeta) manda cuando existe; la de la tarjeta queda solo de
+      // respaldo si el panel no la trajo por algún motivo.
       const camposCompletos = {
         titulo: cand.titulo, empresa: cand.empresa,
-        cuerpo: extraerTextoAviso(), ubicacion: extraerUbicacion(cand.t),
+        cuerpo: extraerTextoAviso(), ubicacion: detalleAviso.ubicacion || extraerUbicacion(cand.t),
       };
       resultadoFinal = AP.evaluarOferta(camposCompletos);
     }
