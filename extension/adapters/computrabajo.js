@@ -574,8 +574,17 @@ async function postular(url, id, titulo, decisionOfertaId) {
         reason:'Enviado (' + n2 + ' campos)',
         respuestas: respuestasParaLog
       });
-      reportarPostulacion({ id, titulo, url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
-      msg('✓ ' + titulo.slice(0,40), '#16A34A');
+      // §1.3 (docs/revision-2026-09-16.md): la postulación YA se envió en
+      // Computrabajo -- lo que puede fallar acá es solo el guardado en
+      // AutoPostula (tope mensual, portal desconectado). Antes ese rechazo
+      // se perdía en silencio y el aviso decía "✓" igual.
+      const reportado = await reportarPostulacion({ id, titulo, url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
+      if (!reportado || !reportado.ok) {
+        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
+        msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
+      } else {
+        msg('✓ ' + titulo.slice(0,40), '#16A34A');
+      }
       return { ok: true, expirada: false };
     } else {
       addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Sin botón Enviar mi CV'});
@@ -583,8 +592,13 @@ async function postular(url, id, titulo, decisionOfertaId) {
     }
   } else {
     addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
-    reportarPostulacion({ id, titulo, decisionOfertaId });
-    msg('✓ ' + titulo.slice(0,40), '#2563EB');
+    const reportado = await reportarPostulacion({ id, titulo, decisionOfertaId });
+    if (!reportado || !reportado.ok) {
+      addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
+      msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
+    } else {
+      msg('✓ ' + titulo.slice(0,40), '#2563EB');
+    }
     return { ok: true, expirada: false };
   }
 }
@@ -733,7 +747,7 @@ async function escanear() {
   // docs/modo-solo-observar.md §3.2: en modo observar esto no cuenta como
   // "postular" -- son ofertas que SE HABRÍAN postulado, se cuentan aparte
   // para que el mensaje no mienta.
-  const soloObservar = !!(AP.cfg && AP.cfg.soloObservar);
+  const soloObservar = AP.soloObservarEfectivo();
   {
     // conteos.postular/observado se fija recién acá, después del filtro de
     // IA viejo (si estuviera activo) -- para que el mensaje nunca diga más
@@ -746,6 +760,18 @@ async function escanear() {
   if (!pendientes.length) {
     if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return; // navegando a la página siguiente
     return;
+  }
+
+  // §1.3 (docs/revision-2026-09-16.md): corta ANTES de abrir la primera
+  // oferta -- antes el tope y el portal conectado solo se sabían al llegar
+  // el 403/400 de /api/applications, DESPUÉS de haber postulado de verdad
+  // en el sitio externo.
+  if (!soloObservar) {
+    const verificacion = await AP.puedePostular('Computrabajo');
+    if (!verificacion.permitido) {
+      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      return;
+    }
   }
 
   AP.procesando = true;

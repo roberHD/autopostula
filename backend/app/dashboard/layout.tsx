@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 };
 import BarraMaquina from "./BarraMaquina";
 import BannerVerificacion from "./BannerVerificacion";
+import BannerModoPrueba from "./BannerModoPrueba";
 
 export default async function DashboardLayout({
   children,
@@ -27,7 +28,7 @@ export default async function DashboardLayout({
   const userId = (session.user as any).id;
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { onboardingCompletado: true, emailVerificado: true },
+    select: { onboardingCompletado: true, emailVerificado: true, postulacionHabilitada: true },
   });
 
   // Se consulta la base directo (no la sesión/JWT) para que el chequeo esté
@@ -43,6 +44,7 @@ export default async function DashboardLayout({
         <BarraMaquina />
         <main className="ap-main">
           <BannerVerificacion verificadoAlCargar={!!dbUser.emailVerificado} />
+          <BannerModoPrueba habilitadaAlCargar={!!dbUser.postulacionHabilitada} />
           {children}
         </main>
       </div>

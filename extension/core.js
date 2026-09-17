@@ -26,6 +26,21 @@ AP.log = [];
 AP.escanear = null;
 AP.onInit = null;
 
+// Único punto de verdad para "¿esta oferta se envía de verdad o no?"
+// (docs/revision-2026-09-16.md §1.2). Combina el toggle del popup con la red
+// de seguridad de la cuenta (User.postulacionHabilitada, expuesta acá como
+// AP.cfg.postulacionHabilitada por /api/extension/perfil): una cuenta nueva
+// postuló a 55/55 ofertas reales apenas conectó la extensión, con el toggle
+// del popup en su valor por defecto -- la cuenta necesita su propio freno,
+// que la persona activa desde el panel, no solo el switch local del popup.
+// postulacionHabilitada llega `undefined` en extensiones viejas que todavía
+// no piden este campo al backend -- ahí no se bloquea nada (`=== false`,
+// nunca `!== true`), para no dejar a cuentas existentes en modo prueba por
+// error de versión.
+AP.soloObservarEfectivo = function () {
+  return !!(AP.cfg && AP.cfg.soloObservar) || !!(AP.cfg && AP.cfg.postulacionHabilitada === false);
+};
+
 // ── Overlay: la máquina hablando dentro del portal ────────────────
 //
 // Vive dentro del sitio de Computrabajo/Laborum, así que tiene dos
@@ -169,6 +184,7 @@ AP.formatearRazonCorta = function (r) {
   if (typeof r === 'string') return r;
   if (!r || !r.tipo) return 'sin razón';
   switch (r.tipo) {
+    case 'sin_perfil': return 'Tu perfil de búsqueda todavía no está listo';
     case 'rol': return 'calza con "' + r.rol + '" (' + r.termino + ')';
     case 'sin_rol': return 'no se encontró ninguno de los roles buscados';
     case 'veto': return r.razon + (r.donde === 'cuerpo' ? ' (mención en el cuerpo del aviso, no en título/empresa)' : '');
@@ -251,12 +267,25 @@ AP.addLog = function (entry) {
 // de extensión para hacer la llamada sin que CORS se meta.
 // "plataforma" identifica el JobPlatform en el backend (ver background.js) —
 // si se omite, background.js asume "Computrabajo" por compatibilidad.
+//
+// Ya NO es fire-and-forget (§1.3, docs/revision-2026-09-16.md): devuelve
+// {ok, error} de verdad -- antes el background siempre respondía ok:true sin
+// importar si el backend había rechazado la postulación (403 por tope
+// mensual, 400 por portal desconectado), así que la persona postulaba de
+// verdad en el portal externo y esa postulación quedaba invisible, sin que
+// nada se lo dijera.
 AP.reportarPostulacion = function (oferta) {
-  try {
-    chrome.runtime.sendMessage({ type: 'REPORTAR_POSTULACION', oferta: oferta });
-  } catch (e) {
-    console.warn('[AP] No se pudo avisar al background:', e);
-  }
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({ type: 'REPORTAR_POSTULACION', oferta: oferta }, (respuesta) => {
+        if (chrome.runtime.lastError) { resolve({ ok: false, error: chrome.runtime.lastError.message }); return; }
+        resolve(respuesta || { ok: false, error: 'Sin respuesta del background' });
+      });
+    } catch (e) {
+      console.warn('[AP] No se pudo avisar al background:', e);
+      resolve({ ok: false, error: String(e) });
+    }
+  });
 };
 
 // ── Reportar títulos vistos al backend (cosecha pasiva del corpus de títulos) ──
@@ -303,6 +332,31 @@ AP.actualizarEstadoPostulacion = function (datos) {
   });
 };
 
+// ── ¿Se puede postular ahora? (docs/revision-2026-09-16.md §1.3) ─────────
+// Se consulta antes de cada tanda de "Postulando:" -- si el mes ya se acabó
+// el cupo, o el portal no está conectado en el plan, corta el escaneo antes
+// de hacer un solo clic. Si algo falla en el camino (sin red, sin token),
+// resuelve permitido:true: /api/applications valida lo mismo después como
+// defensa en profundidad, así que fallar acá no debe trabar el escaneo.
+AP.puedePostular = function (plataforma) {
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({ type: 'PUEDE_POSTULAR', plataforma: plataforma }, (respuesta) => {
+        if (chrome.runtime.lastError || !respuesta) { resolve({ permitido: true, motivo: null, restantes: null }); return; }
+        resolve(respuesta);
+      });
+    } catch (e) { resolve({ permitido: true, motivo: null, restantes: null }); }
+  });
+};
+
+// Texto corto y accionable para cada motivo de rechazo -- compartido por los
+// tres adaptadores para no repetir el mismo switch tres veces.
+AP.motivoPuedePostular = function (motivo) {
+  if (motivo === 'limite') return 'Usaste todas tus postulaciones del mes — no se va a postular';
+  if (motivo === 'portal') return 'Este portal no está conectado en tu plan — no se va a postular';
+  return 'No se puede postular ahora';
+};
+
 // Palabras que delatan modalidad/jornada en el texto de la oferta -- estas
 // dos solo se filtran "en positivo" (exigiendo que el aviso mencione alguna)
 // cuando el criterio es remoto/hibrido o full_time/part_time. "presencial" y
@@ -330,7 +384,12 @@ AP.coincideFiltros = function (textoCompleto, ubicacion) {
   if (cfg.excTags && cfg.excTags.length) {
     if (cfg.excTags.some(tag => t.includes(AP.n(tag)))) return false;
   }
-  if (cfg.incTags && cfg.incTags.length) {
+  // §1.1 (docs/revision-2026-09-16.md): sin incTags, esto devolvía `true`
+  // para cualquier oferta -- una cuenta nueva sin palabras configuradas
+  // "pasaba" el filtro entero y postulaba a todo. Una lista vacía significa
+  // "no sé qué buscas", no "acepto todo".
+  if (!cfg.incTags || !cfg.incTags.length) return false;
+  {
     const expandido = t.replace(/\bpt\b/g, 'part time').replace(/\(a\)/g, 'a').replace(/\/a\b/g, 'a');
     if (!cfg.incTags.some(tag => expandido.includes(AP.n(tag)))) return false;
   }
@@ -539,11 +598,13 @@ AP.puntuarOferta = function (campos, perfil) {
 // Portal-agnóstico: cada adaptador arma sus propios "campos" (título, empresa,
 // cuerpo, ubicación -- lo que pueda leer sin abrir el aviso) y llama acá. Si
 // el scorer local está activo (AP.cfg.scorer.usarScorerLocal) y hay perfil
-// compilado, puntúa con AP.puntuarOferta; si no, cae al filtro viejo
-// (coincideFiltros) tratando cualquier "pasa" como banda 'postular' -- así
-// las dos rutas conviven detrás del flag sin que el adaptador tenga que saber
-// cuál está activa (§13: "no borrar coincideFiltros hasta que el scorer esté
-// validado").
+// compilado, puntúa con AP.puntuarOferta. Si no, YA NO cae al filtro viejo
+// para decidir 'postular' (§1.1, docs/revision-2026-09-16.md): una cuenta
+// nueva de punta a punta, sin perfil compilado, habría postulado a 55/55
+// ofertas reales en los 3 portales (comunas que la persona pidió evitar,
+// turnos de noche) porque coincideFiltros con todo vacío devolvía `true`
+// para cualquier oferta. "Sin perfil" ya no es "acepto todo" -- es "no sé
+// qué buscas", y eso va a gris, nunca a postular.
 AP.evaluarOferta = function (campos) {
   const scorerCfg = AP.cfg && AP.cfg.scorer;
   if (scorerCfg && scorerCfg.usarScorerLocal && scorerCfg.perfilCompilado) {
@@ -565,12 +626,10 @@ AP.evaluarOferta = function (campos) {
     const resultado = AP.puntuarOferta(campos, scorerCfg.perfilCompilado);
     return { banda: resultado.banda, score: resultado.score, razones: resultado.razones, usoScorer: true };
   }
-  const textoCompleto = [campos.titulo, campos.empresa, campos.cuerpo].filter(Boolean).join(' ');
-  const pasaFiltroViejo = AP.coincideFiltros(textoCompleto, campos.ubicacion);
   return {
-    banda: pasaFiltroViejo ? 'postular' : 'descartar',
+    banda: 'gris',
     score: null,
-    razones: pasaFiltroViejo ? [] : ['no calza con tus filtros de búsqueda'],
+    razones: [{ tipo: 'sin_perfil' }],
     usoScorer: false,
   };
 };
@@ -1037,7 +1096,7 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
     // puerta mientras el modo esté activo. No se marca expirada (expirada:
     // false): queda pendiente para reintentarse en el próximo ciclo, cuando
     // la persona salga del modo observar.
-    if (AP.cfg && AP.cfg.soloObservar) {
+    if (AP.soloObservarEfectivo()) {
       sendResponse({ success: false, expirada: false, motivo: 'Estás en modo solo observar' });
       return true;
     }

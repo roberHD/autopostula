@@ -377,7 +377,7 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
   // que resolvió a postular, y una aprobación de banda gris (aunque esa ya
   // se corta antes, en el handler de DO_APPLY de core.js). Ni se toca el
   // botón ni se envía nada.
-  if (AP.cfg && AP.cfg.soloObservar) {
+  if (AP.soloObservarEfectivo()) {
     addLog({ ts: Date.now(), status: 'observado', title: titulo, url, uid: id, reason: 'Habría postulado — modo solo observar' });
     return { ok: false, expirada: false };
   }
@@ -432,8 +432,15 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
     if (ok) {
       const respuestasParaLog = resultado.respuestasLog.map(paraLog);
       addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación con preguntas enviada', respuestas: respuestasParaLog });
-      reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, matchScore: resultado.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
-      msg('✓ ' + titulo.slice(0, 40), '#16A34A');
+      // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
+      // computrabajo.js, es el mismo acá.
+      const reportado = await reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, matchScore: resultado.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
+      if (!reportado || !reportado.ok) {
+        addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: 'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido') });
+        msg('⚠ Enviado, no se guardó: ' + titulo.slice(0, 30), '#DC2626');
+      } else {
+        msg('✓ ' + titulo.slice(0, 40), '#16A34A');
+      }
       return { ok: true, expirada: false };
     }
     marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(paraLog), decisionOfertaId);
@@ -444,8 +451,13 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
   const ok = await esperarConfirmacion();
   if (ok) {
     addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación rápida enviada' });
-    reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, decisionOfertaId });
-    msg('✓ ' + titulo.slice(0, 40), '#16A34A');
+    const reportado = await reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, decisionOfertaId });
+    if (!reportado || !reportado.ok) {
+      addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: 'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido') });
+      msg('⚠ Enviado, no se guardó: ' + titulo.slice(0, 30), '#DC2626');
+    } else {
+      msg('✓ ' + titulo.slice(0, 40), '#16A34A');
+    }
     return { ok: true, expirada: false };
   }
 
@@ -604,7 +616,7 @@ async function escanear() {
 
   // docs/modo-solo-observar.md §3.2: estas son ofertas que SE HABRÍAN
   // postulado -- se cuentan aparte para que el mensaje no mienta.
-  const soloObservar = !!(AP.cfg && AP.cfg.soloObservar);
+  const soloObservar = AP.soloObservarEfectivo();
   if (soloObservar) conteos.observado = pendientes.length;
   else conteos.postular = pendientes.length;
   {
@@ -623,6 +635,14 @@ async function escanear() {
       addLog({ ts: Date.now(), status: 'observado', title: p.titulo, url: p.url, uid: p.id, reason: 'Habría postulado — modo solo observar' });
     });
   } else if (pendientes.length) {
+    // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
+    // computrabajo.js, es el mismo acá.
+    const verificacion = await AP.puedePostular('Laborum');
+    if (!verificacion.permitido) {
+      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      return;
+    }
+
     AP.procesando = true;
     const primera = pendientes[0];
     AP.vistos.add(primera.id);

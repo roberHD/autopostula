@@ -26,6 +26,11 @@ let infoItems = [];   // [{id, texto}] — datos libres del candidato para que l
 // nombres cortos que ya esperan content.js y los prompts del backend.
 let perfilRemoto = null;
 let cvTextoCache = '';
+// Red de seguridad por cuenta (docs/revision-2026-09-16.md §1.2) -- true por
+// defecto para no bloquear a alguien que abre el popup sin conexión o con un
+// backend viejo que todavía no manda este campo; solo se pone en false
+// cuando /api/extension/perfil lo dice explícito.
+let postulacionHabilitadaRemoto = true;
 
 const DEFAULTS = {
   incTags: [],
@@ -222,8 +227,10 @@ async function cargarPerfilRemoto(mostrarToast) {
     if (data.scorer) {
       scorerRemoto = data.scorer;
     }
+    postulacionHabilitadaRemoto = data.postulacionHabilitada !== false;
 
     renderPerfilCard();
+    renderModoPrueba();
     guardarConfigLocal(); // persiste el perfil y los filtros recién traídos para que content.js los use ya mismo
     if (mostrarToast) toast('✓ Perfil actualizado desde la web');
   } catch (e) {
@@ -352,8 +359,26 @@ function construirConfig(activeOverride) {
     modoRevision: document.getElementById('toggle-revision')?.checked || false,
     usarIAFiltros: document.getElementById('toggle-ia-filtros')?.checked || false,
     soloObservar: document.getElementById('toggle-observar')?.checked || false,
+    postulacionHabilitada: postulacionHabilitadaRemoto,
     perfil: perfilRemoto || {},
   };
+}
+
+// docs/revision-2026-09-16.md §1.2: cuenta en modo prueba -- el toggle de
+// "solo observar" se ve marcado y bloqueado. El freno real vive en la cuenta
+// (AP.soloObservarEfectivo, en el content script, ya lo exige igual aunque
+// alguien lograra destildarlo); esto es solo para que el popup no mienta
+// mostrando un switch editable que no cambiaría nada.
+function renderModoPrueba() {
+  const toggleObservar = document.getElementById('toggle-observar');
+  const observarHint = document.getElementById('observar-hint');
+  if (!toggleObservar) return;
+  toggleObservar.disabled = !postulacionHabilitadaRemoto;
+  if (!postulacionHabilitadaRemoto) {
+    toggleObservar.checked = true;
+    actualizarModoObservar(true);
+    if (observarHint) observarHint.textContent = 'Tu cuenta está en modo prueba — actívala desde el panel';
+  }
 }
 
 // docs/modo-solo-observar.md §3.4/§4.4: mientras el modo esté puesto, "revisar
@@ -485,6 +510,11 @@ function loadState() {
     if (toggleIAFiltros) toggleIAFiltros.checked = cfg.usarIAFiltros || false;
     if (toggleObservar) toggleObservar.checked = cfg.soloObservar || false;
     actualizarModoObservar(cfg.soloObservar || false);
+    // Cacheado localmente -- cargarPerfilRemoto() lo refresca abajo apenas
+    // resuelva el fetch. Sin esto, abrir el popup mostraba el switch como
+    // editable por un instante aunque la cuenta estuviera en modo prueba.
+    postulacionHabilitadaRemoto = cfg.postulacionHabilitada !== false;
+    renderModoPrueba();
 
     const active = data.active ?? cfg.active ?? false;
     toggleMain.checked = active;

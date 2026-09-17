@@ -138,6 +138,34 @@ async function llamarIABackend(tipo, payload) {
   }
 }
 
+// ── ¿Se puede postular ahora? (límites y portal conectado) ─────
+// docs/revision-2026-09-16.md §1.3: se consulta ANTES de cada "Postulando:"
+// en los tres adaptadores -- antes solo se sabía que el tope o el portal no
+// calzaban DESPUÉS de haber postulado de verdad en el sitio externo (el 403/400
+// de /api/applications llega recién ahí). Si esto falla (sin token, sin red,
+// backend caído) se responde permitido:true -- /api/applications sigue
+// validando lo mismo después, como defensa en profundidad; esta consulta solo
+// evita el intento inútil, no es la única barrera.
+async function puedePostularBackend(plataforma) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return { permitido: true, motivo: null, restantes: null };
+
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/puede-postular?plataforma=' + encodeURIComponent(plataforma), {
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.warn('[AP] puede-postular rechazado por el backend:', data.error || res.status);
+      return { permitido: true, motivo: null, restantes: null };
+    }
+    return data;
+  } catch (e) {
+    console.warn('[AP] Error de red consultando puede-postular:', e);
+    return { permitido: true, motivo: null, restantes: null };
+  }
+}
+
 // ── Actualizar estado de postulación (visto/en proceso/etc) ────
 async function actualizarEstadoBackend(datos) {
   const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
@@ -477,7 +505,7 @@ async function reportarPostulacionBackend(oferta) {
 
   if (!autopostulaToken) {
     console.warn('[AP] Sin token de AutoPostula configurado — no se reportó al backend');
-    return;
+    return { ok: false, error: 'Sin token de AutoPostula configurado' };
   }
 
   try {
@@ -506,9 +534,12 @@ async function reportarPostulacionBackend(oferta) {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       console.warn('[AP] Backend rechazó la postulación:', data.error || res.status);
+      return { ok: false, error: data.error || ('Error ' + res.status) };
     }
+    return { ok: true };
   } catch (e) {
     console.warn('[AP] Error de red reportando al backend:', e);
+    return { ok: false, error: 'Error de red: ' + e.message };
   }
 }
 
@@ -609,7 +640,12 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   // El return true mantiene vivo el listener (y con él, el service worker)
   // hasta que el fetch realmente termine.
   if (msg.type === 'REPORTAR_POSTULACION') {
-    reportarPostulacionBackend(msg.oferta).then(() => sendResponse({ ok: true }));
+    // §1.3 (docs/revision-2026-09-16.md): el sendResponse ya no está
+    // hardcodeado a ok:true -- antes eso escondía cualquier 403/400 real de
+    // /api/applications (tope mensual, portal desconectado) detrás de un
+    // "éxito" falso, y la postulación quedaba enviada al portal externo pero
+    // invisible en AutoPostula sin que nada lo dijera.
+    reportarPostulacionBackend(msg.oferta).then(sendResponse);
     return true;
   }
   if (msg.type === 'REPORTAR_TITULOS_VISTOS') {
@@ -626,6 +662,10 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   }
   if (msg.type === 'ACTUALIZAR_ESTADO') {
     actualizarEstadoBackend(msg.datos).then(sendResponse);
+    return true;
+  }
+  if (msg.type === 'PUEDE_POSTULAR') {
+    puedePostularBackend(msg.plataforma).then(sendResponse);
     return true;
   }
   if (msg.type === 'AI_CALL') {

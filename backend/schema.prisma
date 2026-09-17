@@ -137,6 +137,14 @@ model User {
   // (docs/verificacion-de-correo.md §6) -- sin esto, ese endpoint es un
   // vector para bombardear de correos una dirección ajena.
   verifyUltimoEnvio DateTime? @map("verify_ultimo_envio")
+  // Red de seguridad para cuentas nuevas (docs/revision-2026-09-16.md §1.2):
+  // false = la extensión trabaja en solo observar aunque el toggle del popup
+  // diga otra cosa. Existe porque una cuenta nueva sin perfil postuló a
+  // 55/55 ofertas reales en los 3 portales (comunas evitadas, turnos de
+  // noche, todo) apenas se conectó la extensión. La persona lo activa desde
+  // el panel una vez que ve qué habría postulado. Las cuentas existentes ya
+  // están usando el producto: la migración las deja en true.
+  postulacionHabilitada Boolean @default(false) @map("postulacion_habilitada")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
