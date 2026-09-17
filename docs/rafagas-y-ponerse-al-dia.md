@@ -245,6 +245,8 @@ Notificaciones del sistema (`chrome.notifications`) quedan fuera por ahora: suma
 
 ### 3.6 Botón "Ponerme al día ahora"
 
+**Solo Premium** (§4). En una cuenta gratis el botón no aparece.
+
 - En el **popup** y en el **panel**. Desde el panel viaja por `bridge.js` con un evento
   `autopostula:ponerse-al-dia`, igual que `autopostula:conectar`.
 - Corre una ráfaga con `disparador: 'manual'`, **sin** el umbral de §3.1.
@@ -259,6 +261,11 @@ Lo que la persona aprobó en "Por decidir" desde el teléfono se ejecuta **en el
 siguiente ráfaga**, antes de buscar ofertas nuevas: son decisiones ya tomadas, no dejarlas esperando.
 Es la forma de arreglar `revision-2026-09-16.md` §2.9 para quien no tiene la extensión abierta en el
 momento de aprobar.
+
+**En el plan gratis** no hay ráfagas que las envíen (§4). Lo aprobado queda en el panel como
+**"Abrir y postular"**: la persona abre la oferta con un clic y la extensión completa y envía el
+formulario ahí mismo. La persona entra al portal a mano, y el resto lo hace la extensión, igual que
+en todo el plan gratis. Nunca debe quedar un "Sí" aprobado sin decir cómo se envía.
 
 ### 3.8 Recordatorio por correo
 
@@ -292,19 +299,92 @@ Dejar de recibir estos avisos
 
 ---
 
-## 4. Planes — decisión abierta de Roberto
+## 4. Planes — decidido por Roberto (2026-09-17)
+
+> **La línea entre planes es quién entra a los portales.** En el plan gratis, **la persona entra a
+> mano** a Computrabajo, Laborum o Trabajando y busca; desde ahí la extensión hace todo sola:
+> escanea, decide, completa los formularios y postula. En Premium, **ni siquiera hay que entrar**: las
+> ráfagas abren las búsquedas solas. El plan gratis tiene además **una prueba única de 5
+> postulaciones automáticas**, para que la persona vea eso funcionando antes de pagar.
 
 | | Gratis | Premium |
 |---|---|---|
-| Ráfagas automáticas (abrir Chrome, despertar, chequeo) | — | ✅ |
+| Escanear, completar formularios y postular **cuando la persona entra al portal** | ✅ hasta 20 al mes | ✅ hasta 80 al mes |
+| Ráfagas automáticas (abrir Chrome, despertar, chequeo) | **Solo la prueba:** 5 postulaciones, una vez por cuenta | ✅ |
+| Botón "Ponerme al día ahora" | — | ✅ |
 | Recordatorio por correo | — | ✅ |
-| Botón "Ponerme al día ahora" | **¿?** | ✅ |
-| Cola del celular en la siguiente ráfaga | **¿?** | ✅ |
+| Lo aprobado desde el celular | "Abrir y postular": la persona abre la oferta y la extensión completa el formulario | Se envía solo en la siguiente ráfaga |
 
-**Recomendación:** dar el botón manual también al plan gratis, dentro de sus 20 postulaciones al mes.
-Es la mejor demostración del producto, no agrega costo de IA (el límite ya existe) y el automático
-sigue siendo la razón para pagar. La cola del celular también: sin ella el "Sí" del plan gratis
-nunca se envía (§2.9 de la revisión).
+### 4.1 La prueba de 5 postulaciones automáticas
+
+**Qué es.** Las primeras 5 postulaciones que envían las ráfagas en una cuenta gratis. Una sola vez
+por cuenta, no por mes. **Cuentan dentro de las 20 del mes** (son postulaciones como cualquier otra).
+
+**Cuándo arranca.** Apenas la persona activa la postulación desde el panel
+(`revision-2026-09-16.md` §1.2, `postulacionHabilitada`): se corre una ráfaga de inmediato, con
+`disparador: 'activacion'`. No es un botón que se pueda repetir: ocurre una vez, en el momento en
+que la persona acaba de decir "sí, actúa". Esperar hasta el siguiente chequeo (hasta 60 min) mataría
+justo el momento en que más interesada está. Si esa primera ráfaga no llega a las 5 (por ejemplo, no
+había ofertas que calzaran), las siguientes se completan con los disparadores normales de §3.1 hasta
+llegar a 5.
+
+**Esquema:**
+
+```prisma
+model User {
+  // … campos actuales …
+  // Postulaciones automáticas de prueba que le quedan a una cuenta gratis.
+  // Se descuenta solo con postulaciones realmente enviadas desde una ráfaga
+  // (no INCOMPLETA ni NO_ENVIADA, revision-2026-09-16.md §8.3).
+  pruebaAutomaticaRestantes Int @default(5) @map("prueba_automatica_restantes")
+}
+```
+
+**Backend.**
+
+- `/api/account/estado-automatico` deja de responder solo `busquedaAutomatica`:
+  ```ts
+  const modo =
+    user.rol === "ADMIN" || plan.busquedaAutomatica ? "premium"
+    : user.pruebaAutomaticaRestantes > 0            ? "prueba"
+    :                                                 "manual";
+  const busquedaAutomatica = modo !== "manual" && user.busquedaAutomaticaActiva && estadoPostulaciones.permitido;
+  return { busquedaAutomatica, modo, pruebaRestantes: modo === "prueba" ? user.pruebaAutomaticaRestantes : null, /* … */ };
+  ```
+- `POST /api/applications` recibe `origen: "rafaga" | "manual"` desde la extensión. Si `origen ===
+  "rafaga"`, la cuenta es gratis y la postulación quedó realmente enviada, descuenta 1 con un
+  `update … decrement` **condicionado a `> 0`** (dos ráfagas en paralelo no pueden bajarlo de 0).
+- `GET /api/extension/puede-postular` (revisión §1.3) suma el motivo `"prueba_terminada"`: con
+  `origen: "rafaga"` en modo prueba y 0 restantes → `permitido: false`. La ráfaga se corta **en medio**
+  si llega a 5, no al terminar.
+
+**Lo que ve la persona.**
+
+- Mientras dura: popup y panel, *"Prueba automática: 3 de 5 postulaciones"*.
+- Al terminar, en el popup, la tarjeta del panel y un correo (el único que recibe una cuenta gratis
+  por este tema):
+  ```
+  Tu prueba terminó: AutoPostula envió 5 postulaciones sin que entraras a ningún portal.
+  [ver las 5]
+
+  Con Premium sigue así, cada vez que abres tu computador.
+  Con el plan gratis, entra a Computrabajo, Laborum o Trabajando y la extensión postula por ti.
+  [Pasar a Premium]
+  ```
+- "Ver las 5" filtra el historial por esas postulaciones: la prueba se demuestra con resultados
+  concretos, no con un mensaje.
+
+**Abuso.** Crear cuentas para repetir la prueba ya está prohibido en los Términos (§8, *"Crear
+múltiples cuentas para eludir los límites del plan gratuito"*), y conectar la extensión exige el
+correo verificado. Son 5 postulaciones: no vale la pena más control que eso.
+
+**Aceptación.**
+1. Cuenta gratis nueva: al activar la postulación arranca una ráfaga sin hacer nada más.
+2. Llegando a 5 postulaciones enviadas, la ráfaga se corta aunque queden ofertas por postular.
+3. Una postulación INCOMPLETA en la ráfaga de prueba **no** descuenta.
+4. Terminada la prueba, abrir Chrome, despertar el computador o esperar el chequeo **no** dispara
+   ráfagas; entrar a mano a un portal sigue postulando normalmente, dentro de las 20 del mes.
+5. Premium y admin no ven nada de la prueba.
 
 ---
 
@@ -316,6 +396,9 @@ Todo lo que hoy promete "cada dos horas" o "sola" sin condiciones:
 |---|---|---|
 | Landing, hero | *"Tú revisas y envías, o lo dejas corriendo solo."* | *"Tú revisas y envías, o deja que se ponga al día sola cada vez que abres tu computador."* |
 | Landing, precios Premium | *"Busca y postula sola, según tus filtros"* | *"Se pone al día sola cada vez que abres tu computador"* |
+| Landing, precios Gratis | *"Postulación asistida: la IA responde, tú envías"* | *"Entras al portal y la extensión postula por ti"* + *"Prueba: 5 postulaciones automáticas"* |
+| `/dashboard/premium`, tabla | — | Fila nueva: *"Postulaciones automáticas (sin entrar al portal)"* → Gratis: *"Prueba de 5"*, Premium: ✅ |
+| Términos §6.1, plan gratuito | Límites mensuales de postulaciones, portales e IA | Agregar la prueba única de 5 postulaciones automáticas y que, fuera de ella, las búsquedas las inicia la persona |
 | `/dashboard/premium` | *"Búsqueda y postulación automática"* | *"Se pone al día sola al abrir tu computador"* |
 | Política de privacidad §6, "Búsqueda automática" | *"…abre cada dos horas una pestaña en segundo plano…"* | Describir las ráfagas: cuándo se disparan, que abren pestañas en segundo plano una a la vez, y que **mientras dura una ráfaga evitan que el computador se suspenda por inactividad** |
 | Chrome Web Store, descripción | *"…búsqueda automática cada dos horas mientras tengas Chrome abierto."* | *"…se pone al día sola cada vez que abres tu computador."* |
@@ -364,7 +447,8 @@ celular, con *"estas ofertas calzan contigo"* y postulación a mano (`celular-y-
 | 4 | `requestKeepAwake` durante la ráfaga + tope de 25 min | 3.3 | Permiso `power` → nueva versión en la tienda |
 | 5 | `Rafaga` + `ultimaRafagaEn` + endpoint | 3.4 | |
 | 6 | Número en el ícono, popup y tarjeta del panel | 3.5 | |
-| 7 | Botón "Ponerme al día ahora" | 3.6 | |
+| 7 | Botón "Ponerme al día ahora" | 3.6 | Solo Premium |
+| 7b | Prueba de 5 postulaciones automáticas | 4.1 | Depende de `revision-2026-09-16.md` §1.2 y §1.3 |
 | 8 | Cola del celular primero | 3.7 | Depende de `revision-2026-09-16.md` §2.9 |
 | 9 | Recordatorio por correo | 3.8 | |
 | 10 | Textos: landing, Premium, privacidad, ficha de la tienda | 5 | En el mismo deploy que el 4 |
@@ -387,3 +471,5 @@ celular, con *"estas ofertas calzan contigo"* y postulación a mano (`celular-y-
 9. **Sin ráfagas por 48 h** → llega un correo; no llega otro antes de 72 h; darse de baja lo detiene.
 10. **Ningún texto** de la landing, el panel, la política de privacidad ni la ficha de la tienda
     sigue diciendo "cada dos horas".
+11. **Plan gratis:** se cumplen los 5 criterios de la prueba (§4.1), y fuera de la prueba no existe
+    el botón "Ponerme al día ahora" ni corre ninguna ráfaga.
