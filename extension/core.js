@@ -786,18 +786,27 @@ AP.seleccionarOpcion = function (el) {
 //
 // preguntas: [{ id, pregunta, opciones: string[]|null }] -- puede venir vacío si
 // solo se quiere el análisis (matchScore) sin preguntas de formulario que responder.
-// Devuelve { analisis, respuestas: {[id]: string|null}, error }.
+// Devuelve { analisis, respuestas: {[id]: string|null}, datosFaltantes: {[id]: string}, error }.
+// datosFaltantes (§8.4, docs/revision-2026-09-16.md): la IA puede decir que
+// una pregunta pide un hecho verificable (licencia, vehículo, renta...) que
+// no está en el perfil, en vez de inventar un "sí"/"no" con el nombre de la
+// persona -- ver la regla 1b del prompt en procesar-postulacion/route.ts.
 AP.analizarYResponder = async function (contexto, preguntas) {
-  if (!contexto) return { analisis: null, respuestas: {}, error: null };
+  if (!contexto) return { analisis: null, respuestas: {}, datosFaltantes: {}, error: null };
   const p = (AP.cfg && AP.cfg.perfil) || {};
   const info = (AP.cfg && AP.cfg.info || []).map(it => it.texto);
   const data = await AP.llamarBackendIA('procesar_postulacion', {
     contexto, perfil: p, info, preguntas: preguntas || []
   });
-  if (!data || data.error) return { analisis: null, respuestas: {}, error: data && data.error };
+  if (!data || data.error) return { analisis: null, respuestas: {}, datosFaltantes: {}, error: data && data.error };
   const respuestas = {};
-  (data.respuestas || []).forEach(r => { if (r && r.id) respuestas[r.id] = r.respuesta; });
-  return { analisis: data.analisis || null, respuestas, error: null };
+  const datosFaltantes = {};
+  (data.respuestas || []).forEach(r => {
+    if (!r || !r.id) return;
+    respuestas[r.id] = r.respuesta;
+    if (r.datoFaltante) datosFaltantes[r.id] = r.datoFaltante;
+  });
+  return { analisis: data.analisis || null, respuestas, datosFaltantes, error: null };
 };
 
 // ── Panel de revisión antes de enviar (editable) — genérico, cualquier
@@ -825,6 +834,12 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
       let tono, etiqueta;
       if (esLimite) { tono = 'aviso'; etiqueta = 'Se acabó tu cupo de IA este mes: complétala tú'; }
       else if (r.errorIA) { tono = 'malo'; etiqueta = 'La IA no pudo responder (' + esc(r.errorIA) + '): complétala tú'; }
+      // §8.4 (docs/revision-2026-09-16.md): distinto de "vacía" a secas --
+      // acá la IA SÍ identificó qué falta (un hecho verificable que no está
+      // en el perfil), pero decidió no inventarlo. Antes de esto no existía
+      // esta distinción: o se inventaba un "sí"/"no" con el nombre de la
+      // persona, o quedaba vacía sin decir por qué.
+      else if (r.datoFaltante) { tono = 'aviso'; etiqueta = 'No está en tu perfil (' + esc(r.datoFaltante) + ') — complétalo'; }
       else if (r.vacia) { tono = 'malo'; etiqueta = 'Quedó vacía: complétala antes de enviar'; }
       else if (r.fueIA) { tono = 'bueno'; etiqueta = 'La escribió la IA con tu perfil: puedes editarla'; }
       else { tono = 'bueno'; etiqueta = 'Lista'; }

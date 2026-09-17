@@ -290,8 +290,15 @@ async function rellenarYEnviarPreguntas(contexto) {
   const respuestasLog = [];
 
   for (const info of infoTextareas) {
-    const val = info.id ? resultado.respuestas[info.id] : null;
-    if (val) {
+    // §8.4 (docs/revision-2026-09-16.md): la IA puede decir que esta
+    // pregunta pide un hecho verificable (licencia, renta...) que no está
+    // en el perfil, en vez de inventar una respuesta -- ver la regla 1b del
+    // prompt en procesar-postulacion/route.ts.
+    const datoFaltante = info.id && resultado.datosFaltantes && resultado.datosFaltantes[info.id];
+    const val = (!datoFaltante && info.id) ? resultado.respuestas[info.id] : null;
+    if (datoFaltante) {
+      respuestasLog.push({ pregunta: info.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante, tipo: 'texto', el: info.ta, errorIA: null });
+    } else if (val) {
       const valLimitado = limitarTexto(val, info.ta);
       info.ta.focus();
       setVal(info.ta, valLimitado);
@@ -315,7 +322,8 @@ async function rellenarYEnviarPreguntas(contexto) {
   // Preguntas de radio (ej: "Tipo de documento") — si quedan sin responder,
   // Laborum nunca habilita el botón de enviar aunque el resto esté completo.
   for (const info of infoGrupos) {
-    const respIA = info.id ? resultado.respuestas[info.id] : null;
+    const datoFaltante = info.id && resultado.datosFaltantes && resultado.datosFaltantes[info.id];
+    const respIA = (!datoFaltante && info.id) ? resultado.respuestas[info.id] : null;
     let elegida = null;
     if (respIA) {
       const rNorm = n(respIA);
@@ -325,7 +333,7 @@ async function rellenarYEnviarPreguntas(contexto) {
       elegida.el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
       respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, fueIA: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: elegida.el });
     } else {
-      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: null, errorIA: resultado.error });
+      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante: datoFaltante || null, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: null, errorIA: resultado.error });
     }
     await sleep(300);
   }
@@ -334,6 +342,16 @@ async function rellenarYEnviarPreguntas(contexto) {
     msg('⏸ Revisión pendiente…', '#2563EB');
     const decision = await mostrarRevision(document.querySelector('h1')?.textContent || 'Oferta', respuestasLog, contexto);
     if (decision === 'skip') return { respuestasLog, saltada: true };
+  } else {
+    // §8.4 (docs/revision-2026-09-16.md): sin modo revisión no hay ningún
+    // humano mirando esto antes de enviar. El botón deshabilitado de Laborum
+    // ya frena la mayoría de los casos (§ más abajo), pero si el campo no
+    // era estrictamente obligatorio para el sitio, un dato faltante igual
+    // podría colarse vacío -- se corta acá explícito, sin depender de eso.
+    const faltaDato = respuestasLog.find(r => r.datoFaltante);
+    if (faltaDato) {
+      return { respuestasLog, errorEnvio: 'Falta "' + faltaDato.datoFaltante + '" en tu perfil para responder bien -- activa "Revisar antes de enviar" o completa tu perfil' };
+    }
   }
 
   // El botón "Responder" está fuera del <form> en el DOM (es un elemento

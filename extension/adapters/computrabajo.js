@@ -372,9 +372,15 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
     analisis = resultado.analisis;
     for (let i = 0; i < pendientesIA.length; i++) {
       const pd = pendientesIA[i];
+      // §8.4 (docs/revision-2026-09-16.md): la IA puede decir que esta
+      // pregunta pide un hecho verificable (licencia, renta...) que no está
+      // en el perfil, en vez de inventar un "sí"/"no" -- ver la regla 1b del
+      // prompt en procesar-postulacion/route.ts. Si vino marcada así, no se
+      // intenta calzar ninguna opción con el texto de la IA.
+      const datoFaltante = resultado.datosFaltantes && resultado.datosFaltantes['o' + i];
       const respIA = resultado.respuestas['o' + i];
       let elegida = null;
-      if (respIA) {
+      if (!datoFaltante && respIA) {
         const rNorm = n(respIA);
         elegida = pd.opciones.find(o => rNorm.includes(n(o.texto)) || (n(o.texto).length < 4 && rNorm.startsWith(n(o.texto))));
       }
@@ -382,7 +388,7 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
         interacciones++;
         respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
       } else {
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante: datoFaltante || null, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
       }
       await sleep(250);
     }
@@ -469,8 +475,11 @@ async function rellenar(contexto) {
     if (resultado.analisis) analisis = resultado.analisis;
     for (let i = 0; i < pendientesTexto.length; i++) {
       const pd = pendientesTexto[i];
+      const datoFaltante = resultado.datosFaltantes && resultado.datosFaltantes['t' + i];
       const valIA = resultado.respuestas['t' + i];
-      if (valIA) {
+      if (datoFaltante) {
+        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', respuestaIa: '', vacia: true, datoFaltante, tipo:'texto', el: pd.el, errorIA: null });
+      } else if (valIA) {
         n2++;
         aplicarValorTexto(pd.el, valIA, pd.labelRaw, true, respuestasLog);
       } else if (pd.fallback) {
@@ -548,6 +557,20 @@ async function postular(url, id, titulo, decisionOfertaId) {
       const decision = await mostrarRevision(titulo, respuestasLog, contexto);
       if (decision === 'skip') {
         addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
+        return { ok: false, expirada: false };
+      }
+    } else {
+      // §8.4/§8.5 (docs/revision-2026-09-16.md): sin modo revisión no hay
+      // ningún humano mirando esta postulación antes de que se envíe -- si
+      // la IA marcó que le falta un hecho verificable (licencia, renta...)
+      // que no está en el perfil, no se manda con eso sin responder. Con
+      // modo revisión SÍ se deja seguir si la persona confirma igual: ya lo
+      // vio marcado ("No está en tu perfil — complétalo") y decidió enviar.
+      const faltaDato = respuestasLog.find(r => r.datoFaltante);
+      if (faltaDato) {
+        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
+          reason:'Falta "' + faltaDato.datoFaltante + '" en tu perfil para responder bien -- activa "Revisar antes de enviar" o completa tu perfil',
+          respuestas: respuestasLog});
         return { ok: false, expirada: false };
       }
     }

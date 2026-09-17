@@ -30,8 +30,12 @@ export async function obtenerEstadoPostulaciones(userId: string) {
   inicioMes.setDate(1);
   inicioMes.setHours(0, 0, 0, 0);
 
+  // §8.3 (docs/revision-2026-09-16.md): INCOMPLETA es un intento que no llegó
+  // a la empresa (el formulario se quedó a medio enviar) -- contarla acá
+  // gastaba cupo real del mes por algo que nunca se envió, y de paso hacía
+  // que el límite pareciera alcanzado antes de tiempo.
   const usadas = await prisma.application.count({
-    where: { userId, enviadaEn: { gte: inicioMes } },
+    where: { userId, enviadaEn: { gte: inicioMes }, estadoActual: { not: "INCOMPLETA" } },
   });
 
   return {
