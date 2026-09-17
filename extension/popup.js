@@ -8,12 +8,11 @@
 const BACKEND_URL = 'https://autopostula.cl';
 
 // ── Estado ─────────────────────────────────────────────────────
-let incTags = [];
-let excTags = [];
-let locTags = [];
-// Palabras clave, modalidad y jornada ya no se editan acá — vienen del dashboard
-// web (/dashboard/filtros) vía /api/extension/perfil, igual que el resto del
-// perfil. Esto es lo último que se trajo de ahí (o lo cacheado localmente).
+// Modalidad y jornada mostradas acá SIEMPRE salen del perfil compilado
+// (scorerRemoto.perfilCompilado) -- docs/revision-2026-09-16.md §1.4 sacó
+// los campos viejos (SearchPreferences.modalidad/jornada, que solo usaba el
+// filtro viejo) de la página de Filtros, así que ya no hay nada editable que
+// leer ahí. Sin perfil compilado todavía, se muestra "Cualquiera".
 let filtrosBusquedaRemoto = { modalidad: 'cualquiera', jornada: 'cualquiera' };
 // Scorer local (docs/rediseno-filtrado-ofertas.md §6) -- apagado por defecto
 // hasta que el propio backend diga que hay perfil compilado Y el flag activo.
@@ -26,11 +25,13 @@ let infoItems = [];   // [{id, texto}] — datos libres del candidato para que l
 // nombres cortos que ya esperan content.js y los prompts del backend.
 let perfilRemoto = null;
 let cvTextoCache = '';
+// Red de seguridad por cuenta (docs/revision-2026-09-16.md §1.2) -- true por
+// defecto para no bloquear a alguien que abre el popup sin conexión o con un
+// backend viejo que todavía no manda este campo; solo se pone en false
+// cuando /api/extension/perfil lo dice explícito.
+let postulacionHabilitadaRemoto = true;
 
 const DEFAULTS = {
-  incTags: [],
-  excTags: [],
-  locTags: [],
   info: []
 };
 
@@ -45,12 +46,6 @@ const pulseLabel    = $('pulse-label');
 const statTotal     = $('stat-total');
 const statHoy       = $('stat-hoy');
 const statOk        = $('stat-ok');
-const incTagsEl     = $('inc-tags');
-const excTagsEl     = $('exc-tags');
-const locTagsEl     = $('loc-tags');
-const locInput      = $('loc-input');
-const locBtn        = $('loc-btn');
-const locUsarComunaBtn = $('loc-usar-comuna-btn');
 const filtroModalidadBadge = $('filtro-modalidad-badge');
 const filtroJornadaBadge   = $('filtro-jornada-badge');
 const filtrosEditarLink    = $('filtros-editar-link');
@@ -84,48 +79,6 @@ function toast(msg, duration = 2200) {
 }
 
 function uid() { return Date.now() + Math.random().toString(36).slice(2,6); }
-
-// ── Tags ───────────────────────────────────────────────────────
-// inc/exc son de solo lectura acá (vienen del dashboard) — solo loc sigue
-// siendo editable directo desde el popup.
-function renderTags() {
-  renderTagsInto(incTagsEl, incTags, 'inc', true);
-  renderTagsInto(excTagsEl, excTags, 'exc', true);
-  renderTagsInto(locTagsEl, locTags, 'loc', false);
-}
-
-function renderTagsInto(container, list, type, soloLectura) {
-  container.innerHTML = '';
-  list.forEach((tag, i) => {
-    const span = document.createElement('span');
-    span.className = `tag ${type}`;
-    span.innerHTML = soloLectura
-      ? tag
-      : `${tag} <button class="tag-x" data-i="${i}">×</button>`;
-    container.appendChild(span);
-  });
-}
-
-function addTag(type, val) {
-  const v = val.trim().toLowerCase();
-  if (!v) return;
-  if (type === 'loc' && !locTags.includes(v)) { locTags.push(v); locInput.value = ''; }
-  renderTags();
-}
-
-document.addEventListener('click', e => {
-  if (!e.target.classList.contains('tag-x')) return;
-  locTags.splice(+e.target.dataset.i, 1);
-  renderTags();
-});
-
-locBtn.addEventListener('click', () => addTag('loc', locInput.value));
-locInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTag('loc', locInput.value); });
-locUsarComunaBtn?.addEventListener('click', () => {
-  const comuna = perfilRemoto?.comuna;
-  if (!comuna) { toast('⚠ No tenemos tu comuna todavía — complétala en la web'); return; }
-  addTag('loc', comuna);
-});
 
 // ── Información adicional ───────────────────────────────────────
 function renderInfo() {
@@ -209,21 +162,19 @@ async function cargarPerfilRemoto(mostrarToast) {
     if (cvTextoCache) chrome.storage.local.set({ cvTexto: cvTextoCache });
     else chrome.storage.local.remove('cvTexto');
 
-    if (data.filtrosBusqueda) {
-      incTags = data.filtrosBusqueda.palabrasIncluir || [];
-      excTags = data.filtrosBusqueda.palabrasExcluir || [];
-      filtrosBusquedaRemoto = {
-        modalidad: data.filtrosBusqueda.modalidad || 'cualquiera',
-        jornada: data.filtrosBusqueda.jornada || 'cualquiera',
-      };
-      renderTags();
-      renderFiltrosBusqueda();
-    }
     if (data.scorer) {
       scorerRemoto = data.scorer;
+      const compilado = scorerRemoto.perfilCompilado;
+      filtrosBusquedaRemoto = {
+        modalidad: compilado?.modalidad || 'cualquiera',
+        jornada: compilado?.jornada || 'cualquiera',
+      };
+      renderFiltrosBusqueda();
     }
+    postulacionHabilitadaRemoto = data.postulacionHabilitada !== false;
 
     renderPerfilCard();
+    renderModoPrueba();
     guardarConfigLocal(); // persiste el perfil y los filtros recién traídos para que content.js los use ya mismo
     if (mostrarToast) toast('✓ Perfil actualizado desde la web');
   } catch (e) {
@@ -343,17 +294,31 @@ function actualizarStats(entries) {
 function construirConfig(activeOverride) {
   return {
     active: activeOverride ?? toggleMain.checked,
-    incTags,
-    excTags,
-    locTags,
     filtrosBusqueda: filtrosBusquedaRemoto,
     scorer: scorerRemoto,
     info: infoItems,
     modoRevision: document.getElementById('toggle-revision')?.checked || false,
-    usarIAFiltros: document.getElementById('toggle-ia-filtros')?.checked || false,
     soloObservar: document.getElementById('toggle-observar')?.checked || false,
+    postulacionHabilitada: postulacionHabilitadaRemoto,
     perfil: perfilRemoto || {},
   };
+}
+
+// docs/revision-2026-09-16.md §1.2: cuenta en modo prueba -- el toggle de
+// "solo observar" se ve marcado y bloqueado. El freno real vive en la cuenta
+// (AP.soloObservarEfectivo, en el content script, ya lo exige igual aunque
+// alguien lograra destildarlo); esto es solo para que el popup no mienta
+// mostrando un switch editable que no cambiaría nada.
+function renderModoPrueba() {
+  const toggleObservar = document.getElementById('toggle-observar');
+  const observarHint = document.getElementById('observar-hint');
+  if (!toggleObservar) return;
+  toggleObservar.disabled = !postulacionHabilitadaRemoto;
+  if (!postulacionHabilitadaRemoto) {
+    toggleObservar.checked = true;
+    actualizarModoObservar(true);
+    if (observarHint) observarHint.textContent = 'Tu cuenta está en modo prueba — actívala desde el panel';
+  }
 }
 
 // docs/modo-solo-observar.md §3.4/§4.4: mientras el modo esté puesto, "revisar
@@ -407,7 +372,6 @@ document.getElementById('toggle-observar')?.addEventListener('change', (e) => {
   guardarYAvisar(false);
 });
 document.getElementById('toggle-revision')?.addEventListener('change', () => guardarYAvisar(false));
-document.getElementById('toggle-ia-filtros')?.addEventListener('change', () => guardarYAvisar(false));
 
 saveBtn.addEventListener('click', () => guardarYAvisar(true));
 
@@ -455,9 +419,6 @@ function loadState() {
   chrome.storage.local.get(['config', 'active', 'log', 'cvTexto'], data => {
     const cfg = data.config || {};
 
-    incTags = cfg.incTags || DEFAULTS.incTags;
-    excTags = cfg.excTags || DEFAULTS.excTags;
-    locTags = cfg.locTags || DEFAULTS.locTags;
     filtrosBusquedaRemoto = cfg.filtrosBusqueda || { modalidad: 'cualquiera', jornada: 'cualquiera' };
     scorerRemoto = cfg.scorer || { usarScorerLocal: false, perfilCompilado: null, versionPerfil: 0 };
 
@@ -479,18 +440,20 @@ function loadState() {
     if (cfg.perfil?.nombre) headerSub.textContent = cfg.perfil.nombre;
 
     const toggleRevision = document.getElementById('toggle-revision');
-    const toggleIAFiltros = document.getElementById('toggle-ia-filtros');
     const toggleObservar = document.getElementById('toggle-observar');
     if (toggleRevision) toggleRevision.checked = cfg.modoRevision || false;
-    if (toggleIAFiltros) toggleIAFiltros.checked = cfg.usarIAFiltros || false;
     if (toggleObservar) toggleObservar.checked = cfg.soloObservar || false;
     actualizarModoObservar(cfg.soloObservar || false);
+    // Cacheado localmente -- cargarPerfilRemoto() lo refresca abajo apenas
+    // resuelva el fetch. Sin esto, abrir el popup mostraba el switch como
+    // editable por un instante aunque la cuenta estuviera en modo prueba.
+    postulacionHabilitadaRemoto = cfg.postulacionHabilitada !== false;
+    renderModoPrueba();
 
     const active = data.active ?? cfg.active ?? false;
     toggleMain.checked = active;
     setActiveUI(active);
 
-    renderTags();
     renderFiltrosBusqueda();
     renderInfo();
     renderPerfilCard();

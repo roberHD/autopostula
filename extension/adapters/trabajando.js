@@ -593,8 +593,15 @@ async function postular(url, id, titulo, decisionOfertaId) {
         reason:'Enviado (' + n2 + ' campos)',
         respuestas: respuestasParaLog
       });
-      reportarPostulacion({ id, titulo, plataforma: 'Trabajando', url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
-      msg('✓ ' + titulo.slice(0,40), '#16A34A');
+      // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
+      // computrabajo.js, es el mismo acá.
+      const reportado = await reportarPostulacion({ id, titulo, plataforma: 'Trabajando', url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
+      if (!reportado || !reportado.ok) {
+        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
+        msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
+      } else {
+        msg('✓ ' + titulo.slice(0,40), '#16A34A');
+      }
       return { ok: true, expirada: false };
     } else {
       addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Formulario detectado pero sin botón de enviar reconocible'});
@@ -602,8 +609,13 @@ async function postular(url, id, titulo, decisionOfertaId) {
     }
   } else {
     addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
-    reportarPostulacion({ id, titulo, plataforma: 'Trabajando', url, decisionOfertaId });
-    msg('✓ ' + titulo.slice(0,40), '#2563EB');
+    const reportado = await reportarPostulacion({ id, titulo, plataforma: 'Trabajando', url, decisionOfertaId });
+    if (!reportado || !reportado.ok) {
+      addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
+      msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
+    } else {
+      msg('✓ ' + titulo.slice(0,40), '#2563EB');
+    }
     return { ok: true, expirada: false };
   }
 }
@@ -706,7 +718,7 @@ async function escanear() {
 
   // docs/modo-solo-observar.md §3.2: ver el razonamiento completo en
   // computrabajo.js, es el mismo acá.
-  const soloObservar = !!(AP.cfg && AP.cfg.soloObservar);
+  const soloObservar = AP.soloObservarEfectivo();
   {
     if (soloObservar) conteos.observado = pendientes.length;
     else conteos.postular = pendientes.length;
@@ -720,6 +732,16 @@ async function escanear() {
   if (!pendientes.length) {
     if (siguientePaginaClick(tarjetas.length, botonVerMas)) return; // el MutationObserver retoma solo cuando lleguen las tarjetas nuevas
     return;
+  }
+
+  // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
+  // computrabajo.js, es el mismo acá.
+  if (!soloObservar) {
+    const verificacion = await AP.puedePostular('Trabajando');
+    if (!verificacion.permitido) {
+      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      return;
+    }
   }
 
   AP.procesando = true;

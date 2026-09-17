@@ -68,6 +68,7 @@ export async function GET(request: Request) {
       filtrosBusqueda,
       scorer,
       bandaGrisAprobadas,
+      postulacionHabilitada: user.postulacionHabilitada,
     });
   }
 
@@ -84,5 +85,6 @@ export async function GET(request: Request) {
     filtrosBusqueda,
     scorer,
     bandaGrisAprobadas,
+    postulacionHabilitada: user.postulacionHabilitada,
   });
 }
