@@ -9,6 +9,7 @@ import { Marca } from "@/components/Marca";
 import { Skel } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
 import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
+import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -24,12 +25,6 @@ async function parsearRespuesta(res: Response): Promise<any> {
     return { error: `El servidor respondió con un error inesperado (${res.status}) — intenta de nuevo en un momento.` };
   }
 }
-
-// Ficha real en Chrome Web Store, publicada 2026-09. Chrome no deja que una
-// página instale una extensión sola (la instalación "inline" está retirada
-// hace años) -- lo único que se puede ofrecer es un enlace a la ficha; ahí
-// la persona hace clic en "Agregar a Chrome" ella misma.
-const URL_CHROME_WEB_STORE = "https://chromewebstore.google.com/detail/autopostula/ecdhfiaepilljcpcidahkoppdomobhgb";
 
 const PASOS = [
   { titulo: "Bienvenida", Icon: Sparkles },

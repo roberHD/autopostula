@@ -791,7 +791,7 @@ async function escanear() {
 
     const resultado = evaluarTarjeta(t);
     if (resultado.banda === 'postular') {
-      pendientes.push({t, id, idx, titulo});
+      pendientes.push({t, id, idx, titulo, empresa});
     } else if (resultado.banda === 'gris') {
       AP.vistos.add(id);
       candidatosGris.push({t, id, idx, titulo, url, empresa, resultado});
@@ -825,7 +825,7 @@ async function escanear() {
     const resultado = resultadoFinal || cand.resultado;
 
     if (resultadoFinal && resultadoFinal.banda === 'postular') {
-      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo});
+      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo, empresa: cand.empresa});
     } else if (resultadoFinal && resultadoFinal.banda === 'descartar') {
       conteos.descartar++;
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
@@ -840,6 +840,14 @@ async function escanear() {
       });
     }
   }
+
+  // §2.8 (docs/revision-2026-09-16.md): ver computrabajo.js, es lo mismo acá.
+  pendientes = await AP.quitarDuplicados('Trabajando', pendientes, (p, razon) => {
+    conteos.descartar++;
+    razonesDescartadas.push(razon);
+    AP.vistos.add(p.id);
+    addLog({ts:Date.now(), status:'skip', title:p.titulo, url:'', uid:p.id, reason:AP.formatearRazonCorta(razon)});
+  });
 
   // docs/modo-solo-observar.md §3.2: ver el razonamiento completo en
   // computrabajo.js, es el mismo acá.

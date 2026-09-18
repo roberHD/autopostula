@@ -510,8 +510,8 @@ export default function InicioPage() {
               </div>
               <p className="ap-empty-state-title">Acá va a aparecer cada postulación</p>
               <p className="ap-empty-state-sub">
-                Con su estado real: enviada, vista, en proceso o finalista. Así sabes en qué quedó
-                cada una sin entrar al portal.
+                Con su portal y su fecha, y con su estado cuando el portal lo informa: enviada,
+                vista, en proceso o finalista.
               </p>
             </div>
           )}

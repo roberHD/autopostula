@@ -7,6 +7,7 @@ import FichaDemo from "@/components/landing/FichaDemo";
 import Revelar from "@/components/Revelar";
 import VolverArriba from "@/components/VolverArriba";
 import { Marca } from "@/components/Marca";
+import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 import "./landing.css";
 
 export const metadata: Metadata = {
@@ -25,6 +26,7 @@ const PASOS = [
   {
     titulo: "Instala la extensión",
     desc: "Conecta tu cuenta de Computrabajo, Laborum o Trabajando.com. La extensión trabaja dentro del portal, con tu sesión.",
+    enlace: { texto: "Instalar desde Chrome Web Store", href: URL_CHROME_WEB_STORE },
   },
   {
     titulo: "Define qué te sirve",
@@ -114,6 +116,12 @@ export default function LandingPage() {
                   Ver cómo funciona
                 </a>
               </div>
+              <p className="lp-hero__sub lp-rise lp-rise--4" style={{ fontSize: 13, marginTop: 12 }}>
+                Es una extensión de Chrome:{" "}
+                <a href={URL_CHROME_WEB_STORE} target="_blank" rel="noreferrer">
+                  instálala desde la Chrome Web Store ↗
+                </a>
+              </p>
 
               <div className="lp-datos lp-rise lp-rise--5">
                 <span>
@@ -187,7 +195,7 @@ export default function LandingPage() {
                 </p>
                 <p className="lp-fuente">
                   <Highlighter size={14} />
-                  Lo marcado salió de tu CV y de tu calibración de estilo. Nada inventado.
+                  Lo marcado sale de tu CV y de tu calibración de estilo. Revisa antes de enviar: la IA puede equivocarse.
                 </p>
               </article>
             </Revelar>
@@ -204,12 +212,17 @@ export default function LandingPage() {
             </Revelar>
 
             <Revelar className="lp-pasos" retraso={1}>
-              {PASOS.map(({ titulo, desc }, i) => (
+              {PASOS.map(({ titulo, desc, enlace }, i) => (
                 <div className="lp-paso" key={titulo}>
                   <span className="lp-paso__line" />
                   <span className="lp-paso__n ap-tnum">{i + 1}</span>
                   <h3>{titulo}</h3>
                   <p>{desc}</p>
+                  {enlace && (
+                    <p>
+                      <a href={enlace.href} target="_blank" rel="noreferrer">{enlace.texto} ↗</a>
+                    </p>
+                  )}
                 </div>
               ))}
             </Revelar>
@@ -223,7 +236,8 @@ export default function LandingPage() {
               <div className="lp-head__rule" />
               <h2>Sabes en qué quedó <span className="lp-fino">cada una.</span></h2>
               <p>
-                Cada postulación queda registrada con su estado real, actualizado desde el portal.
+                Cada postulación queda registrada con su portal y su fecha, y no se repite a la
+                misma oferta. Si el portal informa que la vieron o avanzó, el estado se actualiza.
                 Se acabó el &ldquo;¿a esta ya postulé?&rdquo;.
               </p>
             </Revelar>
@@ -231,7 +245,7 @@ export default function LandingPage() {
             <Revelar className="lp-tablero" retraso={1}>
               <div className="lp-tablero__bar">
                 <span className="lp-tablero__t">Tus postulaciones</span>
-                <span className="lp-tablero__meta ap-tnum">Últimos 30 días · 76 enviadas</span>
+                <span className="lp-tablero__meta ap-tnum">Ejemplo · últimos 30 días · 76 enviadas</span>
               </div>
 
               <div className="lp-tablero__in">
@@ -330,7 +344,8 @@ export default function LandingPage() {
             <div>
               <h2>Deja de llenar formularios a mano.</h2>
               <p>
-                Crea tu cuenta, sube tu CV y postula a tu primera oferta en menos de diez minutos.
+                Crea tu cuenta, sube tu CV e instala la extensión de Chrome. Después abres tu portal
+                de siempre y ella se encarga.
               </p>
             </div>
             <Link

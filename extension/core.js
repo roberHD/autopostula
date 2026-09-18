@@ -190,6 +190,12 @@ AP.formatearRazonCorta = function (r) {
     case 'veto': return r.razon + (r.donde === 'cuerpo' ? ' (mención en el cuerpo del aviso, no en título/empresa)' : '');
     case 'ubicacion': return r.ofertaEn ? (r.ofertaEn + ' no está en tus comunas') : 'fuera de las comunas que buscas';
     case 'ubicacion_desconocida': return 'no se pudo saber en qué comuna es';
+    case 'nivel': return r.certeza === 'desconocida'
+      ? 'cargo de jefatura o dirección ("' + r.termino + '"): no está claro si buscas ese nivel'
+      : 'cargo de jefatura o dirección ("' + r.termino + '"): buscas otro nivel';
+    case 'duplicado': return r.fecha
+      ? 'ya postulaste a este mismo cargo en esta empresa el ' + AP.formatearFechaCorta(r.fecha)
+      : 'este mismo cargo de esta empresa ya apareció en este escaneo';
     case 'senal': return (r.delta >= 0 ? '+' : '') + r.delta + ' por "' + r.patron + '"';
     case 'sin_senales': return 'sin señales claras';
     default: return 'sin razón';
@@ -350,6 +356,62 @@ AP.puedePostular = function (plataforma) {
   });
 };
 
+// ── Duplicados (docs/revision-2026-09-16.md §2.8) ─────────────────────
+// El mismo cargo de la misma empresa aparece con ids distintos: repetido en la
+// misma página, o republicado días después (Laborum: 3 postulaciones el mismo
+// día a "Asesor Comercial Remoto | AVAN-C Chile"). Clave: título + empresa
+// normalizados; sin empresa, título + el mismo día (un título solo es
+// demasiado poco para llamarlo "el mismo aviso").
+AP.claveDuplicado = function (titulo, empresa) {
+  const limpiar = (s) => AP.n(s).replace(/[^a-z0-9]+/g, ' ').trim();
+  const t = limpiar(String(titulo || '').split('\n')[0]);
+  if (!t) return null;
+  const e = limpiar(empresa);
+  return e ? t + '|' + e : t + '||' + new Date().toDateString();
+};
+
+AP.formatearFechaCorta = function (iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0');
+};
+
+// Quita de `pendientes` (ítems con .titulo y .empresa) lo que ya está
+// repetido en este mismo escaneo o ya se postuló en los últimos 30 días según
+// el backend. `alDescartar(item, razon)` deja que cada adaptador registre el
+// descarte a su manera (log, conteos, vistos). Si el backend no responde, solo
+// rige el filtro local: no trabar el escaneo por esto.
+AP.quitarDuplicados = async function (plataforma, pendientes, alDescartar) {
+  if (!pendientes.length) return pendientes;
+
+  const vistas = new Set();
+  const unicas = [];
+  for (const p of pendientes) {
+    const clave = AP.claveDuplicado(p.titulo, p.empresa);
+    if (clave && vistas.has(clave)) { alDescartar(p, { tipo: 'duplicado', fecha: null }); continue; }
+    if (clave) vistas.add(clave);
+    unicas.push(p);
+  }
+
+  const previas = await new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({
+        type: 'DUPLICADOS', plataforma: plataforma,
+        ofertas: unicas.map(p => ({ titulo: p.titulo, empresa: p.empresa || null })),
+      }, (respuesta) => {
+        if (chrome.runtime.lastError || !respuesta || !Array.isArray(respuesta.duplicados)) { resolve([]); return; }
+        resolve(respuesta.duplicados);
+      });
+    } catch (e) { resolve([]); }
+  });
+  const fechas = new Map(previas.map(d => [d.indice, d.fecha]));
+  return unicas.filter((p, i) => {
+    if (!fechas.has(i)) return true;
+    alDescartar(p, { tipo: 'duplicado', fecha: fechas.get(i) });
+    return false;
+  });
+};
+
 // Texto corto y accionable para cada motivo de rechazo -- compartido por los
 // tres adaptadores para no repetir el mismo switch tres veces.
 AP.motivoPuedePostular = function (motivo) {
@@ -503,6 +565,16 @@ function apExtraerComunaConocida(ubicacionNorm, tituloNorm) {
   return null;
 }
 
+// §2.7: términos de jefatura/dirección en un título (ya normalizado, sin
+// tildes). Mismos que backend/lib/nivel-cargo.ts. "Asistente de gerente" o
+// "secretaria de gerencia" no son cargos directivos: se quita la frase antes.
+const AP_NIVEL_DIRECTIVO = /\b(?:sub)?(?:gerent[ea]|director[a]?|jef[ea]|jefatura)\b|\bhead of\b/;
+const AP_NIVEL_DE_APOYO = /\b(?:asistente|secretari[oa]|ayudante|apoyo)\s+(?:de|del|a|al)\s+(?:la\s+|el\s+)?(?:sub)?(?:gerent[ea]|director[a]?|jef[ea]|jefatura)\b/g;
+function apTerminoDirectivo(tituloNorm) {
+  const m = AP_NIVEL_DIRECTIVO.exec(tituloNorm.replace(AP_NIVEL_DE_APOYO, ' '));
+  return m ? m[0] : null;
+}
+
 AP.puntuarOferta = function (campos, perfil) {
   const titulo = AP.n((campos && campos.titulo) || '');
   const empresa = AP.n((campos && campos.empresa) || '');
@@ -545,6 +617,23 @@ AP.puntuarOferta = function (campos, perfil) {
     }
     penalizacionVetoCuerpo = 60;
     vetoCuerpo = { patron: veto.patron, razon: veto.razon || ('posible: ' + veto.patron) };
+  }
+
+  // 1b. Nivel del cargo (docs/revision-2026-09-16.md §2.7). El rol "ventas"
+  // calzaba con "Gerente Comercial" y "Subgerente de ventas" -- el nivel no se
+  // miraba. Es solo por título, determinista: perfil.nivelDirectivo lo pone el
+  // backend según el CIUO de los objetivos declarados (true = busca ese nivel,
+  // false = no, ausente/null = no se sabe). Sin certeza no se descarta ni se
+  // postula: banda gris más abajo, para que lo decida la persona.
+  let nivelIncierto = null;
+  if (perfil.nivelDirectivo !== true) {
+    const terminoNivel = apTerminoDirectivo(titulo);
+    if (terminoNivel) {
+      if (perfil.nivelDirectivo === false) {
+        return { score: 0, banda: 'descartar', razones: [{ tipo: 'nivel', termino: terminoNivel }] };
+      }
+      nivelIncierto = { tipo: 'nivel', termino: terminoNivel, certeza: 'desconocida' };
+    }
   }
 
   // 2. Roles -- puntaje del mejor match (canónico o sinónimo) × peso del rol,
@@ -639,6 +728,11 @@ AP.puntuarOferta = function (campos, perfil) {
   if (score >= umbralPostular) banda = 'postular';
   else if (score <= umbralGris) banda = 'descartar';
   else banda = 'gris';
+
+  if (nivelIncierto && banda !== 'descartar') {
+    razones.unshift(nivelIncierto);
+    banda = 'gris';
+  }
 
   if (!razones.length) razones.push({ tipo: 'sin_senales' });
 

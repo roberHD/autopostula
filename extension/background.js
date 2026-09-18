@@ -166,6 +166,32 @@ async function puedePostularBackend(plataforma) {
   }
 }
 
+// ── ¿Ya postulé a esto? (docs/revision-2026-09-16.md §2.8) ─────
+// Devuelve { duplicados: [{ indice, fecha }] } para las ofertas que ya se
+// postularon en los últimos 30 días con otro id. Cualquier falla responde sin
+// duplicados: el filtro local del mismo escaneo sigue rigiendo.
+async function duplicadosBackend(plataforma, ofertas) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken || !Array.isArray(ofertas) || !ofertas.length) return { duplicados: [] };
+
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/duplicados', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plataforma, ofertas }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.warn('[AP] duplicados rechazado por el backend:', data.error || res.status);
+      return { duplicados: [] };
+    }
+    return data;
+  } catch (e) {
+    console.warn('[AP] Error de red consultando duplicados:', e);
+    return { duplicados: [] };
+  }
+}
+
 // ── Actualizar estado de postulación (visto/en proceso/etc) ────
 async function actualizarEstadoBackend(datos) {
   const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
@@ -666,6 +692,10 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
   }
   if (msg.type === 'PUEDE_POSTULAR') {
     puedePostularBackend(msg.plataforma).then(sendResponse);
+    return true;
+  }
+  if (msg.type === 'DUPLICADOS') {
+    duplicadosBackend(msg.plataforma, msg.ofertas).then(sendResponse);
     return true;
   }
   if (msg.type === 'AI_CALL') {

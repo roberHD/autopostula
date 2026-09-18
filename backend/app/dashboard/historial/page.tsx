@@ -9,6 +9,8 @@ type Application = {
   empresa: string | null;
   portal: string;
   estado: string;
+  // Solo INCOMPLETA: por qué no se pudo terminar sola (§3.4).
+  notaAtencion: string | null;
   enviadaEn: string;
 };
 
@@ -22,6 +24,13 @@ const FILTROS = [
   { valor: "RECHAZADO", etiqueta: "Rechazada" },
 ];
 
+// §3.4 (docs/revision-2026-09-16.md): INCOMPLETA no es un estado más de la
+// misma escala -- es una postulación que se quedó a medias y NO llegó a la
+// empresa. Se muestra con su propio nombre y color (antes salía como el texto
+// crudo "INCOMPLETA", gris, junto a "Enviada") y con su propio filtro, que solo
+// aparece cuando hay alguna.
+const FILTRO_ATENCION = { valor: "INCOMPLETA", etiqueta: "Necesitan tu atención" };
+
 const COLOR_ESTADO: Record<string, string> = {
   ENVIADO: "var(--status-enviado)",
   VISTO: "var(--status-visto)",
@@ -29,6 +38,7 @@ const COLOR_ESTADO: Record<string, string> = {
   FINALISTA: "var(--status-finalista)",
   FINALIZADO: "var(--status-finalizado)",
   RECHAZADO: "var(--status-rechazado)",
+  INCOMPLETA: "var(--warn)",
 };
 
 const ETIQUETA_ESTADO: Record<string, string> = {
@@ -38,6 +48,7 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   FINALISTA: "Finalista",
   FINALIZADO: "Finalizada",
   RECHAZADO: "Rechazada",
+  INCOMPLETA: "Necesita tu atención",
 };
 
 export default function HistorialPage() {
@@ -82,6 +93,8 @@ export default function HistorialPage() {
       return true;
     });
   }, [applications, filtro, busqueda]);
+
+  const hayIncompletas = useMemo(() => applications.some((a) => a.estado === "INCOMPLETA"), [applications]);
 
   const hoy = new Date().toLocaleDateString("es-CL", {
     weekday: "long",
@@ -129,7 +142,7 @@ export default function HistorialPage() {
           onChange={(e) => setBusqueda(e.target.value)}
         />
         <div className="ap-filter-tabs">
-          {FILTROS.map((f) => (
+          {(hayIncompletas ? [...FILTROS, FILTRO_ATENCION] : FILTROS).map((f) => (
             <button
               key={f.valor}
               className={"ap-filter-tab" + (filtro === f.valor ? " ap-filter-tab-active" : "")}
@@ -185,6 +198,11 @@ export default function HistorialPage() {
                   <span className="ap-log__cargo">
                     <b>{a.titulo}</b>
                     <span>{a.empresa ?? "Empresa no especificada"}</span>
+                    {a.estado === "INCOMPLETA" && (
+                      <span style={{ display: "block", color: "var(--warn)" }}>
+                        {a.notaAtencion ?? "No se pudo completar automáticamente"} — ábrela y termínala a mano
+                      </span>
+                    )}
                   </span>
                   <span className="ap-log__meta">{a.portal}</span>
                   <span>

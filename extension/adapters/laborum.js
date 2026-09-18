@@ -507,6 +507,17 @@ async function resolverEtapa2Gris(pendiente) {
       titulo: pendiente.titulo, empresa: pendiente.empresa, cuerpo, ubicacion: pendiente.ubicacion || '',
     });
 
+    // §2.8: la revisión de una gris que resuelve a postular tampoco puede
+    // repetir un cargo que ya se postuló con otro id.
+    if (resultadoFinal.banda === 'postular') {
+      let razonDuplicado = null;
+      const unicas = await AP.quitarDuplicados('Laborum', [pendiente], (p, razon) => { razonDuplicado = razon; });
+      if (!unicas.length) {
+        resultadoFinal.banda = 'descartar';
+        resultadoFinal.razones = [razonDuplicado];
+      }
+    }
+
     if (resultadoFinal.banda === 'postular') {
       AP.procesando = true;
       await postularEnPagina(pendiente.id, pendiente.titulo, location.href);
@@ -563,7 +574,7 @@ async function escanear() {
   const candidatas = (await esperar('a[href^="/empleos/"]')).filter(a => /-\d+\.html/.test(a.href));
   if (!candidatas.length) { msg('Sin tarjetas — busca ofertas en Laborum', '#9CA3AF'); return; }
 
-  const pendientes = [];
+  let pendientes = [];
   const titulosVistos = [];
   const avistamientos = [];
   // Desglose del escaneo (§A): se cuentan las tres bandas y se junta la razón
@@ -615,7 +626,7 @@ async function escanear() {
 
     const resultado = evaluarTarjeta(a);
     if (resultado.banda === 'postular') {
-      pendientes.push({ a, id, titulo, url: a.href });
+      pendientes.push({ a, id, titulo, empresa, url: a.href });
     } else if (resultado.banda === 'gris') {
       candidatosGris.push({ id, titulo, url: a.href, empresa, ubicacion: getUbicacionDeTarjeta(a), resultado });
     } else {
@@ -631,6 +642,16 @@ async function escanear() {
   });
   reportarTitulosVistos(titulosVistos, 'Laborum');
   AP.reportarAvistamientos(avistamientos, 'Laborum');
+
+  // §2.8 (docs/revision-2026-09-16.md): lo que ya se postuló con otro id, o
+  // está repetido en esta misma página, no se vuelve a postular. Acá importa
+  // más que en los otros: Laborum postuló 3 veces el mismo día a un mismo aviso.
+  pendientes = await AP.quitarDuplicados('Laborum', pendientes, (p, razon) => {
+    conteos.descartar++;
+    razonesDescartadas.push(razon);
+    AP.vistos.add(p.id);
+    addLog({ ts: Date.now(), status: 'skip', title: p.titulo, url: p.url, uid: p.id, reason: AP.formatearRazonCorta(razon) });
+  });
 
   // docs/modo-solo-observar.md §3.2: estas son ofertas que SE HABRÍAN
   // postulado -- se cuentan aparte para que el mensaje no mienta.

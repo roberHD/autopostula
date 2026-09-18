@@ -142,7 +142,7 @@ export default function LoginPage() {
         marcado="siguió postulando."
         bajada="AutoPostula no para cuando cierras la pestaña. Entra y mira en qué quedó cada postulación."
         hechos={[
-          "Cada oferta con el estado real que devuelve el portal",
+          "Cada postulación registrada con su portal y su fecha",
           "Respuestas escritas con tus palabras, no con plantillas",
           "Computrabajo, Laborum y Trabajando.com en el mismo lugar",
         ]}
