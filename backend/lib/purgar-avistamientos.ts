@@ -30,3 +30,19 @@ export async function purgarAvistamientos(): Promise<number> {
 
   return count;
 }
+
+// Retención del registro de ráfagas (docs/rafagas-y-ponerse-al-dia.md §3.4).
+// Son datos de uso -- cuándo corrió la extensión y cuántas ofertas vio -- sin
+// contenido de ninguna oferta ni respuesta, pero tampoco hay razón para
+// acumularlos: la tarjeta del panel y la mediana de duración solo miran las
+// últimas. Mismo plazo que los avistamientos, para tener un solo número que
+// recordar; si se cambia acá, revisar lo que diga la política de privacidad.
+export const DIAS_RETENCION_RAFAGAS = 90;
+
+export async function purgarRafagas(): Promise<number> {
+  const limite = new Date();
+  limite.setDate(limite.getDate() - DIAS_RETENCION_RAFAGAS);
+
+  const { count } = await prisma.rafaga.deleteMany({ where: { inicio: { lt: limite } } });
+  return count;
+}

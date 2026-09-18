@@ -12,6 +12,7 @@ import {
 import { ArrowUpRight, ArrowDownRight, Sparkles, Send, CheckCheck, Trophy, Target } from "lucide-react";
 import { SkelStats, SkelGrafico, SkelFilas } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
+import { textoTarjetaRafaga, type UltimaRafaga } from "@/lib/texto-rafaga";
 
 type Resumen = {
   postulacionesEnviadas: number;
@@ -154,7 +155,7 @@ export default function InicioPage() {
   // decidía solo por "hay un portal conectado", mientras la barra de arriba
   // (BarraMaquina) decía "En pausa" -- dos veredictos distintos en la misma
   // pantalla. Ahora lee del mismo /api/dashboard/estado que la barra.
-  const [estadoAuto, setEstadoAuto] = useState<{ activa: boolean; motivo: string | null } | null>(null);
+  const [estadoAuto, setEstadoAuto] = useState<{ activa: boolean; motivo: string | null; ultimaRafaga: UltimaRafaga | null } | null>(null);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState("");
   const { error: avisarError } = useAvisos();
@@ -162,7 +163,7 @@ export default function InicioPage() {
   useEffect(() => {
     fetch("/api/dashboard/estado")
       .then((r) => (r.ok ? r.json() : null))
-      .then((e) => { if (e) setEstadoAuto({ activa: !!e.activa, motivo: e.motivo ?? null }); })
+      .then((e) => { if (e) setEstadoAuto({ activa: !!e.activa, motivo: e.motivo ?? null, ultimaRafaga: e.ultimaRafaga ?? null }); })
       .catch(() => {});
   }, []);
 
@@ -294,6 +295,13 @@ export default function InicioPage() {
     "sin-cupo": { t: "Sin cupo este mes", d: "Se reinicia el día 1. Entretanto puedes ir completando tu perfil.", href: "/dashboard/premium", cta: "Ampliar cupo" },
   };
   const inactivoInfo = estadoAuto?.motivo ? textoInactivo[estadoAuto.motivo] : undefined;
+  // docs/rafagas-y-ponerse-al-dia.md §3.5: cuando la búsqueda automática SÍ
+  // está activa, la tarjeta ya no dice "Tu asistente está activo" (eso no dice
+  // nada que la persona pueda comprobar) sino cuándo se puso al día por última
+  // vez y qué encontró -- o, si hace más de 48 h, qué hacer. Sin el estado
+  // cargado todavía no se sabe nada de eso: no se inventa un "todavía no se
+  // puso al día" que parpadee y se corrija.
+  const tarjetaRafaga = estadoAuto && asistenteActivo ? textoTarjetaRafaga(estadoAuto.ultimaRafaga, new Date()) : null;
 
   return (
     <div className="ap-glow-bg" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -578,11 +586,11 @@ export default function InicioPage() {
               <Sparkles size={18} />
             </div>
             <h2 style={{ marginTop: 12, fontSize: 13.5, fontWeight: 600 }}>
-              {asistenteActivo ? "Tu asistente está activo" : inactivoInfo?.t ?? "Tu asistente todavía no postula"}
+              {asistenteActivo ? tarjetaRafaga?.t ?? "Revisando el estado…" : inactivoInfo?.t ?? "Tu asistente todavía no postula"}
             </h2>
             <p style={{ marginTop: 4, fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
               {asistenteActivo
-                ? `Perfil entrenado al ${datos.perfilEntrenado}%. Mientras más completo, más precisas y personales serán las respuestas en los formularios.`
+                ? tarjetaRafaga?.d ?? ""
                 : inactivoInfo?.d ??
                   "Le falta un portal conectado para empezar a trabajar. Entretanto puedes ir completando tu perfil: mientras más entrenado, más tuyas suenan las respuestas."}
             </p>
@@ -622,11 +630,13 @@ export default function InicioPage() {
               />
             </div>
             <p style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-muted)" }}>
+              {/* "Monitoreando" prometía una vigilancia continua que las ráfagas
+                  no son: se pone al día al abrir el computador, no mira todo el día. */}
               {datos.portalesActivos === 0
                 ? "Sin portales conectados"
                 : datos.portalesActivos === 1
-                  ? "Monitoreando 1 portal conectado"
-                  : `Monitoreando ${datos.portalesActivos} portales conectados`}
+                  ? "1 portal conectado"
+                  : `${datos.portalesActivos} portales conectados`}
             </p>
           </div>
         </div>

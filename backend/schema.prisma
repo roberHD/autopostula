@@ -145,6 +145,11 @@ model User {
   // el panel una vez que ve qué habría postulado. Las cuentas existentes ya
   // están usando el producto: la migración las deja en true.
   postulacionHabilitada Boolean @default(false) @map("postulacion_habilitada")
+  // Cuándo terminó la última ráfaga de la extensión (docs/rafagas-y-ponerse-al-dia.md
+  // §3.4). Solo cuenta una que TERMINÓ: una interrumpida no "puso al día" a
+  // nadie. null = todavía no hubo ninguna. Lo lee la tarjeta del panel y,
+  // más adelante, el recordatorio por correo.
+  ultimaRafagaEn DateTime? @map("ultima_rafaga_en")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
@@ -157,6 +162,7 @@ model User {
   searchPreferences SearchPreferences?
   decisionesOferta  DecisionOferta[]
   objetivosLaborales ObjetivoLaboral[]
+  rafagas           Rafaga[]
 
   @@map("users")
 }
@@ -558,6 +564,45 @@ model AiUsageLog {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("ai_usage_logs")
+}
+
+// Una "ráfaga" es una pasada de la extensión para ponerse al día -- abrir las
+// búsquedas de cada portal, escanear, postular -- disparada al abrir Chrome,
+// al despertar el equipo, por el chequeo periódico o a pedido (docs/rafagas-y-ponerse-al-dia.md
+// §3.4). Sirve para decirle a la persona qué pasó mientras no miraba (ícono,
+// popup, tarjeta del panel) y para saber cuánto suele demorar una.
+//
+// El estado real vive en la extensión (chrome.storage); esto es solo el
+// registro. La extensión reporta al empezar y al terminar, por eso el mismo
+// registro se actualiza: extensionId es el id que le puso la extensión, y
+// (userId, extensionId) es único para que un reintento de red no duplique la
+// fila -- ni una persona pueda pisar la de otra mandando su mismo id.
+//
+// Son datos de uso, no del contenido de nada: se purgan a los 90 días junto
+// con los avistamientos (lib/purgar-avistamientos.ts).
+model Rafaga {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  extensionId String    @map("extension_id")
+  disparador  String // inicio_chrome | despertar | chequeo | manual
+  inicio      DateTime
+  fin         DateTime?
+  estado      String // en_curso | terminada | interrumpida
+  postuladas  Int       @default(0)
+  // En modo "solo observar" no se postula: son las que HABRÍA postulado. Sin
+  // esta columna, una cuenta nueva (que arranca observando, ver
+  // User.postulacionHabilitada) vería siempre "0" en su tarjeta del panel.
+  observadas  Int       @default(0)
+  descartadas Int       @default(0)
+  gris        Int       @default(0)
+  errores     Int       @default(0)
+  duracionMs  Int?      @map("duracion_ms")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, extensionId])
+  @@index([userId, inicio])
+  @@map("rafagas")
 }
 
 // ─────────────────────────────────────────

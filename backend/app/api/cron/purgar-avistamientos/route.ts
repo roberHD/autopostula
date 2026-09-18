@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { purgarAvistamientos } from "@/lib/purgar-avistamientos";
+import { purgarAvistamientos, purgarRafagas } from "@/lib/purgar-avistamientos";
 
 // La corre el cron de Vercel una vez al día (vercel.json). Vercel manda el
 // header `Authorization: Bearer <CRON_SECRET>` solo si esa variable existe en
@@ -19,6 +19,7 @@ export async function GET(request: Request) {
   }
 
   const borrados = await purgarAvistamientos();
-  console.log(`Purgados ${borrados} avistamiento(s) vencidos.`);
-  return NextResponse.json({ borrados });
+  const rafagasBorradas = await purgarRafagas();
+  console.log(`Purgados ${borrados} avistamiento(s) y ${rafagasBorradas} ráfaga(s) vencidos.`);
+  return NextResponse.json({ borrados, rafagasBorradas });
 }

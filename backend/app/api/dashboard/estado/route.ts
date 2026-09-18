@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { limpiarTitulo } from "@/lib/text";
+import { resumenUltimaRafaga } from "@/lib/rafagas";
 
 /**
  * Estado de la máquina, para la barra que va arriba de todo el dashboard.
@@ -18,10 +19,10 @@ export async function GET() {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  const [user, subscripcion, cupo, ultima, portalesActivos] = await Promise.all([
+  const [user, subscripcion, cupo, ultima, portalesActivos, rafaga] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { rol: true, busquedaAutomaticaActiva: true },
+      select: { rol: true, busquedaAutomaticaActiva: true, ultimaRafagaEn: true },
     }),
     prisma.subscription.findFirst({
       where: { userId, estado: "ACTIVA" },
@@ -38,6 +39,7 @@ export async function GET() {
       },
     }),
     prisma.platformAccount.count({ where: { userId, activa: true } }),
+    resumenUltimaRafaga(userId),
   ]);
 
   // Mismo criterio que /api/account/estado-automatico: ADMIN no depende de
@@ -67,6 +69,12 @@ export async function GET() {
     pausadaPorTi,
     portalesActivos,
     cupo: { usadas, limite: cupo.limite, restantes: cupo.restantes },
+    // Cuándo se puso al día por última vez (hora del servidor) y qué encontró
+    // -- lo lee la tarjeta del Inicio. `resumen` es null si la fila ya se purgó
+    // (a los 90 días) pero la fecha sigue en el usuario.
+    ultimaRafaga: user?.ultimaRafagaEn
+      ? { en: user.ultimaRafagaEn.toISOString(), resumen: rafaga }
+      : null,
     ultima: ultima
       ? {
           titulo: limpiarTitulo(ultima.jobOffer.titulo),
