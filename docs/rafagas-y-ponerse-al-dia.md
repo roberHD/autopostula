@@ -1,6 +1,21 @@
 # Ráfagas: que se ponga al día cada vez que abres el computador — especificación
 
-> **Estado:** diseño aprobado, sin implementar.
+> **Estado:** en implementación. Pasos 1 a 6 de §7 hechos y con test (`extension/verificar-rafagas.js`,
+> `backend/scripts/verificar-texto-rafaga.ts`, 2026-09-18); del 7 en adelante, pendiente. **Falta verificar a
+> mano** el criterio de `powercfg /requests` (§3.3, criterios 2 y 3 de §8): el test cubre la lógica con
+> `chrome.power` simulado, no el Windows real. Tampoco se vio la tarjeta del panel con una sesión iniciada
+> (§3.5): está probado el texto y la consulta contra Postgres, no el dibujo en pantalla.
+>
+> **Lo que el paso 5 hizo distinto de §3.4** (por qué, en una línea cada uno):
+> - `Rafaga.extensionId` + `@@unique([userId, extensionId])`: el mismo registro se reporta al empezar y al
+>   terminar, y la extensión pone su propio id (`r_<ms>`) — la clave única por persona hace idempotentes los
+>   reintentos y evita que alguien pise la fila de otra persona mandando su mismo id.
+> - `Rafaga.observadas`: en modo solo observar no se postula, y una cuenta nueva arranca observando
+>   (`postulacionHabilitada`); sin esta columna su tarjeta mostraría siempre "0".
+> - `User.ultimaRafagaEn` se actualiza solo con una ráfaga **terminada** (no interrumpida) y con la hora del
+>   **servidor**, no la del reloj de la persona.
+> - Las otras dos columnas de `User` del bloque de §3.4 (`recordatorioRafagaEn`, `recordatoriosActivos`)
+>   quedan para el paso 9, que es el que las usa.
 > **Para:** el chat de producción.
 > **Fecha:** 2026-09-17.
 > **Va después de:** la Fase 1 de `revision-2026-09-16.md` (pasos 1 a 4d de su §6). No sirve ponerse
@@ -441,12 +456,12 @@ celular, con *"estas ofertas calzan contigo"* y postulación a mano (`celular-y-
 
 | # | Tarea | § | Nota |
 |---|---|---|---|
-| **1** | La alarma deja de reiniciarse | 2.1 | Bug latente; chico |
-| **2** | Ráfaga como máquina de estados + `ESCANEO_TERMINADO` en los 3 adaptadores | 2.2, 3.2 | La base de todo lo demás |
-| 3 | Disparadores (`onStartup`, despertar, chequeo 60 min) + umbral | 3.1 | |
-| 4 | `requestKeepAwake` durante la ráfaga + tope de 25 min | 3.3 | Permiso `power` → nueva versión en la tienda |
-| 5 | `Rafaga` + `ultimaRafagaEn` + endpoint | 3.4 | |
-| 6 | Número en el ícono, popup y tarjeta del panel | 3.5 | |
+| ~~**1**~~ | ~~La alarma deja de reiniciarse~~ | 2.1 | ✅ Hecho |
+| ~~**2**~~ | ~~Ráfaga como máquina de estados + `ESCANEO_TERMINADO` en los 3 adaptadores~~ | 2.2, 3.2 | ✅ Hecho |
+| ~~3~~ | ~~Disparadores (`onStartup`, despertar, chequeo 60 min) + umbral~~ | 3.1 | ✅ Hecho — el botón manual queda para el 7 |
+| ~~4~~ | ~~`requestKeepAwake` durante la ráfaga + tope de 25 min~~ | 3.3 | ✅ Hecho — permiso `power` puesto en el manifest → **nueva versión en la tienda** |
+| ~~5~~ | ~~`Rafaga` + `ultimaRafagaEn` + endpoint~~ | 3.4 | ✅ Hecho — ver el bloque de abajo con lo que difiere del esquema de §3.4 |
+| ~~6~~ | ~~Número en el ícono, popup y tarjeta del panel~~ | 3.5 | ✅ Hecho — el ícono cuenta las postulaciones de la última ráfaga (en gris, lo que *habría* postulado, si está en solo observar) y una ráfaga sin novedades lo limpia; el popup lo limpia al abrir |
 | 7 | Botón "Ponerme al día ahora" | 3.6 | Solo Premium |
 | 7b | Prueba de 5 postulaciones automáticas | 4.1 | Depende de `revision-2026-09-16.md` §1.2 y §1.3 |
 | 8 | Cola del celular primero | 3.7 | Depende de `revision-2026-09-16.md` §2.9 |
