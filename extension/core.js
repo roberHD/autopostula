@@ -1084,9 +1084,8 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
     }
 
     // -- Cuenta regresiva --
-    // El panel se auto-confirma y ENVÍA a los 3 minutos. Antes eso pasaba
-    // en silencio: te ibas a buscar un café y volvías con la postulación
-    // mandada. Ahora se ve, y los últimos 30 segundos se marcan en rojo.
+    // Cuenta regresiva de 3 minutos, visible; los últimos 30 segundos se
+    // marcan en rojo. Al llegar a cero la oferta se salta (ver abajo).
     const LIMITE_MS = 180000;
     const vence = Date.now() + LIMITE_MS;
     const reloj = raiz.getElementById('ap-rev-reloj');
@@ -1096,9 +1095,14 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
       const restan = Math.max(0, Math.round((vence - Date.now()) / 1000));
       const mm = Math.floor(restan / 60), ss = String(restan % 60).padStart(2, '0');
       reloj.innerHTML = restan <= 30
-        ? 'Se envía sola en <b>' + mm + ':' + ss + '</b>'
-        : 'Se envía sola en ' + mm + ':' + ss;
-      if (restan <= 0) cerrar('confirm');
+        ? 'Se salta sola en <b>' + mm + ':' + ss + '</b>'
+        : 'Se salta sola en ' + mm + ':' + ss;
+      // §2.10 (docs/revision-2026-09-16.md): al vencer se SALTA la oferta, no
+      // se envía. Antes se auto-confirmaba y mandaba la postulación: "Revisar
+      // antes de enviar" no garantizaba revisión (te ibas a buscar un café y
+      // volvías con la postulación mandada), y los Términos (§5) prometen
+      // que se puede leer y editar cada respuesta ANTES de que se envíe.
+      if (restan <= 0) cerrar('skip');
     }
     pintarReloj();
     tic = setInterval(pintarReloj, 1000);

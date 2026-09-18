@@ -1004,7 +1004,7 @@ function PasoTriaje({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
       ) : titulos.length === 0 ? (
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <p style={{ fontSize: 13.5, color: "var(--text-muted)", marginBottom: 20 }}>
-            Por ahora no tenemos más cargos para mostrarte — puedes seguir.
+            No encontramos cargos parecidos al que buscas para preguntarte — no pasa nada, puedes seguir.
           </p>
           <button className="ap-button" onClick={onSiguiente}>
             Continuar

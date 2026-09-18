@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { usuarioTienePerfilDinamico } from "@/lib/plan-beneficios";
+import { compilarPerfil } from "@/lib/compilar-perfil";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -92,6 +93,18 @@ export async function POST() {
       fuentesCompletadas: fuentes,
     },
   });
+
+  // §2.6 (docs/revision-2026-09-16.md): el perfil de búsqueda se compilaba
+  // ANTES de la conversación y nunca después -- lo que la persona contó ahí
+  // (cercanía, turno de mañana) no llegaba a roles ni señales. Ahora que el
+  // perfil de estilo quedó confirmado, se recompila para que lo use. Es
+  // best-effort: si la IA falla acá (cupo, red), el perfil de estilo ya
+  // quedó guardado y el de búsqueda sigue como estaba -- ni se le avisa a la
+  // persona como error ni se marca desactualizado (no cambió ninguna
+  // declaración suya que el perfil actual contradiga).
+  await compilarPerfil(userId, { forzar: true, sinMarcarDesactualizado: true }).catch((e) =>
+    console.error("Recompilación tras la conversación falló:", e)
+  );
 
   return NextResponse.json({
     resumen: actualizado.resumen,

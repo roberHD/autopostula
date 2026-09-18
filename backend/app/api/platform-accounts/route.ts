@@ -16,7 +16,7 @@ export async function GET() {
   // tanto en local como recién desplegado en un ambiente nuevo.
   await Promise.all([asegurarPlataformasBase(), asegurarPlanesBase()]);
 
-  const [plataformas, cuentas, subscripcion] = await Promise.all([
+  const [plataformas, cuentas, subscripcion, usuario] = await Promise.all([
     prisma.jobPlatform.findMany(),
     prisma.platformAccount.findMany({
       where: { userId },
@@ -29,6 +29,7 @@ export async function GET() {
       where: { userId, estado: "ACTIVA" },
       include: { plan: true },
     }),
+    prisma.user.findUnique({ where: { id: userId }, select: { rol: true } }),
   ]);
 
   return NextResponse.json({
@@ -54,7 +55,11 @@ export async function GET() {
               .toISOString()
           : null,
     })),
-    maxPlataformasActivas: subscripcion?.plan.maxPlataformasActivas ?? 1,
+    // §3.2 (docs/revision-2026-09-16.md): la cuenta ADMIN no tiene tope (el POST
+    // de abajo ya la trata así con limite=null) -- antes esto devolvía el
+    // del plan igual, y la pantalla decía "Plan gratuito · 3 de 1 portales
+    // activos" para una cuenta que sí puede tener los tres.
+    maxPlataformasActivas: usuario?.rol === "ADMIN" ? null : (subscripcion?.plan.maxPlataformasActivas ?? 1),
     planNombre: subscripcion?.plan.nombre ?? null,
   });
 }

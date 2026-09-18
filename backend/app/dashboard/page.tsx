@@ -150,9 +150,21 @@ function Badge({ estado }: { estado: string }) {
 
 export default function InicioPage() {
   const [datos, setDatos] = useState<Resumen | null>(null);
+  // §3.2 (docs/revision-2026-09-16.md): la tarjeta "Tu asistente está activo"
+  // decidía solo por "hay un portal conectado", mientras la barra de arriba
+  // (BarraMaquina) decía "En pausa" -- dos veredictos distintos en la misma
+  // pantalla. Ahora lee del mismo /api/dashboard/estado que la barra.
+  const [estadoAuto, setEstadoAuto] = useState<{ activa: boolean; motivo: string | null } | null>(null);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState("");
   const { error: avisarError } = useAvisos();
+
+  useEffect(() => {
+    fetch("/api/dashboard/estado")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((e) => { if (e) setEstadoAuto({ activa: !!e.activa, motivo: e.motivo ?? null }); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function cargar() {
@@ -253,15 +265,12 @@ export default function InicioPage() {
       Icon: Trophy,
       color: "var(--chart-4)",
     },
-    {
-      label: "Match promedio IA",
-      value: datos.matchPromedio != null ? `${datos.matchPromedio}%` : "—",
-      delta: null,
-      up: true,
-      hint: "afinidad con ofertas",
-      Icon: Target,
-      color: "var(--chart-3)",
-    },
+    // §3.2 (docs/revision-2026-09-16.md): la tarjeta "Match promedio IA" se
+    // sacó -- el número salía de JobOffer.relevanciaAi, que solo llenaba el
+    // filtro de IA viejo (ya fuera de la decisión desde §1.1/§1.4), así que
+    // mostraba un 69% de una fuente que el motor actual no alimenta, con la
+    // palabra "IA" en una app cuya política dice que decidir a qué postular
+    // no usa IA oferta por oferta.
   ];
 
   const totalPortal = datos.porPortal.reduce((a, b) => a + b.cantidad, 0);
@@ -274,8 +283,17 @@ export default function InicioPage() {
     const porDiez = (fila.cantidad / datos.postulacionesEnviadas) * 10;
     return porDiez >= 1 ? String(Math.round(porDiez)) : porDiez.toFixed(1).replace(".0", "");
   };
-  // Decir "activo" sin un portal conectado es mentira: no puede postular.
-  const asistenteActivo = datos.portalesActivos > 0;
+  // Decir "activo" sin un portal conectado es mentira: no puede postular. Y
+  // tampoco si está en pausa, sin cupo, o el plan no incluye la búsqueda
+  // automática (§3.2): manda el mismo estado que la barra de arriba, y solo si
+  // todavía no cargó se cae al criterio viejo (portal conectado).
+  const asistenteActivo = estadoAuto ? estadoAuto.activa : datos.portalesActivos > 0;
+  const textoInactivo: Record<string, { t: string; d: string; href?: string; cta?: string }> = {
+    pausada: { t: "Tu búsqueda automática está en pausa", d: "Reanúdala desde la barra de arriba y vuelve a postular sola." },
+    "sin-plan": { t: "Postulas tú desde la extensión", d: "Tu plan actual no incluye la búsqueda automática. Entretanto puedes ir completando tu perfil.", href: "/dashboard/premium", cta: "Ver Premium" },
+    "sin-cupo": { t: "Sin cupo este mes", d: "Se reinicia el día 1. Entretanto puedes ir completando tu perfil.", href: "/dashboard/premium", cta: "Ampliar cupo" },
+  };
+  const inactivoInfo = estadoAuto?.motivo ? textoInactivo[estadoAuto.motivo] : undefined;
 
   return (
     <div className="ap-glow-bg" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -560,16 +578,21 @@ export default function InicioPage() {
               <Sparkles size={18} />
             </div>
             <h2 style={{ marginTop: 12, fontSize: 13.5, fontWeight: 600 }}>
-              {asistenteActivo ? "Tu asistente está activo" : "Tu asistente todavía no postula"}
+              {asistenteActivo ? "Tu asistente está activo" : inactivoInfo?.t ?? "Tu asistente todavía no postula"}
             </h2>
             <p style={{ marginTop: 4, fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
               {asistenteActivo
                 ? `Perfil entrenado al ${datos.perfilEntrenado}%. Mientras más completo, más precisas y personales serán las respuestas en los formularios.`
-                : "Le falta un portal conectado para empezar a trabajar. Entretanto puedes ir completando tu perfil: mientras más entrenado, más tuyas suenan las respuestas."}
+                : inactivoInfo?.d ??
+                  "Le falta un portal conectado para empezar a trabajar. Entretanto puedes ir completando tu perfil: mientras más entrenado, más tuyas suenan las respuestas."}
             </p>
-            {!asistenteActivo && (
-              <Link className="ap-button-ghost" style={{ marginTop: 12 }} href="/dashboard/portales">
-                Conectar un portal
+            {!asistenteActivo && (!inactivoInfo || inactivoInfo.href) && (
+              <Link
+                className="ap-button-ghost"
+                style={{ marginTop: 12 }}
+                href={inactivoInfo?.href ?? "/dashboard/portales"}
+              >
+                {inactivoInfo?.cta ?? "Conectar un portal"}
               </Link>
             )}
           </div>

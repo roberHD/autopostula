@@ -69,8 +69,16 @@ export async function GET() {
   ]);
 
   const total = todas.length;
-  const conRespuesta = todas.filter((a) => a.estadoActual !== "ENVIADO").length;
-  const tasaRespuesta = total ? Math.round((conRespuesta / total) * 100) : 0;
+  // §3.1 (docs/revision-2026-09-16.md): INCOMPLETA no es "una empresa
+  // respondió" -- es una postulación que se quedó a medias y nunca llegó.
+  // Antes el filtro era "distinto de ENVIADO", que las contaba: 7 INCOMPLETA
+  // de 46 daban un "15% de respuesta" que en realidad eran cero respuestas
+  // (0 vistas, 0 en proceso, 0 finalistas en el mismo panel). Tampoco cuentan
+  // en el denominador: no son postulaciones que una empresa haya podido
+  // responder.
+  const enviadasDeVerdad = todas.filter((a) => a.estadoActual !== "INCOMPLETA");
+  const conRespuesta = enviadasDeVerdad.filter((a) => a.estadoActual !== "ENVIADO").length;
+  const tasaRespuesta = enviadasDeVerdad.length ? Math.round((conRespuesta / enviadasDeVerdad.length) * 100) : 0;
 
   const matches = todas.map((a) => a.jobOffer.relevanciaAi).filter((v): v is number => v != null);
   const matchPromedio = matches.length

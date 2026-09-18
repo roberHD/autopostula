@@ -68,7 +68,16 @@ async function marcarDesactualizadoSiForzado(userId: string, forzar: boolean | u
     .catch((e) => console.error("No se pudo marcar el perfil como desactualizado:", e));
 }
 
-export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }): Promise<ResultadoCompilarPerfil> {
+// sinMarcarDesactualizado: recompilación "de refresco" (ej. tras la
+// conversación del onboarding, §2.6) -- salta el límite de 24h como `forzar`,
+// pero si falla NO marca el perfil como desactualizado: no hubo ninguna
+// declaración nueva que el perfil actual contradiga (a diferencia de un
+// cambio de objetivo), así que dejar todo en banda gris por eso sería peor.
+export async function compilarPerfil(
+  userId: string,
+  opts?: { forzar?: boolean; sinMarcarDesactualizado?: boolean }
+): Promise<ResultadoCompilarPerfil> {
+  const marcarSiFalla = !!opts?.forzar && !opts?.sinMarcarDesactualizado;
   const [cv, styleProfile, prefsActuales, decisiones, objetivos] = await Promise.all([
     prisma.cvProfile.findUnique({ where: { userId } }),
     prisma.styleProfile.findFirst({ where: { userId }, orderBy: { creadoEn: "desc" } }),
@@ -78,7 +87,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
   ]);
 
   if (!cv?.textoExtraido) {
-    await marcarDesactualizadoSiForzado(userId, opts?.forzar);
+    await marcarDesactualizadoSiForzado(userId, marcarSiFalla);
     return { ok: false, status: 400, error: "Primero sube tu CV para poder compilar tu perfil de búsqueda" };
   }
 
@@ -97,7 +106,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
 
   const uso = await checkAndLogAiUsage(userId, "compilar_perfil");
   if (!uso.permitido) {
-    await marcarDesactualizadoSiForzado(userId, opts?.forzar);
+    await marcarDesactualizadoSiForzado(userId, marcarSiFalla);
     return { ok: false, status: 403, error: `Alcanzaste el límite de llamadas de IA de tu plan este mes (${uso.limite}).` };
   }
 
@@ -222,7 +231,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
     return { ok: true, perfilCompilado };
   } catch (err) {
     console.error("Error compilando perfil:", err);
-    await marcarDesactualizadoSiForzado(userId, opts?.forzar);
+    await marcarDesactualizadoSiForzado(userId, marcarSiFalla);
     return { ok: false, status: 500, error: "No se pudo compilar el perfil — revisa la terminal del servidor" };
   }
 }
