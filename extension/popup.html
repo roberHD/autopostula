@@ -121,6 +121,17 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .pulse-label.active  { color: #5BD59B; }
 .pulse-label.working { color: var(--marker); }
 
+/* ── Última puesta al día (docs/rafagas-y-ponerse-al-dia.md §3.5) ────────
+   Lo primero que se ve al abrir el popup: si la extensión se puso al día
+   mientras la persona hacía otra cosa, tiene que enterarse. */
+.rafaga-row {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.rafaga-titulo { font-size: 12.5px; font-weight: 700; color: var(--text-1); }
+.rafaga-detalle { font-size: 11px; color: var(--text-2); margin-top: 1px; }
+
 /* ── Solo observar (docs/modo-solo-observar.md §3.4) ────────────────────
    Va pegado al toggle master, con su propio fondo, para que sea imposible
    no verlo -- "la persona nunca puede quedar en duda sobre si la extensión
@@ -376,6 +387,12 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
     <div class="pulse" id="pulse"></div>
     <span class="pulse-label" id="pulse-label">Inactivo</span>
   </div>
+</div>
+
+<!-- ÚLTIMA PUESTA AL DÍA -->
+<div class="rafaga-row hidden" id="rafaga-row" role="status">
+  <div class="rafaga-titulo" id="rafaga-titulo"></div>
+  <div class="rafaga-detalle hidden" id="rafaga-detalle"></div>
 </div>
 
 <!-- MASTER TOGGLE -->

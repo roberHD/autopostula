@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "tabs",
-    "alarms"
+    "alarms",
+    "power"
   ],
   "host_permissions": [
     "https://www.computrabajo.cl/*",

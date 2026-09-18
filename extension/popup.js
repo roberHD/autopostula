@@ -414,9 +414,91 @@ chrome.runtime.onMessage.addListener(msg => {
   }
 });
 
+// ── Última puesta al día (docs/rafagas-y-ponerse-al-dia.md §3.5) ────────
+// textoRafaga y haceCuanto son puras a propósito (sin DOM ni chrome.*):
+// verificar-rafagas.js las extrae de este archivo y las prueba tal cual.
+function haceCuanto(ms) {
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'hace unos segundos';
+  if (min < 60) return 'hace ' + min + ' min';
+  const h = Math.floor(min / 60);
+  if (h < 24) return 'hace ' + h + ' h';
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'hace 1 día' : 'hace ' + d + ' días';
+}
+
+// Devuelve { titulo, detalle } o null si no hay nada que mostrar. "Te pusimos
+// al día hace 12 min" + "7 postulaciones · 14 descartadas". En modo solo
+// observar nada se postuló, y decir "0 postulaciones" sería mentir por
+// omisión: se cuenta lo que HABRÍA postulado.
+function textoRafaga(rafaga, ahora) {
+  if (!rafaga || !rafaga.estado) return null;
+
+  // Mismo umbral que retomarORafagaInterrumpida (background.js): un "en_curso"
+  // sin latido reciente es una ráfaga que el service worker perdió sin llegar
+  // a marcarla -- decir que se está poniendo al día sería mentira, así que se
+  // muestra como lo que va a terminar siendo: interrumpida.
+  const LATIDO_MAX_MS = 10 * 60000;
+  const viva = rafaga.estado === 'en_curso' && ahora - (rafaga.latido || rafaga.inicio) < LATIDO_MAX_MS;
+  if (viva) {
+    const total = (rafaga.pasos || []).length;
+    const paso = Math.min((rafaga.pasoActual || 0) + 1, total);
+    return { titulo: 'Poniéndose al día ahora…', detalle: total ? 'Paso ' + paso + ' de ' + total : '' };
+  }
+  const estado = rafaga.estado === 'en_curso' ? 'interrumpida' : rafaga.estado;
+
+  const c = rafaga.conteos || {};
+  const postuladas = c.postuladas || 0;
+  const observadas = c.observadas || 0;
+  const partes = [];
+  if (postuladas === 0 && observadas > 0) partes.push('habría postulado a ' + observadas);
+  else partes.push(postuladas + (postuladas === 1 ? ' postulación' : ' postulaciones'));
+  if (c.gris > 0) partes.push(c.gris + ' por decidir');
+  if (c.descartadas > 0) partes.push(c.descartadas + (c.descartadas === 1 ? ' descartada' : ' descartadas'));
+  // Una búsqueda que no terminó (venció el seguro de tiempo) se dice, no se
+  // esconde: si no, "0 postulaciones" parece "no había nada" y era "no llegó".
+  if (c.errores > 0) partes.push(c.errores + (c.errores === 1 ? ' búsqueda no terminó' : ' búsquedas no terminaron'));
+
+  const cuando = haceCuanto(ahora - (rafaga.fin || rafaga.latido || rafaga.inicio));
+  const titulo = estado === 'interrumpida'
+    ? 'La última puesta al día se cortó ' + cuando
+    : 'Te pusimos al día ' + cuando;
+  return { titulo, detalle: partes.join(' · ') };
+}
+
+function renderRafaga(rafaga) {
+  const fila = document.getElementById('rafaga-row');
+  if (!fila) return;
+  const texto = textoRafaga(rafaga, Date.now());
+  fila.classList.toggle('hidden', !texto);
+  if (!texto) return;
+  document.getElementById('rafaga-titulo').textContent = texto.titulo;
+  const detalle = document.getElementById('rafaga-detalle');
+  detalle.textContent = texto.detalle;
+  detalle.classList.toggle('hidden', !texto.detalle);
+}
+
+// El número del ícono (background.js) dice "pasó algo"; abrir el popup es
+// verlo, así que se limpia. La línea de arriba sigue contando la última
+// ráfaga aunque el número ya no esté.
+function limpiarInsigniaRafaga() {
+  try { chrome.action.setBadgeText({ text: '' }); } catch (e) { /* sin chrome.action (no debería pasar) */ }
+}
+
+// Si una ráfaga termina con el popup abierto, se actualiza sola la línea y
+// el número que acaba de aparecer se limpia: la persona ya lo está mirando.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.rafaga) {
+    renderRafaga(changes.rafaga.newValue);
+    limpiarInsigniaRafaga();
+  }
+});
+
 // ── Cargar estado ──────────────────────────────────────────────
 function loadState() {
-  chrome.storage.local.get(['config', 'active', 'log', 'cvTexto'], data => {
+  chrome.storage.local.get(['config', 'active', 'log', 'cvTexto', 'rafaga'], data => {
+    renderRafaga(data.rafaga);
+    limpiarInsigniaRafaga();
     const cfg = data.config || {};
 
     filtrosBusquedaRemoto = cfg.filtrosBusqueda || { modalidad: 'cualquiera', jornada: 'cualquiera' };

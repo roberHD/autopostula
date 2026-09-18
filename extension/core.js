@@ -255,6 +255,15 @@ AP.siguientePaginaClick = function (cantidadEnPagina, boton) {
   return true;
 };
 
+// docs/rafagas-y-ponerse-al-dia.md §3.2: le avisa a background.js que este
+// paso de la ráfaga terminó de verdad (nada más por paginar, nada más por
+// postular) para que avance al siguiente paso YA en vez de esperar el timeout
+// fijo de 5 min -- background.js igual se queda con ese timeout como red de
+// seguridad si este mensaje nunca llega (pestaña abierta a mano, error, etc).
+AP.reportarEscaneoTerminado = function (conteos) {
+  AP.safeSend({ type: 'ESCANEO_TERMINADO', conteos: conteos || {} });
+};
+
 AP.addLog = function (entry) {
   AP.log.push(entry);
   if (AP.log.length > 200) AP.log = AP.log.slice(-200);

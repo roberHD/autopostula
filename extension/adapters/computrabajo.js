@@ -666,9 +666,9 @@ async function activar(tarjeta) {
 
 // ── Escanear ──────────────────────────────────────────────────
 async function escanear() {
-  if (!AP.activo || AP.procesando || !AP.cfg) return;
+  if (!AP.activo || AP.procesando || !AP.cfg) { AP.reportarEscaneoTerminado(); return; }
   const tarjetas = [...document.querySelectorAll('article.box_offer')];
-  if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en CT', '#9CA3AF'); return; }
+  if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en CT', '#9CA3AF'); AP.reportarEscaneoTerminado(); return; }
 
   let pendientes = [];
   const titulosVistos = [];
@@ -811,6 +811,7 @@ async function escanear() {
   }
   if (!pendientes.length) {
     if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return; // navegando a la página siguiente
+    AP.reportarEscaneoTerminado(conteos);
     return;
   }
 
@@ -822,6 +823,7 @@ async function escanear() {
     const verificacion = await AP.puedePostular('Computrabajo');
     if (!verificacion.permitido) {
       msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      AP.reportarEscaneoTerminado(conteos);
       return;
     }
   }
@@ -854,6 +856,7 @@ async function escanear() {
   // automática (pestaña oculta) sigue a la próxima página en vez de darse por
   // terminada, para no dejar sin revisar el resto del listado.
   if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return;
+  AP.reportarEscaneoTerminado(conteos);
   msg('Escaneo completo', '#16A34A');
 }
 
@@ -874,7 +877,7 @@ function extraerHashOferta(url) {
 
 async function escanearMisPostulaciones() {
   const boxes = document.querySelectorAll('[match-div-offers] .box[data-match]');
-  if (!boxes.length) return;
+  if (!boxes.length) { AP.reportarEscaneoTerminado(); return; }
 
   msg('Revisando estados de postulaciones…', '#7C3AED');
   let actualizadas = 0;
@@ -898,6 +901,7 @@ async function escanearMisPostulaciones() {
   }
 
   msg(actualizadas ? '✓ ' + actualizadas + ' estado(s) actualizado(s)' : 'Estados al día', '#16A34A');
+  AP.reportarEscaneoTerminado();
 }
 
 // ── Postular directo a UNA oferta ya aprobada en banda gris (§8.6) ──────

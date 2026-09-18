@@ -541,12 +541,17 @@ async function resolverEtapa2Gris(pendiente) {
   if (history.length > 1) {
     history.back();
     setTimeout(() => { if (AP.activo) escanear(); }, 1800);
+  } else {
+    // No hay a dónde volver (caso raro: pestaña abierta directo en el
+    // detalle) -- sin esto el paso de la ráfaga se queda esperando un
+    // ESCANEO_TERMINADO que nunca llega hasta que vence el seguro de tiempo.
+    AP.reportarEscaneoTerminado();
   }
 }
 
 // ── Escanear el listado ────────────────────────────────────────────
 async function escanear() {
-  if (!AP.activo || AP.procesando || !AP.cfg) return;
+  if (!AP.activo || AP.procesando || !AP.cfg) { AP.reportarEscaneoTerminado(); return; }
 
   // ¿Esta página de detalle es la vuelta de haber ido a revisar una gris
   // (Etapa 2), y no una navegación normal a postular? Se revisa antes que
@@ -572,7 +577,7 @@ async function escanear() {
   }
 
   const candidatas = (await esperar('a[href^="/empleos/"]')).filter(a => /-\d+\.html/.test(a.href));
-  if (!candidatas.length) { msg('Sin tarjetas — busca ofertas en Laborum', '#9CA3AF'); return; }
+  if (!candidatas.length) { msg('Sin tarjetas — busca ofertas en Laborum', '#9CA3AF'); AP.reportarEscaneoTerminado(); return; }
 
   let pendientes = [];
   const titulosVistos = [];
@@ -679,6 +684,7 @@ async function escanear() {
     const verificacion = await AP.puedePostular('Laborum');
     if (!verificacion.permitido) {
       msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      AP.reportarEscaneoTerminado(conteos);
       return;
     }
 
@@ -712,7 +718,9 @@ async function escanear() {
   // Nada más que hacer en esta página -- si es una búsqueda automática
   // (pestaña oculta), sigue a la próxima página del listado en vez de
   // quedarse pegada acá para siempre (los listados no son infinitos).
-  siguientePagina(candidatas.length, urlPaginaLaborum);
+  if (!siguientePagina(candidatas.length, urlPaginaLaborum)) {
+    AP.reportarEscaneoTerminado(conteos);
+  }
 }
 
 // Cuando escanear() navega a una oferta puntual, este es el flujo que sigue
@@ -727,6 +735,8 @@ async function escanearPaginaDeOferta() {
     if (history.length > 1) {
       history.back();
       setTimeout(() => { if (AP.activo) escanear(); }, 1800);
+    } else {
+      AP.reportarEscaneoTerminado();
     }
     return;
   }
@@ -744,6 +754,8 @@ async function escanearPaginaDeOferta() {
   if (history.length > 1) {
     history.back();
     setTimeout(() => { if (AP.activo) escanear(); }, 1800);
+  } else {
+    AP.reportarEscaneoTerminado();
   }
 }
 

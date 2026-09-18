@@ -227,16 +227,59 @@ async function actualizarEstadoBackend(datos) {
 // ── Búsqueda automática en background (premium) ─────────────────
 // Requiere el permiso "alarms" en manifest.json.
 const NOMBRE_ALARMA_AUTOMATICA = 'autopostula-scan';
-const INTERVALO_MINUTOS = 120; // cada 2 horas
+// docs/rafagas-y-ponerse-al-dia.md §3.1: ya no es "el" disparador -- ahora es
+// la red de seguridad detrás de abrir Chrome (onStartup) y de que el
+// computador despierte (que Chrome ya resuelve solo, disparando la alarma
+// perdida). 60 min en vez de 120: si los otros dos disparadores fallan por
+// lo que sea, la espera máxima se reduce a la mitad.
+const INTERVALO_MINUTOS = 60;
 
-// Envuelto en try/catch: si el permiso "alarms" llegara a faltar en el manifest,
-// esto no debe tumbar el resto del script (y con eso, dejar de registrar los
-// listeners de mensajes más abajo, como AI_CALL).
-try {
-  chrome.alarms.create(NOMBRE_ALARMA_AUTOMATICA, { periodInMinutes: INTERVALO_MINUTOS });
-} catch (e) {
-  console.error('[AP] No se pudo crear la alarma de búsqueda automática (¿falta el permiso "alarms"?):', e);
+// docs/rafagas-y-ponerse-al-dia.md §2.1: el código de nivel superior de un
+// service worker MV3 vuelve a correr CADA VEZ que Chrome lo despierta -- un
+// mensaje, una pestaña abierta, el popup -- no solo al instalar la extensión
+// o al abrir el navegador. Como chrome.alarms.create() con el mismo nombre
+// REEMPLAZA la alarma existente, crearla acá sin condición reiniciaba el
+// reloj a 120 minutos en cada despertar: mientras la persona usa los
+// portales (que despierta el worker seguido), la alarma nunca llegaba a
+// dispararse -- justo cuando más sentido tendría que corriera.
+// chrome.alarms.get() primero hace que esto sea idempotente: si la alarma ya
+// existe, no se la toca, así que un despertar de más no le resetea el reloj.
+async function asegurarAlarma() {
+  try {
+    const existente = await chrome.alarms.get(NOMBRE_ALARMA_AUTOMATICA);
+    if (!existente) {
+      await chrome.alarms.create(NOMBRE_ALARMA_AUTOMATICA, { periodInMinutes: INTERVALO_MINUTOS });
+    }
+  } catch (e) {
+    console.error('[AP] No se pudo asegurar la alarma de búsqueda automática (¿falta el permiso "alarms"?):', e);
+  }
 }
+chrome.runtime.onInstalled.addListener(asegurarAlarma);
+chrome.runtime.onStartup.addListener(asegurarAlarma);
+// Además de los dos eventos de arriba: cubre el caso en que el worker
+// despierta por cualquier otro motivo (mensaje, pestaña) sin que ninguno de
+// los dos haya disparado antes -- es seguro llamarla siempre, es idempotente.
+asegurarAlarma();
+
+// docs/rafagas-y-ponerse-al-dia.md §3.2, punto 5: si el worker se reinicia a
+// mitad de una ráfaga (Chrome lo mata por memoria, un crash), retomarORafagaInterrumpida
+// evita que quede "en_curso" para siempre -- eso bloquearía cualquier ráfaga
+// futura (iniciarRafaga se niega a pisar una que ya está en_curso) y dejaría
+// la pestaña huérfana abierta. Mismos disparadores que asegurarAlarma: es
+// igual de seguro llamarla en cada despertar, no hace nada si no hay ráfaga
+// en curso o si su latido es reciente.
+chrome.runtime.onInstalled.addListener(retomarORafagaInterrumpida);
+chrome.runtime.onStartup.addListener(retomarORafagaInterrumpida);
+retomarORafagaInterrumpida();
+
+// docs/rafagas-y-ponerse-al-dia.md §3.1, disparador "se abre Chrome" -- antes
+// no existía nada acá. A diferencia de asegurarAlarma/retomarORafagaInterrumpida
+// (que sí se llaman en cada despertar del worker porque son inofensivas si no
+// corresponde), esto SOLO va colgado de onStartup: onStartup dispara de
+// verdad cuando arranca el navegador, no en cualquier despertar del worker
+// (un mensaje de un content script, una pestaña) -- colgarlo de más lados
+// abriría una ráfaga cada vez que la persona simplemente navega un portal.
+chrome.runtime.onStartup.addListener(() => quizasRafaga('inicio_chrome'));
 
 function normalizarParaUrl(texto) {
   return (texto || '')
@@ -389,7 +432,22 @@ async function actualizarFiltrosDesdeBackend(token) {
   }
 }
 
-async function escanearAutomatico() {
+// docs/rafagas-y-ponerse-al-dia.md §3.1: los tres disparadores automáticos
+// (se abre Chrome, despierta, chequeo periódico) pasan todos por acá antes
+// de arrancar una ráfaga -- el umbral evita que abrir y cerrar la tapa diez
+// veces seguidas dispare diez ráfagas. El botón manual (§3.6, todavía sin
+// construir) va a ser el único que llame a escanearAutomatico() directo,
+// ignorando el umbral a propósito -- por eso el umbral vive acá y no adentro.
+const UMBRAL_HORAS_ENTRE_RAFAGAS = 3;
+
+async function quizasRafaga(disparador) {
+  const { rafaga, ultimaRafagaFin } = await chrome.storage.local.get(['rafaga', 'ultimaRafagaFin']);
+  if (rafaga && rafaga.estado === 'en_curso') return; // ya hay una corriendo
+  if (ultimaRafagaFin && Date.now() - ultimaRafagaFin < UMBRAL_HORAS_ENTRE_RAFAGAS * 3600e3) return;
+  await escanearAutomatico(disparador);
+}
+
+async function escanearAutomatico(disparador) {
   const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
   if (!autopostulaToken) return;
 
@@ -443,20 +501,20 @@ async function escanearAutomatico() {
   await chrome.storage.local.set({ cicloBusquedaAutomatica: ciclo });
   const objetivosDeEsteCiclo = objetivos.filter((_, i) => i === 0 || ciclo % 2 === 0);
 
-  // Se recorren en serie, espaciadas, en vez de abrirlas todas a la vez
-  // (§8: "cuidado con el volumen... recorrerlas en serie") -- menos carga
-  // simultánea sobre el mismo portal, más parecido a como navegaría alguien.
-  const ESPACIO_MS = 45 * 1000;
-  let demora = 0;
+  // Se recorren en serie -- una pestaña a la vez -- en vez de abrirlas todas
+  // juntas (§8: "cuidado con el volumen... recorrerlas en serie") -- menos
+  // carga simultánea sobre el mismo portal, más parecido a como navegaría
+  // alguien. Antes esto se espaciaba con setTimeout(45s) encadenados; ahora
+  // es la ráfaga (más abajo) la que hace avanzar un paso recién cuando el
+  // anterior terminó de verdad, por evento, no por tiempo (§3.2).
+  const pasos = [];
   for (const objetivo of objetivosDeEsteCiclo) {
     const slug = normalizarParaUrl(objetivo.etiqueta);
     if (!slug) continue;
     for (const nombre of plataformas) {
       const construirUrl = URL_BUSQUEDA_POR_PORTAL[nombre];
       if (!construirUrl) continue; // portal conectado pero sin adaptador de búsqueda automática todavía
-      const url = construirUrl(slug, filtros);
-      setTimeout(() => abrirYEscanear(url), demora);
-      demora += ESPACIO_MS;
+      pasos.push({ tipo: 'busqueda', portal: nombre, url: construirUrl(slug, filtros) });
     }
   }
 
@@ -465,58 +523,246 @@ async function escanearAutomatico() {
   // proceso, Finalista, ...) solo se refrescaba si la persona entraba ahí ella
   // misma con la extensión activa, y las analíticas del dashboard se quedaban
   // pegadas para siempre en ENVIADO. escanearMisPostulaciones() (ver
-  // adapters/computrabajo.js) se autodispara sola al cargar esta página --
-  // no hace falta mandarle AUTO_SCAN a propósito para eso, abrirYEscanear ya
-  // manda ese mensaje igual, y ahí simplemente no encuentra tarjetas de
-  // listado y no hace nada (es inofensivo).
+  // adapters/computrabajo.js) se autodispara sola al cargar esta página.
   if (plataformas.includes('Computrabajo')) {
-    setTimeout(() => abrirYEscanear('https://cl.computrabajo.com/candidate/match'), demora);
-    demora += ESPACIO_MS;
+    pasos.push({ tipo: 'estados', portal: 'Computrabajo', url: 'https://cl.computrabajo.com/candidate/match' });
+  }
+
+  await iniciarRafaga(disparador || 'chequeo', pasos);
+}
+
+// ── Ráfaga: máquina de estados persistida ────────────────────────
+// docs/rafagas-y-ponerse-al-dia.md §2.2/§3.2: encadenar setTimeout para
+// espaciar pestañas y otro setTimeout para cerrarlas no sobrevive a que
+// Chrome apague el service worker por inactividad entre medio -- ningún
+// timer de MV3 tiene esa garantía, y con el worker se pierden los timers
+// pendientes sin avisar. Acá el estado vive en chrome.storage.local (sí
+// sobrevive un restart del worker) y el avance es por EVENTOS: el content
+// script avisa con ESCANEO_TERMINADO cuando de verdad terminó -- escaneó,
+// postuló, agotó las páginas --, y chrome.alarms (no setTimeout) es el
+// seguro de tiempo por si ese aviso nunca llega, porque las alarmas sí
+// sobreviven un restart del worker.
+const NOMBRE_ALARMA_SEGURO_RAFAGA = 'autopostula-rafaga-seguro';
+const SEGURO_MINUTOS_POR_PASO = 8;
+
+// docs/rafagas-y-ponerse-al-dia.md §3.3: mientras dura la ráfaga, el equipo no
+// se suspende por INACTIVIDAD (la persona abre el notebook, se va a hacer otra
+// cosa, y la ráfaga termina igual). No evita que se suspenda al cerrar la tapa
+// ni al apretar el botón de apagado -- eso lo decide la persona. La pantalla sí
+// se apaga: se pide nivel 'system', no 'display'. Requiere el permiso "power".
+//
+// Tope duro de 25 min con su propia alarma: si la ráfaga se cuelga por un bug,
+// la persona no puede quedar con el computador sin poder suspenderse. Al
+// vencer el tope se suelta el bloqueo AUNQUE la ráfaga siga.
+const NOMBRE_ALARMA_TOPE_RAFAGA = 'autopostula-rafaga-tope';
+const TOPE_MINUTOS_RAFAGA = 25;
+
+// Envueltos en try/catch, igual que la alarma: si el permiso "power" llegara
+// a faltar en el manifest, chrome.power es undefined y llamarlo tiraría un
+// TypeError que tumbaría la ráfaga entera -- que no se suspenda el equipo es
+// un extra, no puede impedir que la ráfaga corra.
+function mantenerDespierto() {
+  try {
+    chrome.power.requestKeepAwake('system');
+  } catch (e) {
+    console.warn('[AP] No se pudo pedir que el equipo no se suspenda (¿falta el permiso "power"?):', e);
   }
 }
 
-// Abre una pestaña oculta en la URL de búsqueda, dispara el escaneo cuando
-// carga, y la cierra sola — mismo flujo sin importar el portal.
-function abrirYEscanear(url) {
-  chrome.tabs.create({ url, active: false }, tab => {
-    const id = tab.id;
-    // El flujo normal cierra la pestaña a los ~5 min, y aparte hay un timeout
-    // de seguridad a los 6 min por si nunca terminó de cargar. Sin este guard,
-    // si el primero ya la cerró, el segundo igual intenta cerrarla de nuevo un
-    // minuto después — y como el tab ya no existe, Chrome tira "No tab with id".
-    let manejado = false;
-    function cerrarTab() {
-      if (manejado) return;
-      manejado = true;
-      chrome.tabs.remove(id, () => { if (chrome.runtime.lastError) {} });
+function soltarDespierto() {
+  try {
+    chrome.power.releaseKeepAwake();
+  } catch (e) {
+    console.warn('[AP] No se pudo soltar el bloqueo de suspensión:', e);
+  }
+}
+
+// Fin de la ráfaga (terminó o quedó interrumpida): soltar el bloqueo y
+// desarmar el tope, que ya no tiene nada que vigilar.
+function terminarKeepAwake() {
+  soltarDespierto();
+  chrome.alarms.clear(NOMBRE_ALARMA_TOPE_RAFAGA);
+}
+
+// docs/rafagas-y-ponerse-al-dia.md §3.5: si la extensión se puso al día
+// mientras la persona hacía otra cosa, tiene que enterarse. El número en el
+// ícono es lo único que se ve sin abrir nada (chrome.notifications sumaría un
+// permiso, y el ícono con número alcanza). Cuenta las postulaciones de la
+// ÚLTIMA ráfaga -- o las que habría hecho, en modo solo observar, en gris para
+// que no se confunda con un envío de verdad -- y se limpia al abrir el popup
+// (popup.js). Una ráfaga sin novedades limpia el número en vez de dejar
+// pegado el de la anterior: el ícono siempre cuenta lo último que pasó.
+const COLOR_INSIGNIA_POSTULADAS = '#17784F';
+const COLOR_INSIGNIA_OBSERVADAS = '#5D6468';
+
+function mostrarInsigniaRafaga(conteos) {
+  const c = conteos || {};
+  const postuladas = c.postuladas || 0;
+  const observadas = c.observadas || 0;
+  const n = postuladas > 0 ? postuladas : observadas;
+  try {
+    chrome.action.setBadgeText({ text: n > 0 ? (n > 999 ? '999+' : String(n)) : '' });
+    if (n > 0) {
+      chrome.action.setBadgeBackgroundColor({ color: postuladas > 0 ? COLOR_INSIGNIA_POSTULADAS : COLOR_INSIGNIA_OBSERVADAS });
     }
+  } catch (e) {
+    // El número es un aviso, no puede tumbar el cierre de la ráfaga.
+    console.warn('[AP] No se pudo poner el número en el ícono:', e);
+  }
+}
+
+async function iniciarRafaga(disparador, pasos) {
+  if (!pasos.length) return;
+  const { rafaga: existente } = await chrome.storage.local.get('rafaga');
+  if (existente && existente.estado === 'en_curso') return; // ya hay una corriendo
+
+  const rafaga = {
+    id: 'r_' + Date.now(),
+    disparador,
+    inicio: Date.now(),
+    latido: Date.now(),
+    pasos,
+    pasoActual: 0,
+    tabActual: null,
+    conteos: { postuladas: 0, descartadas: 0, gris: 0, observadas: 0, errores: 0 },
+    estado: 'en_curso',
+  };
+  await chrome.storage.local.set({ rafaga });
+  mantenerDespierto();
+  chrome.alarms.create(NOMBRE_ALARMA_TOPE_RAFAGA, { delayInMinutes: TOPE_MINUTOS_RAFAGA });
+  // Sin await a propósito: registrar el inicio no debe demorar el primer paso.
+  reportarRafagaBackend(rafaga);
+  avanzarRafaga();
+}
+
+async function avanzarRafaga() {
+  const { rafaga } = await chrome.storage.local.get('rafaga');
+  if (!rafaga || rafaga.estado !== 'en_curso') return;
+
+  if (rafaga.pasoActual >= rafaga.pasos.length) {
+    rafaga.estado = 'terminada';
+    rafaga.fin = Date.now();
+    await chrome.storage.local.set({ rafaga, ultimaRafagaFin: Date.now() });
+    // Soltar el bloqueo va ANTES del reporte: un backend lento o caído nunca
+    // debe alargar el tiempo que el equipo queda sin poder suspenderse. Lo
+    // mismo el número del ícono: es local e instantáneo, no espera a la red.
+    terminarKeepAwake();
+    mostrarInsigniaRafaga(rafaga.conteos);
+    await reportarRafagaBackend(rafaga);
+    console.log('[AP] Ráfaga terminada:', rafaga.conteos);
+    return;
+  }
+
+  const paso = rafaga.pasos[rafaga.pasoActual];
+  chrome.tabs.create({ url: paso.url, active: false }, tab => {
+    if (chrome.runtime.lastError || !tab) {
+      // Ni se pudo abrir la pestaña -- se salta este paso igual, no se
+      // cuelga la ráfaga entera por un portal que falló al abrir.
+      pasoTerminado(null);
+      return;
+    }
+    rafaga.tabActual = tab.id;
+    rafaga.latido = Date.now();
+    chrome.storage.local.set({ rafaga });
+    // El seguro de tiempo se re-crea en cada paso -- si ESCANEO_TERMINADO
+    // nunca llega (portal caído, error inesperado), esto avanza igual.
+    chrome.alarms.create(NOMBRE_ALARMA_SEGURO_RAFAGA, { delayInMinutes: SEGURO_MINUTOS_POR_PASO });
 
     const onUpdated = (tabId, info) => {
-      if (tabId !== id || info.status !== 'complete') return;
+      if (tabId !== tab.id || info.status !== 'complete') return;
       chrome.tabs.onUpdated.removeListener(onUpdated);
       setTimeout(() => {
-        if (manejado) return; // la pestaña ya se cerró (ej. por el timeout de seguridad)
-        chrome.tabs.sendMessage(id, { type: 'AUTO_SCAN' }, () => {
-          if (chrome.runtime.lastError) { /* pestaña cerrada o sin content script */ }
+        chrome.tabs.sendMessage(tab.id, { type: 'AUTO_SCAN' }, () => {
+          if (chrome.runtime.lastError) { /* pestaña cerrada, o el content script no llegó a cargar */ }
         });
-        // El escaneo puede postular a varias ofertas seguidas — le damos tiempo
-        // antes de cerrar la pestaña sola. Ajusta si ves que corta muy justo.
-        setTimeout(cerrarTab, 5 * 60 * 1000);
       }, 2000);
     };
     chrome.tabs.onUpdated.addListener(onUpdated);
-    // Timeout de seguridad, por si el tab nunca termina de cargar
-    setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(onUpdated);
-      cerrarTab();
-    }, 6 * 60 * 1000);
   });
 }
+
+// Llega desde ESCANEO_TERMINADO (conteos reales) o desde el seguro de tiempo
+// (conteos null) -- en ambos casos: sumar lo que haya, cerrar la pestaña del
+// paso actual, avanzar al siguiente.
+async function pasoTerminado(conteos) {
+  const { rafaga } = await chrome.storage.local.get('rafaga');
+  if (!rafaga || rafaga.estado !== 'en_curso') return;
+
+  if (conteos) {
+    rafaga.conteos.postuladas += conteos.postular || 0;
+    rafaga.conteos.observadas += conteos.observado || 0;
+    rafaga.conteos.descartadas += conteos.descartar || 0;
+    rafaga.conteos.gris += conteos.gris || 0;
+  } else {
+    rafaga.conteos.errores += 1;
+  }
+  const tabId = rafaga.tabActual;
+  rafaga.tabActual = null;
+  rafaga.pasoActual += 1;
+  rafaga.latido = Date.now();
+  await chrome.storage.local.set({ rafaga });
+  chrome.alarms.clear(NOMBRE_ALARMA_SEGURO_RAFAGA);
+  if (tabId != null) chrome.tabs.remove(tabId, () => { if (chrome.runtime.lastError) {} });
+  avanzarRafaga();
+}
+
+// El seguro de tiempo por paso (chrome.alarms, 8 min) ya cubre casi todos los
+// casos de que algo se cuelgue -- las alarmas sobreviven un restart del
+// worker. Esto es el respaldo para el caso más raro: que hasta esa alarma se
+// haya perdido (ej. la extensión se deshabilitó y volvió a habilitar a
+// mitad de una ráfaga). Sin latido reciente, se asume perdida.
+const RETOMAR_LATIDO_MAX_MIN = 10;
+
+async function retomarORafagaInterrumpida() {
+  const { rafaga } = await chrome.storage.local.get('rafaga');
+  if (!rafaga || rafaga.estado !== 'en_curso') {
+    // §3.3: si el worker murió a mitad de una ráfaga, el bloqueo de suspensión
+    // pudo quedar pedido aunque ya no haya nada en curso (el pedido vive en el
+    // navegador, no en el worker). Soltarlo cuando no hay ráfaga es inofensivo
+    // si no había ninguno, y evita dejar el equipo sin poder suspenderse.
+    terminarKeepAwake();
+    return;
+  }
+
+  const minutosDesdeLatido = (Date.now() - rafaga.latido) / 60000;
+  if (minutosDesdeLatido < RETOMAR_LATIDO_MAX_MIN) return; // pudo seguir en curso de verdad -- no tocar
+
+  if (rafaga.tabActual != null) {
+    chrome.tabs.remove(rafaga.tabActual, () => { if (chrome.runtime.lastError) {} });
+  }
+  rafaga.estado = 'interrumpida';
+  rafaga.fin = Date.now();
+  await chrome.storage.local.set({ rafaga });
+  terminarKeepAwake();
+  // Lo que alcanzó a hacer antes de cortarse también es una novedad real.
+  mostrarInsigniaRafaga(rafaga.conteos);
+  await reportarRafagaBackend(rafaga);
+  console.warn('[AP] Ráfaga marcada interrumpida -- sin señales de vida por más de ' + RETOMAR_LATIDO_MAX_MIN + ' min.');
+}
+
+// docs/rafagas-y-ponerse-al-dia.md §3.1, disparador "el computador despierta":
+// Chrome ya lo resuelve solo -- una alarma periódica que estaba vencida
+// mientras el equipo estaba suspendido se dispara sola al despertar, sin
+// código extra de nuestra parte. Lo único que se agrega acá es distinguir
+// ESE caso del chequeo normal, para que quede bien registrado como
+// disparador cuando exista el modelo Rafaga del backend (§3.4, pendiente):
+// si la alarma se disparó bastante después de su hora programada, es señal
+// de que el equipo no estuvo disponible a tiempo -- estaba suspendido, no
+// que Chrome se demoró unos segundos.
+const RETRASO_DESPERTAR_MIN = 5;
 
 try {
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === NOMBRE_ALARMA_AUTOMATICA) {
-      escanearAutomatico();
+      const retrasoMin = alarm.scheduledTime ? (Date.now() - alarm.scheduledTime) / 60000 : 0;
+      quizasRafaga(retrasoMin >= RETRASO_DESPERTAR_MIN ? 'despertar' : 'chequeo');
+    } else if (alarm.name === NOMBRE_ALARMA_SEGURO_RAFAGA) {
+      pasoTerminado(null);
+    } else if (alarm.name === NOMBRE_ALARMA_TOPE_RAFAGA) {
+      // Tope duro (§3.3): solo se suelta el bloqueo de suspensión -- la ráfaga
+      // puede seguir, pero no a costa de dejar el equipo sin poder suspenderse.
+      soltarDespierto();
+      console.warn('[AP] Tope de ' + TOPE_MINUTOS_RAFAGA + ' min de la ráfaga alcanzado -- se libera el bloqueo de suspensión.');
     }
   });
 } catch (e) {
@@ -651,7 +897,62 @@ async function reportarBandaGrisBackend(oferta) {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
+// ── Reportar la ráfaga al backend (docs/rafagas-y-ponerse-al-dia.md §3.4) ──
+// Se llama dos veces por ráfaga: al empezar (estado "en_curso") y al terminar
+// ("terminada" o "interrumpida", ya con los conteos) -- las dos caen en la
+// misma fila del backend, por el id de la ráfaga. Best-effort, como los otros
+// reportes de solo lectura: el estado real vive en chrome.storage, esto es el
+// registro que alimenta la tarjeta del panel; una ráfaga que corrió no deja
+// de haber corrido porque el backend no contestó, así que no se reintenta ni
+// se bloquea nada por esto.
+async function reportarRafagaBackend(rafaga) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return;
+
+  const payload = {
+    id: rafaga.id,
+    disparador: rafaga.disparador,
+    inicio: rafaga.inicio,
+    estado: rafaga.estado,
+    conteos: rafaga.conteos,
+  };
+  if (rafaga.fin) {
+    payload.fin = rafaga.fin;
+    payload.duracionMs = rafaga.fin - rafaga.inicio;
+  }
+
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/rafaga', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + autopostulaToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('[AP] Backend rechazó el registro de la ráfaga:', data.error || res.status);
+    }
+  } catch (e) {
+    console.warn('[AP] Error de red reportando la ráfaga:', e);
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'ESCANEO_TERMINADO') {
+    // Solo se atiende si viene de la pestaña que la ráfaga tiene abierta
+    // AHORA MISMO -- una pestaña vieja (de un paso anterior, ya cerrada, o
+    // abierta a mano por la persona) no debe poder avanzar el paso actual
+    // por una carrera de mensajes.
+    chrome.storage.local.get('rafaga', ({ rafaga }) => {
+      if (rafaga && rafaga.estado === 'en_curso' && sender.tab && sender.tab.id === rafaga.tabActual) {
+        pasoTerminado(msg.conteos);
+      }
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
   if (msg.type === 'OPEN_AND_APPLY') {
     queue.push({ url: msg.url, titulo: msg.titulo });
     processQueue();

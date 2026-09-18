@@ -766,9 +766,9 @@ async function activar(tarjeta) {
 
 // ── Escanear ──────────────────────────────────────────────────
 async function escanear() {
-  if (!AP.activo || AP.procesando || !AP.cfg) return;
+  if (!AP.activo || AP.procesando || !AP.cfg) { AP.reportarEscaneoTerminado(); return; }
   const tarjetas = [...document.querySelectorAll('div.result-box')];
-  if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en Trabajando', '#9CA3AF'); return; }
+  if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en Trabajando', '#9CA3AF'); AP.reportarEscaneoTerminado(); return; }
 
   let pendientes = [];
   const titulosVistos = [];
@@ -864,6 +864,7 @@ async function escanear() {
 
   if (!pendientes.length) {
     if (siguientePaginaClick(tarjetas.length, botonVerMas)) return; // el MutationObserver retoma solo cuando lleguen las tarjetas nuevas
+    AP.reportarEscaneoTerminado(conteos);
     return;
   }
 
@@ -873,6 +874,7 @@ async function escanear() {
     const verificacion = await AP.puedePostular('Trabajando');
     if (!verificacion.permitido) {
       msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      AP.reportarEscaneoTerminado(conteos);
       return;
     }
   }
@@ -899,6 +901,7 @@ async function escanear() {
   AP.procesando = false;
 
   if (siguientePaginaClick(tarjetas.length, botonVerMas)) return;
+  AP.reportarEscaneoTerminado(conteos);
   msg('Escaneo completo', '#16A34A');
 }
 
