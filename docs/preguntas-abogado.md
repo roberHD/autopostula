@@ -1,11 +1,17 @@
 # Preguntas para el abogado — AutoPostula
 
-> Preparado el 2026-09-04, contra el estado real del código.
-> Acompaña a `/privacidad` y `/terminos`, que están actualizados a esa fecha.
+> Preparado el 2026-09-04 y **actualizado el 2026-09-19**, contra el estado real del código.
+> Acompaña a `/privacidad` y `/terminos` (versión del 13-09) y a su versión en Word/PDF en `docs/legal/`.
 >
 > **Contexto en una frase:** extensión de Chrome + web que postula automáticamente a ofertas de
-> empleo en Computrabajo y Laborum en nombre del usuario, usando su CV y respondiendo los
-> formularios con IA. Suscripción mensual de $3.990 CLP vía Flow. Operado por persona natural.
+> empleo en Computrabajo, Laborum y Trabajando.com en nombre del usuario, usando su CV y
+> respondiendo los formularios con IA. **Premium pasa de suscripción mensual a pases prepagados
+> de 30 y 90 días vía Flow, sin renovación automática** (ver §E y `pase-prepagado.md`). Operado
+> por persona natural.
+
+> ⚠️ **Cambio del 2026-09-19:** los Términos publicados todavía describen una suscripción mensual
+> con renovación automática. Se van a reescribir para pases (`pase-prepagado.md` §8). Conviene que
+> el abogado revise §6 y §7 de los Términos **pensando en pases**, no en la suscripción.
 
 Ordenadas por urgencia. Las de la sección A bloquean la publicación; las de B tienen plazo
 legal encima; el resto son de riesgo, no de bloqueo.
@@ -14,20 +20,28 @@ legal encima; el resto son de riesgo, no de bloqueo.
 
 ## A. Lo que está literalmente sin resolver en el texto
 
-### A1. Derecho a retracto
+### A1. Derecho a retracto y devolución
 
-Es el único `[REVISAR CON ABOGADO]` que queda, en Términos §7.
+La página publicada ya no tiene la nota de borrador (se reemplazó el 13-09 por una remisión a la
+Ley 19.496). La cláusula de devolución está **en borrador** en `docs/legal/` (Términos §7.2) y hay
+que reescribirla para pases.
 
-- ¿Aplica el **art. 3° bis de la Ley 19.496** a una suscripción mensual digital contratada por
-  medios electrónicos?
-- Si aplica: ¿los 10 días corren desde la contratación o desde el primer cobro? ¿Se puede
-  excluir si el servicio empieza a prestarse de inmediato con consentimiento expreso del
-  usuario?
-- ¿Qué política de reembolso conviene declarar, y con qué redacción exacta?
+**Cómo es ahora el producto:** un **pago único** por un pase de 30 días ($3.990) o de 90 días
+(propuesta: $9.990). **No se renueva solo**: al vencer, la cuenta vuelve al plan gratis. Comprar
+con un pase vigente suma días al final. El servicio empieza a prestarse apenas se acredita el pago.
 
-**Dato relevante:** hoy la cancelación opera al final del período ya pagado (el usuario
-conserva el acceso hasta esa fecha y no hay cobros posteriores). No se devuelve dinero de
-meses ya cobrados.
+- ¿Aplica el **art. 3° bis de la Ley 19.496** a un pase digital prepagado contratado por medios
+  electrónicos? ¿Cambia la respuesta respecto de una suscripción mensual?
+- Si aplica: ¿se puede excluir con consentimiento expreso, dado que el servicio empieza de
+  inmediato? ¿O conviene declarar una devolución voluntaria? El borrador proponía **devolver el
+  100% del primer cobro dentro de 14 días**; ¿cómo debería quedar para pases (solo el primer pase,
+  cualquier pase, proporcional a los días usados)?
+- **Borrar la cuenta con un pase vigente:** los Términos §13 prometen devolver la parte
+  proporcional **cuando AutoPostula cierra la cuenta** (salvo incumplimiento grave). ¿Qué
+  corresponde cuando es **la persona** la que borra su cuenta con días pagados sin usar?
+- ¿Hay obligación de **avisar antes del vencimiento**? El diseño avisa por correo 5 días antes, 1 día
+  antes y al vencer.
+- ¿Qué redacción exacta conviene para todo lo anterior?
 
 ### A2. Cláusula de limitación de responsabilidad
 
@@ -56,7 +70,10 @@ La **Ley 21.719** entra en vigencia a fines de 2026. Es bastante más exigente q
 | Postulaciones | Ofertas, respuestas enviadas, estados |
 | Ofertas revisadas | Título, empresa, enlace de ofertas **que el usuario no postuló** |
 | Preferencias | Sí/no del usuario sobre qué ofertas le interesan |
-| Pago | ID de cliente en Flow, montos, fechas (**no** datos de tarjeta) |
+| Respuestas | La que propuso la IA, la que se envió y si el usuario la editó |
+| Soporte | Mensaje, adjuntos, nombre y correo; llegan por correo y **no** quedan en la base de datos |
+| Dictado por voz | AutoPostula no recibe el audio, pero **Chrome lo manda a Google** para transcribirlo |
+| Pago | Número de orden de Flow, monto, fecha y estado (**no** datos de tarjeta; con pases ya no hay ID de cliente en Flow) |
 
 ### B2. Preguntas
 
@@ -73,8 +90,10 @@ La **Ley 21.719** entra en vigencia a fines de 2026. Es bastante más exigente q
    Unidos)** para generar las respuestas. ¿Qué exige la 21.719 para esa transferencia — cláusulas
    contractuales tipo, consentimiento expreso, algo más? ¿Basta con declararlo en la política?
 
-5. **Ofertas revisadas.** Se guardan ofertas que el usuario **vio pero no postuló**, asociadas a
-   su cuenta, y se purgan a los 90 días. ¿Es proporcional? ¿90 días es defendible?
+5. **Ofertas revisadas.** Se guardan las ofertas que la extensión vio (título, empresa, enlace y
+   portal) **aunque el usuario no postulara**. Las que no postuló ni decidió **no quedan asociadas
+   a su cuenta** (la tabla no guarda el usuario), y se purgan a los 90 días con un proceso diario.
+   ¿Es proporcional? ¿90 días es defendible?
 
 6. **El diccionario de cargos.** Se guardan títulos de avisos públicos (ej. "Vendedor part time
    Ñuñoa") **sin ninguna asociación a usuarios**, y no se borran al eliminar la cuenta.
@@ -106,8 +125,8 @@ Este es el riesgo estructural del producto y conviene entenderlo bien.
    > con su sesión y a velocidad humana.
 
 3. **Uso de marcas.** Los términos dicen que no hay afiliación y que las marcas son de sus
-   titulares. ¿Se pueden seguir nombrando "Computrabajo" y "Laborum" en la ficha de la Chrome
-   Web Store y en la web, o hay que cambiar cómo se mencionan?
+   titulares. ¿Se pueden seguir nombrando "Computrabajo", "Laborum" y "Trabajando.com" en la ficha
+   de la Chrome Web Store y en la web, o hay que cambiar cómo se mencionan?
 
 ---
 
@@ -129,16 +148,39 @@ Este es el riesgo estructural del producto y conviene entenderlo bien.
 
 ## E. Estructura y tributación
 
-1. **Persona natural vs. SpA.** Hoy opera con RUT personal y cobra suscripciones. ¿Conviene
-   constituir una SpA **antes** de tener usuarios pagando, por responsabilidad y por orden
-   tributario?
+> **Lo que cambió el 2026-09-19 y por qué.**
+> - El **Cargo Automático de Flow** (cobro recurrente a tarjeta, la base de cualquier suscripción)
+>   es **solo para empresas**. Exige cuenta corriente a nombre de una empresa con RUT en el SII, un
+>   giro que ampare el servicio, y datos de facturación del mismo RUT. Para personas naturales,
+>   Flow dice que no está disponible.
+> - Por eso se decidió cobrar como **persona natural con pases prepagados** (pago único, sin
+>   renovación), y dejar la suscripción para cuando exista una empresa.
+> - Según Flow, **desde abril de 2025 toda plataforma de pago debe exigir el inicio de actividades**
+>   y el cumplimiento tributario. Así que el inicio de actividades es obligatorio de todos modos,
+>   con cualquier pasarela.
 
-2. **Boleta o factura.** ¿Qué hay que emitir por una suscripción mensual de $3.990 a persona
-   natural, y con qué periodicidad? ¿Flow lo resuelve o es responsabilidad propia?
+1. **Inicio de actividades como persona natural.** ¿En qué categoría y con qué giro, para vender
+   por internet un servicio digital por suscripción o por pase? ¿Qué régimen tributario conviene?
+   ¿Qué obligaciones mensuales y anuales trae (declaraciones, libros)?
 
-3. **IVA.** El precio se declara "impuestos incluidos". ¿Es correcto para este servicio?
+2. **Boleta.** Con inicio de actividades, ¿hay que emitir una boleta electrónica por **cada pase**
+   vendido a persona natural? ¿Sirve el sistema gratuito del SII venta por venta, o conviene un
+   proveedor que se integre por API? ¿Flow emite algún documento que lo reemplace?
 
-4. **Inicio de actividades.** ¿Hace falta antes del primer cobro?
+3. **IVA.** Los precios ($3.990 y $9.990) se publican "impuestos incluidos". ¿Corresponde IVA a
+   este servicio y está bien declararlo así?
+
+4. **¿Cuándo pasar a SpA?** Se mantiene la idea de constituir una SpA cuando haya tracción, lo que
+   además permitiría volver a la renovación automática con Flow.
+   - ¿Hay un umbral (ventas, número de usuarios) a partir del cual conviene?
+   - ¿Conviene **antes**, por responsabilidad, considerando que la herramienta envía postulaciones
+     **en nombre de terceros** y que el patrimonio personal queda expuesto?
+   - Al pasar a SpA: el responsable del tratamiento de datos y la parte de los Términos cambian de
+     la persona natural a la empresa. ¿Qué hay que hacer con los usuarios que ya aceptaron los
+     documentos con el responsable anterior?
+
+5. **Renovación automática futura.** Cuando exista la SpA y se vuelva a cobrar con renovación
+   automática, ¿qué exige la Ley 19.496 (consentimiento, avisos previos al cobro, cancelación)?
 
 ---
 
@@ -158,6 +200,9 @@ Este es el riesgo estructural del producto y conviene entenderlo bien.
 
 - `autopostula.cl/privacidad`
 - `autopostula.cl/terminos`
+- `docs/legal/`: los dos documentos en Word y PDF (versión del 13-09), con el resumen de cambios
+  al inicio y el borrador de devolución (Términos §7.2)
+- `docs/pase-prepagado.md` §1 y §8: por qué se cambió a pases y qué textos cambian
 - Esta lista
 
 Los dos textos están escritos contra lo que el código hace de verdad, no son plantillas. Si el

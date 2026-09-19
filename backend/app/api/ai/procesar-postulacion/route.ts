@@ -121,15 +121,17 @@ export async function POST(request: Request) {
       "- fortalezas: en una frase corta, que fortalezas REALES del candidato (solo las de su CV/perfil/datos adicionales) conectan mejor con este aviso\n" +
       '- tono: como debe sonar el candidato al responder este formulario (ej: "cercano y directo", "formal y profesional"), segun el registro del aviso\n' +
       "- matchScore: entero 0-100, que tan bien calza el candidato con ESTE aviso. Se estricto: si falta informacion, usa un puntaje moderado (40-60) en vez de uno alto\n\n" +
-      "TAREA 2 -- Responder cada pregunta del formulario de postulacion. Completa el campo \"respuestas\" como un array con UN objeto por cada pregunta de la lista de abajo, en el mismo orden, cada uno con exactamente esta forma: {\"id\":\"\",\"respuesta\":\"\" o null}\n" +
+      "TAREA 2 -- Responder cada pregunta del formulario de postulacion. Completa el campo \"respuestas\" como un array con UN objeto por cada pregunta de la lista de abajo, en el mismo orden, cada uno con exactamente esta forma: {\"id\":\"\",\"respuesta\":\"\" o null,\"datoFaltante\":\"\" o null}\n" +
       "REGLAS para las respuestas:\n" +
       "1. Usa solo informacion real del CV, perfil o datos adicionales entregados abajo. Nunca inventes datos concretos (anios, empresas, certificaciones) que no esten ahi.\n" +
-      "2. Si la pregunta trae \"opciones\" (no null): responde con el texto EXACTO de una de esas opciones (copiado tal cual), o null si ninguna aplica realmente.\n" +
-      "3. Si la pregunta NO trae opciones (texto libre): responde en primera persona, con una extension de " + (DESCRIPCION_LONGITUD[styleProfile?.longitudRespuesta || "media"] || DESCRIPCION_LONGITUD.media) + ", honesta, util y personalizada al aviso especifico (rubro, productos, tareas mencionadas -- debe notarse que leiste este aviso en particular). Si no tienes el dato exacto, no dejes el campo en null: responde con honestidad reconociendo que no tienes esa experiencia especifica pero conectandola con la experiencia real mas cercana que si tengas. Usa null SOLO si la pregunta es completamente irrelevante para un postulante a empleo.\n" +
-      "3b. Si la pregunta es una autoidentificacion voluntaria de tipo si/no (ej: discapacidad, genero, pertenencia a pueblo originario) y el candidato no menciona nada relacionado en su CV/perfil/datos adicionales, responde con el valor neutro esperado (\"No\", o el que corresponda segun la pregunta) -- NUNCA uses null en estos casos solo porque no tienes el dato explicito, esa pregunta siempre espera una respuesta.\n" +
+      "1b. HECHOS VERIFICABLES (licencia de conducir, tenencia de vehiculo propio, titulo/grado especifico, certificacion o curso puntual, disponibilidad de horario exacta, pretension de renta): si la pregunta pide uno de estos Y el CV/perfil/datos adicionales NO lo menciona ni a favor ni en contra, NO respondas \"si\" ni \"no\" ni ningun valor concreto -- ni siquiera como suposicion razonable. Un \"no\" inventado puede sacar al candidato de un cargo que si podria hacer, y un \"si\" inventado es una mentira con su nombre. En estos casos deja \"respuesta\":null y llena \"datoFaltante\" con una descripcion corta de 2-4 palabras del dato que falta (ej: \"licencia clase B\", \"pretension de renta\", \"titulo de contador\"). Esta regla pisa a la 2 y a la 3 cuando aplica: no se inventa ni en texto libre ni eligiendo una opcion.\n" +
+      "2. Si la pregunta trae \"opciones\" (no null) y NO es un hecho verificable sin datos (regla 1b): responde con el texto EXACTO de una de esas opciones (copiado tal cual), o null si ninguna aplica realmente.\n" +
+      "3. Si la pregunta NO trae opciones (texto libre) y NO es un hecho verificable sin datos (regla 1b): responde en primera persona, con una extension de " + (DESCRIPCION_LONGITUD[styleProfile?.longitudRespuesta || "media"] || DESCRIPCION_LONGITUD.media) + ", honesta, util y personalizada al aviso especifico (rubro, productos, tareas mencionadas -- debe notarse que leiste este aviso en particular). Si no tienes el dato exacto pero la pregunta es sobre experiencia/motivacion/habilidades (no un hecho verificable puntual), no dejes el campo en null: responde con honestidad reconociendo que no tienes esa experiencia especifica pero conectandola con la experiencia real mas cercana que si tengas. Usa null SOLO si la pregunta es completamente irrelevante para un postulante a empleo.\n" +
+      "3b. Si la pregunta es una autoidentificacion voluntaria de tipo si/no (ej: discapacidad, genero, pertenencia a pueblo originario) y el candidato no menciona nada relacionado en su CV/perfil/datos adicionales, responde con el valor neutro esperado (\"No\", o el que corresponda segun la pregunta) -- NUNCA uses null en estos casos solo porque no tienes el dato explicito, esa pregunta siempre espera una respuesta. Esto NO es un hecho verificable de la regla 1b (es una autoidentificacion, no algo que se pueda verificar).\n" +
       '4. Si la pregunta de texto libre pide VARIOS datos a la vez (ej: "indique su comuna y telefono"), responde TODOS los datos pedidos, no solo el primero.\n' +
       "5. Responde en TEXTO PLANO. NUNCA uses markdown (nada de #, ##, **, guiones ni listas). NUNCA repitas ni cites la pregunta antes de responder. NUNCA agregues introducciones tipo \"Respuesta:\" ni comillas envolviendo el texto.\n" +
-      '6. SE CONCISO Y EVITA REDUNDANCIA: no repitas la misma idea con otras palabras. Usa el tono que tu mismo determinaste en el "analisis" en vez de sonar siempre igual de formal en todas las respuestas.\n\n' +
+      '6. SE CONCISO Y EVITA REDUNDANCIA: no repitas la misma idea con otras palabras. Usa el tono que tu mismo determinaste en el "analisis" en vez de sonar siempre igual de formal en todas las respuestas.\n' +
+      "7. Registro escrito profesional siempre, aunque el tono configurado sea cercano: sin muletillas orales (\"nomas\", \"cachai\", \"o sea\") ni groserias. Cercano no es igual a hablado.\n\n" +
       bloqueEstilo +
       bloqueEntrenamiento +
       bloqueCalibracion +
@@ -146,7 +148,7 @@ export async function POST(request: Request) {
       "Preguntas del formulario a responder (array JSON, respeta el mismo \"id\" en tu respuesta):\n" +
       JSON.stringify(preguntasParaPrompt) + "\n\n" +
       "Responde SOLO con este JSON, sin texto adicional ni markdown:\n" +
-      '{"analisis":{"cargo":"","empresa":"","prioridades":"","fortalezas":"","tono":"","matchScore":0},"respuestas":[{"id":"","respuesta":""}]}';
+      '{"analisis":{"cargo":"","empresa":"","prioridades":"","fortalezas":"","tono":"","matchScore":0},"respuestas":[{"id":"","respuesta":"","datoFaltante":null}]}';
 
     const messages = await construirMensajesCV(user.id, instruccion);
 
@@ -180,7 +182,13 @@ export async function POST(request: Request) {
       if (!respuesta || respuesta.includes("SINRESPUESTA") || respuesta.toLowerCase().includes("sin respuesta")) {
         respuesta = null;
       }
-      return { id: r?.id, respuesta };
+      // §8.4 (docs/revision-2026-09-16.md): cuando la pregunta pide un hecho
+      // verificable que no está en el perfil (regla 1b del prompt), la IA
+      // devuelve esto en vez de inventar un "sí"/"no" con el nombre de la
+      // persona. Se propaga tal cual para que la extensión nunca la trate
+      // como una respuesta real, ni en modo revisión ni fuera de él.
+      const datoFaltante = typeof r?.datoFaltante === "string" && r.datoFaltante.trim() ? r.datoFaltante.trim() : null;
+      return { id: r?.id, respuesta: datoFaltante ? null : respuesta, datoFaltante };
     });
 
     return NextResponse.json({ analisis, respuestas });

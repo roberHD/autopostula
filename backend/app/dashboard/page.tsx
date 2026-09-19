@@ -12,6 +12,18 @@ import {
 import { ArrowUpRight, ArrowDownRight, Sparkles, Send, CheckCheck, Trophy, Target } from "lucide-react";
 import { SkelStats, SkelGrafico, SkelFilas } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
+import {
+  RUTA_VER_LAS_DE_PRUEBA,
+  TEXTO_DESPUES_DE_LA_PRUEBA,
+  TEXTO_PASAR_A_PREMIUM,
+  textoPruebaEnCurso,
+  textoPruebaTerminada,
+  textoTarjetaRafaga,
+  textoVerLasDePrueba,
+  type UltimaRafaga,
+} from "@/lib/texto-rafaga";
+import { PRUEBA_TOTAL, type ModoAutomatico } from "@/lib/estado-automatico";
+import BotonPonerseAlDia from "./BotonPonerseAlDia";
 
 type Resumen = {
   postulacionesEnviadas: number;
@@ -150,9 +162,43 @@ function Badge({ estado }: { estado: string }) {
 
 export default function InicioPage() {
   const [datos, setDatos] = useState<Resumen | null>(null);
+  // §3.2 (docs/revision-2026-09-16.md): la tarjeta "Tu asistente está activo"
+  // decidía solo por "hay un portal conectado", mientras la barra de arriba
+  // (BarraMaquina) decía "En pausa" -- dos veredictos distintos en la misma
+  // pantalla. Ahora lee del mismo /api/dashboard/estado que la barra.
+  const [estadoAuto, setEstadoAuto] = useState<{
+    activa: boolean;
+    motivo: string | null;
+    ultimaRafaga: UltimaRafaga | null;
+    estimadoRafagaMs: number | null;
+    // docs/rafagas-y-ponerse-al-dia.md §4.1: premium | prueba | manual, y cuántas
+    // postulaciones de prueba le quedan de las `pruebaTotal` (solo con "prueba").
+    modo: ModoAutomatico;
+    pruebaRestantes: number | null;
+    pruebaTotal: number;
+  } | null>(null);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState("");
   const { error: avisarError } = useAvisos();
+
+  useEffect(() => {
+    fetch("/api/dashboard/estado")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((e) => {
+        if (e) {
+          setEstadoAuto({
+            activa: !!e.activa,
+            motivo: e.motivo ?? null,
+            ultimaRafaga: e.ultimaRafaga ?? null,
+            estimadoRafagaMs: e.estimadoRafagaMs ?? null,
+            modo: e.modo ?? "premium",
+            pruebaRestantes: e.pruebaRestantes ?? null,
+            pruebaTotal: e.pruebaTotal ?? PRUEBA_TOTAL,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function cargar() {
@@ -253,15 +299,12 @@ export default function InicioPage() {
       Icon: Trophy,
       color: "var(--chart-4)",
     },
-    {
-      label: "Match promedio IA",
-      value: datos.matchPromedio != null ? `${datos.matchPromedio}%` : "—",
-      delta: null,
-      up: true,
-      hint: "afinidad con ofertas",
-      Icon: Target,
-      color: "var(--chart-3)",
-    },
+    // §3.2 (docs/revision-2026-09-16.md): la tarjeta "Match promedio IA" se
+    // sacó -- el número salía de JobOffer.relevanciaAi, que solo llenaba el
+    // filtro de IA viejo (ya fuera de la decisión desde §1.1/§1.4), así que
+    // mostraba un 69% de una fuente que el motor actual no alimenta, con la
+    // palabra "IA" en una app cuya política dice que decidir a qué postular
+    // no usa IA oferta por oferta.
   ];
 
   const totalPortal = datos.porPortal.reduce((a, b) => a + b.cantidad, 0);
@@ -274,8 +317,34 @@ export default function InicioPage() {
     const porDiez = (fila.cantidad / datos.postulacionesEnviadas) * 10;
     return porDiez >= 1 ? String(Math.round(porDiez)) : porDiez.toFixed(1).replace(".0", "");
   };
-  // Decir "activo" sin un portal conectado es mentira: no puede postular.
-  const asistenteActivo = datos.portalesActivos > 0;
+  // Decir "activo" sin un portal conectado es mentira: no puede postular. Y
+  // tampoco si está en pausa, sin cupo, o el plan no incluye la búsqueda
+  // automática (§3.2): manda el mismo estado que la barra de arriba, y solo si
+  // todavía no cargó se cae al criterio viejo (portal conectado).
+  const asistenteActivo = estadoAuto ? estadoAuto.activa : datos.portalesActivos > 0;
+  const totalPrueba = estadoAuto?.pruebaTotal ?? PRUEBA_TOTAL;
+  const textoInactivo: Record<string, { t: string; d: string; href?: string; cta?: string; extra?: { href: string; cta: string } }> = {
+    pausada: { t: "Tu búsqueda automática está en pausa", d: "Reanúdala desde la barra de arriba y vuelve a postular sola." },
+    // §4.1: la prueba se demuestra con resultados concretos -- "Ver las 5" lleva
+    // al historial filtrado, y las dos salidas (Premium, o entrar a mano a un
+    // portal) se dicen sin rodeos.
+    "prueba-terminada": {
+      t: textoPruebaTerminada(totalPrueba),
+      d: TEXTO_DESPUES_DE_LA_PRUEBA,
+      href: "/dashboard/premium",
+      cta: TEXTO_PASAR_A_PREMIUM,
+      extra: { href: RUTA_VER_LAS_DE_PRUEBA, cta: textoVerLasDePrueba(totalPrueba) },
+    },
+    "sin-cupo": { t: "Sin cupo este mes", d: "Se reinicia el día 1. Entretanto puedes ir completando tu perfil.", href: "/dashboard/premium", cta: "Ampliar cupo" },
+  };
+  const inactivoInfo = estadoAuto?.motivo ? textoInactivo[estadoAuto.motivo] : undefined;
+  // docs/rafagas-y-ponerse-al-dia.md §3.5: cuando la búsqueda automática SÍ
+  // está activa, la tarjeta ya no dice "Tu asistente está activo" (eso no dice
+  // nada que la persona pueda comprobar) sino cuándo se puso al día por última
+  // vez y qué encontró -- o, si hace más de 48 h, qué hacer. Sin el estado
+  // cargado todavía no se sabe nada de eso: no se inventa un "todavía no se
+  // puso al día" que parpadee y se corrija.
+  const tarjetaRafaga = estadoAuto && asistenteActivo ? textoTarjetaRafaga(estadoAuto.ultimaRafaga, new Date()) : null;
 
   return (
     <div className="ap-glow-bg" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -492,8 +561,8 @@ export default function InicioPage() {
               </div>
               <p className="ap-empty-state-title">Acá va a aparecer cada postulación</p>
               <p className="ap-empty-state-sub">
-                Con su estado real: enviada, vista, en proceso o finalista. Así sabes en qué quedó
-                cada una sin entrar al portal.
+                Con su portal y su fecha, y con su estado cuando el portal lo informa: enviada,
+                vista, en proceso o finalista.
               </p>
             </div>
           )}
@@ -560,17 +629,39 @@ export default function InicioPage() {
               <Sparkles size={18} />
             </div>
             <h2 style={{ marginTop: 12, fontSize: 13.5, fontWeight: 600 }}>
-              {asistenteActivo ? "Tu asistente está activo" : "Tu asistente todavía no postula"}
+              {asistenteActivo ? tarjetaRafaga?.t ?? "Revisando el estado…" : inactivoInfo?.t ?? "Tu asistente todavía no postula"}
             </h2>
             <p style={{ marginTop: 4, fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
               {asistenteActivo
-                ? `Perfil entrenado al ${datos.perfilEntrenado}%. Mientras más completo, más precisas y personales serán las respuestas en los formularios.`
-                : "Le falta un portal conectado para empezar a trabajar. Entretanto puedes ir completando tu perfil: mientras más entrenado, más tuyas suenan las respuestas."}
+                ? tarjetaRafaga?.d ?? ""
+                : inactivoInfo?.d ??
+                  "Le falta un portal conectado para empezar a trabajar. Entretanto puedes ir completando tu perfil: mientras más entrenado, más tuyas suenan las respuestas."}
             </p>
-            {!asistenteActivo && (
-              <Link className="ap-button-ghost" style={{ marginTop: 12 }} href="/dashboard/portales">
-                Conectar un portal
-              </Link>
+            {/* §4.1: mientras dura la prueba, cuántas lleva -- visible aunque hoy esté
+                en pausa, para que se entienda qué es lo que se pausó. */}
+            {estadoAuto?.modo === "prueba" && estadoAuto.pruebaRestantes !== null && (
+              <p style={{ marginTop: 8, fontSize: 12, fontWeight: 600 }}>
+                {textoPruebaEnCurso(estadoAuto.pruebaRestantes, totalPrueba)}
+              </p>
+            )}
+            {!asistenteActivo && (!inactivoInfo || inactivoInfo.href) && (
+              <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {inactivoInfo?.extra && (
+                  <Link className="ap-button-ghost" href={inactivoInfo.extra.href}>
+                    {inactivoInfo.extra.cta}
+                  </Link>
+                )}
+                <Link className="ap-button-ghost" href={inactivoInfo?.href ?? "/dashboard/portales"}>
+                  {inactivoInfo?.cta ?? "Conectar un portal"}
+                </Link>
+              </div>
+            )}
+            {/* docs/rafagas-y-ponerse-al-dia.md §3.6: solo Premium. `activa` exige que
+                se pueda buscar solo (plan, o la prueba de una cuenta gratis), no esté
+                en pausa, quede cupo y haya un portal conectado; el botón además pide
+                `modo === "premium"`: en el plan gratis no existe, ni durante la prueba. */}
+            {estadoAuto?.activa && estadoAuto.modo === "premium" && (
+              <BotonPonerseAlDia estimadoMs={estadoAuto.estimadoRafagaMs} />
             )}
           </div>
           <div style={{ marginTop: 16 }}>
@@ -599,11 +690,13 @@ export default function InicioPage() {
               />
             </div>
             <p style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-muted)" }}>
+              {/* "Monitoreando" prometía una vigilancia continua que las ráfagas
+                  no son: se pone al día al abrir el computador, no mira todo el día. */}
               {datos.portalesActivos === 0
                 ? "Sin portales conectados"
                 : datos.portalesActivos === 1
-                  ? "Monitoreando 1 portal conectado"
-                  : `Monitoreando ${datos.portalesActivos} portales conectados`}
+                  ? "1 portal conectado"
+                  : `${datos.portalesActivos} portales conectados`}
             </p>
           </div>
         </div>

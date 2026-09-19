@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { objetivosPermitenDirectivo } from "@/lib/nivel-cargo";
 
 // Mismo patrón de auth por token que /api/ai/analizar-oferta y compañía —
 // esta ruta la usa la extensión (Authorization: Bearer <apiToken>), nunca
@@ -20,7 +21,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
   }
 
-  const [perfil, filtros, aprobadas] = await Promise.all([
+  const [perfil, filtros, aprobadas, objetivos] = await Promise.all([
     prisma.cvProfile.findUnique({ where: { userId: user.id } }),
     prisma.searchPreferences.findUnique({ where: { userId: user.id } }),
     // Banda gris aprobada, pendiente de que la extensión la tome (§8.6):
@@ -33,6 +34,12 @@ export async function GET(request: Request) {
       orderBy: { decididoEn: "asc" },
       take: 5,
     }),
+    // §2.7: el nivel del cargo se calcula acá, en cada consulta, y no dentro de
+    // perfilCompilado -- así también rige para perfiles compilados antes de
+    // que existiera, sin obligar a recompilarlos.
+    user.objetivoConfirmado
+      ? prisma.objetivoLaboral.findMany({ where: { userId: user.id }, select: { ciuo: true, etiqueta: true } })
+      : Promise.resolve([]),
   ]);
 
   const bandaGrisAprobadas = aprobadas
@@ -50,7 +57,9 @@ export async function GET(request: Request) {
   // puntuar, así que usarScorerLocal nunca se activa solo sin uno.
   const scorer = {
     usarScorerLocal: !!(filtros?.usarScorerLocal && filtros?.perfilCompilado),
-    perfilCompilado: filtros?.perfilCompilado ?? null,
+    perfilCompilado: filtros?.perfilCompilado
+      ? { ...(filtros.perfilCompilado as object), nivelDirectivo: objetivosPermitenDirectivo(objetivos) }
+      : null,
     versionPerfil: filtros?.versionPerfil ?? 0,
     // Revisión externa 2026-09-05: si una recompilación forzada por cambio
     // de objetivo falló, perfilCompilado sigue con el objetivo viejo -- el

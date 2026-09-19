@@ -171,6 +171,21 @@ function evaluarTarjeta(tarjeta) {
 
 // ── Label de un campo (mismo módulo genérico que los otros adaptadores) ──
 function getLabel(el) {
+  // Verificado en vivo el 2026-09-17: cada pregunta del formulario real vive
+  // en un <div id="pregunta_N" class="mb-3"> con DOS <label> sin `for` (no
+  // calzan con el id del campo, y el propio campo a veces comparte el mismo
+  // id que el div) -- uno .type1 con el ordinal ("Pregunta 1 de 4") y otro
+  // .type2 con el texto real de la pregunta. Sin esto, el fallback genérico
+  // de más abajo terminaba leyendo "Máximo 3.000 caracteres (ingresados: 0)"
+  // como si fuera la pregunta -- la IA respondía sin ver la pregunta real
+  // (docs/revision-2026-09-16.md §8.1). `div[id^="pregunta_"]`, no
+  // `[id^="pregunta_"]` a secas: el propio campo puede tener ese mismo id, y
+  // closest() se fija primero en el propio elemento.
+  const contenedorPregunta = el.closest('div[id^="pregunta_"]');
+  if (contenedorPregunta) {
+    const real = contenedorPregunta.querySelector('label.type2');
+    if (real && real.textContent.trim()) return real.textContent.trim();
+  }
   if (el.id) {
     const lf = document.querySelector('label[for="' + el.id + '"]');
     if (lf) return lf.textContent.trim();
@@ -371,25 +386,73 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
     }
   }
 
+  // Preguntas de selección simple (<select>) -- verificado en vivo el
+  // 2026-09-17: Trabajando también usa un <select> normal para preguntas de
+  // una sola respuesta (ej. "¿Tienes conocimientos en...?" con Sí/No/
+  // Selecciona), no cubierto por los tres loops de arriba (que solo miran
+  // radio/checkbox/[role]) ni por el loop de texto de rellenar() (que
+  // excluye <select> a propósito). Sin este bloque la pregunta quedaba sin
+  // tocar, y el botón de postular del panel se queda deshabilitado hasta
+  // que TODAS las preguntas requeridas tengan respuesta -- la postulación
+  // nunca llegaba a poder enviarse (docs/revision-2026-09-16.md §8.1).
+  const selects = [...panelForm.querySelectorAll('select')].filter(sel => esVisible(sel) && !sel.value);
+  for (const sel of selects) {
+    const opciones = [...sel.options].filter(o => o.value !== '').map(o => ({ el: o, texto: o.textContent.trim() }));
+    if (!opciones.length) continue;
+    // getLabel(), no hallarContenedorPregunta()/textoPreguntaContenedor():
+    // esas dos buscan contenedores con varios radio/checkbox/[role] adentro
+    // (SELECTOR_OPCIONES no incluye <select>), así que nunca encontraban el
+    // div#pregunta_N real -- getLabel() ya sabe leer ese patrón directo.
+    const pregunta = getLabel(sel);
+    const elegida = calcularRespuesta(pregunta, opciones, perfil);
+    if (elegida) {
+      sel.value = elegida.el.value;
+      sel.dispatchEvent(new Event('input', { bubbles: true }));
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      interacciones++;
+      respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
+    } else if (AP.iaDisponible && pregunta.length > 5) {
+      pendientesIA.push({ pregunta, opciones, sel });
+    } else if (pregunta) {
+      respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
+    }
+  }
+
   let analisis = null;
   if (pendientesIA.length) {
     const preguntasParaIA = pendientesIA.map((pd, i) => ({ id: 'o' + i, pregunta: pd.pregunta, opciones: pd.opciones.map(o => o.texto) }));
-    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', '#7C3AED');
+    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', 'trabajando');
     const resultado = await analizarYResponder(contexto, preguntasParaIA);
     analisis = resultado.analisis;
     for (let i = 0; i < pendientesIA.length; i++) {
       const pd = pendientesIA[i];
+      // §8.4 (docs/revision-2026-09-16.md): la IA puede decir que esta
+      // pregunta pide un hecho verificable (licencia, renta...) que no está
+      // en el perfil, en vez de inventar una respuesta -- ver la regla 1b
+      // del prompt en procesar-postulacion/route.ts.
+      const datoFaltante = resultado.datosFaltantes && resultado.datosFaltantes['o' + i];
       const respIA = resultado.respuestas['o' + i];
       let elegida = null;
-      if (respIA) {
+      if (!datoFaltante && respIA) {
         const rNorm = n(respIA);
         elegida = pd.opciones.find(o => rNorm.includes(n(o.texto)) || (n(o.texto).length < 4 && rNorm.startsWith(n(o.texto))));
       }
-      if (elegida && seleccionarOpcion(elegida.el)) {
+      // pd.sel: viene del bloque de <select> de arriba -- seleccionarOpcion()
+      // asume un radio/checkbox/[role] clickeable, y un <option> dentro de un
+      // <select> cerrado no es clickeable ni "visible" para AP.esVisible (los
+      // navegadores no le dan layout propio). Se aplica directo sobre el
+      // <select>, igual que la rama sin IA de arriba.
+      if (elegida && pd.sel) {
+        pd.sel.value = elegida.el.value;
+        pd.sel.dispatchEvent(new Event('input', { bubbles: true }));
+        pd.sel.dispatchEvent(new Event('change', { bubbles: true }));
+        interacciones++;
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
+      } else if (elegida && seleccionarOpcion(elegida.el)) {
         interacciones++;
         respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
       } else {
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante: datoFaltante || null, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
       }
       await sleep(250);
     }
@@ -448,13 +511,16 @@ async function rellenar(contexto) {
   let analisis = analisisDeOpciones;
   if (pendientesTexto.length) {
     const preguntasParaIA = pendientesTexto.map((pd, i) => ({ id: 't' + i, pregunta: pd.labelRaw, opciones: null }));
-    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', '#7C3AED');
+    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', 'trabajando');
     const resultado = await analizarYResponder(contexto, preguntasParaIA);
     if (resultado.analisis) analisis = resultado.analisis;
     for (let i = 0; i < pendientesTexto.length; i++) {
       const pd = pendientesTexto[i];
+      const datoFaltante = resultado.datosFaltantes && resultado.datosFaltantes['t' + i];
       const valIA = resultado.respuestas['t' + i];
-      if (valIA) {
+      if (datoFaltante) {
+        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', respuestaIa: '', vacia: true, datoFaltante, tipo:'texto', el: pd.el, errorIA: null });
+      } else if (valIA) {
         n2++;
         aplicarValorTexto(pd.el, valIA, pd.labelRaw, true, respuestasLog);
       } else if (pd.fallback) {
@@ -490,22 +556,54 @@ function obtenerBotonPostular() {
     .find(el => n(el.textContent || '').includes('postul') && el.offsetParent && !el.disabled) || null;
 }
 
+// ── Confirmación final (docs/revision-2026-09-16.md §8.1) ────────────────
+// Verificado en vivo el 2026-09-17, con sesión real y sin llegar a confirmar
+// una postulación de verdad: después del clic en "Postular"/"Enviar" (con o
+// sin preguntas de por medio), el sitio muestra un SEGUNDO modal --
+// "Confirma tu postulación al cargo" (id="modalConfirmarPostulacion") -- con
+// su propio botón "Postular" (id="botonPostularModalConfirmacion"), ya
+// presente (oculto) en el DOM desde que carga la página. Antes de este fix
+// nada en el código sabía que este paso existía: se asumía éxito apenas se
+// hacía clic en el botón del formulario, y en el portal real quedaba
+// "Confirma tu postulación al cargo" sin resolver -- exactamente lo que
+// encontró el documento (AutoPostula decía "Enviada", trabajando.cl/
+// mis-postulaciones decía "Aún no tienes postulaciones").
+async function confirmarPostulacionFinal() {
+  await sleep(800);
+  const btnConfirmar = document.getElementById('botonPostularModalConfirmacion')
+    || [...document.querySelectorAll('.modal.show button, .modal.show a')]
+      .find(el => n(el.textContent || '') === 'postular' && el.offsetParent && !el.disabled);
+  if (btnConfirmar && btnConfirmar.offsetParent && !btnConfirmar.disabled) {
+    btnConfirmar.click();
+    await sleep(1500);
+    return true;
+  }
+  return false;
+}
+
+// §8.1 punto 2 del arreglo: "el ✓ solo se muestra con evidencia del portal".
+// Antes, un clic sin errores en el botón ya bastaba para marcar "Enviado" --
+// exactamente el hueco que dejó pasar el caso de arriba sin que nada lo
+// notara. Dos señales, cualquiera alcanza: (a) el mismo texto que ya usa
+// este archivo para detectar "ya postulaste" al reabrir un aviso, si
+// aparece en cualquier parte de la página después del clic: o (b) el botón
+// de postular original ya no está clickeable (desapareció, quedó
+// deshabilitado, o cambió de texto) -- una postulación real cambia ese
+// estado; un clic que no confirmó nada, no.
+// ⚠️ La señal (a) no se pudo confirmar palabra por palabra contra un envío
+// real (evitado a propósito para no postular de verdad durante la prueba) --
+// si en el uso real algún envío exitoso NO dispara ninguna de las dos
+// señales, va a quedar registrado como error en vez de "Enviado", nunca al
+// revés (silencioso como "Enviado" sin serlo, que es el bug que esto arregla).
+function huboEvidenciaDeExito() {
+  const texto = n(document.body.innerText || '');
+  if (/ya (te )?postulaste|postulaci[oó]n (ya )?enviada|postulaci[oó]n (recibida|exitosa|realizada)|gracias por postular/.test(texto)) return true;
+  return !obtenerBotonPostular();
+}
+
 // ── Postular ──────────────────────────────────────────────────
 // Devuelve { ok, expirada } -- expirada=true SOLO cuando no hay ningún botón
 // de postular (la oferta ya no existe o no acepta postulantes).
-//
-// ⚠️ SIN VERIFICAR EN VIVO más allá del clic en "Postular": Trabajando exige
-// sesión iniciada para postular (probado: sin sesión, redirige a una
-// pantalla de login de página completa con campos de email/contraseña), así
-// que no se pudo observar el formulario real que aparece después de iniciar
-// sesión -- ni si es un modal de preguntas como Computrabajo, ni si es
-// postulación directa de un clic como Laborum a veces. El código de acá
-// reutiliza el mismo módulo genérico de detección de preguntas que ya usan
-// los otros dos adaptadores (radios/checkboxes/texto dentro del panel), que
-// no depende de las clases particulares del sitio -- pero conviene probar
-// las primeras postulaciones reales con "Revisar antes de enviar" activado
-// en el popup, para confirmar que lee bien el formulario real antes de
-// confiarle el envío automático.
 //
 // Salvaguarda que SÍ es explícita a propósito: si después de hacer clic en
 // "Postular" aparece un input[type=password] en la página, es la pantalla
@@ -575,6 +673,18 @@ async function postular(url, id, titulo, decisionOfertaId) {
         addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
         return { ok: false, expirada: false };
       }
+    } else {
+      // §8.4/§8.5 (docs/revision-2026-09-16.md): sin modo revisión no hay
+      // ningún humano mirando esto antes de enviar -- si la IA marcó que le
+      // falta un hecho verificable (licencia, renta...) que no está en el
+      // perfil, no se manda con eso sin responder.
+      const faltaDato = respuestasLog.find(r => r.datoFaltante);
+      if (faltaDato) {
+        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
+          reason:'Falta "' + faltaDato.datoFaltante + '" en tu perfil para responder bien -- activa "Revisar antes de enviar" o completa tu perfil',
+          respuestas: respuestasLog});
+        return { ok: false, expirada: false };
+      }
     }
 
     const btnEnviar = [...document.querySelectorAll('button, a, input[type=submit]')]
@@ -588,7 +698,16 @@ async function postular(url, id, titulo, decisionOfertaId) {
       await sleep(300);
       btnEnviar.click();
       await sleep(2000);
+      await confirmarPostulacionFinal();
       const respuestasParaLog = respuestasLog.map(r => ({ pregunta:r.pregunta, respuestaIa:r.respuestaIa, respuesta:r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
+      if (!huboEvidenciaDeExito()) {
+        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
+          reason:'El formulario se envió pero el portal nunca confirmó la postulación',
+          respuestas: respuestasParaLog
+        });
+        msg('⚠ No se confirmó: ' + titulo.slice(0,30), '#DC2626');
+        return { ok: false, expirada: false };
+      }
       addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id,
         reason:'Enviado (' + n2 + ' campos)',
         respuestas: respuestasParaLog
@@ -608,6 +727,23 @@ async function postular(url, id, titulo, decisionOfertaId) {
       return { ok: false, expirada: false };
     }
   } else {
+    // §2.10 (docs/revision-2026-09-16.md): sin preguntas, este es el clic que
+    // envía -- con "Revisar antes de enviar" el visto bueno se pide antes.
+    if (AP.cfg && AP.cfg.modoRevision) {
+      msg('⏸ Revisión pendiente…', '#2563EB');
+      const decision = await AP.confirmarAntesDeEnviar(titulo, contexto,
+        'Esta oferta se postula sin preguntas: al confirmar se envía tu CV. ¿Enviar?');
+      if (decision === 'skip') {
+        addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
+        return { ok: false, expirada: false };
+      }
+    }
+    await confirmarPostulacionFinal();
+    if (!huboEvidenciaDeExito()) {
+      addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se hizo clic en Postular pero el portal nunca confirmó la postulación'});
+      msg('⚠ No se confirmó: ' + titulo.slice(0,30), '#DC2626');
+      return { ok: false, expirada: false };
+    }
     addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
     const reportado = await reportarPostulacion({ id, titulo, plataforma: 'Trabajando', url, decisionOfertaId });
     if (!reportado || !reportado.ok) {
@@ -641,9 +777,9 @@ async function activar(tarjeta) {
 
 // ── Escanear ──────────────────────────────────────────────────
 async function escanear() {
-  if (!AP.activo || AP.procesando || !AP.cfg) return;
+  if (!AP.activo || AP.procesando || !AP.cfg) { AP.reportarEscaneoTerminado(); return; }
   const tarjetas = [...document.querySelectorAll('div.result-box')];
-  if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en Trabajando', '#9CA3AF'); return; }
+  if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en Trabajando', '#9CA3AF'); AP.reportarEscaneoTerminado(); return; }
 
   let pendientes = [];
   const titulosVistos = [];
@@ -666,7 +802,7 @@ async function escanear() {
 
     const resultado = evaluarTarjeta(t);
     if (resultado.banda === 'postular') {
-      pendientes.push({t, id, idx, titulo});
+      pendientes.push({t, id, idx, titulo, empresa});
     } else if (resultado.banda === 'gris') {
       AP.vistos.add(id);
       candidatosGris.push({t, id, idx, titulo, url, empresa, resultado});
@@ -685,7 +821,7 @@ async function escanear() {
   // razonamiento completo en computrabajo.js, es el mismo acá.
   for (const cand of candidatosGris) {
     if (!AP.activo) break;
-    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', 'trabajando');
     const btn = await activar(cand.t);
     let resultadoFinal = null;
     let detalleAviso = null;
@@ -700,7 +836,7 @@ async function escanear() {
     const resultado = resultadoFinal || cand.resultado;
 
     if (resultadoFinal && resultadoFinal.banda === 'postular') {
-      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo});
+      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo, empresa: cand.empresa});
     } else if (resultadoFinal && resultadoFinal.banda === 'descartar') {
       conteos.descartar++;
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
@@ -715,6 +851,14 @@ async function escanear() {
       });
     }
   }
+
+  // §2.8 (docs/revision-2026-09-16.md): ver computrabajo.js, es lo mismo acá.
+  pendientes = await AP.quitarDuplicados('Trabajando', pendientes, (p, razon) => {
+    conteos.descartar++;
+    razonesDescartadas.push(razon);
+    AP.vistos.add(p.id);
+    addLog({ts:Date.now(), status:'skip', title:p.titulo, url:'', uid:p.id, reason:AP.formatearRazonCorta(razon)});
+  });
 
   // docs/modo-solo-observar.md §3.2: ver el razonamiento completo en
   // computrabajo.js, es el mismo acá.
@@ -731,20 +875,16 @@ async function escanear() {
 
   if (!pendientes.length) {
     if (siguientePaginaClick(tarjetas.length, botonVerMas)) return; // el MutationObserver retoma solo cuando lleguen las tarjetas nuevas
+    AP.reportarEscaneoTerminado(conteos);
     return;
   }
 
-  // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
+  // §1.3 y docs/rafagas-y-ponerse-al-dia.md §4.1: se pregunta antes de CADA
+  // oferta, no una vez por página; ver el razonamiento completo en
   // computrabajo.js, es el mismo acá.
-  if (!soloObservar) {
-    const verificacion = await AP.puedePostular('Trabajando');
-    if (!verificacion.permitido) {
-      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
-      return;
-    }
-  }
-
   AP.procesando = true;
+  let cortado = false;
+  let intentadas = 0;
   for (const {t, id, titulo} of pendientes) {
     if (!AP.activo) break;
     const a = t.querySelector('h2 a') || t.querySelector('a');
@@ -754,9 +894,15 @@ async function escanear() {
       addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:'Habría postulado — modo solo observar'});
       continue;
     }
+    const verificacion = await AP.puedePostular('Trabajando');
+    if (!verificacion.permitido) {
+      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      cortado = true;
+      break;
+    }
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
-    if (btn) await postular(url, id, titulo);
+    if (btn) { intentadas++; await postular(url, id, titulo); }
     else {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Panel no cargó'});
@@ -765,8 +911,22 @@ async function escanear() {
   }
   AP.procesando = false;
 
+  if (cortado) {
+    // `conteos.postular` era lo que se iba a postular (lo que dijo el resumen de
+    // arriba), no lo que pasó: al cortarse solo cuentan las que se llegaron a postular().
+    // Sin esto la ráfaga reportaría -- y el ícono mostraría -- postulaciones que
+    // nunca se enviaron. No se pagina ni se pisa el aviso rojo con el resumen.
+    conteos.postular = intentadas;
+    AP.reportarEscaneoTerminado(conteos);
+    return;
+  }
+
   if (siguientePaginaClick(tarjetas.length, botonVerMas)) return;
-  msg('Escaneo completo', '#16A34A');
+  AP.reportarEscaneoTerminado(conteos);
+  // §5: el aviso final se quedaba en "Escaneo completo" sin el resumen que sí
+  // muestran los otros dos portales.
+  const resumenFinal = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
+  msg(resumenFinal.texto, resumenFinal.estado);
 }
 
 // ── Postular directo a UNA oferta ya aprobada en banda gris (§8.6) ──────
@@ -786,13 +946,13 @@ async function aplicarDirecto(decisionOfertaId) {
 }
 
 // ── Registro en el núcleo compartido (core.js) ──────────────────
-AP.escanear = escanear;
+AP.escanear = AP.sinReentrada(escanear);
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function() {
   console.log('[AP-TJ] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible);
   if (AP.activo) {
     msg('Activado — escaneando…', '#16A34A');
-    setTimeout(escanear, 1800);
+    setTimeout(() => AP.escanear(), 1800);
   }
 };
 

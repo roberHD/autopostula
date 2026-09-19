@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, FlaskConical, Target, Plus } from "lucide-react";
+import { X, FlaskConical, Target, Plus, MapPin } from "lucide-react";
+import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 
 type PerfilCompilado = {
   version: number;
@@ -29,17 +30,30 @@ export default function FiltrosPage() {
   const [mensajeObjetivo, setMensajeObjetivo] = useState("");
   const [sugerirRetriaje, setSugerirRetriaje] = useState(false);
 
+  // §2.1 (docs/revision-2026-09-16.md): mismo picker que el onboarding, para
+  // que corregir la ubicación después sea tan fácil como declararla la
+  // primera vez.
+  const [ubicacion, setUbicacion] = useState<UbicacionValor>(ubicacionVacia());
+  const [guardandoUbicacion, setGuardandoUbicacion] = useState(false);
+  const [mensajeUbicacion, setMensajeUbicacion] = useState("");
+
   useEffect(() => {
     async function cargar() {
       try {
-        const [resPerfil, resObjetivos] = await Promise.all([
+        const [resPerfil, resObjetivos, resPrefs] = await Promise.all([
           fetch("/api/ai/compilar-perfil"),
           fetch("/api/objetivos"),
+          fetch("/api/preferencias-busqueda"),
         ]);
 
         if (resPerfil.ok) {
           const perfilData = await resPerfil.json();
           setPerfilCompilado(perfilData.perfilCompilado ?? null);
+        }
+
+        if (resPrefs.ok) {
+          const prefsData = await resPrefs.json();
+          if (prefsData?.ubicacionDeclarada) setUbicacion({ ...ubicacionVacia(), ...prefsData.ubicacionDeclarada });
         }
 
         if (resObjetivos.ok) {
@@ -71,14 +85,34 @@ export default function FiltrosPage() {
     try {
       const res = await fetch("/api/ai/compilar-perfil", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) { setMensajeScorer(data.error ?? "No se pudo compilar"); return; }
+      if (!res.ok) { setMensajeScorer(data.error ?? "No se pudo actualizar tu búsqueda"); return; }
       setPerfilCompilado(data.perfilCompilado);
-      setMensajeScorer("Perfil compilado.");
+      setMensajeScorer("Búsqueda actualizada.");
     } catch (err) {
       console.error("Error compilando perfil:", err);
-      setMensajeScorer("No se pudo compilar — revisa la consola");
+      setMensajeScorer("No se pudo actualizar tu búsqueda — revisa la consola");
     } finally {
       setCompilando(false);
+    }
+  }
+
+  async function guardarUbicacion() {
+    setGuardandoUbicacion(true);
+    setMensajeUbicacion("");
+    try {
+      const res = await fetch("/api/preferencias-busqueda", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ubicacionDeclarada: ubicacion }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setMensajeUbicacion(data.error ?? "No se pudo guardar"); return; }
+      setMensajeUbicacion("Guardado. Actualiza tu búsqueda (más abajo) para que la extensión la use.");
+    } catch (err) {
+      console.error("Error guardando ubicación:", err);
+      setMensajeUbicacion("No se pudo guardar — revisa la consola");
+    } finally {
+      setGuardandoUbicacion(false);
     }
   }
 
@@ -105,7 +139,7 @@ export default function FiltrosPage() {
       setMensajeObjetivo(
         data.avisoCompilacion
           ? "Objetivo guardado. " + data.avisoCompilacion
-          : "Objetivo guardado y perfil recompilado."
+          : "Objetivo guardado y búsqueda actualizada."
       );
     } catch (err) {
       console.error("Error guardando objetivo:", err);
@@ -217,25 +251,50 @@ export default function FiltrosPage() {
         </div>
       </div>
 
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.08s", borderColor: "color-mix(in oklch, var(--chart-4, var(--chart-2)) 35%, transparent)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <MapPin size={15} />
+          <p className="ap-section-title" style={{ marginBottom: 0 }}>Ubicación</p>
+        </div>
+        <p className="ap-section-sub">
+          Dónde estás dispuesto a trabajar. Antes esto se adivinaba con IA a partir de tu CV — se
+          declara acá para no equivocarse (agregar una comuna que quieres evitar, u omitir una que sí pediste).
+        </p>
+
+        {mensajeUbicacion && (
+          <p style={{ fontSize: 12.5, color: mensajeUbicacion.startsWith("Guardado") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
+            {mensajeUbicacion}
+          </p>
+        )}
+
+        <UbicacionPicker valor={ubicacion} onChange={setUbicacion} />
+
+        <div style={{ marginTop: 14 }}>
+          <button className="ap-button-ghost" disabled={guardandoUbicacion} onClick={guardarUbicacion}>
+            {guardandoUbicacion ? "Guardando..." : "Guardar ubicación"}
+          </button>
+        </div>
+      </div>
+
       <div className="ap-section ap-animate-in" style={{ animationDelay: "0.1s", borderColor: "color-mix(in oklch, var(--chart-2) 35%, transparent)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <FlaskConical size={15} color="var(--chart-2)" />
           <p className="ap-section-title" style={{ marginBottom: 0 }}>Perfil de búsqueda</p>
         </div>
         <p className="ap-section-sub">
-          Compila un perfil con IA a partir de tu CV y tus decisiones, y puntúa cada oferta con más
-          matices (sinónimos, vetos con razón, ubicación).
+          Es lo que la extensión usa para decidir a qué ofertas postular: los cargos que buscas, lo que
+          descartas y dónde. Se arma con tu CV, tus objetivos y tus decisiones.
         </p>
 
         {mensajeScorer && (
-          <p style={{ fontSize: 12.5, color: mensajeScorer.includes("compilado") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
+          <p style={{ fontSize: 12.5, color: mensajeScorer.includes("actualizada") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
             {mensajeScorer}
           </p>
         )}
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: perfilCompilado ? 16 : 0, flexWrap: "wrap" }}>
           <button className="ap-button-ghost" onClick={compilarPerfil} disabled={compilando}>
-            {compilando ? "Compilando..." : perfilCompilado ? "Recompilar perfil" : "Compilar mi perfil"}
+            {compilando ? "Actualizando..." : perfilCompilado ? "Actualizar mi búsqueda" : "Armar mi búsqueda"}
           </button>
         </div>
 

@@ -9,7 +9,10 @@ async function getUserFromToken(request: Request) {
   return prisma.user.findUnique({ where: { apiToken: token } });
 }
 
-const ESTADOS_VALIDOS = ["VISTO", "EN_PROCESO", "FINALISTA", "FINALIZADO", "RECHAZADO"];
+// ENVIADO solo tiene sentido como "el portal confirma que sí llegó" para una
+// postulación que AutoPostula dejó INCOMPLETA (ver más abajo); para cualquier
+// otra es el estado con el que ya nació y no cambia nada.
+const ESTADOS_VALIDOS = ["ENVIADO", "VISTO", "EN_PROCESO", "FINALISTA", "FINALIZADO", "RECHAZADO"];
 
 export async function PATCH(request: Request) {
   try {
@@ -67,9 +70,18 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ id: application.id, sinCambios: true });
     }
 
+    // docs/revision-2026-09-16.md §8.2/§8.3: "Postulado" en "Mis postulaciones"
+    // del portal es la evidencia que faltaba -- si AutoPostula la había dejado
+    // INCOMPLETA (no vio la confirmación) pero el portal la muestra, sí llegó.
+    // Solo INCOMPLETA puede pasar a ENVIADO: nunca se retrocede una postulación
+    // que ya avanzó (VISTO, EN_PROCESO...) porque el portal diga "Postulado".
+    if (estado === "ENVIADO" && application.estadoActual !== "INCOMPLETA") {
+      return NextResponse.json({ id: application.id, sinCambios: true });
+    }
+
     await prisma.application.update({
       where: { id: application.id },
-      data: { estadoActual: estado as any },
+      data: { estadoActual: estado as any, ...(estado === "ENVIADO" ? { notaAtencion: null } : {}) },
     });
 
     await prisma.applicationStatusHistory.create({

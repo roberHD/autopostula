@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { limpiarTitulo } from "@/lib/text";
+import { resumenUltimaRafaga, estimadoDuracionRafagaMs } from "@/lib/rafagas";
+import { modoAutomatico, motivoInactivo, PRUEBA_TOTAL } from "@/lib/estado-automatico";
 
 /**
  * Estado de la máquina, para la barra que va arriba de todo el dashboard.
@@ -18,15 +21,12 @@ export async function GET() {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  const [user, subscripcion, cupo, ultima, portalesActivos] = await Promise.all([
+  const [user, subscripcion, cupo, ultima, portalesActivos, rafaga, estimadoRafagaMs] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { rol: true, busquedaAutomaticaActiva: true },
+      select: { rol: true, busquedaAutomaticaActiva: true, ultimaRafagaEn: true, pruebaAutomaticaRestantes: true },
     }),
-    prisma.subscription.findFirst({
-      where: { userId, estado: "ACTIVA" },
-      include: { plan: true },
-    }),
+    obtenerSubscripcionVigente(userId),
     obtenerEstadoPostulaciones(userId),
     prisma.application.findFirst({
       where: { userId },
@@ -38,24 +38,28 @@ export async function GET() {
       },
     }),
     prisma.platformAccount.count({ where: { userId, activa: true } }),
+    resumenUltimaRafaga(userId),
+    estimadoDuracionRafagaMs(userId),
   ]);
 
-  // Mismo criterio que /api/account/estado-automatico: ADMIN no depende de
-  // tener un plan armado, para poder probar sin montar Plan + Subscription.
-  const disponibleEnPlan =
-    user?.rol === "ADMIN" ? true : (subscripcion?.plan.busquedaAutomatica ?? false);
+  // Mismo veredicto que /api/account/estado-automatico (lib/estado-automatico.ts):
+  // ADMIN no depende de tener un plan armado, y una cuenta gratis con prueba por
+  // gastar corre ráfagas hasta enviar las 5 (docs/rafagas-y-ponerse-al-dia.md §4.1).
+  const modo = modoAutomatico({
+    esAdmin: user?.rol === "ADMIN",
+    planIncluyeBusquedaAutomatica: subscripcion?.plan.busquedaAutomatica ?? false,
+    pruebaRestantes: user?.pruebaAutomaticaRestantes ?? 0,
+  });
+  // Solo del plan: "Ponerme al día ahora" no existe en el plan gratis, ni en la prueba.
+  const disponibleEnPlan = modo === "premium";
 
   const pausadaPorTi = user?.busquedaAutomaticaActiva === false;
 
-  // "Postulando" solo si se cumplen las tres: el plan lo permite, no está
-  // pausada a mano, y todavía queda cupo. Si falta una, la barra dice cuál.
-  const activa = disponibleEnPlan && !pausadaPorTi && cupo.permitido && portalesActivos > 0;
+  // "Postulando" solo si se cumplen las tres: el plan (o la prueba) lo permite,
+  // no está pausada a mano, y todavía queda cupo. Si falta una, la barra dice cuál.
+  const activa = modo !== "manual" && !pausadaPorTi && cupo.permitido && portalesActivos > 0;
 
-  let motivo: string | null = null;
-  if (!disponibleEnPlan) motivo = "sin-plan";
-  else if (pausadaPorTi) motivo = "pausada";
-  else if (!cupo.permitido) motivo = "sin-cupo";
-  else if (portalesActivos === 0) motivo = "sin-portales";
+  const motivo = motivoInactivo({ modo, pausadaPorTi, cupoPermitido: cupo.permitido, portalesActivos });
 
   const usadas =
     cupo.limite === null ? null : Math.max(0, cupo.limite - (cupo.restantes ?? 0));
@@ -64,9 +68,23 @@ export async function GET() {
     activa,
     motivo,
     disponibleEnPlan,
+    // premium | prueba | manual (§4.1). Con "prueba", cuántas le quedan de las 5.
+    modo,
+    pruebaRestantes: modo === "prueba" ? (user?.pruebaAutomaticaRestantes ?? 0) : null,
+    pruebaTotal: PRUEBA_TOTAL,
     pausadaPorTi,
     portalesActivos,
     cupo: { usadas, limite: cupo.limite, restantes: cupo.restantes },
+    // Cuándo se puso al día por última vez (hora del servidor) y qué encontró
+    // -- lo lee la tarjeta del Inicio. `resumen` es null si la fila ya se purgó
+    // (a los 90 días) pero la fecha sigue en el usuario.
+    // Mediana de las últimas 5 ráfagas que terminaron (docs/rafagas-y-ponerse-al-dia.md
+    // §3.6), para decirle a la persona cuánto suele tardar "Ponerme al día
+    // ahora". null si todavía no hay ninguna: no se inventa una duración.
+    estimadoRafagaMs,
+    ultimaRafaga: user?.ultimaRafagaEn
+      ? { en: user.ultimaRafagaEn.toISOString(), resumen: rafaga }
+      : null,
     ultima: ultima
       ? {
           titulo: limpiarTitulo(ultima.jobOffer.titulo),

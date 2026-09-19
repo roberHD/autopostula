@@ -414,9 +414,261 @@ chrome.runtime.onMessage.addListener(msg => {
   }
 });
 
+// ── Última puesta al día (docs/rafagas-y-ponerse-al-dia.md §3.5) ────────
+// textoRafaga y haceCuanto son puras a propósito (sin DOM ni chrome.*):
+// verificar-rafagas.js las extrae de este archivo y las prueba tal cual.
+function haceCuanto(ms) {
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'hace unos segundos';
+  if (min < 60) return 'hace ' + min + ' min';
+  const h = Math.floor(min / 60);
+  if (h < 24) return 'hace ' + h + ' h';
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'hace 1 día' : 'hace ' + d + ' días';
+}
+
+// Devuelve { titulo, detalle } o null si no hay nada que mostrar. "Te pusimos
+// al día hace 12 min" + "7 postulaciones · 14 descartadas". En modo solo
+// observar nada se postuló, y decir "0 postulaciones" sería mentir por
+// omisión: se cuenta lo que HABRÍA postulado.
+function textoRafaga(rafaga, ahora) {
+  if (!rafaga || !rafaga.estado) return null;
+
+  // Mismo umbral que retomarORafagaInterrumpida (background.js): un "en_curso"
+  // sin latido reciente es una ráfaga que el service worker perdió sin llegar
+  // a marcarla -- decir que se está poniendo al día sería mentira, así que se
+  // muestra como lo que va a terminar siendo: interrumpida.
+  const LATIDO_MAX_MS = 10 * 60000;
+  const viva = rafaga.estado === 'en_curso' && ahora - (rafaga.latido || rafaga.inicio) < LATIDO_MAX_MS;
+  if (viva) {
+    const total = (rafaga.pasos || []).length;
+    const paso = Math.min((rafaga.pasoActual || 0) + 1, total);
+    return { titulo: 'Poniéndose al día ahora…', detalle: total ? 'Paso ' + paso + ' de ' + total : '' };
+  }
+  const estado = rafaga.estado === 'en_curso' ? 'interrumpida' : rafaga.estado;
+
+  const c = rafaga.conteos || {};
+  const postuladas = c.postuladas || 0;
+  const observadas = c.observadas || 0;
+  const partes = [];
+  if (postuladas === 0 && observadas > 0) partes.push('habría postulado a ' + observadas);
+  else partes.push(postuladas + (postuladas === 1 ? ' postulación' : ' postulaciones'));
+  if (c.gris > 0) partes.push(c.gris + ' por decidir');
+  if (c.descartadas > 0) partes.push(c.descartadas + (c.descartadas === 1 ? ' descartada' : ' descartadas'));
+  // Una búsqueda que no terminó (venció el seguro de tiempo) se dice, no se
+  // esconde: si no, "0 postulaciones" parece "no había nada" y era "no llegó".
+  if (c.errores > 0) partes.push(c.errores + (c.errores === 1 ? ' búsqueda no terminó' : ' búsquedas no terminaron'));
+
+  const cuando = haceCuanto(ahora - (rafaga.fin || rafaga.latido || rafaga.inicio));
+  const titulo = estado === 'interrumpida'
+    ? 'La última puesta al día se cortó ' + cuando
+    : 'Te pusimos al día ' + cuando;
+  return { titulo, detalle: partes.join(' · ') };
+}
+
+function renderRafaga(rafaga) {
+  const fila = document.getElementById('rafaga-row');
+  if (!fila) return;
+  const texto = textoRafaga(rafaga, Date.now());
+  fila.classList.toggle('hidden', !texto);
+  if (!texto) return;
+  document.getElementById('rafaga-titulo').textContent = texto.titulo;
+  const detalle = document.getElementById('rafaga-detalle');
+  detalle.textContent = texto.detalle;
+  detalle.classList.toggle('hidden', !texto.detalle);
+}
+
+// ── "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6) ─────────
+// Los textos son los mismos que en el panel (backend/lib/texto-rafaga.ts): la
+// persona ve el botón en los dos lados y tienen que explicar lo mismo.
+// verificar-rafagas.js compara este archivo contra ese.
+
+// "unos 8 minutos". No promete un número de ofertas: no se sabe cuántas hay
+// hasta escanear -- solo cuánto suele tardar, que sí se sabe.
+function duracionAproximada(ms) {
+  if (!ms || ms <= 0) return 'unos minutos';
+  if (ms < 60000) return 'menos de un minuto';
+  const min = Math.round(ms / 60000);
+  if (min === 1) return 'un minuto';
+  if (min >= 60) return 'más de una hora';
+  return 'unos ' + min + ' minutos';
+}
+
+function textoEstimadoPonerse(ms) {
+  return ms ? 'Suele tardar ' + duracionAproximada(ms) + '.' : 'Puede tardar unos minutos.';
+}
+
+// Por qué no arrancó. Las claves son las que devuelve background.js.
+const MOTIVOS_PONERSE_AL_DIA = {
+  en_curso: 'Ya se está poniendo al día. Te avisamos en el ícono de la extensión.',
+  reciente: 'Te pusimos al día hace muy poco. Vuelve a intentarlo en unos minutos.',
+  sin_plan: 'Ponerte al día ahora es parte de Premium.',
+  pausada: 'La búsqueda automática está en pausa. Reanúdala desde tu panel.',
+  sin_cupo: 'Ya usaste tus postulaciones de este mes. Se reinicia el día 1.',
+  sin_portales: 'Conecta un portal para empezar.',
+  sin_objetivo: 'Cuéntanos qué buscas, en tu panel, para poder empezar.',
+  sin_token: 'Conecta la extensión con tu cuenta desde tu panel.',
+  sin_conexion: 'No pudimos consultar tu cuenta. Revisa tu conexión e inténtalo de nuevo.',
+  extension_no_responde: 'La extensión no respondió. Recarga esta página e inténtalo de nuevo.',
+};
+const MOTIVO_GENERICO_PONERSE = 'No se pudo poner al día ahora. Inténtalo de nuevo en unos minutos.';
+const TEXTO_EMPEZO_PONERSE = 'Empezó. Puedes cerrar esto: te avisamos en el ícono de la extensión.';
+
+// Estos motivos pueden pasar (mala conexión, un worker que se reinició): tiene
+// sentido dejar volver a apretar. Los demás no cambian por apretar de nuevo.
+const MOTIVOS_REINTENTABLES_PONERSE = ['sin_conexion', 'extension_no_responde'];
+
+function textoMotivoPonerse(motivo) {
+  return (motivo && MOTIVOS_PONERSE_AL_DIA[motivo]) || MOTIVO_GENERICO_PONERSE;
+}
+
+// { deshabilitado, hint } o null si la fila no se muestra: en una cuenta
+// gratis el botón ni aparece (§3.6). Bloqueado se ve, deshabilitado, con la
+// razón debajo -- más útil que esconderlo y dejar a la persona sin saber qué
+// hacer. Habilitado dice cuánto suele tardar.
+function estadoBotonPonerse(estado) {
+  if (!estado || !estado.mostrar) return null;
+  if (estado.bloqueo) return { deshabilitado: true, hint: textoMotivoPonerse(estado.bloqueo) };
+  return { deshabilitado: false, hint: textoEstimadoPonerse(estado.estimadoMs) };
+}
+
+// ── La prueba de 5 postulaciones automáticas (docs/rafagas-y-ponerse-al-dia.md §4.1) ──
+// Las mismas palabras que el panel y el correo de fin de prueba
+// (backend/lib/texto-rafaga.ts): es la misma promesa dicha en tres lugares.
+// verificar-rafagas.js compara este bloque contra ese archivo.
+
+// Cuántas lleva, no cuántas quedan: "3 de 5". Ancla `restantes` a [0, total]
+// para que un dato raro nunca dibuje "7 de 5".
+function textoPruebaEnCurso(restantes, total) {
+  const enviadas = Math.max(0, Math.min(total, total - restantes));
+  return 'Prueba automática: ' + enviadas + ' de ' + total + ' postulaciones';
+}
+
+function textoPruebaTerminada(total) {
+  return 'Tu prueba terminó: AutoPostula envió ' + total + ' postulaciones sin que entraras a ningún portal.';
+}
+
+const TEXTO_DESPUES_DE_LA_PRUEBA =
+  'Con Premium sigue así, cada vez que abres tu computador. Con el plan gratis, entra a Computrabajo, Laborum o Trabajando y la extensión postula por ti.';
+const TEXTO_PASAR_A_PREMIUM = 'Pasar a Premium';
+const RUTA_VER_LAS_DE_PRUEBA = '/dashboard/historial?filtro=prueba';
+
+function textoVerLasDePrueba(total) {
+  return 'Ver las ' + total;
+}
+
+// `prueba` es lo que arma background.js (pruebaDeEstado): null si no aplica
+// (Premium, o un servidor anterior a la prueba), { estado: 'en_curso', restantes,
+// total } mientras dura, o { estado: 'terminada', total }.
+function textoPrueba(prueba) {
+  if (!prueba) return null;
+  if (prueba.estado === 'en_curso') {
+    return { titulo: textoPruebaEnCurso(prueba.restantes, prueba.total), detalle: '', enlaces: null };
+  }
+  if (prueba.estado === 'terminada') {
+    return {
+      titulo: textoPruebaTerminada(prueba.total),
+      detalle: TEXTO_DESPUES_DE_LA_PRUEBA,
+      enlaces: [
+        { texto: textoVerLasDePrueba(prueba.total), ruta: RUTA_VER_LAS_DE_PRUEBA },
+        { texto: TEXTO_PASAR_A_PREMIUM, ruta: '/dashboard/premium' },
+      ],
+    };
+  }
+  return null;
+}
+
+function renderPrueba(prueba) {
+  const fila = document.getElementById('prueba-row');
+  if (!fila) return;
+  const t = textoPrueba(prueba);
+  fila.classList.toggle('hidden', !t);
+  if (!t) return;
+  document.getElementById('prueba-titulo').textContent = t.titulo;
+  const detalle = document.getElementById('prueba-detalle');
+  detalle.textContent = t.detalle;
+  detalle.classList.toggle('hidden', !t.detalle);
+  const enlaces = document.getElementById('prueba-links');
+  enlaces.classList.toggle('hidden', !t.enlaces);
+  if (!t.enlaces) return;
+  [['prueba-ver', t.enlaces[0]], ['prueba-premium', t.enlaces[1]]].forEach(([id, e]) => {
+    const a = document.getElementById(id);
+    a.textContent = e.texto;
+    a.href = BACKEND_URL + e.ruta;
+  });
+}
+
+function renderPonerse(estado) {
+  // La prueba viene en la misma respuesta (una sola consulta al servidor) y se
+  // muestra aunque el botón no: es lo único automático de una cuenta gratis.
+  renderPrueba(estado && estado.prueba);
+  const fila = document.getElementById('ponerse-row');
+  if (!fila) return;
+  const e = estadoBotonPonerse(estado);
+  fila.classList.toggle('hidden', !e);
+  if (!e) return;
+  document.getElementById('ponerse-btn').disabled = e.deshabilitado;
+  document.getElementById('ponerse-hint').textContent = e.hint;
+}
+
+function cargarEstadoPonerse() {
+  try {
+    chrome.runtime.sendMessage({ type: 'ESTADO_PONERSE_AL_DIA' }, (estado) => {
+      if (chrome.runtime.lastError) return; // el worker no contestó: la fila queda como estaba
+      renderPonerse(estado);
+    });
+  } catch (e) { /* popup sin runtime (no debería pasar) */ }
+}
+
+function apretarPonerse() {
+  const boton = document.getElementById('ponerse-btn');
+  const hint = document.getElementById('ponerse-hint');
+  if (!boton || !hint) return;
+  boton.disabled = true;
+  hint.textContent = 'Empezando…';
+  chrome.runtime.sendMessage({ type: 'PONERSE_AL_DIA' }, (respuesta) => {
+    if (chrome.runtime.lastError || !respuesta) {
+      hint.textContent = textoMotivoPonerse('extension_no_responde');
+      boton.disabled = false;
+      return;
+    }
+    if (respuesta.ok) {
+      hint.textContent = TEXTO_EMPEZO_PONERSE;
+      return; // queda deshabilitado: ya está corriendo
+    }
+    hint.textContent = textoMotivoPonerse(respuesta.motivo);
+    boton.disabled = !MOTIVOS_REINTENTABLES_PONERSE.includes(respuesta.motivo);
+  });
+}
+
+// El número del ícono (background.js) dice "pasó algo"; abrir el popup es
+// verlo, así que se limpia. La línea de arriba sigue contando la última
+// ráfaga aunque el número ya no esté.
+function limpiarInsigniaRafaga() {
+  try { chrome.action.setBadgeText({ text: '' }); } catch (e) { /* sin chrome.action (no debería pasar) */ }
+}
+
+// Si una ráfaga termina con el popup abierto, se actualiza sola la línea y
+// el número que acaba de aparecer se limpia: la persona ya lo está mirando.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.rafaga) {
+    renderRafaga(changes.rafaga.newValue);
+    limpiarInsigniaRafaga();
+    // Cada paso de una ráfaga en curso también cambia `rafaga`, pero el botón
+    // solo tiene algo nuevo que decir cuando terminó (vuelve el enfriamiento).
+    const nueva = changes.rafaga.newValue;
+    if (nueva && nueva.estado !== 'en_curso') cargarEstadoPonerse();
+  }
+});
+
 // ── Cargar estado ──────────────────────────────────────────────
+document.getElementById('ponerse-btn')?.addEventListener('click', apretarPonerse);
+
 function loadState() {
-  chrome.storage.local.get(['config', 'active', 'log', 'cvTexto'], data => {
+  chrome.storage.local.get(['config', 'active', 'log', 'cvTexto', 'rafaga'], data => {
+    renderRafaga(data.rafaga);
+    limpiarInsigniaRafaga();
+    cargarEstadoPonerse();
     const cfg = data.config || {};
 
     filtrosBusquedaRemoto = cfg.filtrosBusqueda || { modalidad: 'cualquiera', jornada: 'cualquiera' };

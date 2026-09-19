@@ -1,6 +1,6 @@
 # Documentos de diseño de AutoPostula
 
-> Índice y estado del trabajo. **Actualizado: 2026-09-16.**
+> Índice y estado del trabajo. **Actualizado: 2026-09-19.**
 > Si vas a implementar algo, empieza por acá: dice qué está hecho, qué falta y en qué orden.
 
 > 🔴 **Antes que cualquier otra cosa: [`revision-2026-09-16.md`](revision-2026-09-16.md).** Una cuenta
@@ -22,6 +22,9 @@
 | [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Pendiente — ⚠️ verificado el 16-09: **son los 3 portales**, Computrabajo tampoco sincroniza (revisión §8.2) |
 | [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente — verificado el 16-09: la parte A no está |
 | [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | 🔴 **Prioridad 1** |
+| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | 🔨 En curso — pasos 1 a 9 hechos; solo el 10 pendiente |
+| [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 💡 Propuesta — va después de la revisión del 16-09 |
+| [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | 🔨 Pendiente — decidido el 19-09 |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -126,6 +129,24 @@ Va antes que todo lo demás. Los pasos 1 a 4 de su §6 (sin perfil no se postula
 modo prueba, límites antes de enviar, motor nuevo para todos) salen juntos en la misma versión de la
 extensión, **antes de cualquier publicidad**.
 
+### 0b. Ráfagas — [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md)
+
+Justo después de la Fase 1. Sus pasos 1 y 2 (la alarma que se reinicia y la ráfaga como máquina de
+estados) son bugs latentes de la búsqueda automática actual, no solo una función nueva. El permiso
+`power` obliga a publicar otra versión en la tienda: conviene que salga en la misma que la Fase 1.
+
+**Avance (2026-09-19):** pasos 1 a 9 hechos — alarma que ya no se reinicia, ráfaga como máquina de
+estados persistida, disparadores reales con umbral de 3 h, `chrome.power` con tope de 25 min (el
+permiso ya está en el manifest), el registro de cada ráfaga en el backend (`Rafaga`,
+`/api/extension/rafaga`, purga a 90 días), y que la persona se entere: número en el ícono, línea en
+el popup y tarjeta del Inicio ("Última puesta al día: hoy 09:14"), y el botón "Ponerme al día ahora"
+(solo Premium, en el popup y en el panel), y la prueba de 5 postulaciones automáticas del plan
+gratis (una ráfaga de inmediato al activar la postulación, el contador en el popup y el panel, el corte
+en medio al llegar a 5, "Ver las 5" en el historial y el correo de fin de prueba) y que lo aprobado en
+"Por decidir" vaya primero en cada ráfaga y cuente en su resumen (se envía en todos los planes, no solo en
+Premium), y el recordatorio por correo cuando lleva 48 h sin ponerse al día (solo Premium, un correo cada
+72 h como máximo, con baja en un clic y sin iniciar sesión). Queda el 10: textos.
+
 ### 1. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 
 El paso 1 (§3, capturar `respuestaIa`/`fueEditada` de verdad) ya está — era chico y urgente,
@@ -149,11 +170,13 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 | Tarea | Estado | Bloquea a |
 |---|---|---|
 | Revisión legal de privacidad y términos | ⏸ Con el abogado | Chrome Web Store |
-| Definir la política de devolución (`§7.2` de Términos, hoy en borrador) | ⏸ Con el abogado | Chrome Web Store |
+| Definir la política de devolución (`§7.2` de Términos, hoy en borrador), **ahora para pases** | ⏸ Con el abogado | Cobrar de verdad |
+| **Inicio de actividades en el SII** y cómo se emiten las boletas | ⚠️ Lo hace Roberto | Cobrar de verdad: desde 2025 toda pasarela lo exige |
 | Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ✅ Resuelto en `323f2a4` | Recuperación de contraseña real |
-| Cuenta de comercio Flow aprobada + `FLOW_SANDBOX=false` | ⚠️ Verificar | Cobrar de verdad |
-| Plan de Flow con el `urlCallback` del dominio propio | ⚠️ Verificar | Renovaciones |
-| Ficha y envío a la Chrome Web Store | Pendiente | — |
+| Cuenta de comercio Flow aprobada + `FLOW_SANDBOX=false` | ⚠️ Verificar — como **persona natural**, solo pagos únicos | Cobrar de verdad |
+| Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | 🔨 Pendiente | Cobrar de verdad: la suscripción actual no funciona sin empresa |
+| ~~Plan de Flow con el `urlCallback` del dominio propio~~ | Ya no aplica: sin suscripción no hay plan en Flow | — |
+| Ficha y envío a la Chrome Web Store | ✅ Publicada | — |
 
 > **Plazo legal real:** la **Ley 21.719** (protección de datos personales) entra en vigencia a
 > fines de 2026 y es bastante más exigente que la 19.628 — ver `preguntas-abogado.md` §B. Es la

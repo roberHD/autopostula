@@ -9,6 +9,8 @@ export type RazonEstructurada =
   | { tipo: "sin_rol" }
   | { tipo: "veto"; patron: string; razon: string; donde: "titulo" | "empresa" | "cuerpo" }
   | { tipo: "ubicacion"; ofertaEn: string | null; buscadas: string[] }
+  | { tipo: "nivel"; termino: string; certeza?: "desconocida" }
+  | { tipo: "duplicado"; fecha: string | null }
   | { tipo: "senal"; patron: string; delta: number }
   | { tipo: "sin_senales" };
 
@@ -23,7 +25,7 @@ export function esRazonPositiva(r: unknown): boolean | null {
   const razon = r as RazonEstructurada;
   if (razon.tipo === "rol") return true;
   if (razon.tipo === "senal") return razon.delta >= 0;
-  if (razon.tipo === "sin_rol" || razon.tipo === "veto" || razon.tipo === "ubicacion" || razon.tipo === "sin_senales") return false;
+  if (razon.tipo === "sin_rol" || razon.tipo === "veto" || razon.tipo === "ubicacion" || razon.tipo === "nivel" || razon.tipo === "duplicado" || razon.tipo === "sin_senales") return false;
   return null;
 }
 
@@ -44,6 +46,14 @@ export function formatearRazon(r: unknown): string {
       return razon.ofertaEn
         ? `${razon.ofertaEn} no está en tus comunas${razon.buscadas?.length ? ` (buscas ${razon.buscadas.join(", ")})` : ""}`
         : "fuera de las comunas que buscas";
+    case "nivel":
+      return razon.certeza === "desconocida"
+        ? `es un cargo de jefatura o dirección ("${razon.termino}") y no está claro si buscas ese nivel`
+        : `es un cargo de jefatura o dirección ("${razon.termino}") y buscas otro nivel`;
+    case "duplicado":
+      return razon.fecha
+        ? `ya postulaste a este mismo cargo en esta empresa el ${new Date(razon.fecha).toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit" })}`
+        : "este mismo cargo de esta empresa ya apareció en este escaneo";
     case "senal":
       return `${razon.delta >= 0 ? "+" : ""}${razon.delta} por "${razon.patron}"`;
     case "sin_senales":

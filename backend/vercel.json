@@ -4,6 +4,14 @@
     {
       "path": "/api/cron/purgar-avistamientos",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/avisos-pase",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/recordatorio-rafaga",
+      "schedule": "0 14 * * *"
     }
   ]
 }

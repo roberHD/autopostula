@@ -282,7 +282,7 @@ async function rellenarYEnviarPreguntas(contexto) {
     return { grupo, id };
   });
 
-  msg(preguntasIA.length ? 'IA respondiendo ' + preguntasIA.length + ' pregunta(s)…' : 'Analizando aviso…', '#7C3AED');
+  msg(preguntasIA.length ? 'IA respondiendo ' + preguntasIA.length + ' pregunta(s)…' : 'Analizando aviso…', 'trabajando');
   const resultado = await analizarYResponder(contexto, preguntasIA);
   const analisis = resultado.analisis;
 
@@ -290,8 +290,15 @@ async function rellenarYEnviarPreguntas(contexto) {
   const respuestasLog = [];
 
   for (const info of infoTextareas) {
-    const val = info.id ? resultado.respuestas[info.id] : null;
-    if (val) {
+    // §8.4 (docs/revision-2026-09-16.md): la IA puede decir que esta
+    // pregunta pide un hecho verificable (licencia, renta...) que no está
+    // en el perfil, en vez de inventar una respuesta -- ver la regla 1b del
+    // prompt en procesar-postulacion/route.ts.
+    const datoFaltante = info.id && resultado.datosFaltantes && resultado.datosFaltantes[info.id];
+    const val = (!datoFaltante && info.id) ? resultado.respuestas[info.id] : null;
+    if (datoFaltante) {
+      respuestasLog.push({ pregunta: info.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante, tipo: 'texto', el: info.ta, errorIA: null });
+    } else if (val) {
       const valLimitado = limitarTexto(val, info.ta);
       info.ta.focus();
       setVal(info.ta, valLimitado);
@@ -315,7 +322,8 @@ async function rellenarYEnviarPreguntas(contexto) {
   // Preguntas de radio (ej: "Tipo de documento") — si quedan sin responder,
   // Laborum nunca habilita el botón de enviar aunque el resto esté completo.
   for (const info of infoGrupos) {
-    const respIA = info.id ? resultado.respuestas[info.id] : null;
+    const datoFaltante = info.id && resultado.datosFaltantes && resultado.datosFaltantes[info.id];
+    const respIA = (!datoFaltante && info.id) ? resultado.respuestas[info.id] : null;
     let elegida = null;
     if (respIA) {
       const rNorm = n(respIA);
@@ -325,7 +333,7 @@ async function rellenarYEnviarPreguntas(contexto) {
       elegida.el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
       respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, fueIA: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: elegida.el });
     } else {
-      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: null, errorIA: resultado.error });
+      respuestasLog.push({ pregunta: info.grupo.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante: datoFaltante || null, tipo: 'opcion', opciones: info.grupo.opciones, elegidoEl: null, errorIA: resultado.error });
     }
     await sleep(300);
   }
@@ -334,6 +342,16 @@ async function rellenarYEnviarPreguntas(contexto) {
     msg('⏸ Revisión pendiente…', '#2563EB');
     const decision = await mostrarRevision(document.querySelector('h1')?.textContent || 'Oferta', respuestasLog, contexto);
     if (decision === 'skip') return { respuestasLog, saltada: true };
+  } else {
+    // §8.4 (docs/revision-2026-09-16.md): sin modo revisión no hay ningún
+    // humano mirando esto antes de enviar. El botón deshabilitado de Laborum
+    // ya frena la mayoría de los casos (§ más abajo), pero si el campo no
+    // era estrictamente obligatorio para el sitio, un dato faltante igual
+    // podría colarse vacío -- se corta acá explícito, sin depender de eso.
+    const faltaDato = respuestasLog.find(r => r.datoFaltante);
+    if (faltaDato) {
+      return { respuestasLog, errorEnvio: 'Falta "' + faltaDato.datoFaltante + '" en tu perfil para responder bien -- activa "Revisar antes de enviar" o completa tu perfil' };
+    }
   }
 
   // El botón "Responder" está fuera del <form> en el DOM (es un elemento
@@ -396,6 +414,20 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
   }
 
   if (!AP.activo) return { ok: false, expirada: false };
+
+  // §2.10 (docs/revision-2026-09-16.md): "Postulación rápida" se envía con
+  // este mismo clic y no pasa por ningún formulario, así que con "Revisar
+  // antes de enviar" el visto bueno se pide ANTES. Las que abren el modal de
+  // preguntas ("Postularme") ya tienen su propia revisión más abajo.
+  if (AP.cfg && AP.cfg.modoRevision && n(btn.textContent).includes('postulacion rapida')) {
+    msg('⏸ Revisión pendiente…', '#2563EB');
+    const decision = await AP.confirmarAntesDeEnviar(titulo, extraerTextoAviso(),
+      'Esta oferta se postula con un clic, sin preguntas: al confirmar se envía tu CV. ¿Enviar?');
+    if (decision === 'skip') {
+      addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: 'Saltada en revisión manual' });
+      return { ok: false, expirada: false };
+    }
+  }
 
   btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
   await sleep(400);
@@ -489,6 +521,17 @@ async function resolverEtapa2Gris(pendiente) {
       titulo: pendiente.titulo, empresa: pendiente.empresa, cuerpo, ubicacion: pendiente.ubicacion || '',
     });
 
+    // §2.8: la revisión de una gris que resuelve a postular tampoco puede
+    // repetir un cargo que ya se postuló con otro id.
+    if (resultadoFinal.banda === 'postular') {
+      let razonDuplicado = null;
+      const unicas = await AP.quitarDuplicados('Laborum', [pendiente], (p, razon) => { razonDuplicado = razon; });
+      if (!unicas.length) {
+        resultadoFinal.banda = 'descartar';
+        resultadoFinal.razones = [razonDuplicado];
+      }
+    }
+
     if (resultadoFinal.banda === 'postular') {
       AP.procesando = true;
       await postularEnPagina(pendiente.id, pendiente.titulo, location.href);
@@ -512,12 +555,17 @@ async function resolverEtapa2Gris(pendiente) {
   if (history.length > 1) {
     history.back();
     setTimeout(() => { if (AP.activo) escanear(); }, 1800);
+  } else {
+    // No hay a dónde volver (caso raro: pestaña abierta directo en el
+    // detalle) -- sin esto el paso de la ráfaga se queda esperando un
+    // ESCANEO_TERMINADO que nunca llega hasta que vence el seguro de tiempo.
+    AP.reportarEscaneoTerminado();
   }
 }
 
 // ── Escanear el listado ────────────────────────────────────────────
 async function escanear() {
-  if (!AP.activo || AP.procesando || !AP.cfg) return;
+  if (!AP.activo || AP.procesando || !AP.cfg) { AP.reportarEscaneoTerminado(); return; }
 
   // ¿Esta página de detalle es la vuelta de haber ido a revisar una gris
   // (Etapa 2), y no una navegación normal a postular? Se revisa antes que
@@ -543,9 +591,9 @@ async function escanear() {
   }
 
   const candidatas = (await esperar('a[href^="/empleos/"]')).filter(a => /-\d+\.html/.test(a.href));
-  if (!candidatas.length) { msg('Sin tarjetas — busca ofertas en Laborum', '#9CA3AF'); return; }
+  if (!candidatas.length) { msg('Sin tarjetas — busca ofertas en Laborum', '#9CA3AF'); AP.reportarEscaneoTerminado(); return; }
 
-  const pendientes = [];
+  let pendientes = [];
   const titulosVistos = [];
   const avistamientos = [];
   // Desglose del escaneo (§A): se cuentan las tres bandas y se junta la razón
@@ -597,7 +645,7 @@ async function escanear() {
 
     const resultado = evaluarTarjeta(a);
     if (resultado.banda === 'postular') {
-      pendientes.push({ a, id, titulo, url: a.href });
+      pendientes.push({ a, id, titulo, empresa, url: a.href });
     } else if (resultado.banda === 'gris') {
       candidatosGris.push({ id, titulo, url: a.href, empresa, ubicacion: getUbicacionDeTarjeta(a), resultado });
     } else {
@@ -613,6 +661,16 @@ async function escanear() {
   });
   reportarTitulosVistos(titulosVistos, 'Laborum');
   AP.reportarAvistamientos(avistamientos, 'Laborum');
+
+  // §2.8 (docs/revision-2026-09-16.md): lo que ya se postuló con otro id, o
+  // está repetido en esta misma página, no se vuelve a postular. Acá importa
+  // más que en los otros: Laborum postuló 3 veces el mismo día a un mismo aviso.
+  pendientes = await AP.quitarDuplicados('Laborum', pendientes, (p, razon) => {
+    conteos.descartar++;
+    razonesDescartadas.push(razon);
+    AP.vistos.add(p.id);
+    addLog({ ts: Date.now(), status: 'skip', title: p.titulo, url: p.url, uid: p.id, reason: AP.formatearRazonCorta(razon) });
+  });
 
   // docs/modo-solo-observar.md §3.2: estas son ofertas que SE HABRÍAN
   // postulado -- se cuentan aparte para que el mensaje no mienta.
@@ -640,6 +698,7 @@ async function escanear() {
     const verificacion = await AP.puedePostular('Laborum');
     if (!verificacion.permitido) {
       msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      AP.reportarEscaneoTerminado(conteos);
       return;
     }
 
@@ -665,7 +724,7 @@ async function escanear() {
     sessionStorage.setItem(CLAVE_ETAPA2_PENDIENTE, JSON.stringify({
       id: cand.id, titulo: cand.titulo, url: cand.url, empresa: cand.empresa, ubicacion: cand.ubicacion,
     }));
-    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', 'trabajando');
     location.href = cand.url;
     return;
   }
@@ -673,7 +732,9 @@ async function escanear() {
   // Nada más que hacer en esta página -- si es una búsqueda automática
   // (pestaña oculta), sigue a la próxima página del listado en vez de
   // quedarse pegada acá para siempre (los listados no son infinitos).
-  siguientePagina(candidatas.length, urlPaginaLaborum);
+  if (!siguientePagina(candidatas.length, urlPaginaLaborum)) {
+    AP.reportarEscaneoTerminado(conteos);
+  }
 }
 
 // Cuando escanear() navega a una oferta puntual, este es el flujo que sigue
@@ -688,6 +749,8 @@ async function escanearPaginaDeOferta() {
     if (history.length > 1) {
       history.back();
       setTimeout(() => { if (AP.activo) escanear(); }, 1800);
+    } else {
+      AP.reportarEscaneoTerminado();
     }
     return;
   }
@@ -705,6 +768,8 @@ async function escanearPaginaDeOferta() {
   if (history.length > 1) {
     history.back();
     setTimeout(() => { if (AP.activo) escanear(); }, 1800);
+  } else {
+    AP.reportarEscaneoTerminado();
   }
 }
 
@@ -729,13 +794,13 @@ async function aplicarDirecto(decisionOfertaId) {
 }
 
 // ── Registro en el núcleo compartido ────────────────────────────
-AP.escanear = escanear;
+AP.escanear = AP.sinReentrada(escanear);
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function () {
   console.log('[AP-Laborum] listo — activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length);
   if (AP.activo) {
     msg('Activado — escaneando…', '#16A34A');
-    setTimeout(escanear, 1800);
+    setTimeout(() => AP.escanear(), 1800);
   }
 };
 

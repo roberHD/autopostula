@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
-// Números decididos para el lanzamiento del premium (2026-09-03): $3.990 CLP/mes,
+// Números decididos para el lanzamiento del premium (2026-09-03): $3.990 CLP,
+// hoy por un pase de 30 días (lib/pases.ts; docs/pase-prepagado.md -- el precio
+// que se cobra sale del catálogo de pases, `precioMensual` es solo informativo),
 // 80 postulaciones/mes (4x el free), portales ilimitados a la vez, búsqueda
 // automática, perfil dinámico (calibración + seguir conversando con la IA de
 // estilo), analítica avanzada, sin anuncios. El free no tiene fila propia --

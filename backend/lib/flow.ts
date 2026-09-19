@@ -1,9 +1,13 @@
 import { createHmac } from "crypto";
 
 // Stripe no opera en Chile -- Flow es la pasarela chilena que sí acepta
-// cuentas de persona natural y tiene una API real de suscripciones
-// recurrentes (planes + clientes + cargo automático a tarjeta).
-// Docs: https://www.flow.cl/docs/api.html
+// cuentas de persona natural.
+//
+// Hoy AutoPostula usa SOLO el pago único (crearPago / estadoPago): Premium son
+// pases prepagados de 30 o 90 días, sin renovación automática
+// (docs/pase-prepagado.md). El Cargo Automático de Flow, del que dependen las
+// suscripciones, es solo para empresas.
+// Docs: https://developers.flow.cl/api (OpenAPI: es-openApiFlow.yaml)
 const BASE_URL = process.env.FLOW_SANDBOX === "false" ? "https://www.flow.cl/api" : "https://sandbox.flow.cl/api";
 
 function credenciales() {
@@ -58,7 +62,41 @@ async function flowRequest<T = any>(
   return data as T;
 }
 
+// Estado de una orden de pago (payment/getStatus). Verificado contra el OpenAPI
+// de Flow el 2026-09-19.
+export const FLOW_PENDIENTE = 1;
+export const FLOW_PAGADA = 2;
+export const FLOW_RECHAZADA = 3;
+export const FLOW_ANULADA = 4;
+
+export type EstadoPagoFlow = {
+  flowOrder: number;
+  commerceOrder: string;
+  status: number;
+  currency: string;
+  amount: number;
+  payer: string;
+};
+
 export const flow = {
+  // ── Pago único: lo único que se usa hoy ─────────────────────────────
+  // Devuelve la url a la que redirigir al pagador: url + "?token=" + token.
+  crearPago: (params: {
+    commerceOrder: string;
+    subject: string;
+    currency: "CLP";
+    amount: number;
+    email: string;
+    urlConfirmation: string;
+    urlReturn: string;
+  }) => flowRequest<{ url: string; token: string; flowOrder: number }>("/payment/create", params),
+
+  estadoPago: (token: string) => flowRequest<EstadoPagoFlow>("/payment/getStatus", { token }, "GET"),
+
+  // ── Suscripciones (Cargo Automático) ────────────────────────────────
+  // Sin uso desde 2026-09-19 (docs/pase-prepagado.md). Se conservan para
+  // volver a la renovación automática cuando AutoPostula opere como empresa:
+  // el Cargo Automático de Flow es solo para empresas.
   crearCliente: (params: { name: string; email: string; externalId: string }) =>
     flowRequest<{ customerId: string }>("/customer/create", params),
 
@@ -98,11 +136,4 @@ export const flow = {
 
   cancelarSuscripcion: (params: { subscriptionId: string; at_period_end: 0 | 1 }) =>
     flowRequest("/subscription/cancel", params),
-
-  estadoPago: (token: string) =>
-    flowRequest<{ status: number; payer: string; commerceOrder: string; flowOrder: number }>(
-      "/payment/getStatus",
-      { token },
-      "GET"
-    ),
 };

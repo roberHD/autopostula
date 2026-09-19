@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function TerminosPage() {
   return (
-    <LegalPage titulo="Términos y condiciones" actualizado="13 de septiembre de 2026">
+    <LegalPage titulo="Términos y condiciones" actualizado="19 de septiembre de 2026">
       <p>
         Estos términos regulan el uso de AutoPostula: el sitio web, el panel de usuario y la
         extensión de Chrome. Al crear una cuenta o instalar la extensión, aceptas lo que sigue.
@@ -126,43 +126,45 @@ export default function TerminosPage() {
         simultáneamente y de uso de la IA. Los límites vigentes se muestran en tu cuenta.
       </p>
 
-      <h3>6.2 Plan de pago</h3>
+      <h3>6.2 Plan de pago: pases de 30 y de 90 días</h3>
       <p>
-        El plan Premium tiene un valor de <strong>$3.990 CLP mensuales</strong>, impuestos
-        incluidos, y se cobra mediante <strong>suscripción de renovación automática</strong>.
+        El plan Premium se contrata con un <strong>pase de pago único</strong>:{" "}
+        <strong>$3.990 CLP por 30 días</strong> o <strong>$9.990 CLP por 90 días</strong>,
+        impuestos incluidos. El pase <strong>no se renueva automáticamente</strong>: pagas una vez
+        y el Premium dura los días que compraste.
       </p>
       <ul>
         <li>Los pagos se procesan a través de Flow, pasarela de pagos chilena.</li>
         <li>
-          AutoPostula no recibe ni almacena los datos de tu tarjeta; los administra directamente
-          Flow.
+          AutoPostula no recibe ni almacena los datos de tu tarjeta ni de tu cuenta bancaria; los
+          administra directamente Flow.
         </li>
         <li>
-          La suscripción se renueva automáticamente cada mes hasta que la canceles, con cargo al
-          medio de pago que registraste.
+          Si compras un pase teniendo otro vigente, el nuevo comienza cuando termina el anterior:
+          no pierdes días por renovar antes.
         </li>
         <li>
-          Si un cobro falla, podemos suspender el acceso a las funciones de pago hasta
-          regularizarlo.
+          Antes de que tu pase termine te avisamos por correo (5 días y 1 día antes). Al vencer,
+          tu cuenta vuelve al plan gratuito; no se hace ningún cobro adicional.
+        </li>
+        <li>
+          Los límites de postulaciones del plan se cuentan por mes calendario, no por los días del
+          pase.
         </li>
       </ul>
 
       <h3>6.3 Cambios de precio</h3>
       <p>
-        Podemos modificar el precio del plan. Si eso ocurre, te avisaremos con al menos 30 días de
-        anticipación y el nuevo valor solo se aplicará en el período siguiente. Si no estás de
-        acuerdo, puedes cancelar antes de que entre en vigencia.
+        Podemos modificar el precio de los pases. Un cambio de precio no afecta a los pases que ya
+        compraste: solo se aplica a las compras posteriores.
       </p>
 
-      <h2>7. Cancelación</h2>
+      <h2>7. Vencimiento y devoluciones</h2>
       <p>
-        Puedes cancelar tu suscripción cuando quieras desde tu cuenta, en la sección Premium. La
-        cancelación opera <strong>al final del período ya pagado</strong>: conservas el acceso
-        Premium hasta esa fecha y no se realizan cobros posteriores.
-      </p>
-      <p>
-        No hay penalizaciones ni plazos mínimos de permanencia. Al terminar el período, tu cuenta
-        vuelve automáticamente al plan gratuito, sin que pierdas tu historial ni tu perfil.
+        Como el pase no se renueva solo, no hay nada que cancelar: el pase dura los días que
+        compraste y después termina por sí mismo. No hay penalizaciones ni plazos mínimos de
+        permanencia. Al terminar, tu cuenta vuelve automáticamente al plan gratuito, sin que
+        pierdas tu historial ni tu perfil.
       </p>
       <p>
         Lo anterior no limita el derecho a retracto ni los demás derechos que te reconoce la Ley N°

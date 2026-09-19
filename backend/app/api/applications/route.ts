@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { usuarioTieneAnaliticaAvanzada } from "@/lib/plan-beneficios";
 import { limpiarTitulo } from "@/lib/text";
+import { obtenerModoAutomatico, consumirPrueba } from "@/lib/prueba-automatica";
+import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
+import { enviarCorreoPruebaTerminada } from "@/lib/correo";
 
 export async function GET() {
   const session = await auth();
@@ -32,6 +35,8 @@ export async function GET() {
       estado: a.estadoActual,
       notaAtencion: a.notaAtencion,
       enviadaEn: a.enviadaEn,
+      // Una de las 5 de la prueba automática -- lo usa "Ver las 5" (§4.1).
+      esDePrueba: a.esDePrueba,
     })),
     analiticaAvanzada,
   });
@@ -66,6 +71,12 @@ export async function POST(request: Request) {
       nota, // por qué quedó incompleta (solo aplica si incompleta = true)
       matchScore, // 0-100 — viene de analizarOferta() en la extensión, si se llamó
       decisionOfertaId, // §8.6: viene de una aprobación de banda gris -- enlaza esa decisión con esta postulación
+      // docs/rafagas-y-ponerse-al-dia.md §4.1: true cuando la postulación salió
+      // de una ráfaga (la pestaña que la envió la abrió la propia extensión, no
+      // la persona). Es lo que gasta la prueba de una cuenta gratis. Campo
+      // aparte de `origen` a propósito: ese ya existía con otro significado
+      // (OrigenOferta, del corpus de ofertas) y la extensión siempre manda MANUAL.
+      desdeRafaga,
     } = body;
 
     if (!platformNombre || !externalId || !titulo) {
@@ -171,7 +182,35 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ id: application.id });
+    // §4.1: una postulación ENVIADA desde una ráfaga, en una cuenta gratis que
+    // todavía tiene prueba, gasta una de las 5. Una INCOMPLETA no llegó a la
+    // empresa (§8.3 de la revisión), así que no descuenta. Va al final, con la
+    // postulación ya guardada: si esto falla, la postulación existe igual (ya
+    // salió al portal, no se puede deshacer) y solo la prueba queda sin descontar.
+    let prueba: { restantes: number; total: number } | undefined;
+    if (desdeRafaga === true && !incompleta) {
+      try {
+        if ((await obtenerModoAutomatico(user)) === "prueba") {
+          const restantes = await consumirPrueba(user.id, application.id);
+          if (restantes !== null) {
+            prueba = { restantes, total: PRUEBA_TOTAL };
+            // El único correo que recibe una cuenta gratis por este tema, y solo
+            // la postulación que se llevó el último cupo llega acá con 0. Con
+            // await: en serverless, un envío sin esperar puede quedar congelado
+            // al responder y perderse.
+            if (restantes === 0 && user.emailVerificado) {
+              await enviarCorreoPruebaTerminada(user.email, PRUEBA_TOTAL).catch((e) =>
+                console.error("[prueba] No se pudo mandar el correo de fin de prueba:", e)
+              );
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[prueba] No se pudo descontar la postulación de prueba:", e);
+      }
+    }
+
+    return NextResponse.json({ id: application.id, ...(prueba ? { prueba } : {}) });
   } catch (err) {
     console.error("Error en /api/applications:", err);
     return NextResponse.json(

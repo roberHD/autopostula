@@ -39,6 +39,15 @@ export async function POST(request: Request) {
   const venceEn = new Date();
   venceEn.setDate(venceEn.getDate() + DIAS_TTL);
 
+  // docs/revision-2026-09-16.md §2.3: se recibía detalleAviso pero nunca se
+  // escribía acá -- 0 de 39 pendientes en producción lo tenían, aunque la
+  // extensión sí lo extraía bien. El límite de tamaño es defensivo: esto es
+  // para pintar la tarjeta ("Por decidir"), no para guardar el aviso entero.
+  const detalleAvisoValido =
+    detalleAviso && typeof detalleAviso === "object" && JSON.stringify(detalleAviso).length < 10_000
+      ? detalleAviso
+      : undefined;
+
   await prisma.decisionOferta.create({
     data: {
       userId: user.id,
@@ -48,6 +57,7 @@ export async function POST(request: Request) {
       plataforma: plataforma || null,
       scoreLocal: typeof scoreLocal === "number" ? scoreLocal : null,
       razones: Array.isArray(razones) ? razones : undefined,
+      detalleAviso: detalleAvisoValido,
       fuente: "BANDA_GRIS",
       veredicto: "PENDIENTE",
       venceEn,

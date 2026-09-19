@@ -13,6 +13,9 @@ export const metadata: Metadata = {
 import BarraMaquina from "./BarraMaquina";
 import BannerVerificacion from "./BannerVerificacion";
 import BannerModoPrueba from "./BannerModoPrueba";
+import BannerExtension from "./BannerExtension";
+import BannerVencimiento from "./BannerVencimiento";
+import { finDelUltimoPase } from "@/lib/plan-vigente";
 
 export default async function DashboardLayout({
   children,
@@ -37,6 +40,10 @@ export default async function DashboardLayout({
     redirect("/onboarding");
   }
 
+  // Fin del último pase Premium, para el aviso de vencimiento (§6). Un admin no
+  // tiene pases y no necesita el aviso.
+  const premiumHasta = await finDelUltimoPase(userId);
+
   return (
     <div className="ap-shell">
       <Sidebar userName={session.user.name ?? session.user.email ?? "Usuario"} />
@@ -45,6 +52,8 @@ export default async function DashboardLayout({
         <main className="ap-main">
           <BannerVerificacion verificadoAlCargar={!!dbUser.emailVerificado} />
           <BannerModoPrueba habilitadaAlCargar={!!dbUser.postulacionHabilitada} />
+          <BannerExtension />
+          <BannerVencimiento venceEn={premiumHasta ? premiumHasta.toISOString() : null} />
           {children}
         </main>
       </div>

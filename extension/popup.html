@@ -121,6 +121,42 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .pulse-label.active  { color: #5BD59B; }
 .pulse-label.working { color: var(--marker); }
 
+/* ── Última puesta al día (docs/rafagas-y-ponerse-al-dia.md §3.5) ────────
+   Lo primero que se ve al abrir el popup: si la extensión se puso al día
+   mientras la persona hacía otra cosa, tiene que enterarse. */
+.rafaga-row {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.rafaga-titulo { font-size: 12.5px; font-weight: 700; color: var(--text-1); }
+.rafaga-detalle { font-size: 11px; color: var(--text-2); margin-top: 1px; }
+
+/* ── "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6) ───────
+   Solo Premium: en una cuenta gratis la fila ni aparece. Debajo del botón
+   va SIEMPRE una línea: cuánto suele tardar, o por qué no se puede ahora. */
+.ponerse-row {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.ponerse-row .btn { width: 100%; }
+.ponerse-hint { font-size: 10.5px; color: var(--text-3); margin-top: 6px; line-height: 1.45; }
+
+/* ── Prueba de 5 postulaciones automáticas (docs/rafagas-y-ponerse-al-dia.md §4.1) ──
+   Solo cuentas gratis: mientras dura, cuántas lleva; al terminar, qué pasó y
+   las dos salidas (Premium, o entrar a mano a un portal). */
+.prueba-row {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.prueba-titulo { font-size: 12px; font-weight: 700; color: var(--text-1); line-height: 1.4; }
+.prueba-detalle { font-size: 11px; color: var(--text-2); margin-top: 3px; line-height: 1.45; }
+.prueba-links { display: flex; gap: 14px; margin-top: 7px; }
+.prueba-links a { font-size: 11.5px; font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.prueba-links a:hover { text-decoration-thickness: 2px; }
+
 /* ── Solo observar (docs/modo-solo-observar.md §3.4) ────────────────────
    Va pegado al toggle master, con su propio fondo, para que sea imposible
    no verlo -- "la persona nunca puede quedar en duda sobre si la extensión
@@ -375,6 +411,28 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   <div class="pulse-wrap">
     <div class="pulse" id="pulse"></div>
     <span class="pulse-label" id="pulse-label">Inactivo</span>
+  </div>
+</div>
+
+<!-- ÚLTIMA PUESTA AL DÍA -->
+<div class="rafaga-row hidden" id="rafaga-row" role="status">
+  <div class="rafaga-titulo" id="rafaga-titulo"></div>
+  <div class="rafaga-detalle hidden" id="rafaga-detalle"></div>
+</div>
+
+<!-- PONERME AL DÍA AHORA (solo Premium) -->
+<div class="ponerse-row hidden" id="ponerse-row">
+  <button class="btn btn-primary" id="ponerse-btn" type="button">Ponerme al día ahora</button>
+  <div class="ponerse-hint" id="ponerse-hint"></div>
+</div>
+
+<!-- PRUEBA DE 5 POSTULACIONES AUTOMÁTICAS (solo cuentas gratis) -->
+<div class="prueba-row hidden" id="prueba-row" role="status">
+  <div class="prueba-titulo" id="prueba-titulo"></div>
+  <div class="prueba-detalle hidden" id="prueba-detalle"></div>
+  <div class="prueba-links hidden" id="prueba-links">
+    <a href="#" id="prueba-ver" target="_blank"></a>
+    <a href="#" id="prueba-premium" target="_blank"></a>
   </div>
 </div>
 

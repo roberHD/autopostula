@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function PrivacidadPage() {
   return (
-    <LegalPage titulo="Política de privacidad" actualizado="13 de septiembre de 2026">
+    <LegalPage titulo="Política de privacidad" actualizado="19 de septiembre de 2026">
       <p>
         Esta política explica qué datos personales recolecta AutoPostula, con qué finalidad los
         usa, con quién los comparte y cómo puedes ejercer tus derechos sobre ellos. Aplica al
@@ -151,8 +151,9 @@ export default function PrivacidadPage() {
 
       <h3>2.7 Datos de pago</h3>
       <p>
-        Si contratas un plan de pago, guardamos un identificador de cliente de la pasarela de
-        pagos, el monto, la fecha y el estado de cada cobro.
+        Si compras un pase Premium, guardamos el número de orden de la pasarela de pagos, el
+        monto, la fecha y el estado de cada pago. No guardamos ningún identificador de cliente de
+        la pasarela: cada pase es un pago único.
       </p>
       <div className="nota">
         <p>
@@ -248,7 +249,7 @@ export default function PrivacidadPage() {
           </tr>
           <tr>
             <td>Datos de pago</td>
-            <td>Gestionar tu suscripción y emitir los cobros correspondientes.</td>
+            <td>Activar tu pase y emitir el comprobante.</td>
           </tr>
           <tr>
             <td>Mensajes de soporte</td>
@@ -324,7 +325,7 @@ export default function PrivacidadPage() {
           </tr>
           <tr>
             <td>Flow</td>
-            <td>Procesar pagos y suscripciones</td>
+            <td>Procesar los pagos de los pases</td>
             <td>Identificación básica y datos de la transacción</td>
           </tr>
           <tr>
@@ -511,8 +512,8 @@ export default function PrivacidadPage() {
         <p>
           <strong>Para eliminar tu cuenta</strong>, entra a tu panel y ve a Ajustes → Zona de
           peligro → Eliminar mi cuenta. El borrado es inmediato: se elimina tu CV, tu perfil, tu
-          historial de postulaciones, tus preferencias y tu suscripción (si tienes una activa, se
-          cancela). Si no puedes acceder a tu cuenta, escríbenos a{" "}
+          historial de postulaciones, tus preferencias y tu pase Premium (si tienes uno vigente,
+          se da por terminado). Si no puedes acceder a tu cuenta, escríbenos a{" "}
           <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a> desde
           el correo con el que te registraste; en ese caso procesamos la solicitud dentro de los 30
           días siguientes y te confirmamos cuando esté hecho.

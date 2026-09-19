@@ -1,0 +1,167 @@
+// Texto de la tarjeta de estado del Inicio -- docs/rafagas-y-ponerse-al-dia.md
+// §3.5. Sin imports de servidor a propósito: la usa la página (cliente) y la
+// verifica scripts/verificar-texto-rafaga.ts.
+
+export type ResumenRafaga = {
+  postuladas: number;
+  observadas: number;
+  descartadas: number;
+  gris: number;
+  errores: number;
+};
+
+// `en` es la hora del servidor en que terminó (User.ultimaRafagaEn), no la del
+// reloj de la persona. `resumen` es null si la fila ya se purgó.
+export type UltimaRafaga = { en: string; resumen: ResumenRafaga | null };
+
+// Pasado esto sin ponerse al día, la tarjeta deja de celebrar la última vez y
+// pasa a decir qué hacer -- que es lo que la persona necesita saber.
+const HORAS_SIN_PONERSE_AL_DIA = 48;
+
+const PEDIR_QUE_ABRA_CHROME = "Abre Chrome en tu computador y se pone al día sola.";
+
+// Mismo texto que la línea del popup de la extensión (extension/popup.js,
+// textoRafaga): las dos superficies tienen que decir lo mismo de la misma
+// ráfaga. En modo solo observar nada se postuló, y "0 postulaciones" sería
+// mentir por omisión, así que se cuenta lo que HABRÍA postulado.
+export function detalleConteos(r: ResumenRafaga | null): string {
+  if (!r) return "";
+  const partes: string[] = [];
+  if (r.postuladas === 0 && r.observadas > 0) partes.push(`habría postulado a ${r.observadas}`);
+  else partes.push(`${r.postuladas} ${r.postuladas === 1 ? "postulación" : "postulaciones"}`);
+  if (r.gris > 0) partes.push(`${r.gris} por decidir`);
+  if (r.descartadas > 0) partes.push(`${r.descartadas} ${r.descartadas === 1 ? "descartada" : "descartadas"}`);
+  if (r.errores > 0) partes.push(`${r.errores} ${r.errores === 1 ? "búsqueda no terminó" : "búsquedas no terminaron"}`);
+  return partes.join(" · ");
+}
+
+// "hoy 09:14", "ayer 21:30". Se compara por día calendario (no por 24 h): lo
+// que terminó anoche a las 23:50 es "ayer" aunque hayan pasado 10 horas.
+function cuando(fecha: Date, ahora: Date): string {
+  const hora = fecha.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const dia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diasAtras = Math.round((dia(ahora) - dia(fecha)) / 86_400_000);
+  if (diasAtras <= 0) return `hoy ${hora}`;
+  if (diasAtras === 1) return `ayer ${hora}`;
+  // Menos de 48 h pueden ser 2 días calendario (hace 47 h, a las 00:10).
+  return `el ${fecha.toLocaleDateString("es-CL", { weekday: "long" })} ${hora}`;
+}
+
+export function textoTarjetaRafaga(ultima: UltimaRafaga | null, ahora: Date): { t: string; d: string } {
+  if (!ultima) {
+    return { t: "Todavía no se puso al día", d: PEDIR_QUE_ABRA_CHROME };
+  }
+
+  const fecha = new Date(ultima.en);
+  const horas = (ahora.getTime() - fecha.getTime()) / 3_600_000;
+
+  if (horas >= HORAS_SIN_PONERSE_AL_DIA) {
+    return { t: `Hace ${Math.floor(horas / 24)} días que no se pone al día`, d: PEDIR_QUE_ABRA_CHROME };
+  }
+  return { t: `Última puesta al día: ${cuando(fecha, ahora)}`, d: detalleConteos(ultima.resumen) };
+}
+
+// ── "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6) ─────────
+// Las mismas palabras que el popup de la extensión (extension/popup.js:
+// MOTIVOS_PONERSE_AL_DIA, duracionAproximada): la persona ve el botón en los
+// dos lados, y tienen que explicar lo mismo.
+
+// "unos 8 minutos". No promete un número de ofertas: no se sabe cuántas hay
+// hasta escanear -- solo cuánto suele tardar, que sí se sabe.
+export function duracionAproximada(ms: number | null | undefined): string {
+  if (!ms || ms <= 0) return "unos minutos";
+  if (ms < 60_000) return "menos de un minuto";
+  const min = Math.round(ms / 60_000);
+  if (min === 1) return "un minuto";
+  if (min >= 60) return "más de una hora";
+  return `unos ${min} minutos`;
+}
+
+export function textoEstimadoPonerse(ms: number | null | undefined): string {
+  return ms ? `Suele tardar ${duracionAproximada(ms)}.` : "Puede tardar unos minutos.";
+}
+
+// Por qué la extensión no arrancó la ráfaga. La clave es la que devuelve
+// background.js (PONERSE_AL_DIA); si llega una que no está acá, se cae al texto
+// genérico de abajo en vez de mostrar una clave cruda.
+export const MOTIVOS_PONERSE_AL_DIA: Record<string, string> = {
+  en_curso: "Ya se está poniendo al día. Te avisamos en el ícono de la extensión.",
+  reciente: "Te pusimos al día hace muy poco. Vuelve a intentarlo en unos minutos.",
+  sin_plan: "Ponerte al día ahora es parte de Premium.",
+  pausada: "La búsqueda automática está en pausa. Reanúdala desde tu panel.",
+  sin_cupo: "Ya usaste tus postulaciones de este mes. Se reinicia el día 1.",
+  sin_portales: "Conecta un portal para empezar.",
+  sin_objetivo: "Cuéntanos qué buscas, en tu panel, para poder empezar.",
+  sin_token: "Conecta la extensión con tu cuenta desde tu panel.",
+  sin_conexion: "No pudimos consultar tu cuenta. Revisa tu conexión e inténtalo de nuevo.",
+  extension_no_responde: "La extensión no respondió. Recarga esta página e inténtalo de nuevo.",
+};
+
+export const MOTIVO_GENERICO_PONERSE = "No se pudo poner al día ahora. Inténtalo de nuevo en unos minutos.";
+
+export function textoMotivoPonerse(motivo: string | undefined): string {
+  return (motivo && MOTIVOS_PONERSE_AL_DIA[motivo]) || MOTIVO_GENERICO_PONERSE;
+}
+
+// Sin la extensión en ESTE navegador (el caso típico: el celular) el botón no
+// puede hacer nada, y lo dice -- en vez de quedarse mudo o fingir que empezó.
+// Es lo que documenta celular-y-escritorio.md: la ráfaga corre en el computador.
+export const SIN_EXTENSION_PONERSE =
+  "Esto corre en tu computador, con la extensión de Chrome. Ábrelo ahí y se pone al día sola.";
+
+// ── La prueba de 5 postulaciones automáticas (docs/rafagas-y-ponerse-al-dia.md §4.1) ──
+// Las mismas palabras en el panel, en el popup de la extensión (popup.js:
+// textoPruebaEnCurso, textoPruebaTerminada, TEXTO_DESPUES_DE_LA_PRUEBA) y en el
+// correo que se manda al terminarla (lib/correo.ts): es la misma promesa dicha
+// en tres lugares, y no puede cambiar de uno a otro.
+
+// Cuántas lleva, no cuántas quedan: "3 de 5". Ancla `restantes` a [0, total]
+// para que un dato raro (negativo, o más que el total) nunca dibuje "7 de 5".
+export function textoPruebaEnCurso(restantes: number, total: number): string {
+  const enviadas = Math.max(0, Math.min(total, total - restantes));
+  return `Prueba automática: ${enviadas} de ${total} postulaciones`;
+}
+
+export function textoPruebaTerminada(total: number): string {
+  return `Tu prueba terminó: AutoPostula envió ${total} postulaciones sin que entraras a ningún portal.`;
+}
+
+// Lo que sigue después: las dos salidas, dichas sin rodeos.
+export const TEXTO_DESPUES_DE_LA_PRUEBA =
+  "Con Premium sigue así, cada vez que abres tu computador. Con el plan gratis, entra a Computrabajo, Laborum o Trabajando y la extensión postula por ti.";
+
+export function textoVerLasDePrueba(total: number): string {
+  return `Ver las ${total}`;
+}
+
+export const TEXTO_PASAR_A_PREMIUM = "Pasar a Premium";
+
+// Adonde lleva "Ver las 5": el historial filtrado por las postulaciones de la prueba.
+export const RUTA_VER_LAS_DE_PRUEBA = "/dashboard/historial?filtro=prueba";
+
+// ── Al activar la postulación desde el panel (docs/rafagas-y-ponerse-al-dia.md §4.1) ──
+// Activar es el momento en que la persona dice "sí, actúa": el panel le pide a la
+// extensión una ráfaga de inmediato, y le cuenta qué pasó. El banner desaparece
+// al activarse, así que el resultado se dice en un aviso -- nunca en silencio.
+export const TEXTO_ACTIVADA_EMPEZO =
+  "Empezó ahora: AutoPostula está buscando ofertas. Te avisamos en el ícono de la extensión cuando termine.";
+export const TEXTO_ACTIVADA_SIN_EXTENSION =
+  "La primera búsqueda empieza cuando abras Chrome en tu computador, con la extensión.";
+// Cuenta gratis con la prueba ya gastada: no hay nada que arrancar solo.
+export const TEXTO_ACTIVADA_MANUAL =
+  "Entra a Computrabajo, Laborum o Trabajando y la extensión postula por ti.";
+const TEXTO_ACTIVADA_MAS_TARDE = "La primera búsqueda empieza la próxima vez que abras Chrome en tu computador.";
+
+// Casi todos los motivos son los mismos que explican por qué no arrancó el botón
+// "Ponerme al día ahora"; estos tres cambian porque acá no hay un botón que
+// apretar de nuevo.
+const MOTIVOS_ACTIVACION: Record<string, string> = {
+  en_curso:
+    "Ya había una búsqueda en curso, que termina sin enviar nada (todavía estabas en modo prueba). La siguiente sí postula.",
+  sin_conexion: "No pudimos consultar tu cuenta desde la extensión. " + TEXTO_ACTIVADA_MAS_TARDE,
+  extension_no_responde: "La extensión no respondió. " + TEXTO_ACTIVADA_MAS_TARDE,
+};
+
+export function textoMotivoActivacion(motivo: string | undefined): string {
+  return (motivo && (MOTIVOS_ACTIVACION[motivo] ?? MOTIVOS_PONERSE_AL_DIA[motivo])) || TEXTO_ACTIVADA_MAS_TARDE;
+}

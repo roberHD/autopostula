@@ -34,8 +34,13 @@ enum EstadoSuscripcion {
 }
 
 enum EstadoPago {
+  // docs/pase-prepagado.md §4: el pago existe ANTES que el pase -- se crea al
+  // iniciar el pago en Flow, cuando todavía no hay nada pagado.
+  PENDIENTE
   PAGADO
   FALLIDO
+  // Status 4 de Flow.
+  ANULADO
   REEMBOLSADO
 }
 
@@ -111,6 +116,12 @@ model User {
   // la página, volver más tarde) no tenía forma de saber que ya se había
   // conectado y mandaba a la persona de vuelta a un paso anterior.
   extensionConectada Boolean @default(false) @map("extension_conectada")
+  // Cuándo se conectó por primera vez (docs/rafagas-y-ponerse-al-dia.md §3.8): el
+  // recordatorio por correo necesita saber hace cuánto está conectada para poder
+  // decir "todavía no se puso al día" a quien nunca corrió una ráfaga. null en
+  // las cuentas que ya estaban conectadas antes de que existiera esta columna, y
+  // a esas no se les manda ese aviso (ver lib/recordatorio-rafaga.ts).
+  extensionConectadaEn DateTime? @map("extension_conectada_en")
   // Distingue "la IA lo sacó del CV" de "la persona lo confirmó" (ver
   // docs/objetivo-laboral.md §5.2). Sin esto no hay forma de saber si el
   // ObjetivoLaboral de alguien es una sugerencia sin revisar o algo que de
@@ -145,9 +156,27 @@ model User {
   // el panel una vez que ve qué habría postulado. Las cuentas existentes ya
   // están usando el producto: la migración las deja en true.
   postulacionHabilitada Boolean @default(false) @map("postulacion_habilitada")
+  // Cuándo terminó la última ráfaga de la extensión (docs/rafagas-y-ponerse-al-dia.md
+  // §3.4). Solo cuenta una que TERMINÓ: una interrumpida no "puso al día" a
+  // nadie. null = todavía no hubo ninguna. Lo lee la tarjeta del panel y,
+  // más adelante, el recordatorio por correo.
+  ultimaRafagaEn DateTime? @map("ultima_rafaga_en")
+  // Postulaciones automáticas de PRUEBA que le quedan a una cuenta gratis
+  // (docs/rafagas-y-ponerse-al-dia.md §4.1): las primeras 5 que envía una
+  // ráfaga, una sola vez por cuenta y no por mes. Solo se descuenta con una
+  // postulación realmente enviada (no INCOMPLETA) desde una ráfaga; ver
+  // lib/prueba-automatica.ts. Premium y admin ni la miran.
+  pruebaAutomaticaRestantes Int @default(5) @map("prueba_automatica_restantes")
+  // Recordatorio por correo cuando lleva días sin ponerse al día (docs/rafagas-y-ponerse-al-dia.md
+  // §3.8). Cuándo salió el último (null = nunca); con recordatoriosActivos en
+  // false -- el enlace de baja del propio correo, sin iniciar sesión -- no sale
+  // ninguno más.
+  recordatorioRafagaEn DateTime? @map("recordatorio_rafaga_en")
+  recordatoriosActivos Boolean   @default(true) @map("recordatorios_activos")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
+  payments          Payment[]
   platformAccounts  PlatformAccount[]
   cvProfile         CvProfile?
   styleProfiles     StyleProfile[]
@@ -157,6 +186,7 @@ model User {
   searchPreferences SearchPreferences?
   decisionesOferta  DecisionOferta[]
   objetivosLaborales ObjetivoLaboral[]
+  rafagas           Rafaga[]
 
   @@map("users")
 }
@@ -219,6 +249,10 @@ model Subscription {
   flowSubscriptionId     String?           @map("flow_subscription_id")
   periodoInicio          DateTime?         @map("periodo_inicio")
   periodoFin             DateTime?         @map("periodo_fin")
+  // Idempotencia de los avisos de vencimiento (docs/pase-prepagado.md §6): cada
+  // correo sale una sola vez por pase.
+  avisoPrevioEn          DateTime?         @map("aviso_previo_en")
+  avisoFinalEn           DateTime?         @map("aviso_final_en")
 
   user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   plan     Plan      @relation(fields: [planId], references: [id])
@@ -227,15 +261,32 @@ model Subscription {
   @@map("subscriptions")
 }
 
+// Un pago de un pase prepagado (docs/pase-prepagado.md §4). Se crea PENDIENTE al
+// iniciar el pago y, cuando Flow confirma, se enlaza al pase (Subscription) que
+// se acredita.
 model Payment {
   id              String     @id @default(uuid())
-  subscriptionId  String     @map("subscription_id")
+  // Opcional: un pago PENDIENTE todavía no tiene pase. Se enlaza al acreditarse.
+  // SetNull (antes Cascade): un pase que se borra no puede arrastrar el registro
+  // del pago, que se conserva por normativa tributaria.
+  subscriptionId  String?    @map("subscription_id")
+  // Directo al usuario porque el pago existe antes que el pase. SetNull por la
+  // misma razón que Subscription: los registros de pago sobreviven al borrado de
+  // la cuenta (política de privacidad §7).
+  userId          String?    @map("user_id")
+  // Lo generamos nosotros y se lo pasamos a Flow. Es lo que identifica el pago
+  // cuando Flow avisa -- nunca el email del pagador, que puede ser distinto del
+  // de la cuenta.
+  commerceOrder   String     @unique @map("commerce_order")
+  pase            String     // "pase_30" | "pase_90" (lib/pases.ts)
+  dias            Int
   flowOrder       String?    @map("flow_order")
   monto           Float
-  estado          EstadoPago @default(PAGADO)
+  estado          EstadoPago @default(PENDIENTE)
   fecha           DateTime   @default(now())
 
-  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("payments")
 }
@@ -412,6 +463,16 @@ model SearchPreferences {
   // equivocado hasta la próxima recompilación exitosa (reabre P2 por la
   // vía de excepción). Se limpia sola en la próxima compilación exitosa.
   perfilDesactualizado Boolean @default(false) @map("perfil_desactualizado")
+  // docs/revision-2026-09-16.md §2.1: la ubicación se DECLARA, no se infiere.
+  // Antes compilar-perfil.ts le pasaba a la IA la comuna del CV y le pedía
+  // adivinar ubicacion.comunas -- en la cuenta de prueba, la persona pidió
+  // "Maipú, Cerrillos o Estación Central" y el perfil compilado terminó con
+  // ["maipu","pudahuel","santiago"] (agregó la comuna de su trabajo ANTERIOR,
+  // que quería evitar, omitió dos de las que pidió, y sumó "santiago" porque
+  // eso decía su CV). Forma: { regiones: string[] (códigos), comunas:
+  // string[], todaLaRegion: boolean, aceptaRemoto: boolean }. Opciones
+  // cerradas (ver /api/regiones-comunas) -- nunca texto libre.
+  ubicacionDeclarada Json? @map("ubicacion_declarada")
   actualizadoEn   DateTime @updatedAt @map("actualizado_en")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -516,6 +577,11 @@ model Application {
   // terminar sola (ej: "Redirige al portal externo de la empresa para continuar").
   notaAtencion        String?           @map("nota_atencion")
   enviadaEn           DateTime          @default(now()) @map("enviada_en")
+  // true = una de las 5 postulaciones de la prueba automática (§4.1 de
+  // docs/rafagas-y-ponerse-al-dia.md). Es lo que deja que "Ver las 5" filtre
+  // el historial: la prueba se demuestra con resultados concretos, no con un
+  // mensaje. Máximo 5 filas por cuenta.
+  esDePrueba          Boolean           @default(false) @map("es_de_prueba")
 
   user             User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobOffer         JobOffer                   @relation(fields: [jobOfferId], references: [id])
@@ -548,6 +614,45 @@ model AiUsageLog {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("ai_usage_logs")
+}
+
+// Una "ráfaga" es una pasada de la extensión para ponerse al día -- abrir las
+// búsquedas de cada portal, escanear, postular -- disparada al abrir Chrome,
+// al despertar el equipo, por el chequeo periódico o a pedido (docs/rafagas-y-ponerse-al-dia.md
+// §3.4). Sirve para decirle a la persona qué pasó mientras no miraba (ícono,
+// popup, tarjeta del panel) y para saber cuánto suele demorar una.
+//
+// El estado real vive en la extensión (chrome.storage); esto es solo el
+// registro. La extensión reporta al empezar y al terminar, por eso el mismo
+// registro se actualiza: extensionId es el id que le puso la extensión, y
+// (userId, extensionId) es único para que un reintento de red no duplique la
+// fila -- ni una persona pueda pisar la de otra mandando su mismo id.
+//
+// Son datos de uso, no del contenido de nada: se purgan a los 90 días junto
+// con los avistamientos (lib/purgar-avistamientos.ts).
+model Rafaga {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  extensionId String    @map("extension_id")
+  disparador  String // inicio_chrome | despertar | chequeo | manual | activacion
+  inicio      DateTime
+  fin         DateTime?
+  estado      String // en_curso | terminada | interrumpida
+  postuladas  Int       @default(0)
+  // En modo "solo observar" no se postula: son las que HABRÍA postulado. Sin
+  // esta columna, una cuenta nueva (que arranca observando, ver
+  // User.postulacionHabilitada) vería siempre "0" en su tarjeta del panel.
+  observadas  Int       @default(0)
+  descartadas Int       @default(0)
+  gris        Int       @default(0)
+  errores     Int       @default(0)
+  duracionMs  Int?      @map("duracion_ms")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, extensionId])
+  @@index([userId, inicio])
+  @@map("rafagas")
 }
 
 // ─────────────────────────────────────────

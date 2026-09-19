@@ -87,6 +87,18 @@ export default function DetalleAplicacionPage() {
         <p className="ap-page-sub">
           {detalle.empresa ?? "Empresa no especificada"} · {detalle.portal}
         </p>
+        {detalle.url && detalle.estadoActual !== "INCOMPLETA" && (
+          <p style={{ marginTop: 6 }}>
+            <a
+              href={detalle.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 12.5, fontWeight: 600, color: "var(--accent)" }}
+            >
+              Ver la oferta en {detalle.portal} ↗
+            </a>
+          </p>
+        )}
       </div>
 
       {detalle.estadoActual === "INCOMPLETA" && (
@@ -98,10 +110,13 @@ export default function DetalleAplicacionPage() {
           }}
         >
           <p style={{ fontSize: 13, fontWeight: 700, color: "var(--warn)", marginBottom: 4 }}>
-            Necesita tu atención
+            Necesita tu atención: esta postulación no llegó a la empresa
           </p>
-          <p style={{ fontSize: 13, color: "var(--text)", marginBottom: detalle.url ? 10 : 0 }}>
+          <p style={{ fontSize: 13, color: "var(--text)", marginBottom: 4 }}>
             {detalle.notaAtencion ?? "No se pudo completar automáticamente."}
+          </p>
+          <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: detalle.url ? 10 : 0 }}>
+            Hasta que la termines a mano en {detalle.portal}, la empresa no la recibe.
           </p>
           {detalle.url && (
             <a
@@ -110,7 +125,7 @@ export default function DetalleAplicacionPage() {
               rel="noreferrer"
               style={{ fontSize: 12.5, fontWeight: 600, color: "var(--warn)" }}
             >
-              Terminar en {detalle.portal} ↗
+              Abrir la oferta y terminarla a mano ↗
             </a>
           )}
         </div>
