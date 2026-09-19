@@ -94,7 +94,7 @@ export function armarCorreoPruebaTerminada(total: number) {
 
 export async function enviarCorreoPruebaTerminada(email: string, total: number) {
   const { subject, html } = armarCorreoPruebaTerminada(total);
-  await getResend().emails.send({ from: remitente(), to: email, subject, html });
+  await enviarOFallar(email, subject, html);
 }
 
 // ── Pases prepagados (docs/pase-prepagado.md §6, §7) ───────────────────
@@ -136,8 +136,8 @@ export function armarComprobantePase(datos: { pase: string; monto: number; desde
 // devuelve { error }. Estos correos marcan "ya se mandó" en la base (los avisos
 // de vencimiento) o son un comprobante de dinero, así que un rechazo silencioso
 // no puede pasar por éxito.
-async function enviarOFallar(email: string, subject: string, html: string) {
-  const { error } = await getResend().emails.send({ from: remitente(), to: email, subject, html });
+async function enviarOFallar(email: string, subject: string, html: string, headers?: Record<string, string>) {
+  const { error } = await getResend().emails.send({ from: remitente(), to: email, subject, html, ...(headers ? { headers } : {}) });
   if (error) throw new Error(`Resend rechazó el correo: ${error.message}`);
 }
 
@@ -196,4 +196,53 @@ export function armarAvisoPase(tipo: AvisoPase, venceEn: Date) {
 export async function enviarAvisoPase(email: string, tipo: AvisoPase, venceEn: Date) {
   const { subject, html } = armarAvisoPase(tipo, venceEn);
   await enviarOFallar(email, subject, html);
+}
+
+// ── Recordatorio de ráfagas (docs/rafagas-y-ponerse-al-dia.md §3.8) ──────────
+
+export type DatosRecordatorioRafaga = {
+  /** Días completos desde la última puesta al día; null = todavía no se puso al día ninguna vez. */
+  dias: number | null;
+  /** Ofertas aprobadas en "Por decidir" que esperan enviarse (0 = no se menciona). */
+  aprobadas: number;
+  /** El enlace que ve la persona (una página). */
+  urlBaja: string;
+  /** El que usa el cliente de correo con un clic (POST, RFC 8058). */
+  urlBajaUnClic: string;
+};
+
+// Contenido honesto, sin inventar cifras: NO dice "hay N ofertas nuevas que calzan
+// contigo" -- hoy el puntaje no existe del lado del servidor
+// (celular-y-escritorio.md §5), así que no se sabe. Lo único que se cuenta es lo que
+// sí se sabe: cuánto hace que no se pone al día y cuántas aprobadas esperan.
+// Armado aparte del envío para poder revisar el contenido sin mandar nada.
+export function armarCorreoRecordatorioRafaga(d: DatosRecordatorioRafaga) {
+  const titulo = d.dias === null ? "AutoPostula todavía no se pone al día" : `AutoPostula no se pone al día hace ${d.dias} días`;
+  const pendientes =
+    d.aprobadas > 0
+      ? `<p style="color: #4B5563; line-height: 1.6;">Tienes ${d.aprobadas} ${d.aprobadas === 1 ? "oferta que aprobaste esperando" : "ofertas que aprobaste esperando"} para enviarse.</p>`
+      : "";
+  return {
+    subject: titulo,
+    html: `
+      <div style="${ESTILO_MARCO}">
+        <h2 style="color: #111827;">${titulo}</h2>
+        <p style="color: #4B5563; line-height: 1.6;">Abre Chrome en tu computador unos minutos y se pone al día solo.</p>
+        ${pendientes}
+        <p style="margin-top: 28px; font-size: 12px;">
+          <a href="${d.urlBaja.replace(/&/g, "&amp;")}" style="color: #9CA3AF;">Dejar de recibir estos avisos</a>
+        </p>
+      </div>
+    `,
+    // Gmail y Outlook muestran "Cancelar suscripción" arriba del correo con esto.
+    headers: {
+      "List-Unsubscribe": `<${d.urlBajaUnClic}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
+  };
+}
+
+export async function enviarCorreoRecordatorioRafaga(email: string, datos: DatosRecordatorioRafaga) {
+  const { subject, html, headers } = armarCorreoRecordatorioRafaga(datos);
+  await enviarOFallar(email, subject, html, headers);
 }

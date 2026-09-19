@@ -116,6 +116,12 @@ model User {
   // la página, volver más tarde) no tenía forma de saber que ya se había
   // conectado y mandaba a la persona de vuelta a un paso anterior.
   extensionConectada Boolean @default(false) @map("extension_conectada")
+  // Cuándo se conectó por primera vez (docs/rafagas-y-ponerse-al-dia.md §3.8): el
+  // recordatorio por correo necesita saber hace cuánto está conectada para poder
+  // decir "todavía no se puso al día" a quien nunca corrió una ráfaga. null en
+  // las cuentas que ya estaban conectadas antes de que existiera esta columna, y
+  // a esas no se les manda ese aviso (ver lib/recordatorio-rafaga.ts).
+  extensionConectadaEn DateTime? @map("extension_conectada_en")
   // Distingue "la IA lo sacó del CV" de "la persona lo confirmó" (ver
   // docs/objetivo-laboral.md §5.2). Sin esto no hay forma de saber si el
   // ObjetivoLaboral de alguien es una sugerencia sin revisar o algo que de
@@ -161,6 +167,12 @@ model User {
   // postulación realmente enviada (no INCOMPLETA) desde una ráfaga; ver
   // lib/prueba-automatica.ts. Premium y admin ni la miran.
   pruebaAutomaticaRestantes Int @default(5) @map("prueba_automatica_restantes")
+  // Recordatorio por correo cuando lleva días sin ponerse al día (docs/rafagas-y-ponerse-al-dia.md
+  // §3.8). Cuándo salió el último (null = nunca); con recordatoriosActivos en
+  // false -- el enlace de baja del propio correo, sin iniciar sesión -- no sale
+  // ninguno más.
+  recordatorioRafagaEn DateTime? @map("recordatorio_rafaga_en")
+  recordatoriosActivos Boolean   @default(true) @map("recordatorios_activos")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]

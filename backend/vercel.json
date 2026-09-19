@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/avisos-pase",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/recordatorio-rafaga",
+      "schedule": "0 14 * * *"
     }
   ]
 }

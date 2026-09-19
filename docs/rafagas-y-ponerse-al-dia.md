@@ -1,7 +1,8 @@
 # Ráfagas: que se ponga al día cada vez que abres el computador — especificación
 
-> **Estado:** en implementación. Pasos 1 a 8 de §7 hechos y con test (`extension/verificar-rafagas.js`,
-> `backend/scripts/verificar-texto-rafaga.ts`, 2026-09-19); del 9 en adelante, pendiente. **Falta verificar a
+> **Estado:** en implementación. Pasos 1 a 9 de §7 hechos y con test (`extension/verificar-rafagas.js`,
+> `backend/scripts/verificar-texto-rafaga.ts`, `backend/scripts/verificar-recordatorio-rafaga.ts`, 2026-09-19);
+> solo el 10 pendiente. **Falta verificar a
 > mano** el criterio de `powercfg /requests` (§3.3, criterios 2 y 3 de §8): el test cubre la lógica con
 > `chrome.power` simulado, no el Windows real. Tampoco se vio la tarjeta del panel con una sesión iniciada
 > (§3.5): está probado el texto y la consulta contra Postgres, no el dibujo en pantalla.
@@ -108,6 +109,32 @@
 >   bloqueo de suspensión: si el equipo se suspende a la mitad, lo que falte se reintenta en el próximo ciclo.
 > - Falta verificar a mano: nada de esto se vio con pestañas reales de un portal. Los tests simulan `DO_APPLY`
 >   y anotan el orden de los eventos (la cola termina antes de abrir la primera búsqueda, una oferta a la vez).
+>
+> **Lo que el paso 9 hizo distinto de §3.8** (o que §3.8 no decía):
+> - **Solo Premium.** "El plan la permite" es `modo === "premium"` (o admin), no la prueba: §4.1 dice que el
+>   correo de fin de prueba es el único que recibe una cuenta gratis por este tema.
+> - **`User.extensionConectadaEn`** (columna nueva; §3.4 no la traía). §3.8 pide avisar a quien "nunca" corrió
+>   una ráfaga "con la extensión conectada hace más de 48 h", y sin la fecha de conexión no hay cómo saberlo.
+>   Se anota solo la primera vez que se conecta. Las cuentas que ya estaban conectadas quedan con `null` y
+>   **no reciben el aviso de "nunca"**: una extensión anterior a las ráfagas sigue buscando con su alarma de
+>   siempre y nunca las reporta, y decirle "AutoPostula no se pone al día" a alguien cuya extensión funciona
+>   sería mentirle. A esas les llega recién cuando corren una ráfaga y después pasan 48 h sin otra.
+> - **Tope de 14 días sin actividad** (`DIAS_MAXIMOS_SIN_ACTIVIDAD`). §3.8 no lo dice; sin él, la regla manda un
+>   correo cada 3 días PARA SIEMPRE a quien se fue. Con 14 salen como máximo cinco (días 2, 5, 8, 11 y 14).
+> - **La baja.** El enlace lleva una firma HMAC del id de la persona (con `AUTH_SECRET`), sin vencimiento. La
+>   página `/recordatorios/baja` da de baja al abrirse y ofrece "Fue sin querer: volver a recibirlos" (un
+>   antivirus de correo puede abrir el enlace antes que la persona). Además el correo trae `List-Unsubscribe` y
+>   `List-Unsubscribe-Post` (RFC 8058) para el "Cancelar suscripción" de Gmail y Outlook, que hace un POST a
+>   `/api/recordatorios/baja`. Sin `AUTH_SECRET` no sale ningún correo: uno sin baja no debe salir.
+> - **Un envío que Resend rechaza no se anota como enviado.** Resend no lanza: devuelve `{ error }`.
+>   `enviarOFallar` lo vuelve un fallo y al día siguiente se reintenta; el correo de "tu prueba terminó" también
+>   pasa ahora por ahí.
+> - **Tope de 100 correos por corrida**; lo que sobra sale al día siguiente.
+> - **Cron a las 14:00 UTC** (11:00 en Chile en horario de verano), con los ±59 min de Vercel Hobby.
+> - Falta verificar a mano: la **entrega real** (el entorno local no tiene claves de Resend: se probó el
+>   contenido, la lógica contra Postgres con envío simulado y las rutas por HTTP) y cómo se ve el correo en Gmail
+>   y Outlook, incluido el botón "Cancelar suscripción". Tampoco se puede reactivar desde Ajustes: solo con el
+>   enlace del último correo. Antes de desplegar hay que tener `CRON_SECRET`, `AUTH_SECRET` y `RESEND_*` en Vercel.
 > **Para:** el chat de producción.
 > **Fecha:** 2026-09-17.
 > **Va después de:** la Fase 1 de `revision-2026-09-16.md` (pasos 1 a 4d de su §6). No sirve ponerse
@@ -564,7 +591,7 @@ celular, con *"estas ofertas calzan contigo"* y postulación a mano (`celular-y-
 | ~~7~~ | ~~Botón "Ponerme al día ahora"~~ | 3.6 | ✅ Hecho, solo Premium — ver "Lo que el paso 7 hizo distinto de §3.6" arriba |
 | ~~7b~~ | ~~Prueba de 5 postulaciones automáticas~~ | 4.1 | ✅ Hecho — ver "Lo que el paso 7b hizo distinto de §4.1" arriba |
 | ~~8~~ | ~~Cola del celular primero~~ | 3.7 | ✅ Hecho, y se envía en todos los planes — ver "Lo que el paso 8 hizo distinto de §3.7" arriba |
-| 9 | Recordatorio por correo | 3.8 | |
+| ~~9~~ | ~~Recordatorio por correo~~ | 3.8 | ✅ Hecho — ver "Lo que el paso 9 hizo distinto de §3.8" arriba |
 | 10 | Textos: landing, Premium, privacidad, ficha de la tienda | 5 | En el mismo deploy que el 4 |
 
 ---
