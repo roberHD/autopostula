@@ -532,7 +532,76 @@ function estadoBotonPonerse(estado) {
   return { deshabilitado: false, hint: textoEstimadoPonerse(estado.estimadoMs) };
 }
 
+// ── La prueba de 5 postulaciones automáticas (docs/rafagas-y-ponerse-al-dia.md §4.1) ──
+// Las mismas palabras que el panel y el correo de fin de prueba
+// (backend/lib/texto-rafaga.ts): es la misma promesa dicha en tres lugares.
+// verificar-rafagas.js compara este bloque contra ese archivo.
+
+// Cuántas lleva, no cuántas quedan: "3 de 5". Ancla `restantes` a [0, total]
+// para que un dato raro nunca dibuje "7 de 5".
+function textoPruebaEnCurso(restantes, total) {
+  const enviadas = Math.max(0, Math.min(total, total - restantes));
+  return 'Prueba automática: ' + enviadas + ' de ' + total + ' postulaciones';
+}
+
+function textoPruebaTerminada(total) {
+  return 'Tu prueba terminó: AutoPostula envió ' + total + ' postulaciones sin que entraras a ningún portal.';
+}
+
+const TEXTO_DESPUES_DE_LA_PRUEBA =
+  'Con Premium sigue así, cada vez que abres tu computador. Con el plan gratis, entra a Computrabajo, Laborum o Trabajando y la extensión postula por ti.';
+const TEXTO_PASAR_A_PREMIUM = 'Pasar a Premium';
+const RUTA_VER_LAS_DE_PRUEBA = '/dashboard/historial?filtro=prueba';
+
+function textoVerLasDePrueba(total) {
+  return 'Ver las ' + total;
+}
+
+// `prueba` es lo que arma background.js (pruebaDeEstado): null si no aplica
+// (Premium, o un servidor anterior a la prueba), { estado: 'en_curso', restantes,
+// total } mientras dura, o { estado: 'terminada', total }.
+function textoPrueba(prueba) {
+  if (!prueba) return null;
+  if (prueba.estado === 'en_curso') {
+    return { titulo: textoPruebaEnCurso(prueba.restantes, prueba.total), detalle: '', enlaces: null };
+  }
+  if (prueba.estado === 'terminada') {
+    return {
+      titulo: textoPruebaTerminada(prueba.total),
+      detalle: TEXTO_DESPUES_DE_LA_PRUEBA,
+      enlaces: [
+        { texto: textoVerLasDePrueba(prueba.total), ruta: RUTA_VER_LAS_DE_PRUEBA },
+        { texto: TEXTO_PASAR_A_PREMIUM, ruta: '/dashboard/premium' },
+      ],
+    };
+  }
+  return null;
+}
+
+function renderPrueba(prueba) {
+  const fila = document.getElementById('prueba-row');
+  if (!fila) return;
+  const t = textoPrueba(prueba);
+  fila.classList.toggle('hidden', !t);
+  if (!t) return;
+  document.getElementById('prueba-titulo').textContent = t.titulo;
+  const detalle = document.getElementById('prueba-detalle');
+  detalle.textContent = t.detalle;
+  detalle.classList.toggle('hidden', !t.detalle);
+  const enlaces = document.getElementById('prueba-links');
+  enlaces.classList.toggle('hidden', !t.enlaces);
+  if (!t.enlaces) return;
+  [['prueba-ver', t.enlaces[0]], ['prueba-premium', t.enlaces[1]]].forEach(([id, e]) => {
+    const a = document.getElementById(id);
+    a.textContent = e.texto;
+    a.href = BACKEND_URL + e.ruta;
+  });
+}
+
 function renderPonerse(estado) {
+  // La prueba viene en la misma respuesta (una sola consulta al servidor) y se
+  // muestra aunque el botón no: es lo único automático de una cuenta gratis.
+  renderPrueba(estado && estado.prueba);
   const fila = document.getElementById('ponerse-row');
   if (!fila) return;
   const e = estadoBotonPonerse(estado);

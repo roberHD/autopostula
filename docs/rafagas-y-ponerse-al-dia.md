@@ -1,7 +1,7 @@
 # Ráfagas: que se ponga al día cada vez que abres el computador — especificación
 
-> **Estado:** en implementación. Pasos 1 a 7 de §7 hechos y con test (`extension/verificar-rafagas.js`,
-> `backend/scripts/verificar-texto-rafaga.ts`, 2026-09-19); del 7b en adelante, pendiente. **Falta verificar a
+> **Estado:** en implementación. Pasos 1 a 7b de §7 hechos y con test (`extension/verificar-rafagas.js`,
+> `backend/scripts/verificar-texto-rafaga.ts`, 2026-09-19); del 8 en adelante, pendiente. **Falta verificar a
 > mano** el criterio de `powercfg /requests` (§3.3, criterios 2 y 3 de §8): el test cubre la lógica con
 > `chrome.power` simulado, no el Windows real. Tampoco se vio la tarjeta del panel con una sesión iniciada
 > (§3.5): está probado el texto y la consulta contra Postgres, no el dibujo en pantalla.
@@ -39,6 +39,50 @@
 >   panel con sesión iniciada. El popup real se vio en el navegador con un `chrome` simulado (todos sus
 >   estados), y el componente real del panel se montó con un `bridge.js` simulado (con extensión, sin
 >   extensión, rechazo y extensión que no contesta); el endpoint y la mediana, contra Postgres real.
+>
+> **Lo que el paso 7b hizo distinto de §4.1** (o que §4.1 no decía):
+> - **`desdeRafaga`, no `origen: "rafaga" | "manual"`.** `POST /api/applications` ya tenía un `origen` con otro
+>   significado (`OrigenOferta`, del corpus de ofertas, y la extensión siempre manda `MANUAL`): mandarle
+>   `"rafaga"` reventaba el enum. Y quien lo pone no es el adaptador sino el background: es "la pestaña que la
+>   ráfaga tiene abierta AHORA" (`tabActual`, el mismo criterio de `ESCANEO_TERMINADO`), así que no hay carrera
+>   con lo que el adaptador alcance a saber, y una pestaña que la persona abrió a mano nunca gasta la prueba.
+> - **`Application.esDePrueba`.** §4.1 pide que "Ver las 5" filtre el historial por esas postulaciones, y su
+>   esquema solo traía el contador: sin esta marca no hay cómo saber cuáles fueron. Se escribe en la misma
+>   transacción que el descuento (`consumirPrueba`, condicionado a `> 0`).
+> - **`puede-postular` se pregunta antes de CADA oferta**, no una vez por página, en Computrabajo y Trabajando
+>   (Laborum ya procesaba una por pasada). Sin eso la prueba no podía cortarse "en medio" al llegar a 5
+>   (criterio 2), y el tope de 20 del mes tampoco. De paso, al cortarse, `conteos.postular` cuenta lo que se
+>   llegó a postular y no lo que se iba a postular (antes el ícono y la tarjeta contaban postulaciones que nunca
+>   se enviaron).
+> - **Al llegar a 5 se salta el resto de la ráfaga** (`cortadaPorPrueba`), no solo el portal en curso: si no,
+>   abriría los demás portales para que cada uno se cortara en su primera oferta.
+> - **`sin-plan` desaparece; nace `prueba-terminada`.** Con la prueba, ninguna cuenta gratis está "sin"
+>   búsqueda automática desde el principio: la tiene y se le acaba. Los payloads traen `modo`
+>   (`premium|prueba|manual`), `pruebaRestantes` y `pruebaTotal`. `disponibleEnPlan` sigue siendo solo del plan:
+>   "Ponerme al día ahora" no existe en el plan gratis ni durante la prueba (y `escanearAutomatico('manual')` lo
+>   rechaza aunque el pedido llegue por el panel).
+> - **Compatibilidad con la extensión ya publicada.** La versión de la tienda no manda `desdeRafaga`: si a una
+>   cuenta en prueba se le dijera `busquedaAutomatica: true`, postularía sola sin descontar nada, hasta el tope
+>   de 20 al mes. La extensión nueva pide `?prueba=1`; a la vieja se le sigue diciendo `false`.
+> - **Una cuenta en prueba puede pausarla** (barra y Ajustes): una acción que corre sola tiene que poder
+>   pararse, aunque no sea del plan.
+> - **Activación** (`disparador: 'activacion'`): `POST /api/account/habilitar-postulacion` responde
+>   `recienActivada` (solo en la llamada que de verdad cambió el estado) y `modo`; el panel pide la ráfaga por
+>   `bridge.js` (`autopostula:activacion`) y le cuenta a la persona qué pasó (empezó / cuándo empieza / por qué
+>   no). Ignora el umbral de 3 h y el enfriamiento de 5 min. Si ya había una ráfaga en curso (necesariamente en
+>   solo observar) no se encola: el aviso dice que esa termina sin enviar y que la siguiente sí postula, que
+>   puede ser hasta 3 h después.
+> - **Solo gasta la prueba lo que la ráfaga envía por sí misma.** Lo aprobado en "Por decidir" sigue su propio
+>   camino (`revision-2026-09-16.md` §2.9), en pestañas que no son de la ráfaga, y no cuenta.
+> - **El correo de "tu prueba terminó"** lo manda la petición que se lleva el último cupo (una sola, aun con
+>   ráfagas en paralelo), solo a un correo verificado, esperando el envío y sin que un fallo rompa la postulación.
+> - Falta verificar a mano: nada de esto se vio en un Chrome real con la extensión cargada; el correo se probó
+>   en su contenido, no en su entrega (el entorno local no tiene claves de Resend); y la tarjeta, la barra, el
+>   historial y el banner se vieron con los componentes reales del panel pero con `fetch` y `bridge.js`
+>   simulados, no con una sesión iniciada. Contra Postgres real: el modo de cada tipo de cuenta (admin, Premium,
+>   gratis con prueba, prueba gastada, pausada), `puede-postular` con y sin `origen`, el descuento (una
+>   INCOMPLETA no descuenta, no baja de 0, y 8 postulaciones en paralelo con 5 de prueba dejan exactamente 5) y
+>   la compatibilidad con la extensión vieja.
 > **Para:** el chat de producción.
 > **Fecha:** 2026-09-17.
 > **Va después de:** la Fase 1 de `revision-2026-09-16.md` (pasos 1 a 4d de su §6). No sirve ponerse
@@ -486,7 +530,7 @@ celular, con *"estas ofertas calzan contigo"* y postulación a mano (`celular-y-
 | ~~5~~ | ~~`Rafaga` + `ultimaRafagaEn` + endpoint~~ | 3.4 | ✅ Hecho — ver el bloque de abajo con lo que difiere del esquema de §3.4 |
 | ~~6~~ | ~~Número en el ícono, popup y tarjeta del panel~~ | 3.5 | ✅ Hecho — el ícono cuenta las postulaciones de la última ráfaga (en gris, lo que *habría* postulado, si está en solo observar) y una ráfaga sin novedades lo limpia; el popup lo limpia al abrir |
 | ~~7~~ | ~~Botón "Ponerme al día ahora"~~ | 3.6 | ✅ Hecho, solo Premium — ver "Lo que el paso 7 hizo distinto de §3.6" arriba |
-| 7b | Prueba de 5 postulaciones automáticas | 4.1 | Depende de `revision-2026-09-16.md` §1.2 y §1.3 |
+| ~~7b~~ | ~~Prueba de 5 postulaciones automáticas~~ | 4.1 | ✅ Hecho — ver "Lo que el paso 7b hizo distinto de §4.1" arriba |
 | 8 | Cola del celular primero | 3.7 | Depende de `revision-2026-09-16.md` §2.9 |
 | 9 | Recordatorio por correo | 3.8 | |
 | 10 | Textos: landing, Premium, privacidad, ficha de la tienda | 5 | En el mismo deploy que el 4 |

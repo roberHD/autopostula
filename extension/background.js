@@ -180,12 +180,17 @@ async function llamarIABackend(tipo, payload) {
 // backend caído) se responde permitido:true -- /api/applications sigue
 // validando lo mismo después, como defensa en profundidad; esta consulta solo
 // evita el intento inútil, no es la única barrera.
-async function puedePostularBackend(plataforma) {
+//
+// `origen` = 'rafaga' cuando la pestaña que va a postular la abrió una ráfaga
+// (esPestanaDeRafaga): el servidor suma el motivo 'prueba_terminada' (docs/
+// rafagas-y-ponerse-al-dia.md §4.1). Sin `origen` (la persona entrando a mano a
+// un portal) el chequeo es el de siempre.
+async function puedePostularBackend(plataforma, origen) {
   const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
   if (!autopostulaToken) return { permitido: true, motivo: null, restantes: null };
 
   try {
-    const res = await fetch(BACKEND_URL + '/api/extension/puede-postular?plataforma=' + encodeURIComponent(plataforma), {
+    const res = await fetch(BACKEND_URL + '/api/extension/puede-postular?plataforma=' + encodeURIComponent(plataforma) + (origen ? '&origen=' + encodeURIComponent(origen) : ''), {
       headers: { 'Authorization': 'Bearer ' + autopostulaToken }
     });
     const data = await res.json().catch(() => ({}));
@@ -525,7 +530,11 @@ async function quizasRafaga(disparador) {
 
 async function pedirEstadoAutomatico(token) {
   try {
-    const res = await fetch(BACKEND_URL + '/api/account/estado-automatico', {
+    // `?prueba=1`: esta extensión sabe marcar qué postulaciones salieron de una
+    // ráfaga (desdeRafaga), que es lo que gasta la prueba gratis de §4.1. El
+    // servidor solo dice "busca sola" a una cuenta gratis con prueba si el
+    // cliente lo pide así -- una versión vieja postularía sin descontar nada.
+    const res = await fetch(BACKEND_URL + '/api/account/estado-automatico?prueba=1', {
       headers: { 'Authorization': 'Bearer ' + token }
     });
     if (!res.ok) return null;
@@ -549,7 +558,8 @@ function objetivosDeEstado(estado) {
 // El servidor dice POR QUÉ no corre (lib/estado-automatico.ts, con guiones);
 // acá se pasa a las claves que usan los textos del popup y del panel. Un
 // backend viejo que no manda `motivo` cae a "no_disponible" (texto genérico).
-const MOTIVO_DE_SERVIDOR = { 'sin-plan': 'sin_plan', 'pausada': 'pausada', 'sin-cupo': 'sin_cupo', 'sin-portales': 'sin_portales' };
+// ('sin-plan' es de un servidor anterior a la prueba de §4.1; ya no lo manda.)
+const MOTIVO_DE_SERVIDOR = { 'sin-plan': 'sin_plan', 'prueba-terminada': 'prueba_terminada', 'pausada': 'pausada', 'sin-cupo': 'sin_cupo', 'sin-portales': 'sin_portales' };
 function motivoDeEstado(estado) {
   return MOTIVO_DE_SERVIDOR[estado.motivo] || 'no_disponible';
 }
@@ -565,8 +575,13 @@ async function escanearAutomatico(disparador) {
   const estado = await pedirEstadoAutomatico(autopostulaToken);
   if (!estado) return { ok: false, motivo: 'sin_conexion' };
 
-  // Sin el beneficio del plan no hay nada automático que hacer -- ni buscar
-  // ofertas nuevas ni postular a lo ya aprobado en banda gris.
+  // "Ponerme al día ahora" es de Premium (§4): en el plan gratis no existe, ni
+  // siquiera durante la prueba. El botón ya no se ofrece ahí, pero el pedido
+  // también llega desde el panel por bridge.js -- la regla se hace cumplir acá.
+  if (disparador === 'manual' && !estado.disponibleEnPlan) return { ok: false, motivo: 'sin_plan' };
+
+  // Sin el beneficio del plan (ni prueba por gastar) no hay nada automático que
+  // hacer -- ni buscar ofertas nuevas ni postular a lo ya aprobado en banda gris.
   if (!estado.busquedaAutomatica) return { ok: false, motivo: motivoDeEstado(estado) };
 
   // La búsqueda automática corre en background sin que nadie haya abierto el
@@ -595,8 +610,11 @@ async function escanearAutomatico(disparador) {
   // con TODO, así que visita todos los objetivos -- si no, la mitad de las
   // veces se saltaría el secundario justo cuando lo pidió a propósito. Y no
   // consume el contador, para no descuadrar la alternancia de las automáticas.
+  //
+  // La activación (§4.1) hace lo mismo: es el momento en que la persona acaba de
+  // decir "sí, actúa", y se le muestra todo lo que busca, no la mitad.
   let objetivosDeEsteCiclo;
-  if (disparador === 'manual') {
+  if (disparador === 'manual' || disparador === 'activacion') {
     objetivosDeEsteCiclo = objetivos;
   } else {
     const { cicloBusquedaAutomatica } = await chrome.storage.local.get('cicloBusquedaAutomatica');
@@ -833,12 +851,37 @@ async function pasoTerminado(conteos) {
   }
   const tabId = rafaga.tabActual;
   rafaga.tabActual = null;
-  rafaga.pasoActual += 1;
+  // §4.1: si la prueba llegó a 5, no quedan ráfagas que correr: se salta lo que
+  // falte -- abrir el resto de los portales solo serviría para que cada uno se
+  // cortara en su primera oferta. Termina como una ráfaga normal.
+  rafaga.pasoActual = rafaga.cortadaPorPrueba ? rafaga.pasos.length : rafaga.pasoActual + 1;
   rafaga.latido = Date.now();
   await chrome.storage.local.set({ rafaga });
   chrome.alarms.clear(NOMBRE_ALARMA_SEGURO_RAFAGA);
   if (tabId != null) chrome.tabs.remove(tabId, () => { if (chrome.runtime.lastError) {} });
   avanzarRafaga();
+}
+
+// ── ¿Esta postulación la hizo una ráfaga, o la persona? (§4.1) ─────────────
+// La prueba gratis se gasta solo con lo que envía una ráfaga: entrar a un portal
+// a mano y postular es el plan gratis de siempre. Quien lo sabe es el background,
+// no el adaptador: la pestaña de la ráfaga es la que él mismo abrió y tiene
+// guardada como tabActual -- el mismo criterio con que atiende ESCANEO_TERMINADO.
+// Así no hay carrera entre "el adaptador se enteró de que es automático" y "ya
+// empezó a postular", y una pestaña que la persona abrió a mano nunca cuenta.
+async function esPestanaDeRafaga(sender) {
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (tabId == null) return false;
+  const { rafaga } = await chrome.storage.local.get('rafaga');
+  return !!(rafaga && rafaga.estado === 'en_curso' && rafaga.tabActual === tabId);
+}
+
+// La prueba llegó a 5: pasoTerminado salta lo que falte de la ráfaga.
+async function marcarCorteDePrueba() {
+  const { rafaga } = await chrome.storage.local.get('rafaga');
+  if (!rafaga || rafaga.estado !== 'en_curso') return;
+  rafaga.cortadaPorPrueba = true;
+  await chrome.storage.local.set({ rafaga });
 }
 
 // El seguro de tiempo por paso (chrome.alarms, 8 min) ya cubre casi todos los
@@ -909,7 +952,33 @@ async function ponerseAlDia() {
   return { ok: true, estimadoMs: await estimadoRafagaMs() };
 }
 
-// Para dibujar el botón sin apretarlo: { mostrar, bloqueo, estimadoMs }.
+// ── Activar la postulación desde el panel (docs/rafagas-y-ponerse-al-dia.md §4.1) ──
+// El panel avisa (por bridge.js) que la persona acaba de decir "sí, actúa": se
+// corre una ráfaga de inmediato, con disparador 'activacion' -- esperar al siguiente
+// chequeo (hasta 60 min) mataría justo el momento en que más interesada está.
+// Ignora el umbral de 3 h y el enfriamiento de 5 min a propósito: la ráfaga
+// anterior, si hubo una, fue en solo observar y no envió nada.
+//
+// Ocurre una vez -- el panel solo lo pide en la llamada que de verdad cambió el
+// estado -- y solo si hay algo automático que arrancar: eso lo decide el servidor
+// dentro de escanearAutomatico (plan o prueba por gastar, sin pausa, con cupo y
+// portales), no el panel. La página no puede hacer que la extensión postule algo
+// que el servidor no le haya dicho que puede.
+async function activacionPostulacion() {
+  await retomarORafagaInterrumpida(); // una "en_curso" perdida no debe bloquearla
+  return escanearAutomatico('activacion');
+}
+
+// Qué le muestra el popup de la prueba de §4.1: null si no aplica (Premium, o un
+// servidor anterior que no manda `modo`), en curso con cuántas lleva, o terminada.
+function pruebaDeEstado(estado) {
+  const total = estado.pruebaTotal || 5;
+  if (estado.modo === 'prueba') return { estado: 'en_curso', restantes: estado.pruebaRestantes, total };
+  if (estado.modo === 'manual') return { estado: 'terminada', total };
+  return null;
+}
+
+// Para dibujar el botón sin apretarlo: { mostrar, bloqueo, estimadoMs, prueba }.
 // "Gratis: el botón no aparece" (§3.6) -- se decide por disponibleEnPlan, que
 // es del plan, no de si hoy está corriendo. Sin respuesta del servidor no se
 // sabe si el plan lo permite, y es mejor no ofrecer un botón que quizás no
@@ -919,7 +988,11 @@ async function estadoPonerseAlDia() {
   if (!autopostulaToken) return { mostrar: false };
 
   const estado = await pedirEstadoAutomatico(autopostulaToken);
-  if (!estado || !estado.disponibleEnPlan) return { mostrar: false };
+  if (!estado) return { mostrar: false };
+  // La prueba (§4.1) se muestra aunque el botón no: es lo único automático que
+  // tiene una cuenta gratis, y el botón es de Premium.
+  const prueba = pruebaDeEstado(estado);
+  if (!estado.disponibleEnPlan) return { mostrar: false, prueba };
 
   let bloqueo;
   if (!estado.busquedaAutomatica) bloqueo = motivoDeEstado(estado);
@@ -927,7 +1000,7 @@ async function estadoPonerseAlDia() {
   else if (!(estado.plataformasConectadas || []).length) bloqueo = 'sin_portales';
   else bloqueo = await bloqueoLocalManual();
 
-  return { mostrar: true, bloqueo, estimadoMs: await estimadoRafagaMs() };
+  return { mostrar: true, bloqueo, estimadoMs: await estimadoRafagaMs(), prueba };
 }
 
 // docs/rafagas-y-ponerse-al-dia.md §3.1, disparador "el computador despierta":
@@ -965,7 +1038,7 @@ try {
 // ── Reportar postulación al backend de AutoPostula (web) ───────
 // Corre en el background porque acá sí hay privilegios de extensión —
 // un fetch hecho desde content.js (contexto de la página) lo bloquea CORS.
-async function reportarPostulacionBackend(oferta) {
+async function reportarPostulacionBackend(oferta, desdeRafaga) {
   const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
 
   if (!autopostulaToken) {
@@ -993,7 +1066,11 @@ async function reportarPostulacionBackend(oferta) {
         matchScore: typeof oferta.matchScore === 'number' ? oferta.matchScore : null,
         // §8.6: si esta postulación viene de una aprobación de banda gris,
         // enlaza esa decisión con la postulación resultante.
-        decisionOfertaId: oferta.decisionOfertaId || null
+        decisionOfertaId: oferta.decisionOfertaId || null,
+        // §4.1: la envió una ráfaga (no la persona): en una cuenta gratis eso
+        // gasta una de las 5 de la prueba. Lo decide esPestanaDeRafaga, no el
+        // portal ni el adaptador.
+        desdeRafaga: !!desdeRafaga
       })
     });
     if (!res.ok) {
@@ -1001,7 +1078,10 @@ async function reportarPostulacionBackend(oferta) {
       console.warn('[AP] Backend rechazó la postulación:', data.error || res.status);
       return { ok: false, error: data.error || ('Error ' + res.status) };
     }
-    return { ok: true };
+    // §4.1: si esta postulación gastó una de la prueba, el servidor dice cuántas
+    // quedan (`prueba: { restantes, total }`); si no, no manda nada.
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, prueba: data.prueba || null };
   } catch (e) {
     console.warn('[AP] Error de red reportando al backend:', e);
     return { ok: false, error: 'Error de red: ' + e.message };
@@ -1143,6 +1223,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
+  // §4.1: el panel avisa que la persona acaba de activar la postulación.
+  if (msg.type === 'ACTIVACION_POSTULACION') {
+    activacionPostulacion().then(sendResponse).catch((e) => {
+      console.warn('[AP] Falló la ráfaga de activación:', e);
+      sendResponse({ ok: false, motivo: 'sin_conexion' });
+    });
+    return true;
+  }
   if (msg.type === 'APROBAR_PENDIENTES') {
     procesarAprobadas().then(sendResponse).catch((e) => {
       console.warn('[AP] Falló procesar las aprobadas de "Por decidir":', e);
@@ -1189,7 +1277,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // /api/applications (tope mensual, portal desconectado) detrás de un
     // "éxito" falso, y la postulación quedaba enviada al portal externo pero
     // invisible en AutoPostula sin que nada lo dijera.
-    reportarPostulacionBackend(msg.oferta).then(sendResponse);
+    //
+    // §4.1: se marca si la envió una ráfaga (gasta la prueba gratis) y, si la
+    // prueba llegó a 5, la ráfaga se corta -- antes de contestar, para que el
+    // adaptador no alcance a abrir la oferta siguiente.
+    esPestanaDeRafaga(sender).catch(() => false)
+      .then(async (deRafaga) => {
+        const respuesta = await reportarPostulacionBackend(msg.oferta, deRafaga);
+        if (deRafaga && respuesta.prueba && respuesta.prueba.restantes === 0) await marcarCorteDePrueba().catch(() => {});
+        return respuesta;
+      })
+      .then(sendResponse);
     return true;
   }
   if (msg.type === 'REPORTAR_TITULOS_VISTOS') {
@@ -1209,7 +1307,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'PUEDE_POSTULAR') {
-    puedePostularBackend(msg.plataforma).then(sendResponse);
+    // §4.1: si la pregunta viene de una pestaña de ráfaga, el servidor también
+    // dice si a esta cuenta gratis todavía le queda prueba. Si no (ya la gastó),
+    // la ráfaga entera se corta, no solo este portal.
+    esPestanaDeRafaga(sender).catch(() => false)
+      .then(async (deRafaga) => {
+        const respuesta = await puedePostularBackend(msg.plataforma, deRafaga ? 'rafaga' : null);
+        if (deRafaga && respuesta.motivo === 'prueba_terminada') await marcarCorteDePrueba().catch(() => {});
+        return respuesta;
+      })
+      .then(sendResponse)
+      .catch(() => sendResponse({ permitido: true, motivo: null, restantes: null }));
     return true;
   }
   if (msg.type === 'DUPLICADOS') {

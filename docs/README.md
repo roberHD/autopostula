@@ -22,7 +22,7 @@
 | [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Pendiente — ⚠️ verificado el 16-09: **son los 3 portales**, Computrabajo tampoco sincroniza (revisión §8.2) |
 | [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente — verificado el 16-09: la parte A no está |
 | [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | 🔴 **Prioridad 1** |
-| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | 🔨 En curso — pasos 1 a 7 hechos; del 7b al 10 pendiente |
+| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | 🔨 En curso — pasos 1 a 7b hechos; del 8 al 10 pendiente |
 | [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 💡 Propuesta — va después de la revisión del 16-09 |
 | [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | 🔨 Pendiente — decidido el 19-09 |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
@@ -135,13 +135,15 @@ Justo después de la Fase 1. Sus pasos 1 y 2 (la alarma que se reinicia y la rá
 estados) son bugs latentes de la búsqueda automática actual, no solo una función nueva. El permiso
 `power` obliga a publicar otra versión en la tienda: conviene que salga en la misma que la Fase 1.
 
-**Avance (2026-09-19):** pasos 1 a 7 hechos — alarma que ya no se reinicia, ráfaga como máquina de
+**Avance (2026-09-19):** pasos 1 a 7b hechos — alarma que ya no se reinicia, ráfaga como máquina de
 estados persistida, disparadores reales con umbral de 3 h, `chrome.power` con tope de 25 min (el
 permiso ya está en el manifest), el registro de cada ráfaga en el backend (`Rafaga`,
 `/api/extension/rafaga`, purga a 90 días), y que la persona se entere: número en el ícono, línea en
 el popup y tarjeta del Inicio ("Última puesta al día: hoy 09:14"), y el botón "Ponerme al día ahora"
-(solo Premium, en el popup y en el panel). Quedan del 7b al 10: prueba de 5, cola del celular,
-recordatorio por correo y textos.
+(solo Premium, en el popup y en el panel), y la prueba de 5 postulaciones automáticas del plan
+gratis (una ráfaga de inmediato al activar la postulación, el contador en el popup y el panel, el corte
+en medio al llegar a 5, "Ver las 5" en el historial y el correo de fin de prueba). Quedan del 8 al 10:
+cola del celular, recordatorio por correo y textos.
 
 ### 1. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 

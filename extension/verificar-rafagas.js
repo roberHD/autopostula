@@ -1126,6 +1126,457 @@ bloque(async () => {
   check('popup.js conecta el clic del botón y pide el estado al abrir', fuente.includes("getElementById('ponerse-btn')?.addEventListener('click', apretarPonerse)") && /loadState[\s\S]{0,900}cargarEstadoPonerse\(\)/.test(fuente));
 });
 
+// ── 14. La prueba de 5 postulaciones automáticas: quién postuló, y cuándo se corta (§4.1) ──
+bloque(async () => {
+  const estadoPrueba = {
+    busquedaAutomatica: true, disponibleEnPlan: false, motivo: null,
+    modo: 'prueba', pruebaRestantes: 5, pruebaTotal: 5,
+    objetivos: [{ etiqueta: 'vendedor', peso: 1 }],
+    // Dos portales = dos pasos de búsqueda: si se corta a la mitad, hay un "resto" que saltarse.
+    plataformasConectadas: ['Trabajando', 'Laborum'],
+  };
+  // Un backend simulado configurable: el estado, puede-postular y POST /api/applications.
+  function servidor(cambiosEstado) {
+    const s = {
+      estado: { ...estadoPrueba, ...(cambiosEstado || {}) },
+      puede: { permitido: true, motivo: null, restantes: 18 },
+      postulacion: { id: 'a1' },
+    };
+    s.fetchImpl = async (url) => {
+      const u = String(url);
+      if (/estado-automatico/.test(u)) return { ok: true, json: async () => s.estado };
+      if (/puede-postular/.test(u)) return { ok: true, json: async () => s.puede };
+      if (/\/api\/applications$/.test(u)) return { ok: true, json: async () => s.postulacion };
+      return { ok: /\/api\/extension\/rafaga/.test(u), json: async () => ({}) };
+    };
+    return s;
+  }
+  // Devuelve un backend con una ráfaga YA en curso (su pestaña es la que abrió ella).
+  async function conRafaga(cambios) {
+    const s = servidor(cambios);
+    const b = cargarBackgroundJs({ fetchImpl: s.fetchImpl });
+    await tick();
+    await b.ctx.quizasRafaga('chequeo');
+    await tick();
+    return { s, b, tab: b.storageLocal.rafaga && b.storageLocal.rafaga.tabActual };
+  }
+  const llamadasA = (b, re) => b.fetchLlamadas.filter(l => re.test(l.url));
+  const ultimoPuede = (b) => llamadasA(b, /puede-postular/).slice(-1)[0].url;
+  const cuerpoPost = (b) => JSON.parse(llamadasA(b, /\/api\/applications$/).slice(-1)[0].init.body);
+  const oferta = { id: 'x1', titulo: 'Vendedor', plataforma: 'Trabajando' };
+  const puede = (b, tab) => b.enviarMensajeAsync({ type: 'PUEDE_POSTULAR', plataforma: 'Trabajando' }, tab === undefined ? {} : { tab: { id: tab } });
+  const reportar = (b, tab) => b.enviarMensajeAsync({ type: 'REPORTAR_POSTULACION', oferta }, tab === undefined ? {} : { tab: { id: tab } });
+
+  // ── ¿Quién es la pestaña de la ráfaga? ──
+  let { s, b, tab } = await conRafaga();
+  check('control: una cuenta en prueba arranca su ráfaga y guarda cuál es su pestaña', !!b.storageLocal.rafaga && b.storageLocal.rafaga.estado === 'en_curso' && tab === 1, b.storageLocal.rafaga);
+
+  let r = await puede(b, tab);
+  check('PUEDE_POSTULAR desde la pestaña de la ráfaga pregunta con origen=rafaga', /[?&]origen=rafaga/.test(ultimoPuede(b)) && r.permitido === true, ultimoPuede(b));
+  await puede(b, 999);
+  check('...desde cualquier otra pestaña (la persona entrando a mano) NO lleva origen', !/origen=/.test(ultimoPuede(b)), ultimoPuede(b));
+  await puede(b);
+  check('...ni desde el popup (mensaje sin pestaña)', !/origen=/.test(ultimoPuede(b)), ultimoPuede(b));
+
+  r = await reportar(b, tab);
+  check('lo que postula la pestaña de la ráfaga se reporta con desdeRafaga: true (es lo que gasta la prueba)', cuerpoPost(b).desdeRafaga === true && r.ok === true, cuerpoPost(b));
+  await reportar(b, 999);
+  check('...lo que postula la persona a mano, con desdeRafaga: false', cuerpoPost(b).desdeRafaga === false, cuerpoPost(b));
+  check('...y `origen` sigue siendo MANUAL, como siempre (el campo de siempre, con su propio significado, no se toca)', cuerpoPost(b).origen === 'MANUAL');
+
+  // ── Lo que responde el servidor: cuántas quedan ──
+  s.postulacion = { id: 'a2', prueba: { restantes: 2, total: 5 } };
+  r = await reportar(b, tab);
+  check('el servidor dice cuántas quedan de la prueba y el adaptador lo recibe', r.ok === true && r.prueba && r.prueba.restantes === 2 && r.prueba.total === 5, r);
+  check('con 2 restantes la ráfaga sigue: no se corta', !b.storageLocal.rafaga.cortadaPorPrueba);
+  s.postulacion = { id: 'a3' };
+  r = await reportar(b, tab);
+  check('una postulación que no gastó prueba (Premium, o manual) no trae `prueba` y no cambia nada', r.ok === true && !r.prueba && !b.storageLocal.rafaga.cortadaPorPrueba, r);
+
+  s.postulacion = { id: 'a4', prueba: { restantes: 0, total: 5 } };
+  r = await reportar(b, 999);
+  check('la misma respuesta ante una pestaña que NO es de la ráfaga no corta nada', !b.storageLocal.rafaga.cortadaPorPrueba, b.storageLocal.rafaga);
+  r = await reportar(b, tab);
+  check('con 0 restantes, desde la pestaña de la ráfaga: queda marcada como cortada por la prueba', b.storageLocal.rafaga.cortadaPorPrueba === true, b.storageLocal.rafaga);
+  check('...y el adaptador igual recibe su ok:true (la postulación quedó registrada)', r.ok === true && r.prueba.restantes === 0, r);
+
+  // ── Al cortarse, el resto de la ráfaga se salta ──
+  const tabsAntes = b.tabsCreados.length;
+  b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: { postular: 5 } }, { tab: { id: tab } });
+  await tick();
+  check('al terminar ese paso NO abre el siguiente portal: la ráfaga termina ahí (criterio 2 de §4.1)', b.tabsCreados.length === tabsAntes && b.storageLocal.rafaga.estado === 'terminada', { tabs: b.tabsCreados.length, estado: b.storageLocal.rafaga.estado });
+  check('...y cuenta lo que se envió, y suelta el bloqueo de suspensión como cualquier ráfaga que termina', b.storageLocal.rafaga.conteos.postuladas === 5 && b.power.liberados >= 1, b.storageLocal.rafaga.conteos);
+  check('...y se reporta al backend como terminada', b.reportesRafaga().slice(-1)[0].body.estado === 'terminada');
+
+  // Control: sin corte, el segundo portal SÍ se abre.
+  ({ s, b, tab } = await conRafaga());
+  b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: { postular: 2 } }, { tab: { id: tab } });
+  await tick();
+  check('control: sin corte, al terminar el primer paso abre el segundo portal', b.tabsCreados.length === 2 && b.storageLocal.rafaga.estado === 'en_curso', b.tabsCreados.length);
+
+  // ── puede-postular dice "prueba_terminada" (otro camino al mismo corte) ──
+  ({ s, b, tab } = await conRafaga());
+  s.puede = { permitido: false, motivo: 'prueba_terminada', restantes: 18 };
+  r = await puede(b, 999);
+  check('ante una pestaña de la persona, "prueba_terminada" llega tal cual pero NO corta la ráfaga', r.motivo === 'prueba_terminada' && !b.storageLocal.rafaga.cortadaPorPrueba, r);
+  r = await puede(b, tab);
+  check('desde la pestaña de la ráfaga: el veredicto llega tal cual al adaptador Y la ráfaga queda cortada', r.permitido === false && r.motivo === 'prueba_terminada' && b.storageLocal.rafaga.cortadaPorPrueba === true, r);
+
+  // ── Una pestaña vieja no cuenta como de la ráfaga ──
+  ({ s, b, tab } = await conRafaga());
+  b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: {} }, { tab: { id: tab } });
+  await tick();
+  b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: {} }, { tab: { id: b.storageLocal.rafaga.tabActual } });
+  await tick();
+  check('control: la ráfaga de dos pasos terminó', b.storageLocal.rafaga.estado === 'terminada');
+  await puede(b, tab);
+  check('con la ráfaga TERMINADA, su pestaña vieja ya no cuenta como de la ráfaga (no lleva origen)', !/origen=/.test(ultimoPuede(b)), ultimoPuede(b));
+
+  // ── Si el servidor falla, no se traba el escaneo ──
+  const rota = cargarBackgroundJs({ fetchImpl: async (url) => { if (/puede-postular/.test(String(url))) throw new Error('sin red'); return { ok: true, json: async () => ({}) }; } });
+  await tick();
+  r = await rota.enviarMensajeAsync({ type: 'PUEDE_POSTULAR', plataforma: 'Trabajando' }, { tab: { id: 1 } });
+  check('sin red al preguntar puede-postular: se deja pasar (permitido: true) -- /api/applications sigue validando después', r.permitido === true, r);
+});
+
+// ── 15. La prueba y los tres modos: qué corre y qué muestra el popup (§4, §4.1) ──
+bloque(async () => {
+  const base = {
+    busquedaAutomatica: true, disponibleEnPlan: false, motivo: null,
+    modo: 'prueba', pruebaRestantes: 3, pruebaTotal: 5,
+    objetivos: [{ etiqueta: 'vendedor', peso: 1 }],
+    plataformasConectadas: ['Trabajando'],
+  };
+  const conEstado = (cambios) => async (url) => {
+    if (/\/api\/account\/estado-automatico/.test(String(url))) return { ok: true, json: async () => ({ ...base, ...cambios }) };
+    return { ok: /\/api\/extension\/rafaga/.test(String(url)), json: async () => ({}) };
+  };
+  const nuevo = async (cambios, opts) => {
+    const b = cargarBackgroundJs({ fetchImpl: conEstado(cambios), ...(opts || {}) });
+    await tick();
+    return b;
+  };
+  const gastada = { busquedaAutomatica: false, motivo: 'prueba-terminada', modo: 'manual', pruebaRestantes: null };
+
+  // ── Gratis con prueba por gastar ──
+  let b = await nuevo({});
+  await b.ctx.quizasRafaga('chequeo');
+  await tick();
+  check('cuenta gratis con prueba: los disparadores automáticos SÍ arrancan una ráfaga', b.tabsCreados.length === 1 && b.storageLocal.rafaga.disparador === 'chequeo');
+  check('la extensión le avisa al servidor que sabe de la prueba (?prueba=1): sin eso, el servidor no la deja correr sola', b.fetchLlamadas.some(l => /estado-automatico\?prueba=1$/.test(l.url)), b.fetchLlamadas.map(l => l.url));
+
+  b = await nuevo({});
+  let r = await b.enviarMensajeAsync({ type: 'PONERSE_AL_DIA' });
+  check('"Ponerme al día ahora" NO existe en el plan gratis, ni durante la prueba: "sin_plan" y no abre nada', r.ok === false && r.motivo === 'sin_plan' && b.tabsCreados.length === 0, r);
+
+  r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
+  check('el popup no muestra el botón durante la prueba (mostrar: false)…', r.mostrar === false, r);
+  check('…pero sí cuántas lleva: en_curso, 3 restantes de 5', !!r.prueba && r.prueba.estado === 'en_curso' && r.prueba.restantes === 3 && r.prueba.total === 5, r);
+
+  // ── Prueba gastada: nada corre solo ──
+  for (const disparador of ['inicio_chrome', 'despertar', 'chequeo']) {
+    b = await nuevo(gastada);
+    await b.ctx.quizasRafaga(disparador);
+    await tick();
+    check('prueba gastada: "' + disparador + '" NO dispara ráfaga (criterio 4 de §4.1)', b.tabsCreados.length === 0 && !b.storageLocal.rafaga, b.tabsCreados.length);
+  }
+  b = await nuevo(gastada);
+  r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
+  check('prueba gastada: el popup no muestra el botón, y sí el mensaje de fin de prueba', r.mostrar === false && !!r.prueba && r.prueba.estado === 'terminada' && r.prueba.total === 5, r);
+  r = await b.enviarMensajeAsync({ type: 'PONERSE_AL_DIA' });
+  check('prueba gastada: "Ponerme al día" tampoco (sin_plan)', r.ok === false && r.motivo === 'sin_plan' && b.tabsCreados.length === 0, r);
+
+  // ── Premium y servidores anteriores: nada de la prueba ──
+  b = await nuevo({ disponibleEnPlan: true, modo: 'premium', pruebaRestantes: null });
+  r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
+  check('Premium: el botón sí, y NADA de la prueba (prueba: null) -- criterio 5 de §4.1', r.mostrar === true && r.prueba === null, r);
+  b = await nuevo({ disponibleEnPlan: true, modo: undefined, pruebaRestantes: undefined, pruebaTotal: undefined });
+  r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
+  check('un servidor anterior a la prueba (sin `modo`): no inventa nada (prueba: null)', r.prueba === null, r);
+  b = await nuevo({ disponibleEnPlan: true, modo: 'premium', pruebaRestantes: null });
+  r = await b.enviarMensajeAsync({ type: 'PONERSE_AL_DIA' });
+  await tick();
+  check('Premium: "Ponerme al día" sigue funcionando igual que antes', r.ok === true && b.tabsCreados.length === 1, r);
+
+  // Sin `pruebaTotal` (no debería pasar) se asume 5.
+  b = await nuevo({ pruebaTotal: undefined });
+  r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
+  check('si el servidor no manda el total, se asume 5', r.prueba && r.prueba.total === 5, r);
+});
+
+// ── 16. Activar la postulación desde el panel: una ráfaga de inmediato (§4.1) ──
+bloque(async () => {
+  const base = {
+    busquedaAutomatica: true, disponibleEnPlan: false, motivo: null,
+    modo: 'prueba', pruebaRestantes: 5, pruebaTotal: 5,
+    objetivos: [{ etiqueta: 'vendedor', peso: 1 }, { etiqueta: 'cajero', peso: 0.5 }],
+    plataformasConectadas: ['Trabajando'],
+  };
+  const conEstado = (cambios) => async (url) => {
+    if (/\/api\/account\/estado-automatico/.test(String(url))) return { ok: true, json: async () => ({ ...base, ...cambios }) };
+    return { ok: /\/api\/extension\/rafaga/.test(String(url)), json: async () => ({}) };
+  };
+  const nuevo = async (cambios, opts) => {
+    const b = cargarBackgroundJs({ fetchImpl: conEstado(cambios), ...(opts || {}) });
+    await tick();
+    return b;
+  };
+  const activar = (b) => b.enviarMensajeAsync({ type: 'ACTIVACION_POSTULACION' });
+  const enCurso = (latidoHaceMin, tabActual) => ({
+    id: 'r_previa', disparador: 'chequeo', inicio: Date.now() - 40 * 60000, latido: Date.now() - latidoHaceMin * 60000,
+    pasos: [{ tipo: 'busqueda', portal: 'Trabajando', url: 'https://www.trabajando.cl/x' }], pasoActual: 0, tabActual,
+    conteos: { postuladas: 0, descartadas: 0, gris: 0, observadas: 0, errores: 0 }, estado: 'en_curso',
+  });
+
+  let b = await nuevo({});
+  b.storageLocal.ultimaRafagaFin = Date.now() - 60000; // hace 1 min: dentro del umbral de 3 h Y del enfriamiento de 5 min
+  let r = await activar(b);
+  await tick();
+  check('activar arranca una ráfaga de inmediato, aunque la anterior (en solo observar) terminara hace 1 min', r.ok === true && b.tabsCreados.length === 1, r);
+  check('...con disparador "activacion"', b.storageLocal.rafaga.disparador === 'activacion');
+  check('...y así se reporta al backend', b.reportesRafaga()[0].body.disparador === 'activacion');
+  check('recorre TODOS los objetivos (dos búsquedas), no la mitad', b.storageLocal.rafaga.pasos.filter(p => p.tipo === 'busqueda').length === 2, b.storageLocal.rafaga.pasos);
+  check('...sin gastar el contador de ciclos de las automáticas', b.storageLocal.cicloBusquedaAutomatica === undefined, b.storageLocal.cicloBusquedaAutomatica);
+
+  b = await nuevo({});
+  await b.ctx.quizasRafaga('chequeo');
+  await tick();
+  check('control: un chequeo normal recorre solo el objetivo principal (una búsqueda) y cuenta el ciclo', b.storageLocal.rafaga.pasos.filter(p => p.tipo === 'busqueda').length === 1 && b.storageLocal.cicloBusquedaAutomatica === 1, b.storageLocal.rafaga.pasos);
+
+  // ── Si ya hay una corriendo ──
+  b = await nuevo({});
+  b.storageLocal.rafaga = enCurso(1, 4242); // latido de hace 1 min: viva
+  r = await activar(b);
+  check('con una ráfaga viva en curso: "en_curso", no abre otra', r.ok === false && r.motivo === 'en_curso' && b.tabsCreados.length === 0, r);
+  b = await nuevo({});
+  b.storageLocal.rafaga = enCurso(30, 4242); // el worker la perdió
+  r = await activar(b);
+  await tick();
+  check('una "en_curso" que el worker perdió NO bloquea la activación', r.ok === true && b.tabsCreados.length === 1, r);
+  check('...y cierra la pestaña huérfana de la vieja', b.removidos.includes(4242));
+
+  // ── Solo si hay algo automático que arrancar (lo decide el servidor, no el panel) ──
+  b = await nuevo({ busquedaAutomatica: false, motivo: 'prueba-terminada', modo: 'manual', pruebaRestantes: null });
+  r = await activar(b);
+  check('prueba gastada: no arranca nada y dice por qué ("prueba_terminada")', r.ok === false && r.motivo === 'prueba_terminada' && b.tabsCreados.length === 0, r);
+  b = await nuevo({ busquedaAutomatica: false, motivo: 'pausada' });
+  r = await activar(b);
+  check('en pausa: "pausada", no arranca', r.ok === false && r.motivo === 'pausada' && b.tabsCreados.length === 0, r);
+  b = await nuevo({ objetivos: [], cargoObjetivo: null });
+  r = await activar(b);
+  check('sin objetivo: "sin_objetivo"', r.ok === false && r.motivo === 'sin_objetivo' && b.tabsCreados.length === 0, r);
+  b = await nuevo({ plataformasConectadas: [] });
+  r = await activar(b);
+  check('sin portales: "sin_portales"', r.ok === false && r.motivo === 'sin_portales' && b.tabsCreados.length === 0, r);
+  b = cargarBackgroundJs({ fetchImpl: async () => { throw new Error('sin red'); } });
+  await tick();
+  r = await activar(b);
+  check('sin red: "sin_conexion" (el panel recibe respuesta, no se queda esperando)', r.ok === false && r.motivo === 'sin_conexion', r);
+  b = await nuevo({}, { sinToken: true });
+  r = await activar(b);
+  check('extensión sin conectar: "sin_token"', r.ok === false && r.motivo === 'sin_token', r);
+
+  // ── Premium también: activar es el momento en que dice "sí, actúa" ──
+  b = await nuevo({ disponibleEnPlan: true, modo: 'premium', pruebaRestantes: null });
+  r = await activar(b);
+  await tick();
+  check('una cuenta Premium que activa también arranca su ráfaga', r.ok === true && b.storageLocal.rafaga.disparador === 'activacion', r);
+});
+
+// ── 17. bridge.js: el evento de la activación (§4.1) ──────────────────────
+bloque(async () => {
+  const fuente = fs.readFileSync(path.join(__dirname, 'bridge.js'), 'utf8');
+  function cargarBridge() {
+    const window = new EventTarget();
+    const enviados = [];
+    const resultados = [];
+    const est = { respuesta: undefined, error: null };
+    window.addEventListener('autopostula:activacion-resultado', (e) => resultados.push(e.detail));
+    const ctx = {
+      window, CustomEvent, console,
+      document: { documentElement: { dataset: {} } },
+      chrome: {
+        runtime: {
+          getManifest: () => ({ version: '9.9.9' }),
+          sendMessage: (m, cb) => { enviados.push(m); cb(est.respuesta); },
+          get lastError() { return est.error; },
+        },
+      },
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fuente, ctx, { filename: 'bridge.js' });
+    return { window, enviados, resultados, est };
+  }
+  const br = cargarBridge();
+  br.est.respuesta = { ok: true };
+  br.window.dispatchEvent(new CustomEvent('autopostula:activacion'));
+  check('el evento del panel se convierte en el mensaje ACTIVACION_POSTULACION', br.enviados.length === 1 && br.enviados[0].type === 'ACTIVACION_POSTULACION', br.enviados);
+  check('...que no lleva nada más (la página no le dice a la extensión qué abrir ni qué postular)', Object.keys(br.enviados[0]).join(',') === 'type', br.enviados[0]);
+  check('la respuesta vuelve al panel como evento, tal cual', br.resultados.length === 1 && br.resultados[0].ok === true, br.resultados);
+  br.est.respuesta = { ok: false, motivo: 'sin_portales' };
+  br.window.dispatchEvent(new CustomEvent('autopostula:activacion'));
+  check('un rechazo lleva su motivo al panel (el panel lo explica)', br.resultados[1] && br.resultados[1].ok === false && br.resultados[1].motivo === 'sin_portales', br.resultados);
+  br.est.respuesta = undefined;
+  br.window.dispatchEvent(new CustomEvent('autopostula:activacion'));
+  check('si la extensión no contesta: "extension_no_responde" (el panel no queda esperando)', br.resultados[2] && br.resultados[2].motivo === 'extension_no_responde', br.resultados);
+  br.est.error = { message: 'Extension context invalidated.' };
+  br.est.respuesta = { ok: true };
+  br.window.dispatchEvent(new CustomEvent('autopostula:activacion'));
+  check('con la extensión recargada (lastError) también', br.resultados[3] && br.resultados[3].ok === false && br.resultados[3].motivo === 'extension_no_responde', br.resultados);
+  const pw = cargarBridge();
+  pw.window.addEventListener('autopostula:ponerse-al-dia-resultado', (e) => pw.resultados.push(e.detail));
+  pw.est.respuesta = { ok: true };
+  pw.window.dispatchEvent(new CustomEvent('autopostula:ponerse-al-dia'));
+  check('lo que ya existía no se rompió: "ponerse al día" sigue mandando PONERSE_AL_DIA', pw.enviados.length === 1 && pw.enviados[0].type === 'PONERSE_AL_DIA');
+});
+
+// ── 18. El popup: la prueba de 5 postulaciones (§4.1) ──────────────────────
+bloque(async () => {
+  const fuente = fs.readFileSync(path.join(__dirname, 'popup.js'), 'utf8');
+  const desde = fuente.indexOf('function haceCuanto(');
+  const hasta = fuente.indexOf('// ── Cargar estado');
+
+  function cargarPopup() {
+    const ids = ['ponerse-row', 'ponerse-btn', 'ponerse-hint', 'rafaga-row', 'rafaga-titulo', 'rafaga-detalle',
+      'prueba-row', 'prueba-titulo', 'prueba-detalle', 'prueba-links', 'prueba-ver', 'prueba-premium'];
+    const elementos = {};
+    for (const id of ids) {
+      const clases = new Set(/-(row|links|detalle)$/.test(id) ? ['hidden'] : []);
+      elementos[id] = {
+        id, textContent: '', disabled: false, href: '',
+        classList: { toggle: (c, f) => { if (f) clases.add(c); else clases.delete(c); }, contains: (c) => clases.has(c) },
+      };
+    }
+    const ctx = {
+      Date,
+      BACKEND_URL: 'https://autopostula.cl', // es una `const` de arriba del archivo, fuera del bloque que se recorta
+      document: { getElementById: (id) => elementos[id] || null },
+      chrome: {
+        runtime: { sendMessage: () => {}, lastError: null },
+        storage: { onChanged: { addListener: () => {} } },
+        action: { setBadgeText: () => {} },
+      },
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fuente.slice(desde, hasta), ctx, { filename: 'popup.js (bloque de ráfaga)' });
+    return { ctx, elementos, oculto: (id) => elementos[id].classList.contains('hidden'), leer: (n) => vm.runInContext(n, ctx) };
+  }
+  const p = cargarPopup();
+
+  // ── Los textos ──
+  check('en curso: "Prueba automática: 3 de 5 postulaciones" (cuántas lleva, no cuántas quedan)', p.ctx.textoPruebaEnCurso(2, 5) === 'Prueba automática: 3 de 5 postulaciones');
+  check('recién empezada: 0 de 5', p.ctx.textoPruebaEnCurso(5, 5) === 'Prueba automática: 0 de 5 postulaciones');
+  check('un dato raro nunca dibuja "7 de 5" ni un negativo', p.ctx.textoPruebaEnCurso(-2, 5) === 'Prueba automática: 5 de 5 postulaciones' && p.ctx.textoPruebaEnCurso(9, 5) === 'Prueba automática: 0 de 5 postulaciones');
+  check('sin prueba (Premium, servidor viejo) no hay texto', p.ctx.textoPrueba(null) === null && p.ctx.textoPrueba(undefined) === null && p.ctx.textoPrueba({ estado: 'algo_raro' }) === null);
+  let t = p.ctx.textoPrueba({ estado: 'en_curso', restantes: 2, total: 5 });
+  check('en curso: solo el título, sin enlaces ni detalle', t.titulo === 'Prueba automática: 3 de 5 postulaciones' && t.detalle === '' && t.enlaces === null, t);
+  t = p.ctx.textoPrueba({ estado: 'terminada', total: 5 });
+  check('terminada: el texto del documento', t.titulo === 'Tu prueba terminó: AutoPostula envió 5 postulaciones sin que entraras a ningún portal.', t);
+  check('...con las dos salidas (Premium, o entrar a mano a un portal)', t.detalle.includes('Con Premium') && t.detalle.includes('Computrabajo, Laborum o Trabajando'), t.detalle);
+  check('...y los dos enlaces: "Ver las 5" (historial filtrado) y "Pasar a Premium"', t.enlaces.length === 2 && t.enlaces[0].texto === 'Ver las 5' && t.enlaces[0].ruta === '/dashboard/historial?filtro=prueba' && t.enlaces[1].texto === 'Pasar a Premium' && t.enlaces[1].ruta === '/dashboard/premium', t.enlaces);
+
+  // ── El render ──
+  p.ctx.renderPonerse({ mostrar: false, prueba: { estado: 'en_curso', restantes: 2, total: 5 } });
+  check('render: cuenta gratis en prueba: se ve la fila con cuántas lleva, y NO la del botón', !p.oculto('prueba-row') && p.elementos['prueba-titulo'].textContent === 'Prueba automática: 3 de 5 postulaciones' && p.oculto('ponerse-row'));
+  check('...sin enlaces ni detalle mientras dura', p.oculto('prueba-links') && p.oculto('prueba-detalle'));
+  p.ctx.renderPonerse({ mostrar: false, prueba: { estado: 'terminada', total: 5 } });
+  check('render: terminada: título, detalle y enlaces visibles', !p.oculto('prueba-row') && !p.oculto('prueba-links') && !p.oculto('prueba-detalle') && p.elementos['prueba-titulo'].textContent.startsWith('Tu prueba terminó'));
+  check('...los enlaces apuntan al panel real: "Ver las 5" filtra el historial, "Pasar a Premium" va a Premium', p.elementos['prueba-ver'].textContent === 'Ver las 5' && p.elementos['prueba-ver'].href === 'https://autopostula.cl/dashboard/historial?filtro=prueba' && p.elementos['prueba-premium'].textContent === 'Pasar a Premium' && p.elementos['prueba-premium'].href === 'https://autopostula.cl/dashboard/premium', [p.elementos['prueba-ver'].href, p.elementos['prueba-premium'].href]);
+  p.ctx.renderPonerse({ mostrar: true, bloqueo: null, estimadoMs: 480000, prueba: null });
+  check('render: Premium (prueba: null): la fila de la prueba se oculta y el botón se ve', p.oculto('prueba-row') && !p.oculto('ponerse-row'));
+  p.ctx.renderPonerse({ mostrar: false });
+  check('render: sin datos de prueba, la fila se oculta (y la del botón también)', p.oculto('prueba-row') && p.oculto('ponerse-row'));
+  p.ctx.renderPonerse(undefined);
+  check('render con la extensión sin contestar (undefined) no revienta y deja todo oculto', p.oculto('prueba-row') && p.oculto('ponerse-row'));
+
+  // ── Son LOS MISMOS textos que el panel y el correo (backend/lib/texto-rafaga.ts) ──
+  const ts = fs.readFileSync(path.join(__dirname, '..', 'backend', 'lib', 'texto-rafaga.ts'), 'utf8');
+  const plantilla = (nombre) => {
+    const i = ts.indexOf('export function ' + nombre);
+    const j = ts.indexOf('`', i);
+    return ts.slice(j + 1, ts.indexOf('`', j + 1));
+  };
+  const constante = (nombre) => (ts.match(new RegExp(nombre + '\\s*=\\s*"([^"]*)"')) || [])[1];
+  const rellenar = (tpl, vars) => tpl.replace(/\$\{(\w+)\}/g, (_, k) => vars[k]);
+  check('"en curso" dice lo mismo en el panel y en el popup', rellenar(plantilla('textoPruebaEnCurso'), { enviadas: 3, total: 5 }) === p.ctx.textoPruebaEnCurso(2, 5), plantilla('textoPruebaEnCurso'));
+  check('"terminó" dice lo mismo en el panel y en el popup', rellenar(plantilla('textoPruebaTerminada'), { total: 5 }) === p.ctx.textoPruebaTerminada(5), plantilla('textoPruebaTerminada'));
+  check('"Ver las N" dice lo mismo', rellenar(plantilla('textoVerLasDePrueba'), { total: 5 }) === p.ctx.textoVerLasDePrueba(5), plantilla('textoVerLasDePrueba'));
+  check('lo que sigue después de la prueba dice lo mismo', constante('TEXTO_DESPUES_DE_LA_PRUEBA') && constante('TEXTO_DESPUES_DE_LA_PRUEBA') === p.leer('TEXTO_DESPUES_DE_LA_PRUEBA'));
+  check('"Pasar a Premium" dice lo mismo', constante('TEXTO_PASAR_A_PREMIUM') && constante('TEXTO_PASAR_A_PREMIUM') === p.leer('TEXTO_PASAR_A_PREMIUM'));
+  check('"Ver las 5" lleva a la misma ruta del historial', constante('RUTA_VER_LAS_DE_PRUEBA') && constante('RUTA_VER_LAS_DE_PRUEBA') === p.leer('RUTA_VER_LAS_DE_PRUEBA'));
+  const historial = fs.readFileSync(path.join(__dirname, '..', 'backend', 'app', 'dashboard', 'historial', 'page.tsx'), 'utf8');
+  check('y esa ruta (?filtro=prueba) es la que el historial del panel sabe leer', /get\("filtro"\)\s*===\s*"prueba"/.test(historial));
+
+  // ── El HTML ──
+  const html = fs.readFileSync(path.join(__dirname, 'popup.html'), 'utf8');
+  check('popup.html trae la fila de la prueba con todos sus ids', ['prueba-row', 'prueba-titulo', 'prueba-detalle', 'prueba-links', 'prueba-ver', 'prueba-premium'].every(id => html.includes('id="' + id + '"')));
+  check('arranca oculta (una cuenta Premium nunca la ve parpadear)', /class="prueba-row hidden"/.test(html) && /class="prueba-links hidden"/.test(html));
+  check('va después del botón y antes del toggle maestro', html.indexOf('id="ponerse-row"') < html.indexOf('id="prueba-row"') && html.indexOf('id="prueba-row"') < html.indexOf('class="master-row"'));
+  check('los enlaces abren en pestaña nueva (target="_blank"), como los demás del popup', /id="prueba-ver"\s+target="_blank"/.test(html) && /id="prueba-premium"\s+target="_blank"/.test(html));
+});
+
+// ── 19. Los adaptadores: se pregunta antes de CADA postulación y el conteo no miente (§4.1) ──
+bloque(async () => {
+  for (const [archivo, portal] of [['computrabajo.js', 'Computrabajo'], ['trabajando.js', 'Trabajando']]) {
+    const fuente = fs.readFileSync(path.join(__dirname, 'adapters', archivo), 'utf8').replace(/\r\n/g, '\n');
+    const marcaInicio = '  AP.procesando = true;\n  let cortado = false;';
+    const marcaFin = '    conteos.postular = intentadas;\n    AP.reportarEscaneoTerminado(conteos);\n    return;\n  }\n';
+    const desde = fuente.indexOf(marcaInicio);
+    const hasta = fuente.indexOf(marcaFin);
+    check(archivo + ': el bucle de postulación está donde se espera', desde > 0 && hasta > desde);
+    if (!(desde > 0 && hasta > desde)) continue;
+    check(archivo + ': ya no queda la consulta única antes del bucle', !/if \(!soloObservar\) \{\s*const verificacion = await AP\.puedePostular/.test(fuente));
+    // El texto REAL del bucle, ejecutado con stubs (no una copia reescrita a mano).
+    const trozo = fuente.slice(desde, hasta + marcaFin.length);
+    const correr = async ({ permitidos, cantidad, soloObservar, sinPanelEn }) => {
+      const llamadas = { puede: 0, postular: [], msgs: [], terminado: null, logs: [] };
+      const ctx = {
+        AP: {
+          activo: true, procesando: false, vistos: new Set(),
+          puedePostular: async (p) => { llamadas.portal = p; return llamadas.puede++ < permitidos ? { permitido: true, motivo: null } : { permitido: false, motivo: 'prueba_terminada' }; },
+          motivoPuedePostular: (m) => 'motivo:' + m,
+          reportarEscaneoTerminado: (c) => { llamadas.terminado = { ...c }; },
+        },
+        soloObservar: !!soloObservar,
+        pendientes: Array.from({ length: cantidad }, (_, i) => ({ t: { querySelector: () => ({ href: 'https://portal/oferta-' + (i + 1) + '#x' }) }, id: 'id' + (i + 1), titulo: 'Titulo ' + (i + 1) })),
+        conteos: { postular: cantidad, gris: 0, descartar: 0 },
+        activar: async (t) => (sinPanelEn && t.querySelector().href.includes('oferta-' + sinPanelEn + '#') ? null : {}),
+        postular: async (url, id) => { llamadas.postular.push(id); },
+        msg: (texto, color) => llamadas.msgs.push([texto, color]),
+        addLog: (e) => llamadas.logs.push(e), sleep: async () => {}, DELAY: 0,
+      };
+      vm.createContext(ctx);
+      const salida = await vm.runInContext('(async function () {\n' + trozo + '\n  return "sigue";\n})()', ctx);
+      return { salida, llamadas, ctx };
+    };
+
+    let x = await correr({ permitidos: 2, cantidad: 5 });
+    check(archivo + ': con cupo para 2 de 5, postula 2 y se corta EN MEDIO al tercero (no al terminar la página)', x.salida !== 'sigue' && x.llamadas.postular.join() === 'id1,id2' && x.llamadas.puede === 3, x.llamadas);
+    check(archivo + ': ...pregunta por el portal correcto (' + portal + ')', x.llamadas.portal === portal, x.llamadas.portal);
+    check(archivo + ': ...y el conteo dice lo que se postuló (2), no lo que se iba a postular (5)', x.llamadas.terminado && x.llamadas.terminado.postular === 2, x.llamadas.terminado);
+    check(archivo + ': ...deja el aviso rojo con el motivo (no se pisa con un resumen alegre)', x.llamadas.msgs.slice(-1)[0][0] === 'motivo:prueba_terminada' && x.llamadas.msgs.slice(-1)[0][1] === '#DC2626', x.llamadas.msgs.slice(-1)[0]);
+    check(archivo + ': ...y suelta AP.procesando', x.ctx.AP.procesando === false);
+
+    x = await correr({ permitidos: 0, cantidad: 5 });
+    check(archivo + ': sin cupo desde el principio: no postula nada y reporta 0 (antes reportaba las 5 que "iba a" postular)', x.llamadas.postular.length === 0 && x.llamadas.terminado && x.llamadas.terminado.postular === 0, x.llamadas);
+
+    x = await correr({ permitidos: 99, cantidad: 5 });
+    check(archivo + ': con cupo para todas: postula las 5 y sigue de largo (a paginar), sin reportar terminado todavía', x.salida === 'sigue' && x.llamadas.postular.length === 5 && x.llamadas.terminado === null && x.llamadas.puede === 5, x.llamadas);
+    check(archivo + ': ...una consulta por oferta (5), no una por página', x.llamadas.puede === 5);
+
+    x = await correr({ permitidos: 99, cantidad: 5, soloObservar: true });
+    check(archivo + ': en solo observar no pregunta nada ni postula (no hay nada que limitar), y deja constancia de las 5', x.llamadas.puede === 0 && x.llamadas.postular.length === 0 && x.llamadas.logs.length === 5 && x.llamadas.logs.every(l => l.status === 'observado') && x.salida === 'sigue', x.llamadas);
+
+    x = await correr({ permitidos: 99, cantidad: 4, sinPanelEn: 2 });
+    check(archivo + ': si el panel del aviso no cargó, esa oferta no se postuló ni cuenta', x.llamadas.postular.join() === 'id1,id3,id4' && x.llamadas.logs.some(l => l.reason === 'Panel no cargó'), x.llamadas);
+    x = await correr({ permitidos: 2, cantidad: 4, sinPanelEn: 1 });
+    check(archivo + ': si además se corta, el conteo es de lo realmente postulado (una saltada por el panel, una postulada y el corte: cuenta 1)', x.llamadas.terminado && x.llamadas.terminado.postular === x.llamadas.postular.length, x.llamadas);
+  }
+  // Laborum no cambia: procesa una oferta por pasada, así que ya preguntaba por oferta.
+  const laborum = fs.readFileSync(path.join(__dirname, 'adapters', 'laborum.js'), 'utf8');
+  check('laborum.js: sigue preguntando antes de navegar a cada oferta (una por pasada), sin tocar', /await AP\.puedePostular\('Laborum'\)/.test(laborum));
+});
+
 const tope = setTimeout(() => {
   console.error('✗ tiempo agotado: algún bloque de prueba nunca terminó');
   process.exit(1);

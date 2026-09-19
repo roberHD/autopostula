@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SIN_EXTENSION_PONERSE, textoEstimadoPonerse, textoMotivoPonerse } from "@/lib/texto-rafaga";
+import { extensionPresente, pedirALaExtension } from "@/lib/puente-extension";
 
 // docs/rafagas-y-ponerse-al-dia.md §3.6: "Ponerme al día ahora", solo para
 // quien su plan incluye la búsqueda automática (la tarjeta que lo monta ya lo
@@ -13,47 +14,6 @@ import { SIN_EXTENSION_PONERSE, textoEstimadoPonerse, textoMotivoPonerse } from 
 type Fase = "listo" | "enviando" | "empezo" | "aviso";
 
 const TEXTO_EMPEZO = "Empezó. Puedes cerrar esto: te avisamos en el ícono de la extensión.";
-
-// Mismo truco que el paso "Extensión" del onboarding: bridge.js deja una marca
-// en el DOM apenas carga, y además contesta a un ping por si la página se montó
-// después. Si en 700 ms no contesta nadie, no hay extensión en este navegador.
-function extensionPresente(): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (document.documentElement.dataset.autopostulaExtension) return resolve(true);
-    let t: ReturnType<typeof setTimeout>;
-    const terminar = (hay: boolean) => {
-      window.removeEventListener("autopostula:extension-presente", alDetectar);
-      clearTimeout(t);
-      resolve(hay);
-    };
-    const alDetectar = () => terminar(true);
-    t = setTimeout(() => terminar(false), 700);
-    window.addEventListener("autopostula:extension-presente", alDetectar);
-    window.dispatchEvent(new CustomEvent("autopostula:ping"));
-  });
-}
-
-type Resultado = { ok: boolean; motivo?: string };
-
-// La extensión hace dos consultas al servidor antes de contestar, así que se
-// le da margen: cortar antes diría "no respondió" de una ráfaga que sí empezó.
-const ESPERA_RESPUESTA_MS = 15_000;
-
-function pedirRafaga(): Promise<Resultado> {
-  return new Promise((resolve) => {
-    let t: ReturnType<typeof setTimeout>;
-    const alResultado = (e: Event) => {
-      clearTimeout(t);
-      resolve(((e as CustomEvent).detail as Resultado | null) ?? { ok: false, motivo: "extension_no_responde" });
-    };
-    t = setTimeout(() => {
-      window.removeEventListener("autopostula:ponerse-al-dia-resultado", alResultado);
-      resolve({ ok: false, motivo: "extension_no_responde" });
-    }, ESPERA_RESPUESTA_MS);
-    window.addEventListener("autopostula:ponerse-al-dia-resultado", alResultado, { once: true });
-    window.dispatchEvent(new CustomEvent("autopostula:ponerse-al-dia"));
-  });
-}
 
 export default function BotonPonerseAlDia({ estimadoMs }: { estimadoMs: number | null }) {
   const [fase, setFase] = useState<Fase>("listo");
@@ -71,7 +31,7 @@ export default function BotonPonerseAlDia({ estimadoMs }: { estimadoMs: number |
       return;
     }
 
-    const resultado = await pedirRafaga();
+    const resultado = await pedirALaExtension("ponerse-al-dia");
     if (resultado.ok) {
       setFase("empezo");
       setAviso(TEXTO_EMPEZO);

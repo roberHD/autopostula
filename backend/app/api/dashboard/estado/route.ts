@@ -4,7 +4,7 @@ import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { limpiarTitulo } from "@/lib/text";
 import { resumenUltimaRafaga, estimadoDuracionRafagaMs } from "@/lib/rafagas";
-import { motivoInactivo } from "@/lib/estado-automatico";
+import { modoAutomatico, motivoInactivo, PRUEBA_TOTAL } from "@/lib/estado-automatico";
 
 /**
  * Estado de la máquina, para la barra que va arriba de todo el dashboard.
@@ -23,7 +23,7 @@ export async function GET() {
   const [user, subscripcion, cupo, ultima, portalesActivos, rafaga, estimadoRafagaMs] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { rol: true, busquedaAutomaticaActiva: true, ultimaRafagaEn: true },
+      select: { rol: true, busquedaAutomaticaActiva: true, ultimaRafagaEn: true, pruebaAutomaticaRestantes: true },
     }),
     prisma.subscription.findFirst({
       where: { userId, estado: "ACTIVA" },
@@ -44,18 +44,24 @@ export async function GET() {
     estimadoDuracionRafagaMs(userId),
   ]);
 
-  // Mismo criterio que /api/account/estado-automatico: ADMIN no depende de
-  // tener un plan armado, para poder probar sin montar Plan + Subscription.
-  const disponibleEnPlan =
-    user?.rol === "ADMIN" ? true : (subscripcion?.plan.busquedaAutomatica ?? false);
+  // Mismo veredicto que /api/account/estado-automatico (lib/estado-automatico.ts):
+  // ADMIN no depende de tener un plan armado, y una cuenta gratis con prueba por
+  // gastar corre ráfagas hasta enviar las 5 (docs/rafagas-y-ponerse-al-dia.md §4.1).
+  const modo = modoAutomatico({
+    esAdmin: user?.rol === "ADMIN",
+    planIncluyeBusquedaAutomatica: subscripcion?.plan.busquedaAutomatica ?? false,
+    pruebaRestantes: user?.pruebaAutomaticaRestantes ?? 0,
+  });
+  // Solo del plan: "Ponerme al día ahora" no existe en el plan gratis, ni en la prueba.
+  const disponibleEnPlan = modo === "premium";
 
   const pausadaPorTi = user?.busquedaAutomaticaActiva === false;
 
-  // "Postulando" solo si se cumplen las tres: el plan lo permite, no está
-  // pausada a mano, y todavía queda cupo. Si falta una, la barra dice cuál.
-  const activa = disponibleEnPlan && !pausadaPorTi && cupo.permitido && portalesActivos > 0;
+  // "Postulando" solo si se cumplen las tres: el plan (o la prueba) lo permite,
+  // no está pausada a mano, y todavía queda cupo. Si falta una, la barra dice cuál.
+  const activa = modo !== "manual" && !pausadaPorTi && cupo.permitido && portalesActivos > 0;
 
-  const motivo = motivoInactivo({ disponibleEnPlan, pausadaPorTi, cupoPermitido: cupo.permitido, portalesActivos });
+  const motivo = motivoInactivo({ modo, pausadaPorTi, cupoPermitido: cupo.permitido, portalesActivos });
 
   const usadas =
     cupo.limite === null ? null : Math.max(0, cupo.limite - (cupo.restantes ?? 0));
@@ -64,6 +70,10 @@ export async function GET() {
     activa,
     motivo,
     disponibleEnPlan,
+    // premium | prueba | manual (§4.1). Con "prueba", cuántas le quedan de las 5.
+    modo,
+    pruebaRestantes: modo === "prueba" ? (user?.pruebaAutomaticaRestantes ?? 0) : null,
+    pruebaTotal: PRUEBA_TOTAL,
     pausadaPorTi,
     portalesActivos,
     cupo: { usadas, limite: cupo.limite, restantes: cupo.restantes },

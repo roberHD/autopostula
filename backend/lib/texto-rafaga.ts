@@ -108,3 +108,60 @@ export function textoMotivoPonerse(motivo: string | undefined): string {
 // Es lo que documenta celular-y-escritorio.md: la ráfaga corre en el computador.
 export const SIN_EXTENSION_PONERSE =
   "Esto corre en tu computador, con la extensión de Chrome. Ábrelo ahí y se pone al día sola.";
+
+// ── La prueba de 5 postulaciones automáticas (docs/rafagas-y-ponerse-al-dia.md §4.1) ──
+// Las mismas palabras en el panel, en el popup de la extensión (popup.js:
+// textoPruebaEnCurso, textoPruebaTerminada, TEXTO_DESPUES_DE_LA_PRUEBA) y en el
+// correo que se manda al terminarla (lib/correo.ts): es la misma promesa dicha
+// en tres lugares, y no puede cambiar de uno a otro.
+
+// Cuántas lleva, no cuántas quedan: "3 de 5". Ancla `restantes` a [0, total]
+// para que un dato raro (negativo, o más que el total) nunca dibuje "7 de 5".
+export function textoPruebaEnCurso(restantes: number, total: number): string {
+  const enviadas = Math.max(0, Math.min(total, total - restantes));
+  return `Prueba automática: ${enviadas} de ${total} postulaciones`;
+}
+
+export function textoPruebaTerminada(total: number): string {
+  return `Tu prueba terminó: AutoPostula envió ${total} postulaciones sin que entraras a ningún portal.`;
+}
+
+// Lo que sigue después: las dos salidas, dichas sin rodeos.
+export const TEXTO_DESPUES_DE_LA_PRUEBA =
+  "Con Premium sigue así, cada vez que abres tu computador. Con el plan gratis, entra a Computrabajo, Laborum o Trabajando y la extensión postula por ti.";
+
+export function textoVerLasDePrueba(total: number): string {
+  return `Ver las ${total}`;
+}
+
+export const TEXTO_PASAR_A_PREMIUM = "Pasar a Premium";
+
+// Adonde lleva "Ver las 5": el historial filtrado por las postulaciones de la prueba.
+export const RUTA_VER_LAS_DE_PRUEBA = "/dashboard/historial?filtro=prueba";
+
+// ── Al activar la postulación desde el panel (docs/rafagas-y-ponerse-al-dia.md §4.1) ──
+// Activar es el momento en que la persona dice "sí, actúa": el panel le pide a la
+// extensión una ráfaga de inmediato, y le cuenta qué pasó. El banner desaparece
+// al activarse, así que el resultado se dice en un aviso -- nunca en silencio.
+export const TEXTO_ACTIVADA_EMPEZO =
+  "Empezó ahora: AutoPostula está buscando ofertas. Te avisamos en el ícono de la extensión cuando termine.";
+export const TEXTO_ACTIVADA_SIN_EXTENSION =
+  "La primera búsqueda empieza cuando abras Chrome en tu computador, con la extensión.";
+// Cuenta gratis con la prueba ya gastada: no hay nada que arrancar solo.
+export const TEXTO_ACTIVADA_MANUAL =
+  "Entra a Computrabajo, Laborum o Trabajando y la extensión postula por ti.";
+const TEXTO_ACTIVADA_MAS_TARDE = "La primera búsqueda empieza la próxima vez que abras Chrome en tu computador.";
+
+// Casi todos los motivos son los mismos que explican por qué no arrancó el botón
+// "Ponerme al día ahora"; estos tres cambian porque acá no hay un botón que
+// apretar de nuevo.
+const MOTIVOS_ACTIVACION: Record<string, string> = {
+  en_curso:
+    "Ya había una búsqueda en curso, que termina sin enviar nada (todavía estabas en modo prueba). La siguiente sí postula.",
+  sin_conexion: "No pudimos consultar tu cuenta desde la extensión. " + TEXTO_ACTIVADA_MAS_TARDE,
+  extension_no_responde: "La extensión no respondió. " + TEXTO_ACTIVADA_MAS_TARDE,
+};
+
+export function textoMotivoActivacion(motivo: string | undefined): string {
+  return (motivo && (MOTIVOS_ACTIVACION[motivo] ?? MOTIVOS_PONERSE_AL_DIA[motivo])) || TEXTO_ACTIVADA_MAS_TARDE;
+}

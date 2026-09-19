@@ -80,3 +80,17 @@ window.addEventListener('autopostula:ponerse-al-dia', () => {
     window.dispatchEvent(new CustomEvent('autopostula:ponerse-al-dia-resultado', { detail }));
   });
 });
+
+// docs/rafagas-y-ponerse-al-dia.md §4.1: la persona acaba de activar la
+// postulación desde el panel ("Activar postulación"): se corre una ráfaga de
+// inmediato. Mismo transporte que "ponerme al día": el evento no lleva nada, la
+// extensión pregunta al servidor si corresponde (plan o prueba por gastar, sin
+// pausa, con cupo y portales) y responde { ok: true } o { ok: false, motivo }.
+window.addEventListener('autopostula:activacion', () => {
+  chrome.runtime.sendMessage({ type: 'ACTIVACION_POSTULACION' }, (respuesta) => {
+    const detail = chrome.runtime.lastError || !respuesta
+      ? { ok: false, motivo: 'extension_no_responde' }
+      : respuesta;
+    window.dispatchEvent(new CustomEvent('autopostula:activacion-resultado', { detail }));
+  });
+});

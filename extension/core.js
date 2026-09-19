@@ -426,6 +426,7 @@ AP.quitarDuplicados = async function (plataforma, pendientes, alDescartar) {
 AP.motivoPuedePostular = function (motivo) {
   if (motivo === 'limite') return 'Usaste todas tus postulaciones del mes — no se va a postular';
   if (motivo === 'portal') return 'Este portal no está conectado en tu plan — no se va a postular';
+  if (motivo === 'prueba_terminada') return 'La prueba de postulaciones automáticas terminó — no se va a postular';
   return 'No se puede postular ahora';
 };
 

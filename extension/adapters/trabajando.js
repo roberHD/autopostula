@@ -879,18 +879,12 @@ async function escanear() {
     return;
   }
 
-  // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
+  // §1.3 y docs/rafagas-y-ponerse-al-dia.md §4.1: se pregunta antes de CADA
+  // oferta, no una vez por página; ver el razonamiento completo en
   // computrabajo.js, es el mismo acá.
-  if (!soloObservar) {
-    const verificacion = await AP.puedePostular('Trabajando');
-    if (!verificacion.permitido) {
-      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
-      AP.reportarEscaneoTerminado(conteos);
-      return;
-    }
-  }
-
   AP.procesando = true;
+  let cortado = false;
+  let intentadas = 0;
   for (const {t, id, titulo} of pendientes) {
     if (!AP.activo) break;
     const a = t.querySelector('h2 a') || t.querySelector('a');
@@ -900,9 +894,15 @@ async function escanear() {
       addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:'Habría postulado — modo solo observar'});
       continue;
     }
+    const verificacion = await AP.puedePostular('Trabajando');
+    if (!verificacion.permitido) {
+      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      cortado = true;
+      break;
+    }
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
-    if (btn) await postular(url, id, titulo);
+    if (btn) { intentadas++; await postular(url, id, titulo); }
     else {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Panel no cargó'});
@@ -910,6 +910,16 @@ async function escanear() {
     await sleep(DELAY);
   }
   AP.procesando = false;
+
+  if (cortado) {
+    // `conteos.postular` era lo que se iba a postular (lo que dijo el resumen de
+    // arriba), no lo que pasó: al cortarse solo cuentan las que se llegaron a postular().
+    // Sin esto la ráfaga reportaría -- y el ícono mostraría -- postulaciones que
+    // nunca se enviaron. No se pagina ni se pisa el aviso rojo con el resumen.
+    conteos.postular = intentadas;
+    AP.reportarEscaneoTerminado(conteos);
+    return;
+  }
 
   if (siguientePaginaClick(tarjetas.length, botonVerMas)) return;
   AP.reportarEscaneoTerminado(conteos);

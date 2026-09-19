@@ -12,7 +12,17 @@ import {
 import { ArrowUpRight, ArrowDownRight, Sparkles, Send, CheckCheck, Trophy, Target } from "lucide-react";
 import { SkelStats, SkelGrafico, SkelFilas } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
-import { textoTarjetaRafaga, type UltimaRafaga } from "@/lib/texto-rafaga";
+import {
+  RUTA_VER_LAS_DE_PRUEBA,
+  TEXTO_DESPUES_DE_LA_PRUEBA,
+  TEXTO_PASAR_A_PREMIUM,
+  textoPruebaEnCurso,
+  textoPruebaTerminada,
+  textoTarjetaRafaga,
+  textoVerLasDePrueba,
+  type UltimaRafaga,
+} from "@/lib/texto-rafaga";
+import { PRUEBA_TOTAL, type ModoAutomatico } from "@/lib/estado-automatico";
 import BotonPonerseAlDia from "./BotonPonerseAlDia";
 
 type Resumen = {
@@ -161,6 +171,11 @@ export default function InicioPage() {
     motivo: string | null;
     ultimaRafaga: UltimaRafaga | null;
     estimadoRafagaMs: number | null;
+    // docs/rafagas-y-ponerse-al-dia.md §4.1: premium | prueba | manual, y cuántas
+    // postulaciones de prueba le quedan de las `pruebaTotal` (solo con "prueba").
+    modo: ModoAutomatico;
+    pruebaRestantes: number | null;
+    pruebaTotal: number;
   } | null>(null);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState("");
@@ -176,6 +191,9 @@ export default function InicioPage() {
             motivo: e.motivo ?? null,
             ultimaRafaga: e.ultimaRafaga ?? null,
             estimadoRafagaMs: e.estimadoRafagaMs ?? null,
+            modo: e.modo ?? "premium",
+            pruebaRestantes: e.pruebaRestantes ?? null,
+            pruebaTotal: e.pruebaTotal ?? PRUEBA_TOTAL,
           });
         }
       })
@@ -304,9 +322,19 @@ export default function InicioPage() {
   // automática (§3.2): manda el mismo estado que la barra de arriba, y solo si
   // todavía no cargó se cae al criterio viejo (portal conectado).
   const asistenteActivo = estadoAuto ? estadoAuto.activa : datos.portalesActivos > 0;
-  const textoInactivo: Record<string, { t: string; d: string; href?: string; cta?: string }> = {
+  const totalPrueba = estadoAuto?.pruebaTotal ?? PRUEBA_TOTAL;
+  const textoInactivo: Record<string, { t: string; d: string; href?: string; cta?: string; extra?: { href: string; cta: string } }> = {
     pausada: { t: "Tu búsqueda automática está en pausa", d: "Reanúdala desde la barra de arriba y vuelve a postular sola." },
-    "sin-plan": { t: "Postulas tú desde la extensión", d: "Tu plan actual no incluye la búsqueda automática. Entretanto puedes ir completando tu perfil.", href: "/dashboard/premium", cta: "Ver Premium" },
+    // §4.1: la prueba se demuestra con resultados concretos -- "Ver las 5" lleva
+    // al historial filtrado, y las dos salidas (Premium, o entrar a mano a un
+    // portal) se dicen sin rodeos.
+    "prueba-terminada": {
+      t: textoPruebaTerminada(totalPrueba),
+      d: TEXTO_DESPUES_DE_LA_PRUEBA,
+      href: "/dashboard/premium",
+      cta: TEXTO_PASAR_A_PREMIUM,
+      extra: { href: RUTA_VER_LAS_DE_PRUEBA, cta: textoVerLasDePrueba(totalPrueba) },
+    },
     "sin-cupo": { t: "Sin cupo este mes", d: "Se reinicia el día 1. Entretanto puedes ir completando tu perfil.", href: "/dashboard/premium", cta: "Ampliar cupo" },
   };
   const inactivoInfo = estadoAuto?.motivo ? textoInactivo[estadoAuto.motivo] : undefined;
@@ -609,20 +637,32 @@ export default function InicioPage() {
                 : inactivoInfo?.d ??
                   "Le falta un portal conectado para empezar a trabajar. Entretanto puedes ir completando tu perfil: mientras más entrenado, más tuyas suenan las respuestas."}
             </p>
-            {!asistenteActivo && (!inactivoInfo || inactivoInfo.href) && (
-              <Link
-                className="ap-button-ghost"
-                style={{ marginTop: 12 }}
-                href={inactivoInfo?.href ?? "/dashboard/portales"}
-              >
-                {inactivoInfo?.cta ?? "Conectar un portal"}
-              </Link>
+            {/* §4.1: mientras dura la prueba, cuántas lleva -- visible aunque hoy esté
+                en pausa, para que se entienda qué es lo que se pausó. */}
+            {estadoAuto?.modo === "prueba" && estadoAuto.pruebaRestantes !== null && (
+              <p style={{ marginTop: 8, fontSize: 12, fontWeight: 600 }}>
+                {textoPruebaEnCurso(estadoAuto.pruebaRestantes, totalPrueba)}
+              </p>
             )}
-            {/* docs/rafagas-y-ponerse-al-dia.md §3.6: solo Premium. `activa` ya exige
-                que el plan incluya la búsqueda automática (o ser admin), no esté en
-                pausa, quede cupo y haya un portal conectado -- así que en una cuenta
-                gratis, o pausada, el botón simplemente no está. */}
-            {estadoAuto?.activa && <BotonPonerseAlDia estimadoMs={estadoAuto.estimadoRafagaMs} />}
+            {!asistenteActivo && (!inactivoInfo || inactivoInfo.href) && (
+              <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {inactivoInfo?.extra && (
+                  <Link className="ap-button-ghost" href={inactivoInfo.extra.href}>
+                    {inactivoInfo.extra.cta}
+                  </Link>
+                )}
+                <Link className="ap-button-ghost" href={inactivoInfo?.href ?? "/dashboard/portales"}>
+                  {inactivoInfo?.cta ?? "Conectar un portal"}
+                </Link>
+              </div>
+            )}
+            {/* docs/rafagas-y-ponerse-al-dia.md §3.6: solo Premium. `activa` exige que
+                se pueda buscar solo (plan, o la prueba de una cuenta gratis), no esté
+                en pausa, quede cupo y haya un portal conectado; el botón además pide
+                `modo === "premium"`: en el plan gratis no existe, ni durante la prueba. */}
+            {estadoAuto?.activa && estadoAuto.modo === "premium" && (
+              <BotonPonerseAlDia estimadoMs={estadoAuto.estimadoRafagaMs} />
+            )}
           </div>
           <div style={{ marginTop: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12 }}>

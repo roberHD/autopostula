@@ -8,7 +8,9 @@ async function getUserFromToken(request: Request) {
   return prisma.user.findUnique({ where: { apiToken: token } });
 }
 
-const DISPARADORES = ["inicio_chrome", "despertar", "chequeo", "manual"];
+// "activacion": la persona acaba de activar la postulación desde el panel y se corre
+// una ráfaga de inmediato (docs/rafagas-y-ponerse-al-dia.md §4.1).
+const DISPARADORES = ["inicio_chrome", "despertar", "chequeo", "manual", "activacion"];
 const ESTADOS = ["en_curso", "terminada", "interrumpida"];
 
 // Las fechas vienen del reloj de la persona (Date.now() de la extensión). Se

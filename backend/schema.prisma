@@ -150,6 +150,12 @@ model User {
   // nadie. null = todavía no hubo ninguna. Lo lee la tarjeta del panel y,
   // más adelante, el recordatorio por correo.
   ultimaRafagaEn DateTime? @map("ultima_rafaga_en")
+  // Postulaciones automáticas de PRUEBA que le quedan a una cuenta gratis
+  // (docs/rafagas-y-ponerse-al-dia.md §4.1): las primeras 5 que envía una
+  // ráfaga, una sola vez por cuenta y no por mes. Solo se descuenta con una
+  // postulación realmente enviada (no INCOMPLETA) desde una ráfaga; ver
+  // lib/prueba-automatica.ts. Premium y admin ni la miran.
+  pruebaAutomaticaRestantes Int @default(5) @map("prueba_automatica_restantes")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
@@ -532,6 +538,11 @@ model Application {
   // terminar sola (ej: "Redirige al portal externo de la empresa para continuar").
   notaAtencion        String?           @map("nota_atencion")
   enviadaEn           DateTime          @default(now()) @map("enviada_en")
+  // true = una de las 5 postulaciones de la prueba automática (§4.1 de
+  // docs/rafagas-y-ponerse-al-dia.md). Es lo que deja que "Ver las 5" filtre
+  // el historial: la prueba se demuestra con resultados concretos, no con un
+  // mensaje. Máximo 5 filas por cuenta.
+  esDePrueba          Boolean           @default(false) @map("es_de_prueba")
 
   user             User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobOffer         JobOffer                   @relation(fields: [jobOfferId], references: [id])
@@ -584,7 +595,7 @@ model Rafaga {
   id          String    @id @default(uuid())
   userId      String    @map("user_id")
   extensionId String    @map("extension_id")
-  disparador  String // inicio_chrome | despertar | chequeo | manual
+  disparador  String // inicio_chrome | despertar | chequeo | manual | activacion
   inicio      DateTime
   fin         DateTime?
   estado      String // en_curso | terminada | interrumpida

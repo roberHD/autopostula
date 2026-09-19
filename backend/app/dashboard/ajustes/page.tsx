@@ -4,11 +4,17 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Zap, Lock, Mail, BadgeCheck, TriangleAlert, LogOut, LifeBuoy, ChevronRight } from "lucide-react";
+import { textoPruebaEnCurso } from "@/lib/texto-rafaga";
+import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
 
 export default function AjustesPage() {
   const router = useRouter();
   const [activa, setActiva] = useState(false);
+  // "Hay algo automático que pausar": el plan Premium, o la prueba de una cuenta
+  // gratis mientras dura (docs/rafagas-y-ponerse-al-dia.md §4.1). Con la prueba
+  // gastada, el ajuste se ofrece como parte de un plan superior.
   const [disponibleEnPlan, setDisponibleEnPlan] = useState(false);
+  const [pruebaRestantes, setPruebaRestantes] = useState<number | null>(null);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
   const [esPremium, setEsPremium] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
@@ -28,7 +34,8 @@ export default function AjustesPage() {
       const data = await res.json();
       if (!res.ok) { setMensaje(data.error ?? `Error ${res.status}`); return; }
       setActiva(data.activa);
-      setDisponibleEnPlan(data.disponibleEnPlan);
+      setDisponibleEnPlan(data.modo ? data.modo !== "manual" : data.disponibleEnPlan);
+      setPruebaRestantes(data.modo === "prueba" ? data.pruebaRestantes ?? null : null);
       setPlanNombre(data.planNombre);
       setEsPremium(data.esPremium ?? false);
       setEmail(data.email);
@@ -264,7 +271,11 @@ export default function AjustesPage() {
                   Postular automáticamente{planNombre ? ` (${planNombre})` : ""}
                 </p>
                 <p className="ap-toggle-desc">
-                  {activa
+                  {pruebaRestantes !== null
+                    ? activa
+                      ? `${textoPruebaEnCurso(pruebaRestantes, PRUEBA_TOTAL)}. Se envían solas, sin que entres a ningún portal.`
+                      : "Pausada — la prueba no envía nada hasta que la reanudes."
+                    : activa
                     ? "Activo — AutoPostula revisa ofertas nuevas cada 2 horas en tus portales conectados y postula por ti."
                     : "Pausado — solo vas a postular cuando lo hagas tú manualmente."}
                 </p>

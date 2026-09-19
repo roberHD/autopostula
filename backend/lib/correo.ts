@@ -1,5 +1,12 @@
 import { Resend } from "resend";
 import { getBaseUrl } from "@/lib/base-url";
+import {
+  RUTA_VER_LAS_DE_PRUEBA,
+  TEXTO_DESPUES_DE_LA_PRUEBA,
+  TEXTO_PASAR_A_PREMIUM,
+  textoPruebaTerminada,
+  textoVerLasDePrueba,
+} from "@/lib/texto-rafaga";
 
 // Remitente de todos los correos que manda la app.
 //
@@ -52,4 +59,40 @@ export async function enviarCorreoVerificacion(email: string, token: string) {
       </div>
     `,
   });
+}
+
+// docs/rafagas-y-ponerse-al-dia.md §4.1: el único correo que recibe una cuenta
+// gratis por el tema de las ráfagas -- se manda una sola vez, cuando la
+// postulación que se llevó el último cupo de la prueba queda registrada. Las
+// frases son las mismas del panel y del popup (lib/texto-rafaga.ts). "Ver las 5"
+// lleva al historial filtrado: la prueba se demuestra con resultados concretos.
+//
+// Armado aparte del envío para poder revisar el contenido sin mandar nada.
+export function armarCorreoPruebaTerminada(total: number) {
+  const base = getBaseUrl();
+  const boton = "display: inline-block; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;";
+  return {
+    subject: `Tu prueba de AutoPostula terminó: ${total} postulaciones enviadas`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color: #111827;">${textoPruebaTerminada(total)}</h2>
+        <p style="margin: 20px 0;">
+          <a href="${base}${RUTA_VER_LAS_DE_PRUEBA}" style="${boton} background: #16181A; color: #F4F5F3;">
+            ${textoVerLasDePrueba(total)}
+          </a>
+        </p>
+        <p style="color: #4B5563; line-height: 1.6;">${TEXTO_DESPUES_DE_LA_PRUEBA}</p>
+        <p style="margin: 20px 0;">
+          <a href="${base}/dashboard/premium" style="${boton} border: 1px solid #16181A; color: #16181A;">
+            ${TEXTO_PASAR_A_PREMIUM}
+          </a>
+        </p>
+      </div>
+    `,
+  };
+}
+
+export async function enviarCorreoPruebaTerminada(email: string, total: number) {
+  const { subject, html } = armarCorreoPruebaTerminada(total);
+  await getResend().emails.send({ from: remitente(), to: email, subject, html });
 }

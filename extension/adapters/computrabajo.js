@@ -830,20 +830,17 @@ async function escanear() {
     return;
   }
 
-  // §1.3 (docs/revision-2026-09-16.md): corta ANTES de abrir la primera
-  // oferta -- antes el tope y el portal conectado solo se sabían al llegar
-  // el 403/400 de /api/applications, DESPUÉS de haber postulado de verdad
-  // en el sitio externo.
-  if (!soloObservar) {
-    const verificacion = await AP.puedePostular('Computrabajo');
-    if (!verificacion.permitido) {
-      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
-      AP.reportarEscaneoTerminado(conteos);
-      return;
-    }
-  }
-
+  // §1.3 (docs/revision-2026-09-16.md): se pregunta ANTES de abrir cada oferta --
+  // antes el tope y el portal conectado solo se sabían al llegar el 403/400 de
+  // /api/applications, DESPUÉS de haber postulado de verdad en el sitio externo.
+  // Es por oferta y no una vez por página (docs/rafagas-y-ponerse-al-dia.md
+  // §4.1): la prueba de 5 postulaciones automáticas se corta EN MEDIO al llegar
+  // a 5, y el tope mensual al llegar al límite -- no al terminar de recorrer 30
+  // ofertas cuando quedaban 2 cupos. Cada consulta ya ve la postulación
+  // anterior, porque reportarPostulacion se espera.
   AP.procesando = true;
+  let cortado = false;
+  let intentadas = 0;
   for (const {t, id, titulo} of pendientes) {
     if (!AP.activo) break;
     const a = t.querySelector('h2 a, a[href*="oferta"], a[href*="trabajo"]') || t.querySelector('a');
@@ -856,9 +853,15 @@ async function escanear() {
       addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:'Habría postulado — modo solo observar'});
       continue;
     }
+    const verificacion = await AP.puedePostular('Computrabajo');
+    if (!verificacion.permitido) {
+      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      cortado = true;
+      break;
+    }
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
-    if (btn) await postular(url, id, titulo);
+    if (btn) { intentadas++; await postular(url, id, titulo); }
     else {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Panel no cargó'});
@@ -866,6 +869,16 @@ async function escanear() {
     await sleep(DELAY);
   }
   AP.procesando = false;
+
+  if (cortado) {
+    // `conteos.postular` era lo que se iba a postular (lo que dijo el resumen de
+    // arriba), no lo que pasó: al cortarse solo cuentan las que se llegaron a postular().
+    // Sin esto la ráfaga reportaría -- y el ícono mostraría -- postulaciones que
+    // nunca se enviaron. No se pagina ni se pisa el aviso rojo con el resumen.
+    conteos.postular = intentadas;
+    AP.reportarEscaneoTerminado(conteos);
+    return;
+  }
 
   // Ya se postuló a todo lo que calzaba en esta página -- si es una búsqueda
   // automática (pestaña oculta) sigue a la próxima página en vez de darse por
