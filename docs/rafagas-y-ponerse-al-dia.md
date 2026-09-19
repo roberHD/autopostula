@@ -1,7 +1,7 @@
 # Ráfagas: que se ponga al día cada vez que abres el computador — especificación
 
-> **Estado:** en implementación. Pasos 1 a 7b de §7 hechos y con test (`extension/verificar-rafagas.js`,
-> `backend/scripts/verificar-texto-rafaga.ts`, 2026-09-19); del 8 en adelante, pendiente. **Falta verificar a
+> **Estado:** en implementación. Pasos 1 a 8 de §7 hechos y con test (`extension/verificar-rafagas.js`,
+> `backend/scripts/verificar-texto-rafaga.ts`, 2026-09-19); del 9 en adelante, pendiente. **Falta verificar a
 > mano** el criterio de `powercfg /requests` (§3.3, criterios 2 y 3 de §8): el test cubre la lógica con
 > `chrome.power` simulado, no el Windows real. Tampoco se vio la tarjeta del panel con una sesión iniciada
 > (§3.5): está probado el texto y la consulta contra Postgres, no el dibujo en pantalla.
@@ -83,6 +83,31 @@
 >   gratis con prueba, prueba gastada, pausada), `puede-postular` con y sin `origen`, el descuento (una
 >   INCOMPLETA no descuenta, no baja de 0, y 8 postulaciones en paralelo con 5 de prueba dejan exactamente 5) y
 >   la compatibilidad con la extensión vieja.
+>
+> **Lo que el paso 8 hizo distinto de §3.7** (o que §3.7 no decía):
+> - **Se envía en todos los planes, sin "Abrir y postular"** (decidido por Roberto el 2026-09-19; cambia lo
+>   que decía §3.7 para el plan gratis). `revision-2026-09-16.md` §2.9 ya se había construido así
+>   (`procesarAprobadas()`: al aprobar en el panel con la extensión presente, al abrir Chrome y en cada
+>   chequeo) y este paso no lo toca: solo cambió el documento. Cada envío cuenta dentro de las 20 del mes y no
+>   gasta la prueba de §4.1, porque su pestaña no es de la ráfaga.
+> - **Lo que quedaba por hacer era el orden y la cuenta.** Antes la cola arrancaba a la vez que la primera
+>   búsqueda (dos pestañas del mismo portal al mismo tiempo) y lo enviado no aparecía en el resumen. Ahora es el
+>   **primer paso** de la ráfaga (`tipo: 'aprobadas'`): en serie, dentro del bloqueo de suspensión y del tope de
+>   25 min, y suma sus envíos a `postuladas`, así que el ícono, el popup y la tarjeta ya no cuentan de menos.
+>   Solo cuenta lo que respondió `ok` (lo que devuelve `postular()`; `success` aparece únicamente en las negativas
+>   de `DO_APPLY`). Si una cola ya la había arrancado el panel o abrir Chrome, la ráfaga espera a esa misma:
+>   cada oferta se envía una vez.
+> - **`processQueue` cambió por dentro** (era de §2.9): la bandera `busy` pasó a una promesa compartida (una
+>   excepción la dejaba "ocupada" para siempre), una oferta que revienta ya no aborta a las demás, y
+>   `applyInTab` ya no se cuelga si Chrome no puede abrir la pestaña.
+> - **En solo observar (o con la cuenta en modo prueba) la ráfaga ya no encola aprobadas**: `DO_APPLY` las
+>   rechaza por dentro y se abrían pestañas para nada.
+> - **El seguro de tiempo del paso suma un minuto por oferta** (8 + N): una cola larga no debe cortarse a los
+>   8. Si aun así se dispara, la ráfaga sigue con la búsqueda y el paso no avanza dos veces.
+> - **Fuera de una ráfaga** (abrir Chrome, el chequeo, el panel) la cola sigue corriendo sola como antes, sin el
+>   bloqueo de suspensión: si el equipo se suspende a la mitad, lo que falte se reintenta en el próximo ciclo.
+> - Falta verificar a mano: nada de esto se vio con pestañas reales de un portal. Los tests simulan `DO_APPLY`
+>   y anotan el orden de los eventos (la cola termina antes de abrir la primera búsqueda, una oferta a la vez).
 > **Para:** el chat de producción.
 > **Fecha:** 2026-09-17.
 > **Va después de:** la Fase 1 de `revision-2026-09-16.md` (pasos 1 a 4d de su §6). No sirve ponerse
@@ -339,15 +364,19 @@ Notificaciones del sistema (`chrome.notifications`) quedan fuera por ahora: suma
 
 ### 3.7 La cola del celular va primero
 
-Lo que la persona aprobó en "Por decidir" desde el teléfono se ejecuta **en el primer paso de la
-siguiente ráfaga**, antes de buscar ofertas nuevas: son decisiones ya tomadas, no dejarlas esperando.
+Lo que la persona aprobó en "Por decidir" (sobre todo desde el teléfono) se envía **en el primer paso de
+la siguiente ráfaga**, antes de buscar ofertas nuevas: son decisiones ya tomadas, no dejarlas esperando.
 Es la forma de arreglar `revision-2026-09-16.md` §2.9 para quien no tiene la extensión abierta en el
 momento de aprobar.
 
-**En el plan gratis** no hay ráfagas que las envíen (§4). Lo aprobado queda en el panel como
-**"Abrir y postular"**: la persona abre la oferta con un clic y la extensión completa y envía el
-formulario ahí mismo. La persona entra al portal a mano, y el resto lo hace la extensión, igual que
-en todo el plan gratis. Nunca debe quedar un "Sí" aprobado sin decir cómo se envía.
+**Se envía en todos los planes** (decidido por Roberto el 2026-09-19). No hace falta una ráfaga: al
+aprobar en el panel con la extensión presente, al abrir Chrome y en cada chequeo, la extensión pide sus
+aprobadas y las envía (`revision-2026-09-16.md` §2.9). Cada una es una oferta que la persona aprobó a
+mano, así que la línea entre planes sigue siendo quién **busca**, no quién ejecuta lo ya decidido; y cuenta
+dentro de las 20 del mes, no de la prueba de §4.1. Se descartó el botón "Abrir y postular" para el plan
+gratis: le pedía un clic más por oferta a quien ya había dicho que sí, sin proteger nada que no proteja ya
+el tope mensual. Nunca debe quedar un "Sí" aprobado sin decir cuándo se envía: eso lo dice el panel
+("Por decidir").
 
 ### 3.8 Recordatorio por correo
 
@@ -388,6 +417,9 @@ Dejar de recibir estos avisos
 > escanea, decide, completa los formularios y postula. En Premium, **ni siquiera hay que entrar**: las
 > ráfagas abren las búsquedas solas. El plan gratis tiene además **una prueba única de 5
 > postulaciones automáticas**, para que la persona vea eso funcionando antes de pagar.
+>
+> Lo que la persona ya aprobó con un "Sí" en "Por decidir" se envía solo en los dos planes (§3.7): la
+> línea es quién **busca**, no quién ejecuta lo ya decidido.
 
 | | Gratis | Premium |
 |---|---|---|
@@ -395,7 +427,7 @@ Dejar de recibir estos avisos
 | Ráfagas automáticas (abrir Chrome, despertar, chequeo) | **Solo la prueba:** 5 postulaciones, una vez por cuenta | ✅ |
 | Botón "Ponerme al día ahora" | — | ✅ |
 | Recordatorio por correo | — | ✅ |
-| Lo aprobado desde el celular | "Abrir y postular": la persona abre la oferta y la extensión completa el formulario | Se envía solo en la siguiente ráfaga |
+| Lo aprobado en "Por decidir" (celular incluido) | Se envía solo al abrir Chrome en el computador, o al aprobar si ya está abierto; cuenta dentro de las 20 | Igual, y va primero en cada ráfaga |
 
 ### 4.1 La prueba de 5 postulaciones automáticas
 
@@ -531,7 +563,7 @@ celular, con *"estas ofertas calzan contigo"* y postulación a mano (`celular-y-
 | ~~6~~ | ~~Número en el ícono, popup y tarjeta del panel~~ | 3.5 | ✅ Hecho — el ícono cuenta las postulaciones de la última ráfaga (en gris, lo que *habría* postulado, si está en solo observar) y una ráfaga sin novedades lo limpia; el popup lo limpia al abrir |
 | ~~7~~ | ~~Botón "Ponerme al día ahora"~~ | 3.6 | ✅ Hecho, solo Premium — ver "Lo que el paso 7 hizo distinto de §3.6" arriba |
 | ~~7b~~ | ~~Prueba de 5 postulaciones automáticas~~ | 4.1 | ✅ Hecho — ver "Lo que el paso 7b hizo distinto de §4.1" arriba |
-| 8 | Cola del celular primero | 3.7 | Depende de `revision-2026-09-16.md` §2.9 |
+| ~~8~~ | ~~Cola del celular primero~~ | 3.7 | ✅ Hecho, y se envía en todos los planes — ver "Lo que el paso 8 hizo distinto de §3.7" arriba |
 | 9 | Recordatorio por correo | 3.8 | |
 | 10 | Textos: landing, Premium, privacidad, ficha de la tienda | 5 | En el mismo deploy que el 4 |
 

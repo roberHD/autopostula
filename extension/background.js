@@ -10,7 +10,11 @@ console.log('[AP] background.js cargado', new Date().toLocaleTimeString());
 const BACKEND_URL = 'https://autopostula.cl';
 
 let queue = [];
-let busy  = false;
+// La cola en proceso, o null si no hay ninguna. processQueue() devuelve esta
+// misma promesa mientras haya una: quien quiera esperar a que se vacíe (el primer
+// paso de la ráfaga, docs/rafagas-y-ponerse-al-dia.md §3.7) espera lo mismo, la
+// haya arrancado quien la haya arrancado (el panel, abrir Chrome, el chequeo).
+let drenando = null;
 // docs/revision-2026-09-16.md §2.9: una aprobación puede llegar por tres
 // caminos a la vez (el panel, la ráfaga, el chequeo periódico) -- sin esto la
 // misma oferta se abriría y postularía dos veces.
@@ -31,9 +35,20 @@ function encolarAprobadas(aprobadas) {
   return nuevas;
 }
 
-async function processQueue() {
-  if (busy || !queue.length) return;
-  busy = true;
+function processQueue() {
+  if (drenando) return drenando;
+  if (!queue.length) return Promise.resolve(0);
+  // finally: si algo revienta a la mitad, la cola no queda "ocupada" para siempre.
+  drenando = vaciarCola().finally(() => { drenando = null; });
+  return drenando;
+}
+
+// Devuelve cuántas de esas ofertas se enviaron de verdad -- es lo que se suma al
+// resumen de la ráfaga. La respuesta de DO_APPLY es { ok, expirada } (lo que
+// devuelve postular() del adaptador); `success` solo aparece en las negativas de
+// core.js, y se acepta por si alguna versión lo usa.
+async function vaciarCola() {
+  let enviadas = 0;
   while (queue.length) {
     const item = queue.shift();
     // §1.3: lo aprobado a mano también respeta el tope del mes y el portal
@@ -52,8 +67,16 @@ async function processQueue() {
         continue;
       }
     }
-    const resultado = await applyInTab(item.url, item.titulo, item.decisionId);
+    let resultado;
+    try {
+      resultado = await applyInTab(item.url, item.titulo, item.decisionId);
+    } catch (e) {
+      // Una oferta que revienta no debe llevarse a las demás ni dejar la cola
+      // trabada: se sigue con la siguiente, y esta queda pendiente para el próximo ciclo.
+      console.warn('[AP] Falló al enviar una oferta aprobada:', e);
+    }
     if (item.decisionId) decisionesEnCola.delete(item.decisionId);
+    if (resultado && (resultado.ok === true || resultado.success === true)) enviadas++;
     // §8.4/§8.6: si la oferta aprobada en banda gris ya no existe o no tiene
     // botón de postular, se marca EXPIRADA en vez de reintentarla para
     // siempre en cada ciclo -- "silencio ahí sería peor que el error".
@@ -62,7 +85,7 @@ async function processQueue() {
     }
     await sleep(5000);
   }
-  busy = false;
+  return enviadas;
 }
 
 async function marcarBandaGrisExpirada(decisionId) {
@@ -92,6 +115,9 @@ async function marcarBandaGrisExpirada(decisionId) {
 function applyInTab(url, titulo, decisionId) {
   return new Promise(resolve => {
     chrome.tabs.create({ url, active: false }, tab => {
+      // Sin pestaña no hay nada que esperar: antes esto reventaba adentro del
+      // callback y la promesa no se resolvía nunca, dejando la cola colgada.
+      if (chrome.runtime.lastError || !tab) { resolve({ success: false, expirada: false }); return; }
       const id = tab.id;
       const onUpdated = (tabId, info) => {
         if (tabId !== id || info.status !== 'complete') return;
@@ -593,14 +619,29 @@ async function escanearAutomatico(disparador) {
   // §8.6: postular lo ya aprobado en banda gris no depende de tener un
   // cargoObjetivo configurado -- cada item ya trae su propia URL concreta,
   // no hace falta armar ninguna búsqueda para llegar a ella.
-  encolarAprobadas(bandaGrisAprobadas);
-  processQueue();
+  //
+  // docs/rafagas-y-ponerse-al-dia.md §3.7: lo aprobado en "Por decidir" (sobre todo
+  // desde el celular) va PRIMERO -- son decisiones ya tomadas, no se dejan
+  // esperando detrás de la búsqueda de ofertas nuevas. Antes se lanzaba a la vez
+  // que la primera búsqueda (dos pestañas del mismo portal al mismo tiempo, y lo
+  // enviado no contaba en el resumen); ahora es el primer PASO de la ráfaga.
+  //
+  // En solo observar (o con la cuenta en modo prueba) no se encola: DO_APPLY se
+  // niega por dentro, y abrir una pestaña por oferta para que la rechace no sirve
+  // de nada.
+  const { config: configActual } = await chrome.storage.local.get('config');
+  if (!(configActual && (configActual.soloObservar || configActual.postulacionHabilitada === false))) {
+    encolarAprobadas(bandaGrisAprobadas);
+  }
+  // Sin búsqueda que hacer (sin objetivo, sin portales) igual se envía lo
+  // aprobado, como siempre: no depende de tener nada configurado.
+  const sinBusqueda = (motivo) => { processQueue(); return { ok: false, motivo }; };
 
   const objetivos = objetivosDeEstado(estado);
-  if (!objetivos.length) return { ok: false, motivo: 'sin_objetivo' };
+  if (!objetivos.length) return sinBusqueda('sin_objetivo');
 
   const plataformas = estado.plataformasConectadas || [];
-  if (!plataformas.length) return { ok: false, motivo: 'sin_portales' };
+  if (!plataformas.length) return sinBusqueda('sin_portales');
 
   // Con más de un objetivo, el secundario se visita con menos frecuencia que
   // el principal -- "uno de cada dos ciclos" (§8). Sin esto, alguien con 2
@@ -653,7 +694,11 @@ async function escanearAutomatico(disparador) {
   }
 
   // Portales conectados pero ninguno con adaptador de búsqueda automática.
-  if (!pasos.length) return { ok: false, motivo: 'sin_portales' };
+  if (!pasos.length) return sinBusqueda('sin_portales');
+
+  // §3.7: lo aprobado, primero. Si ya había una cola en proceso (la arrancó abrir
+  // Chrome o el panel), el paso espera a esa misma.
+  if (queue.length || drenando) pasos.unshift({ tipo: 'aprobadas' });
 
   const arranco = await iniciarRafaga(disparador || 'chequeo', pasos);
   return arranco ? { ok: true } : { ok: false, motivo: 'en_curso' };
@@ -807,6 +852,10 @@ async function avanzarRafaga() {
   }
 
   const paso = rafaga.pasos[rafaga.pasoActual];
+  if (paso.tipo === 'aprobadas') {
+    pasoAprobadas().catch((e) => console.warn('[AP] Falló el paso de las aprobadas:', e));
+    return;
+  }
   chrome.tabs.create({ url: paso.url, active: false }, tab => {
     if (chrome.runtime.lastError || !tab) {
       // Ni se pudo abrir la pestaña -- se salta este paso igual, no se
@@ -860,6 +909,32 @@ async function pasoTerminado(conteos) {
   chrome.alarms.clear(NOMBRE_ALARMA_SEGURO_RAFAGA);
   if (tabId != null) chrome.tabs.remove(tabId, () => { if (chrome.runtime.lastError) {} });
   avanzarRafaga();
+}
+
+// §3.7: el primer paso de la ráfaga cuando hay ofertas aprobadas por enviar. No
+// abre una pestaña de búsqueda: espera a que la cola de aprobadas se vacíe (cada
+// oferta, una a la vez, en su propia pestaña) y suma lo que se envió al resumen.
+// Corre DENTRO de la ráfaga, así que la cubren el bloqueo de suspensión y el tope
+// de 25 min, y el paso siguiente no abre otra pestaña mientras esta cola sigue.
+async function pasoAprobadas() {
+  const { rafaga } = await chrome.storage.local.get('rafaga');
+  if (!rafaga || rafaga.estado !== 'en_curso') return;
+  const indice = rafaga.pasoActual;
+  rafaga.latido = Date.now();
+  await chrome.storage.local.set({ rafaga });
+  // Seguro de tiempo: cada oferta de la cola puede tardar hasta ~1 min (35 s de
+  // tope de la pestaña, más la pausa entre una y otra), así que se suma un minuto
+  // por oferta a los 8 de siempre.
+  chrome.alarms.create(NOMBRE_ALARMA_SEGURO_RAFAGA, { delayInMinutes: SEGURO_MINUTOS_POR_PASO + queue.length });
+
+  let enviadas = null; // null = falló: cuenta como error del paso, como un portal que no contestó
+  try { enviadas = await processQueue(); } catch (e) { console.warn('[AP] Falló la cola de aprobadas:', e); }
+
+  // Si el seguro de tiempo ya siguió adelante (la cola se demoró más de la cuenta),
+  // este paso ya no es el actual: no se avanza dos veces.
+  const { rafaga: actual } = await chrome.storage.local.get('rafaga');
+  if (!actual || actual.estado !== 'en_curso' || actual.pasoActual !== indice) return;
+  await pasoTerminado(enviadas === null ? null : { postular: enviadas });
 }
 
 // ── ¿Esta postulación la hizo una ráfaga, o la persona? (§4.1) ─────────────

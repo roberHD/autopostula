@@ -1577,6 +1577,172 @@ bloque(async () => {
   check('laborum.js: sigue preguntando antes de navegar a cada oferta (una por pasada), sin tocar', /await AP\.puedePostular\('Laborum'\)/.test(laborum));
 });
 
+// ── 20. Lo aprobado en "Por decidir" va primero, en serie, y cuenta (§3.7) ──
+bloque(async () => {
+  const aprobada = (n) => ({ id: 'd' + n, url: 'https://cl.computrabajo.com/oferta-' + n, titulo: 'Oferta ' + n, plataforma: 'Computrabajo' });
+  const estadoBase = {
+    busquedaAutomatica: true, disponibleEnPlan: true, motivo: null, modo: 'premium',
+    objetivos: [{ etiqueta: 'vendedor', peso: 1 }], plataformasConectadas: ['Trabajando'],
+  };
+  function servidor({ aprobadas, perfil, estado } = {}) {
+    return async (url) => {
+      const u = String(url);
+      if (/estado-automatico/.test(u)) return { ok: true, json: async () => ({ ...estadoBase, ...(estado || {}) }) };
+      if (/\/api\/extension\/perfil/.test(u)) return { ok: true, json: async () => ({ filtrosBusqueda: {}, postulacionHabilitada: true, bandaGrisAprobadas: aprobadas || [], ...(perfil || {}) }) };
+      if (/puede-postular/.test(u)) return { ok: true, json: async () => ({ permitido: true, motivo: null, restantes: 10 }) };
+      return { ok: /\/api\/extension\/rafaga/.test(u), json: async () => ({}) };
+    };
+  }
+  // Un backend con el orden de todo lo que pasa anotado: cada oferta de la cola
+  // ("cola:dN") y cada pestaña que abre la ráfaga ("pestana:...").
+  async function nuevo(cfg, { demoraCola, fallaEn, resultados } = {}) {
+    const b = cargarBackgroundJs({ fetchImpl: servidor(cfg) });
+    await tick();
+    b.eventos = [];
+    b.aplicadas = [];
+    b.alarmas = [];
+    b.ctx.applyInTab = async (_url, _titulo, decisionId) => {
+      b.eventos.push('cola:' + decisionId);
+      b.aplicadas.push(decisionId);
+      await tick(demoraCola || 5);
+      if (fallaEn === decisionId) throw new Error('la pestaña reventó');
+      return (resultados && resultados[decisionId]) || { ok: true, expirada: false };
+    };
+    const crear = b.ctx.chrome.tabs.create;
+    b.ctx.chrome.tabs.create = (o, cb) => { b.eventos.push('pestana:' + o.url); return crear(o, cb); };
+    const crearAlarma = b.ctx.chrome.alarms.create;
+    b.ctx.chrome.alarms.create = (name, o) => { b.alarmas.push([name, o]); return crearAlarma(name, o); };
+    return b;
+  }
+  const busquedas = (b) => b.eventos.filter(e => e.startsWith('pestana:'));
+
+  // ── El orden: la cola termina ANTES de abrir la primera búsqueda ──
+  let b = await nuevo({ aprobadas: [aprobada(1), aprobada(2)] });
+  await b.ctx.quizasRafaga('chequeo');
+  await tick(150);
+  let r = b.storageLocal.rafaga;
+  check('con aprobadas por enviar, el PRIMER paso de la ráfaga es "aprobadas"', r.pasos[0].tipo === 'aprobadas' && r.pasos[1].tipo === 'busqueda', r.pasos);
+  check('se envían las 2, una a la vez, y solo después se abre la primera búsqueda (nunca dos pestañas a la vez)', JSON.stringify(b.eventos.slice(0, 2)) === '["cola:d1","cola:d2"]' && !!b.eventos[2] && b.eventos[2].startsWith('pestana:') && busquedas(b).length === 1, b.eventos);
+  check('...y lo enviado ya cuenta en el resumen de la ráfaga (2 postuladas) antes de buscar nada', r.conteos.postuladas === 2, r.conteos);
+  check('...la ráfaga sigue con la búsqueda de ofertas nuevas (paso 2)', r.estado === 'en_curso' && r.pasoActual === 1, { estado: r.estado, paso: r.pasoActual });
+  b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: { postular: 3 } }, { tab: { id: r.tabActual } });
+  await tick(30);
+  r = b.storageLocal.rafaga;
+  check('al terminar la búsqueda, el resumen suma las aprobadas y las nuevas (2 + 3)', r.estado === 'terminada' && r.conteos.postuladas === 5, r.conteos);
+  check('...y así se reporta al backend (el ícono y la tarjeta del panel no cuentan de menos)', b.reportesRafaga().slice(-1)[0].body.conteos.postuladas === 5, b.reportesRafaga().slice(-1)[0].body);
+  check('el bloqueo de suspensión cubre el paso de las aprobadas (se pidió al empezar la ráfaga, no después)', b.power.pedidos.length >= 1 && b.power.liberados >= 1);
+
+  // ── Solo cuenta lo que se envió de verdad ──
+  b = await nuevo({ aprobadas: [aprobada(1), aprobada(2), aprobada(3)] }, { resultados: { d2: { ok: false, expirada: false }, d3: { ok: false, expirada: true } } });
+  await b.ctx.quizasRafaga('chequeo');
+  await tick(150);
+  check('de 3 aprobadas, solo cuenta la que se envió (las otras no: una falló, otra expiró)', b.storageLocal.rafaga.conteos.postuladas === 1, b.storageLocal.rafaga.conteos);
+  check('...y la que ya no existe se marca expirada en el backend, como antes (no se reintenta para siempre)', b.fetchLlamadas.some(l => /banda-gris-expirada/.test(l.url) && JSON.parse(l.init.body).decisionId === 'd3'));
+
+  // ── Sin aprobadas, todo como siempre ──
+  b = await nuevo({ aprobadas: [] });
+  await b.ctx.quizasRafaga('chequeo');
+  await tick(50);
+  check('sin aprobadas por enviar NO hay paso de aprobadas: la ráfaga abre la búsqueda directo', b.storageLocal.rafaga.pasos.length === 1 && b.storageLocal.rafaga.pasos[0].tipo === 'busqueda' && b.aplicadas.length === 0, b.storageLocal.rafaga.pasos);
+
+  // ── Todos los disparadores ──
+  b = await nuevo({ aprobadas: [aprobada(1)], estado: { disponibleEnPlan: false, modo: 'prueba', pruebaRestantes: 5, pruebaTotal: 5 } });
+  let x = await b.enviarMensajeAsync({ type: 'ACTIVACION_POSTULACION' });
+  await tick(100);
+  check('la ráfaga de activación (cuenta en prueba) también manda primero lo aprobado', x.ok === true && b.storageLocal.rafaga.pasos[0].tipo === 'aprobadas' && b.aplicadas.join() === 'd1', b.storageLocal.rafaga.pasos);
+  b = await nuevo({ aprobadas: [aprobada(1)] });
+  x = await b.enviarMensajeAsync({ type: 'PONERSE_AL_DIA' });
+  await tick(100);
+  check('y "Ponerme al día ahora" también', x.ok === true && b.storageLocal.rafaga.pasos[0].tipo === 'aprobadas', x);
+
+  // ── Solo observar: la oferta aprobada no se envía, y no se abren pestañas para nada ──
+  b = await nuevo({ aprobadas: [aprobada(1), aprobada(2)] });
+  b.storageLocal.config = { soloObservar: true };
+  await b.ctx.quizasRafaga('chequeo');
+  await tick(50);
+  check('en solo observar no se encola nada (DO_APPLY lo rechazaría) y la ráfaga sigue con su búsqueda', b.aplicadas.length === 0 && b.storageLocal.rafaga.pasos.every(p => p.tipo === 'busqueda'), { aplicadas: b.aplicadas, pasos: b.storageLocal.rafaga.pasos });
+  b = await nuevo({ aprobadas: [aprobada(1)], perfil: { postulacionHabilitada: false } });
+  await b.ctx.quizasRafaga('chequeo');
+  await tick(50);
+  check('con la cuenta en modo prueba (postulacionHabilitada: false) tampoco', b.aplicadas.length === 0 && b.storageLocal.rafaga.pasos.every(p => p.tipo === 'busqueda'), b.aplicadas);
+
+  // ── Sin nada que buscar, lo aprobado igual se envía (no depende de tener objetivo ni portales) ──
+  b = await nuevo({ aprobadas: [aprobada(1)], estado: { objetivos: [], cargoObjetivo: null } });
+  x = await b.enviarMensajeAsync({ type: 'PONERSE_AL_DIA' });
+  await tick(50);
+  check('sin objetivo: no hay ráfaga (sin_objetivo) pero lo aprobado se envía igual, como antes', x.ok === false && x.motivo === 'sin_objetivo' && b.aplicadas.join() === 'd1' && !b.storageLocal.rafaga, x);
+  b = await nuevo({ aprobadas: [aprobada(1)], estado: { plataformasConectadas: [] } });
+  x = await b.enviarMensajeAsync({ type: 'PONERSE_AL_DIA' });
+  await tick(50);
+  check('sin portales conectados: igual', x.ok === false && x.motivo === 'sin_portales' && b.aplicadas.join() === 'd1', x);
+
+  // ── Una cola que ya arrancó otro camino (abrir Chrome, el panel) ──
+  b = await nuevo({ aprobadas: [aprobada(1), aprobada(2)] }, { demoraCola: 40 });
+  x = await b.enviarMensajeAsync({ type: 'APROBAR_PENDIENTES' });
+  check('control: el panel arranca la cola por su cuenta', x.ok === true && x.encoladas === 2, x);
+  await b.ctx.quizasRafaga('chequeo');
+  await tick(250);
+  check('si la cola ya estaba en proceso, la ráfaga espera a ESA (cada oferta se envía UNA vez, no dos)', b.aplicadas.join() === 'd1,d2', b.aplicadas);
+  check('...y la búsqueda solo abre después de que la cola terminó', b.eventos.indexOf('cola:d2') < b.eventos.findIndex(e => e.startsWith('pestana:')) && busquedas(b).length === 1, b.eventos);
+  check('...y lo que envió esa cola también cuenta en la ráfaga', b.storageLocal.rafaga.conteos.postuladas === 2, b.storageLocal.rafaga.conteos);
+
+  // ── El seguro de tiempo escala con la cola, y no hace avanzar dos veces ──
+  b = await nuevo({ aprobadas: [aprobada(1), aprobada(2), aprobada(3)] }, { demoraCola: 60 });
+  await b.ctx.quizasRafaga('chequeo');
+  await tick(20);
+  const seguros = b.alarmas.filter(([n]) => n === 'autopostula-rafaga-seguro');
+  check('el seguro de tiempo del paso de aprobadas suma un minuto por oferta (8 + 3 = 11), para no cortar una cola larga', seguros.length >= 1 && seguros[0][1].delayInMinutes === 11, seguros);
+  for (const fn of b.onAlarmListeners) fn({ name: 'autopostula-rafaga-seguro' }); // el seguro se dispara con la cola todavía en proceso
+  await tick(20);
+  check('si el seguro se dispara antes de tiempo, la ráfaga sigue con su búsqueda (y lo anota como error)', b.storageLocal.rafaga.pasoActual === 1 && b.storageLocal.rafaga.conteos.errores === 1 && busquedas(b).length === 1, b.storageLocal.rafaga);
+  await tick(300);
+  check('...y cuando la cola por fin termina, NO hace avanzar el paso otra vez (una sola búsqueda, paso 2 de 2)', b.storageLocal.rafaga.pasoActual === 1 && busquedas(b).length === 1 && b.storageLocal.rafaga.estado === 'en_curso', { paso: b.storageLocal.rafaga.pasoActual, busquedas: busquedas(b).length });
+
+  // ── Un fallo a la mitad no deja la cola trabada ──
+  b = await nuevo({ aprobadas: [aprobada(1), aprobada(2)] }, { fallaEn: 'd1' });
+  await b.ctx.quizasRafaga('chequeo');
+  await tick(150);
+  check('una oferta que revienta no se lleva a las demás: la d2 se envía igual y solo esa cuenta', b.aplicadas.join() === 'd1,d2' && b.storageLocal.rafaga.conteos.postuladas === 1, { aplicadas: b.aplicadas, conteos: b.storageLocal.rafaga.conteos });
+  check('...la ráfaga sigue con su búsqueda, sin marcar error (una oferta que falla no es una búsqueda que no terminó)', b.storageLocal.rafaga.conteos.errores === 0 && busquedas(b).length === 1 && b.storageLocal.rafaga.pasoActual === 1, b.storageLocal.rafaga);
+  check('...y la que falló se puede volver a encolar (no queda marcada "en cola" para siempre)', vm.runInContext('decisionesEnCola.has("d1")', b.ctx) === false);
+  b.ctx.applyInTab = async (_u, _t, id) => { b.aplicadas.push('reintento:' + id); return { ok: true }; };
+  const nuevas = vm.runInContext('encolarAprobadas([{ id: "dZ", url: "https://x/oferta-z", titulo: "Z", plataforma: "Computrabajo" }])', b.ctx);
+  const enviadas = await vm.runInContext('processQueue()', b.ctx);
+  check('...y la cola sigue funcionando después (antes, una excepción la dejaba "ocupada" para siempre)', nuevas === 1 && enviadas === 1 && b.aplicadas.includes('reintento:dZ'), { nuevas, enviadas });
+
+  // Una excepción que SÍ escapa del bucle (aquí forzada en la consulta de puede-postular)
+  // tampoco deja la cola "ocupada": la siguiente vuelta corre.
+  b = await nuevo({ aprobadas: [] });
+  b.ctx.puedePostularBackend = async () => { throw new Error('forzado'); };
+  vm.runInContext('encolarAprobadas([{ id: "dQ", url: "https://x/q", titulo: "Q", plataforma: "Computrabajo" }])', b.ctx);
+  let rechazo = null;
+  try { await vm.runInContext('processQueue()', b.ctx); } catch (e) { rechazo = e; }
+  b.ctx.puedePostularBackend = async () => ({ permitido: true, motivo: null, restantes: 1 });
+  vm.runInContext('encolarAprobadas([{ id: "dR", url: "https://x/r", titulo: "R", plataforma: "Computrabajo" }])', b.ctx);
+  const despues = await Promise.race([vm.runInContext('processQueue()', b.ctx).then(n => n, () => 'rechazada de nuevo'), new Promise((ok) => setTimeout(() => ok('colgada'), 300))]);
+  check('una excepción que escapa de la cola no la deja "ocupada" para siempre: la vuelta siguiente corre', rechazo !== null && despues === 1, { rechazo: rechazo && rechazo.message, despues });
+
+  // Si la cola entera falla (no una oferta), el paso cuenta como error y la ráfaga sigue.
+  b = await nuevo({ aprobadas: [aprobada(1)] });
+  b.ctx.processQueue = () => Promise.reject(new Error('reventó todo'));
+  await b.ctx.quizasRafaga('chequeo');
+  await tick(150);
+  check('si la cola falla entera, el paso cuenta como error y la ráfaga sigue con la búsqueda', b.storageLocal.rafaga.conteos.errores === 1 && busquedas(b).length === 1 && b.storageLocal.rafaga.pasoActual === 1, b.storageLocal.rafaga);
+
+  // applyInTab real: si Chrome no puede abrir la pestaña, no se cuelga.
+  b = cargarBackgroundJs({ fetchImpl: servidor({}) });
+  await tick();
+  b.ctx.chrome.tabs.create = (_o, cb) => cb(undefined);
+  const res = await Promise.race([vm.runInContext('applyInTab("https://x/oferta", "t", "d1")', b.ctx), new Promise((ok) => setTimeout(() => ok('colgada'), 300))]);
+  check('si no se puede abrir la pestaña, applyInTab responde (antes se colgaba y dejaba la cola trabada)', res && res.success === false && res.expirada === false, res);
+
+  // ── Lo que ya existía: sin ráfaga, las aprobadas se envían igual ──
+  b = await nuevo({ aprobadas: [aprobada(1), aprobada(2)] });
+  x = await b.enviarMensajeAsync({ type: 'APROBAR_PENDIENTES' });
+  await tick(60);
+  check('sin ráfaga (el panel o abrir Chrome), las aprobadas se envían igual, sin abrir ninguna búsqueda', x.ok === true && b.aplicadas.join() === 'd1,d2' && busquedas(b).length === 0 && !b.storageLocal.rafaga, { x, eventos: b.eventos });
+});
+
 const tope = setTimeout(() => {
   console.error('✗ tiempo agotado: algún bloque de prueba nunca terminó');
   process.exit(1);
