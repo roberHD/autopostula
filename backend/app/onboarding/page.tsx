@@ -625,7 +625,7 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
               Busco otra cosa
             </button>
             <button className="ap-button" style={{ flex: 1 }} onClick={guardar} disabled={guardando}>
-              {guardando ? "Guardando..." : "Sí, es eso"}
+              {guardando ? "Armando tu búsqueda…" : "Sí, es eso"}
             </button>
           </div>
         </div>
@@ -694,7 +694,13 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
             </button>
           )}
 
-          <Footer onSiguiente={guardar} onOmitir={onOmitir} siguienteTexto={guardando ? "Guardando..." : "Continuar"} deshabilitado={guardando} />
+          <Footer onSiguiente={guardar} onOmitir={onOmitir} siguienteTexto={guardando ? "Armando tu búsqueda…" : "Continuar"} deshabilitado={guardando} />
+          {/* §4.2: guardar arma tu búsqueda con IA y tarda ~10 s; sin aviso parecía colgado. */}
+          {guardando && (
+            <p role="status" style={{ fontSize: 12, color: "var(--text-muted)", textAlign: "right", marginTop: 8 }}>
+              Estamos armando tu búsqueda con lo que elegiste. Toma unos 10 segundos, no cierres esta página.
+            </p>
+          )}
         </>
       )}
     </>
