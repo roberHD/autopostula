@@ -49,3 +49,20 @@ window.addEventListener('autopostula:conectar', (e) => {
     }
   });
 });
+
+// docs/rafagas-y-ponerse-al-dia.md §3.6: el botón "Ponerme al día ahora" del
+// panel viaja igual que "conectar" -- evento del DOM de esta misma página (no
+// postMessage de cualquier origen), y la respuesta vuelve como otro evento.
+// La extensión decide si se puede (plan, pausa, cupo, si ya está corriendo...)
+// y devuelve { ok: true, estimadoMs } o { ok: false, motivo }; acá solo se
+// transporta, para que el panel muestre el motivo en vez de quedarse mudo.
+window.addEventListener('autopostula:ponerse-al-dia', () => {
+  chrome.runtime.sendMessage({ type: 'PONERSE_AL_DIA' }, (respuesta) => {
+    // lastError: la extensión se recargó o actualizó con la pestaña abierta y
+    // este script quedó huérfano -- recargar la página lo arregla.
+    const detail = chrome.runtime.lastError || !respuesta
+      ? { ok: false, motivo: 'extension_no_responde' }
+      : respuesta;
+    window.dispatchEvent(new CustomEvent('autopostula:ponerse-al-dia-resultado', { detail }));
+  });
+});

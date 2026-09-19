@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
+import { motivoInactivo } from "@/lib/estado-automatico";
 
 async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -51,6 +52,20 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     busquedaAutomatica,
+    // docs/rafagas-y-ponerse-al-dia.md §3.6: "Ponerme al día ahora" es solo
+    // para quien su plan incluye la búsqueda automática -- en una cuenta gratis
+    // el botón ni aparece, así que la extensión necesita saber si el plan lo
+    // permite POR SEPARADO de si hoy está corriendo. `motivo` dice por qué no
+    // corre (mismo veredicto que la barra del dashboard: lib/estado-automatico.ts)
+    // para que el botón, si está bloqueado, explique qué hacer en vez de fallar
+    // en silencio.
+    disponibleEnPlan: loPermiteElPlan,
+    motivo: motivoInactivo({
+      disponibleEnPlan: loPermiteElPlan,
+      pausadaPorTi: !user.busquedaAutomaticaActiva,
+      cupoPermitido: estadoPostulaciones.permitido,
+      portalesActivos: cuentasActivas.length,
+    }),
     // Se mantiene por compatibilidad -- background.js viejo (o una versión
     // de la extensión que todavía no actualizó) sigue funcionando con esto.
     cargoObjetivo: cv?.cargoObjetivo ?? null,

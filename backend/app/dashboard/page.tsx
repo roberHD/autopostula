@@ -13,6 +13,7 @@ import { ArrowUpRight, ArrowDownRight, Sparkles, Send, CheckCheck, Trophy, Targe
 import { SkelStats, SkelGrafico, SkelFilas } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
 import { textoTarjetaRafaga, type UltimaRafaga } from "@/lib/texto-rafaga";
+import BotonPonerseAlDia from "./BotonPonerseAlDia";
 
 type Resumen = {
   postulacionesEnviadas: number;
@@ -155,7 +156,12 @@ export default function InicioPage() {
   // decidía solo por "hay un portal conectado", mientras la barra de arriba
   // (BarraMaquina) decía "En pausa" -- dos veredictos distintos en la misma
   // pantalla. Ahora lee del mismo /api/dashboard/estado que la barra.
-  const [estadoAuto, setEstadoAuto] = useState<{ activa: boolean; motivo: string | null; ultimaRafaga: UltimaRafaga | null } | null>(null);
+  const [estadoAuto, setEstadoAuto] = useState<{
+    activa: boolean;
+    motivo: string | null;
+    ultimaRafaga: UltimaRafaga | null;
+    estimadoRafagaMs: number | null;
+  } | null>(null);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState("");
   const { error: avisarError } = useAvisos();
@@ -163,7 +169,16 @@ export default function InicioPage() {
   useEffect(() => {
     fetch("/api/dashboard/estado")
       .then((r) => (r.ok ? r.json() : null))
-      .then((e) => { if (e) setEstadoAuto({ activa: !!e.activa, motivo: e.motivo ?? null, ultimaRafaga: e.ultimaRafaga ?? null }); })
+      .then((e) => {
+        if (e) {
+          setEstadoAuto({
+            activa: !!e.activa,
+            motivo: e.motivo ?? null,
+            ultimaRafaga: e.ultimaRafaga ?? null,
+            estimadoRafagaMs: e.estimadoRafagaMs ?? null,
+          });
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -603,6 +618,11 @@ export default function InicioPage() {
                 {inactivoInfo?.cta ?? "Conectar un portal"}
               </Link>
             )}
+            {/* docs/rafagas-y-ponerse-al-dia.md §3.6: solo Premium. `activa` ya exige
+                que el plan incluya la búsqueda automática (o ser admin), no esté en
+                pausa, quede cupo y haya un portal conectado -- así que en una cuenta
+                gratis, o pausada, el botón simplemente no está. */}
+            {estadoAuto?.activa && <BotonPonerseAlDia estimadoMs={estadoAuto.estimadoRafagaMs} />}
           </div>
           <div style={{ marginTop: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12 }}>

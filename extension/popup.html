@@ -132,6 +132,17 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .rafaga-titulo { font-size: 12.5px; font-weight: 700; color: var(--text-1); }
 .rafaga-detalle { font-size: 11px; color: var(--text-2); margin-top: 1px; }
 
+/* ── "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6) ───────
+   Solo Premium: en una cuenta gratis la fila ni aparece. Debajo del botón
+   va SIEMPRE una línea: cuánto suele tardar, o por qué no se puede ahora. */
+.ponerse-row {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.ponerse-row .btn { width: 100%; }
+.ponerse-hint { font-size: 10.5px; color: var(--text-3); margin-top: 6px; line-height: 1.45; }
+
 /* ── Solo observar (docs/modo-solo-observar.md §3.4) ────────────────────
    Va pegado al toggle master, con su propio fondo, para que sea imposible
    no verlo -- "la persona nunca puede quedar en duda sobre si la extensión
@@ -393,6 +404,12 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 <div class="rafaga-row hidden" id="rafaga-row" role="status">
   <div class="rafaga-titulo" id="rafaga-titulo"></div>
   <div class="rafaga-detalle hidden" id="rafaga-detalle"></div>
+</div>
+
+<!-- PONERME AL DÍA AHORA (solo Premium) -->
+<div class="ponerse-row hidden" id="ponerse-row">
+  <button class="btn btn-primary" id="ponerse-btn" type="button">Ponerme al día ahora</button>
+  <div class="ponerse-hint" id="ponerse-hint"></div>
 </div>
 
 <!-- MASTER TOGGLE -->

@@ -1,7 +1,7 @@
 # Ráfagas: que se ponga al día cada vez que abres el computador — especificación
 
-> **Estado:** en implementación. Pasos 1 a 6 de §7 hechos y con test (`extension/verificar-rafagas.js`,
-> `backend/scripts/verificar-texto-rafaga.ts`, 2026-09-18); del 7 en adelante, pendiente. **Falta verificar a
+> **Estado:** en implementación. Pasos 1 a 7 de §7 hechos y con test (`extension/verificar-rafagas.js`,
+> `backend/scripts/verificar-texto-rafaga.ts`, 2026-09-19); del 7b en adelante, pendiente. **Falta verificar a
 > mano** el criterio de `powercfg /requests` (§3.3, criterios 2 y 3 de §8): el test cubre la lógica con
 > `chrome.power` simulado, no el Windows real. Tampoco se vio la tarjeta del panel con una sesión iniciada
 > (§3.5): está probado el texto y la consulta contra Postgres, no el dibujo en pantalla.
@@ -16,6 +16,29 @@
 >   **servidor**, no la del reloj de la persona.
 > - Las otras dos columnas de `User` del bloque de §3.4 (`recordatorioRafagaEn`, `recordatoriosActivos`)
 >   quedan para el paso 9, que es el que las usa.
+>
+> **Lo que el paso 7 hizo distinto de §3.6** (o que §3.6 no decía):
+> - **Enfriamiento de 5 min** después de terminar una ráfaga. §3.6 dice "sin el umbral de §3.1" y así es
+>   (el de 3 h no aplica), pero apretarlo diez veces seguidas abriría diez rondas de pestañas sobre los
+>   portales, y un bloqueo caería sobre la cuenta de la persona. Con menos de 5 min desde la última no hay
+>   nada nuevo que encontrar. Si molesta, es `ENFRIAMIENTO_MANUAL_MIN` en `background.js`.
+> - **Recorre todos los objetivos** y no consume el contador de ciclos: las automáticas alternan (el
+>   secundario, una de cada dos), pero quien pide "ponerme al día" pidió con TODO.
+> - **Dónde aparece.** Popup: siempre que el plan lo incluya, deshabilitado y con la razón debajo si hoy no
+>   se puede (pausa, cupo, sin objetivo…). Panel: dentro de la tarjeta de estado, **solo con la búsqueda
+>   activa** (`activa` ya exige plan, sin pausa, con cupo y con portal) — en pausa la tarjeta ya dice qué
+>   hacer y no lleva botón.
+> - **La duración estimada sale de dos lados** con la misma definición (mediana de las últimas 5 terminadas):
+>   el popup la lee de su propio historial local (`duracionesRafaga`), el panel de la tabla `Rafaga`.
+> - `/api/account/estado-automatico` ahora devuelve `disponibleEnPlan` y `motivo`; el veredicto de "por qué
+>   no corre" salió a `lib/estado-automatico.ts` y lo usan también la barra del dashboard y esa ruta, para que
+>   el panel y el botón no digan cosas distintas de la misma cuenta.
+> - **Sin extensión en el navegador** (el celular): el botón del panel explica que esto corre en el
+>   computador y no manda nada.
+> - Falta verificar a mano: el botón dentro de un Chrome real con la extensión cargada, y la tarjeta del
+>   panel con sesión iniciada. El popup real se vio en el navegador con un `chrome` simulado (todos sus
+>   estados), y el componente real del panel se montó con un `bridge.js` simulado (con extensión, sin
+>   extensión, rechazo y extensión que no contesta); el endpoint y la mediana, contra Postgres real.
 > **Para:** el chat de producción.
 > **Fecha:** 2026-09-17.
 > **Va después de:** la Fase 1 de `revision-2026-09-16.md` (pasos 1 a 4d de su §6). No sirve ponerse
@@ -462,7 +485,7 @@ celular, con *"estas ofertas calzan contigo"* y postulación a mano (`celular-y-
 | ~~4~~ | ~~`requestKeepAwake` durante la ráfaga + tope de 25 min~~ | 3.3 | ✅ Hecho — permiso `power` puesto en el manifest → **nueva versión en la tienda** |
 | ~~5~~ | ~~`Rafaga` + `ultimaRafagaEn` + endpoint~~ | 3.4 | ✅ Hecho — ver el bloque de abajo con lo que difiere del esquema de §3.4 |
 | ~~6~~ | ~~Número en el ícono, popup y tarjeta del panel~~ | 3.5 | ✅ Hecho — el ícono cuenta las postulaciones de la última ráfaga (en gris, lo que *habría* postulado, si está en solo observar) y una ráfaga sin novedades lo limpia; el popup lo limpia al abrir |
-| 7 | Botón "Ponerme al día ahora" | 3.6 | Solo Premium |
+| ~~7~~ | ~~Botón "Ponerme al día ahora"~~ | 3.6 | ✅ Hecho, solo Premium — ver "Lo que el paso 7 hizo distinto de §3.6" arriba |
 | 7b | Prueba de 5 postulaciones automáticas | 4.1 | Depende de `revision-2026-09-16.md` §1.2 y §1.3 |
 | 8 | Cola del celular primero | 3.7 | Depende de `revision-2026-09-16.md` §2.9 |
 | 9 | Recordatorio por correo | 3.8 | |

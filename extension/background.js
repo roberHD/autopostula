@@ -435,9 +435,9 @@ async function actualizarFiltrosDesdeBackend(token) {
 // docs/rafagas-y-ponerse-al-dia.md §3.1: los tres disparadores automáticos
 // (se abre Chrome, despierta, chequeo periódico) pasan todos por acá antes
 // de arrancar una ráfaga -- el umbral evita que abrir y cerrar la tapa diez
-// veces seguidas dispare diez ráfagas. El botón manual (§3.6, todavía sin
-// construir) va a ser el único que llame a escanearAutomatico() directo,
-// ignorando el umbral a propósito -- por eso el umbral vive acá y no adentro.
+// veces seguidas dispare diez ráfagas. El botón manual (§3.6, ponerseAlDia
+// más abajo) es el único que llama a escanearAutomatico() directo, ignorando
+// este umbral a propósito -- por eso el umbral vive acá y no adentro.
 const UMBRAL_HORAS_ENTRE_RAFAGAS = 3;
 
 async function quizasRafaga(disparador) {
@@ -447,25 +447,51 @@ async function quizasRafaga(disparador) {
   await escanearAutomatico(disparador);
 }
 
-async function escanearAutomatico(disparador) {
-  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
-  if (!autopostulaToken) return;
-
-  let estado;
+async function pedirEstadoAutomatico(token) {
   try {
     const res = await fetch(BACKEND_URL + '/api/account/estado-automatico', {
-      headers: { 'Authorization': 'Bearer ' + autopostulaToken }
+      headers: { 'Authorization': 'Bearer ' + token }
     });
-    if (!res.ok) return;
-    estado = await res.json();
+    if (!res.ok) return null;
+    return await res.json();
   } catch (e) {
     console.warn('[AP] No se pudo consultar estado automático:', e);
-    return;
+    return null;
   }
+}
+
+// docs/objetivo-laboral.md §8: uno o más objetivos, cada uno con su propia
+// búsqueda -- no solo el cargoObjetivo del CV. Si el backend todavía no
+// manda "objetivos" (versión vieja) o el usuario nunca confirmó ninguno,
+// cargoObjetivo sigue funcionando como único objetivo, igual que siempre.
+function objetivosDeEstado(estado) {
+  return (estado.objetivos && estado.objetivos.length)
+    ? estado.objetivos
+    : (estado.cargoObjetivo ? [{ etiqueta: estado.cargoObjetivo, peso: 1 }] : []);
+}
+
+// El servidor dice POR QUÉ no corre (lib/estado-automatico.ts, con guiones);
+// acá se pasa a las claves que usan los textos del popup y del panel. Un
+// backend viejo que no manda `motivo` cae a "no_disponible" (texto genérico).
+const MOTIVO_DE_SERVIDOR = { 'sin-plan': 'sin_plan', 'pausada': 'pausada', 'sin-cupo': 'sin_cupo', 'sin-portales': 'sin_portales' };
+function motivoDeEstado(estado) {
+  return MOTIVO_DE_SERVIDOR[estado.motivo] || 'no_disponible';
+}
+
+// Devuelve { ok: true } si arrancó una ráfaga, o { ok: false, motivo } con la
+// razón por la que no -- los disparadores automáticos lo ignoran, pero el
+// botón "Ponerme al día ahora" (§3.6) necesita decirle a la persona qué pasó
+// en vez de quedarse mudo.
+async function escanearAutomatico(disparador) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return { ok: false, motivo: 'sin_token' };
+
+  const estado = await pedirEstadoAutomatico(autopostulaToken);
+  if (!estado) return { ok: false, motivo: 'sin_conexion' };
 
   // Sin el beneficio del plan no hay nada automático que hacer -- ni buscar
   // ofertas nuevas ni postular a lo ya aprobado en banda gris.
-  if (!estado.busquedaAutomatica) return;
+  if (!estado.busquedaAutomatica) return { ok: false, motivo: motivoDeEstado(estado) };
 
   // La búsqueda automática corre en background sin que nadie haya abierto el
   // popup — si no se refresca acá, usaría los filtros de búsqueda que haya
@@ -481,25 +507,29 @@ async function escanearAutomatico(disparador) {
   }
   processQueue();
 
-  // docs/objetivo-laboral.md §8: uno o más objetivos, cada uno con su propia
-  // búsqueda -- no solo el cargoObjetivo del CV. Si el backend todavía no
-  // manda "objetivos" (versión vieja) o el usuario nunca confirmó ninguno,
-  // cargoObjetivo sigue funcionando como único objetivo, igual que siempre.
-  const objetivos = (estado.objetivos && estado.objetivos.length)
-    ? estado.objetivos
-    : (estado.cargoObjetivo ? [{ etiqueta: estado.cargoObjetivo, peso: 1 }] : []);
-  if (!objetivos.length) return;
+  const objetivos = objetivosDeEstado(estado);
+  if (!objetivos.length) return { ok: false, motivo: 'sin_objetivo' };
 
   const plataformas = estado.plataformasConectadas || [];
-  if (!plataformas.length) return;
+  if (!plataformas.length) return { ok: false, motivo: 'sin_portales' };
 
   // Con más de un objetivo, el secundario se visita con menos frecuencia que
   // el principal -- "uno de cada dos ciclos" (§8). Sin esto, alguien con 2
   // objetivos × 2 portales pasaría de 2 a 4 pestañas cada 2 horas.
-  const { cicloBusquedaAutomatica } = await chrome.storage.local.get('cicloBusquedaAutomatica');
-  const ciclo = (cicloBusquedaAutomatica || 0) + 1;
-  await chrome.storage.local.set({ cicloBusquedaAutomatica: ciclo });
-  const objetivosDeEsteCiclo = objetivos.filter((_, i) => i === 0 || ciclo % 2 === 0);
+  //
+  // "Ponerme al día ahora" es la excepción: la persona pidió ponerse al día
+  // con TODO, así que visita todos los objetivos -- si no, la mitad de las
+  // veces se saltaría el secundario justo cuando lo pidió a propósito. Y no
+  // consume el contador, para no descuadrar la alternancia de las automáticas.
+  let objetivosDeEsteCiclo;
+  if (disparador === 'manual') {
+    objetivosDeEsteCiclo = objetivos;
+  } else {
+    const { cicloBusquedaAutomatica } = await chrome.storage.local.get('cicloBusquedaAutomatica');
+    const ciclo = (cicloBusquedaAutomatica || 0) + 1;
+    await chrome.storage.local.set({ cicloBusquedaAutomatica: ciclo });
+    objetivosDeEsteCiclo = objetivos.filter((_, i) => i === 0 || ciclo % 2 === 0);
+  }
 
   // Se recorren en serie -- una pestaña a la vez -- en vez de abrirlas todas
   // juntas (§8: "cuidado con el volumen... recorrerlas en serie") -- menos
@@ -528,7 +558,11 @@ async function escanearAutomatico(disparador) {
     pasos.push({ tipo: 'estados', portal: 'Computrabajo', url: 'https://cl.computrabajo.com/candidate/match' });
   }
 
-  await iniciarRafaga(disparador || 'chequeo', pasos);
+  // Portales conectados pero ninguno con adaptador de búsqueda automática.
+  if (!pasos.length) return { ok: false, motivo: 'sin_portales' };
+
+  const arranco = await iniciarRafaga(disparador || 'chequeo', pasos);
+  return arranco ? { ok: true } : { ok: false, motivo: 'en_curso' };
 }
 
 // ── Ráfaga: máquina de estados persistida ────────────────────────
@@ -611,10 +645,11 @@ function mostrarInsigniaRafaga(conteos) {
   }
 }
 
+// Devuelve true si arrancó, false si no (no hay pasos, o ya hay una corriendo).
 async function iniciarRafaga(disparador, pasos) {
-  if (!pasos.length) return;
+  if (!pasos.length) return false;
   const { rafaga: existente } = await chrome.storage.local.get('rafaga');
-  if (existente && existente.estado === 'en_curso') return; // ya hay una corriendo
+  if (existente && existente.estado === 'en_curso') return false; // ya hay una corriendo
 
   const rafaga = {
     id: 'r_' + Date.now(),
@@ -633,6 +668,28 @@ async function iniciarRafaga(disparador, pasos) {
   // Sin await a propósito: registrar el inicio no debe demorar el primer paso.
   reportarRafagaBackend(rafaga);
   avanzarRafaga();
+  return true;
+}
+
+// docs/rafagas-y-ponerse-al-dia.md §3.6: cuánto suele tardar una ráfaga, para
+// decírselo a la persona antes de que apriete "Ponerme al día ahora". Las
+// últimas 5 que TERMINARON (una interrumpida no dice cuánto tarda una
+// completa), en este mismo equipo: el tiempo lo manda la velocidad de los
+// portales desde acá, no una cifra global.
+const DURACIONES_PARA_ESTIMAR = 5;
+
+// Mediana, no promedio: una ráfaga que se colgó hasta el seguro de 8 min por
+// paso no debe correr la estimación de todas las demás.
+function mediana(valores) {
+  if (!valores.length) return null;
+  const orden = [...valores].sort((a, b) => a - b);
+  const medio = Math.floor(orden.length / 2);
+  return orden.length % 2 ? orden[medio] : Math.round((orden[medio - 1] + orden[medio]) / 2);
+}
+
+async function estimadoRafagaMs() {
+  const { duracionesRafaga } = await chrome.storage.local.get('duracionesRafaga');
+  return mediana(duracionesRafaga || []);
 }
 
 async function avanzarRafaga() {
@@ -642,7 +699,9 @@ async function avanzarRafaga() {
   if (rafaga.pasoActual >= rafaga.pasos.length) {
     rafaga.estado = 'terminada';
     rafaga.fin = Date.now();
-    await chrome.storage.local.set({ rafaga, ultimaRafagaFin: Date.now() });
+    const { duracionesRafaga } = await chrome.storage.local.get('duracionesRafaga');
+    const duraciones = [...(duracionesRafaga || []), rafaga.fin - rafaga.inicio].slice(-DURACIONES_PARA_ESTIMAR);
+    await chrome.storage.local.set({ rafaga, ultimaRafagaFin: Date.now(), duracionesRafaga: duraciones });
     // Soltar el bloqueo va ANTES del reporte: un backend lento o caído nunca
     // debe alargar el tiempo que el equipo queda sin poder suspenderse. Lo
     // mismo el número del ícono: es local e instantáneo, no espera a la red.
@@ -738,6 +797,61 @@ async function retomarORafagaInterrumpida() {
   mostrarInsigniaRafaga(rafaga.conteos);
   await reportarRafagaBackend(rafaga);
   console.warn('[AP] Ráfaga marcada interrumpida -- sin señales de vida por más de ' + RETOMAR_LATIDO_MAX_MIN + ' min.');
+}
+
+// ── "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6) ─────────
+// Solo Premium (la extensión no lo decide: lo dice el plan, vía estado-automatico)
+// y sin el umbral de 3 h de §3.1 -- la persona lo pidió a propósito.
+//
+// Sí tiene un enfriamiento corto, que el documento no menciona: apretarlo diez
+// veces seguidas abriría diez rondas de pestañas sobre los portales, y
+// Computrabajo ya respondió 403 a tráfico de servidor; un bloqueo sería de la
+// cuenta de la persona. Cinco minutos después de terminar una, otra no tiene
+// nada nuevo que encontrar.
+const ENFRIAMIENTO_MANUAL_MIN = 5;
+
+// Lo que se puede saber sin salir a la red: ¿ya está corriendo una, o
+// terminó hace nada?
+async function bloqueoLocalManual() {
+  // Una ráfaga "en_curso" que el worker perdió (latido viejo) no puede dejar
+  // el botón bloqueado para siempre: se reconcilia antes de mirar.
+  await retomarORafagaInterrumpida();
+  const { rafaga, ultimaRafagaFin } = await chrome.storage.local.get(['rafaga', 'ultimaRafagaFin']);
+  if (rafaga && rafaga.estado === 'en_curso') return 'en_curso';
+  if (ultimaRafagaFin && Date.now() - ultimaRafagaFin < ENFRIAMIENTO_MANUAL_MIN * 60000) return 'reciente';
+  return null;
+}
+
+// Apretar el botón. { ok: true, estimadoMs } si arrancó, o { ok: false, motivo }
+// -- el motivo es una clave que los textos del popup y del panel saben explicar.
+async function ponerseAlDia() {
+  const bloqueo = await bloqueoLocalManual();
+  if (bloqueo) return { ok: false, motivo: bloqueo };
+
+  const resultado = await escanearAutomatico('manual');
+  if (!resultado.ok) return { ok: false, motivo: resultado.motivo };
+  return { ok: true, estimadoMs: await estimadoRafagaMs() };
+}
+
+// Para dibujar el botón sin apretarlo: { mostrar, bloqueo, estimadoMs }.
+// "Gratis: el botón no aparece" (§3.6) -- se decide por disponibleEnPlan, que
+// es del plan, no de si hoy está corriendo. Sin respuesta del servidor no se
+// sabe si el plan lo permite, y es mejor no ofrecer un botón que quizás no
+// corresponde que ofrecérselo a una cuenta gratis.
+async function estadoPonerseAlDia() {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return { mostrar: false };
+
+  const estado = await pedirEstadoAutomatico(autopostulaToken);
+  if (!estado || !estado.disponibleEnPlan) return { mostrar: false };
+
+  let bloqueo;
+  if (!estado.busquedaAutomatica) bloqueo = motivoDeEstado(estado);
+  else if (!objetivosDeEstado(estado).length) bloqueo = 'sin_objetivo';
+  else if (!(estado.plataformasConectadas || []).length) bloqueo = 'sin_portales';
+  else bloqueo = await bloqueoLocalManual();
+
+  return { mostrar: true, bloqueo, estimadoMs: await estimadoRafagaMs() };
 }
 
 // docs/rafagas-y-ponerse-al-dia.md §3.1, disparador "el computador despierta":
@@ -940,6 +1054,23 @@ async function reportarRafagaBackend(rafaga) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // §3.6: el popup los manda directo; el panel, por bridge.js. Si algo revienta
+  // por dentro, igual se responde -- un sendResponse que nunca llega deja a la
+  // persona mirando un botón que dice "Empezando…" para siempre.
+  if (msg.type === 'PONERSE_AL_DIA') {
+    ponerseAlDia().then(sendResponse).catch((e) => {
+      console.warn('[AP] Falló "Ponerme al día ahora":', e);
+      sendResponse({ ok: false, motivo: 'sin_conexion' });
+    });
+    return true;
+  }
+  if (msg.type === 'ESTADO_PONERSE_AL_DIA') {
+    estadoPonerseAlDia().then(sendResponse).catch((e) => {
+      console.warn('[AP] No se pudo calcular el estado del botón "Ponerme al día ahora":', e);
+      sendResponse({ mostrar: false });
+    });
+    return true;
+  }
   if (msg.type === 'ESCANEO_TERMINADO') {
     // Solo se atiende si viene de la pestaña que la ráfaga tiene abierta
     // AHORA MISMO -- una pestaña vieja (de un paso anterior, ya cerrada, o

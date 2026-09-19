@@ -1,7 +1,17 @@
 // Verificación del texto de la tarjeta del Inicio (docs/rafagas-y-ponerse-al-dia.md §3.5).
 // Lógica pura, sin base de datos ni navegador. Es para correr a mano:
 //   npx tsx scripts/verificar-texto-rafaga.ts
-import { detalleConteos, textoTarjetaRafaga, type ResumenRafaga } from "../lib/texto-rafaga";
+import {
+  detalleConteos,
+  duracionAproximada,
+  MOTIVOS_PONERSE_AL_DIA,
+  SIN_EXTENSION_PONERSE,
+  textoEstimadoPonerse,
+  textoMotivoPonerse,
+  textoTarjetaRafaga,
+  type ResumenRafaga,
+} from "../lib/texto-rafaga";
+import { motivoInactivo } from "../lib/estado-automatico";
 
 let fallos = 0;
 function check(desc: string, cond: boolean, detalle?: unknown) {
@@ -66,6 +76,57 @@ check("reciente sin resumen: muestra la hora y deja el detalle vacío", r.t.star
 // Medianoche: nunca "24:05".
 r = textoTarjetaRafaga({ en: new Date(2026, 8, 18, 0, 5).toISOString(), resumen: base }, ahora);
 check("después de medianoche dice 00:05, no 24:05", r.t === "Última puesta al día: hoy 00:05", r);
+
+// ── "Ponerme al día ahora" (§3.6) ────────────────────────────────────────
+// La MISMA tabla que extension/verificar-rafagas.js prueba contra popup.js:
+// el botón está en los dos lados y tienen que decir lo mismo.
+const tabla: [number | null, string][] = [
+  [null, "unos minutos"], [0, "unos minutos"], [30000, "menos de un minuto"], [60000, "un minuto"],
+  [89000, "un minuto"], [90000, "unos 2 minutos"], [480000, "unos 8 minutos"], [3540000, "unos 59 minutos"],
+  [3600000, "más de una hora"], [7200000, "más de una hora"],
+];
+for (const [ms, esperado] of tabla) {
+  check(`duracionAproximada(${ms}) = "${esperado}"`, duracionAproximada(ms) === esperado, duracionAproximada(ms));
+}
+check('con estimación: "Suele tardar unos 8 minutos."', textoEstimadoPonerse(480000) === "Suele tardar unos 8 minutos.");
+check('sin estimación no inventa un número: "Puede tardar unos minutos."', textoEstimadoPonerse(null) === "Puede tardar unos minutos.");
+
+const motivosDeLaExtension = [
+  "en_curso", "reciente", "sin_plan", "pausada", "sin_cupo", "sin_portales", "sin_objetivo",
+  "sin_token", "sin_conexion", "extension_no_responde",
+];
+check(
+  "cada motivo que puede devolver la extensión tiene su texto",
+  motivosDeLaExtension.every((m) => (MOTIVOS_PONERSE_AL_DIA[m] ?? "").length > 10),
+  motivosDeLaExtension.filter((m) => !MOTIVOS_PONERSE_AL_DIA[m]),
+);
+check("un motivo conocido devuelve su texto", textoMotivoPonerse("pausada") === MOTIVOS_PONERSE_AL_DIA.pausada);
+check(
+  "un motivo desconocido o ausente cae al texto genérico, nunca a una clave cruda",
+  textoMotivoPonerse("algo_nuevo").startsWith("No se pudo poner al día ahora") &&
+    textoMotivoPonerse(undefined).startsWith("No se pudo poner al día ahora"),
+);
+check(
+  "sin extensión en este navegador (el celular) dice que esto corre en el computador",
+  SIN_EXTENSION_PONERSE.includes("computador") && SIN_EXTENSION_PONERSE.includes("extensión"),
+);
+
+// ── motivoInactivo: el veredicto que comparten la barra del dashboard y la extensión ──
+const ok = { disponibleEnPlan: true, pausadaPorTi: false, cupoPermitido: true, portalesActivos: 2 };
+check("todo en orden → no hay motivo (está corriendo)", motivoInactivo(ok) === null);
+check("sin plan → sin-plan", motivoInactivo({ ...ok, disponibleEnPlan: false }) === "sin-plan");
+check("pausada por la persona → pausada", motivoInactivo({ ...ok, pausadaPorTi: true }) === "pausada");
+check("sin cupo → sin-cupo", motivoInactivo({ ...ok, cupoPermitido: false }) === "sin-cupo");
+check("sin portales → sin-portales", motivoInactivo({ ...ok, portalesActivos: 0 }) === "sin-portales");
+check(
+  "el orden es el de qué hacer primero: sin plan gana sobre todo lo demás",
+  motivoInactivo({ disponibleEnPlan: false, pausadaPorTi: true, cupoPermitido: false, portalesActivos: 0 }) === "sin-plan",
+);
+check(
+  "pausada gana sobre sin cupo y sin portales",
+  motivoInactivo({ ...ok, pausadaPorTi: true, cupoPermitido: false, portalesActivos: 0 }) === "pausada",
+);
+check("sin cupo gana sobre sin portales", motivoInactivo({ ...ok, cupoPermitido: false, portalesActivos: 0 }) === "sin-cupo");
 
 console.log("\n" + (fallos === 0 ? "✓ Todo OK" : "✗ " + fallos + " fallo(s)"));
 process.exit(fallos === 0 ? 0 : 1);

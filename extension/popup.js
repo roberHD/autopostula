@@ -478,6 +478,100 @@ function renderRafaga(rafaga) {
   detalle.classList.toggle('hidden', !texto.detalle);
 }
 
+// ── "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6) ─────────
+// Los textos son los mismos que en el panel (backend/lib/texto-rafaga.ts): la
+// persona ve el botón en los dos lados y tienen que explicar lo mismo.
+// verificar-rafagas.js compara este archivo contra ese.
+
+// "unos 8 minutos". No promete un número de ofertas: no se sabe cuántas hay
+// hasta escanear -- solo cuánto suele tardar, que sí se sabe.
+function duracionAproximada(ms) {
+  if (!ms || ms <= 0) return 'unos minutos';
+  if (ms < 60000) return 'menos de un minuto';
+  const min = Math.round(ms / 60000);
+  if (min === 1) return 'un minuto';
+  if (min >= 60) return 'más de una hora';
+  return 'unos ' + min + ' minutos';
+}
+
+function textoEstimadoPonerse(ms) {
+  return ms ? 'Suele tardar ' + duracionAproximada(ms) + '.' : 'Puede tardar unos minutos.';
+}
+
+// Por qué no arrancó. Las claves son las que devuelve background.js.
+const MOTIVOS_PONERSE_AL_DIA = {
+  en_curso: 'Ya se está poniendo al día. Te avisamos en el ícono de la extensión.',
+  reciente: 'Te pusimos al día hace muy poco. Vuelve a intentarlo en unos minutos.',
+  sin_plan: 'Ponerte al día ahora es parte de Premium.',
+  pausada: 'La búsqueda automática está en pausa. Reanúdala desde tu panel.',
+  sin_cupo: 'Ya usaste tus postulaciones de este mes. Se reinicia el día 1.',
+  sin_portales: 'Conecta un portal para empezar.',
+  sin_objetivo: 'Cuéntanos qué buscas, en tu panel, para poder empezar.',
+  sin_token: 'Conecta la extensión con tu cuenta desde tu panel.',
+  sin_conexion: 'No pudimos consultar tu cuenta. Revisa tu conexión e inténtalo de nuevo.',
+  extension_no_responde: 'La extensión no respondió. Recarga esta página e inténtalo de nuevo.',
+};
+const MOTIVO_GENERICO_PONERSE = 'No se pudo poner al día ahora. Inténtalo de nuevo en unos minutos.';
+const TEXTO_EMPEZO_PONERSE = 'Empezó. Puedes cerrar esto: te avisamos en el ícono de la extensión.';
+
+// Estos motivos pueden pasar (mala conexión, un worker que se reinició): tiene
+// sentido dejar volver a apretar. Los demás no cambian por apretar de nuevo.
+const MOTIVOS_REINTENTABLES_PONERSE = ['sin_conexion', 'extension_no_responde'];
+
+function textoMotivoPonerse(motivo) {
+  return (motivo && MOTIVOS_PONERSE_AL_DIA[motivo]) || MOTIVO_GENERICO_PONERSE;
+}
+
+// { deshabilitado, hint } o null si la fila no se muestra: en una cuenta
+// gratis el botón ni aparece (§3.6). Bloqueado se ve, deshabilitado, con la
+// razón debajo -- más útil que esconderlo y dejar a la persona sin saber qué
+// hacer. Habilitado dice cuánto suele tardar.
+function estadoBotonPonerse(estado) {
+  if (!estado || !estado.mostrar) return null;
+  if (estado.bloqueo) return { deshabilitado: true, hint: textoMotivoPonerse(estado.bloqueo) };
+  return { deshabilitado: false, hint: textoEstimadoPonerse(estado.estimadoMs) };
+}
+
+function renderPonerse(estado) {
+  const fila = document.getElementById('ponerse-row');
+  if (!fila) return;
+  const e = estadoBotonPonerse(estado);
+  fila.classList.toggle('hidden', !e);
+  if (!e) return;
+  document.getElementById('ponerse-btn').disabled = e.deshabilitado;
+  document.getElementById('ponerse-hint').textContent = e.hint;
+}
+
+function cargarEstadoPonerse() {
+  try {
+    chrome.runtime.sendMessage({ type: 'ESTADO_PONERSE_AL_DIA' }, (estado) => {
+      if (chrome.runtime.lastError) return; // el worker no contestó: la fila queda como estaba
+      renderPonerse(estado);
+    });
+  } catch (e) { /* popup sin runtime (no debería pasar) */ }
+}
+
+function apretarPonerse() {
+  const boton = document.getElementById('ponerse-btn');
+  const hint = document.getElementById('ponerse-hint');
+  if (!boton || !hint) return;
+  boton.disabled = true;
+  hint.textContent = 'Empezando…';
+  chrome.runtime.sendMessage({ type: 'PONERSE_AL_DIA' }, (respuesta) => {
+    if (chrome.runtime.lastError || !respuesta) {
+      hint.textContent = textoMotivoPonerse('extension_no_responde');
+      boton.disabled = false;
+      return;
+    }
+    if (respuesta.ok) {
+      hint.textContent = TEXTO_EMPEZO_PONERSE;
+      return; // queda deshabilitado: ya está corriendo
+    }
+    hint.textContent = textoMotivoPonerse(respuesta.motivo);
+    boton.disabled = !MOTIVOS_REINTENTABLES_PONERSE.includes(respuesta.motivo);
+  });
+}
+
 // El número del ícono (background.js) dice "pasó algo"; abrir el popup es
 // verlo, así que se limpia. La línea de arriba sigue contando la última
 // ráfaga aunque el número ya no esté.
@@ -491,14 +585,21 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.rafaga) {
     renderRafaga(changes.rafaga.newValue);
     limpiarInsigniaRafaga();
+    // Cada paso de una ráfaga en curso también cambia `rafaga`, pero el botón
+    // solo tiene algo nuevo que decir cuando terminó (vuelve el enfriamiento).
+    const nueva = changes.rafaga.newValue;
+    if (nueva && nueva.estado !== 'en_curso') cargarEstadoPonerse();
   }
 });
 
 // ── Cargar estado ──────────────────────────────────────────────
+document.getElementById('ponerse-btn')?.addEventListener('click', apretarPonerse);
+
 function loadState() {
   chrome.storage.local.get(['config', 'active', 'log', 'cvTexto', 'rafaga'], data => {
     renderRafaga(data.rafaga);
     limpiarInsigniaRafaga();
+    cargarEstadoPonerse();
     const cfg = data.config || {};
 
     filtrosBusquedaRemoto = cfg.filtrosBusqueda || { modalidad: 'cualquiera', jornada: 'cualquiera' };

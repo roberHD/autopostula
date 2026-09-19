@@ -12,3 +12,28 @@ export async function resumenUltimaRafaga(userId: string) {
     select: { postuladas: true, observadas: true, descartadas: true, gris: true, errores: true },
   });
 }
+
+// Mediana, no promedio: una sola ráfaga colgada hasta el seguro de 8 min por
+// paso no debe correr la estimación de todas las demás.
+export function mediana(valores: number[]): number | null {
+  if (!valores.length) return null;
+  const orden = [...valores].sort((a, b) => a - b);
+  const medio = Math.floor(orden.length / 2);
+  return orden.length % 2 ? orden[medio] : Math.round((orden[medio - 1] + orden[medio]) / 2);
+}
+
+// docs/rafagas-y-ponerse-al-dia.md §3.6: cuánto suele tardar "Ponerme al día
+// ahora" -- la mediana de las últimas 5 ráfagas de ESA persona que terminaron
+// (una interrumpida no dice cuánto tarda una ráfaga completa). null si todavía
+// no hay ninguna: no se inventa una duración, y tampoco un número de ofertas.
+export const RAFAGAS_PARA_ESTIMAR = 5;
+
+export async function estimadoDuracionRafagaMs(userId: string): Promise<number | null> {
+  const filas = await prisma.rafaga.findMany({
+    where: { userId, estado: "terminada", duracionMs: { not: null } },
+    orderBy: { inicio: "desc" },
+    take: RAFAGAS_PARA_ESTIMAR,
+    select: { duracionMs: true },
+  });
+  return mediana(filas.map((f) => f.duracionMs as number));
+}

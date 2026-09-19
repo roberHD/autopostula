@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { limpiarTitulo } from "@/lib/text";
-import { resumenUltimaRafaga } from "@/lib/rafagas";
+import { resumenUltimaRafaga, estimadoDuracionRafagaMs } from "@/lib/rafagas";
+import { motivoInactivo } from "@/lib/estado-automatico";
 
 /**
  * Estado de la máquina, para la barra que va arriba de todo el dashboard.
@@ -19,7 +20,7 @@ export async function GET() {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  const [user, subscripcion, cupo, ultima, portalesActivos, rafaga] = await Promise.all([
+  const [user, subscripcion, cupo, ultima, portalesActivos, rafaga, estimadoRafagaMs] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { rol: true, busquedaAutomaticaActiva: true, ultimaRafagaEn: true },
@@ -40,6 +41,7 @@ export async function GET() {
     }),
     prisma.platformAccount.count({ where: { userId, activa: true } }),
     resumenUltimaRafaga(userId),
+    estimadoDuracionRafagaMs(userId),
   ]);
 
   // Mismo criterio que /api/account/estado-automatico: ADMIN no depende de
@@ -53,11 +55,7 @@ export async function GET() {
   // pausada a mano, y todavía queda cupo. Si falta una, la barra dice cuál.
   const activa = disponibleEnPlan && !pausadaPorTi && cupo.permitido && portalesActivos > 0;
 
-  let motivo: string | null = null;
-  if (!disponibleEnPlan) motivo = "sin-plan";
-  else if (pausadaPorTi) motivo = "pausada";
-  else if (!cupo.permitido) motivo = "sin-cupo";
-  else if (portalesActivos === 0) motivo = "sin-portales";
+  const motivo = motivoInactivo({ disponibleEnPlan, pausadaPorTi, cupoPermitido: cupo.permitido, portalesActivos });
 
   const usadas =
     cupo.limite === null ? null : Math.max(0, cupo.limite - (cupo.restantes ?? 0));
@@ -72,6 +70,10 @@ export async function GET() {
     // Cuándo se puso al día por última vez (hora del servidor) y qué encontró
     // -- lo lee la tarjeta del Inicio. `resumen` es null si la fila ya se purgó
     // (a los 90 días) pero la fecha sigue en el usuario.
+    // Mediana de las últimas 5 ráfagas que terminaron (docs/rafagas-y-ponerse-al-dia.md
+    // §3.6), para decirle a la persona cuánto suele tardar "Ponerme al día
+    // ahora". null si todavía no hay ninguna: no se inventa una duración.
+    estimadoRafagaMs,
     ultimaRafaga: user?.ultimaRafagaEn
       ? { en: user.ultimaRafagaEn.toISOString(), resumen: rafaga }
       : null,

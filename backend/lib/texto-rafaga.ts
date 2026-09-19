@@ -60,3 +60,51 @@ export function textoTarjetaRafaga(ultima: UltimaRafaga | null, ahora: Date): { 
   }
   return { t: `Última puesta al día: ${cuando(fecha, ahora)}`, d: detalleConteos(ultima.resumen) };
 }
+
+// ── "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6) ─────────
+// Las mismas palabras que el popup de la extensión (extension/popup.js:
+// MOTIVOS_PONERSE_AL_DIA, duracionAproximada): la persona ve el botón en los
+// dos lados, y tienen que explicar lo mismo.
+
+// "unos 8 minutos". No promete un número de ofertas: no se sabe cuántas hay
+// hasta escanear -- solo cuánto suele tardar, que sí se sabe.
+export function duracionAproximada(ms: number | null | undefined): string {
+  if (!ms || ms <= 0) return "unos minutos";
+  if (ms < 60_000) return "menos de un minuto";
+  const min = Math.round(ms / 60_000);
+  if (min === 1) return "un minuto";
+  if (min >= 60) return "más de una hora";
+  return `unos ${min} minutos`;
+}
+
+export function textoEstimadoPonerse(ms: number | null | undefined): string {
+  return ms ? `Suele tardar ${duracionAproximada(ms)}.` : "Puede tardar unos minutos.";
+}
+
+// Por qué la extensión no arrancó la ráfaga. La clave es la que devuelve
+// background.js (PONERSE_AL_DIA); si llega una que no está acá, se cae al texto
+// genérico de abajo en vez de mostrar una clave cruda.
+export const MOTIVOS_PONERSE_AL_DIA: Record<string, string> = {
+  en_curso: "Ya se está poniendo al día. Te avisamos en el ícono de la extensión.",
+  reciente: "Te pusimos al día hace muy poco. Vuelve a intentarlo en unos minutos.",
+  sin_plan: "Ponerte al día ahora es parte de Premium.",
+  pausada: "La búsqueda automática está en pausa. Reanúdala desde tu panel.",
+  sin_cupo: "Ya usaste tus postulaciones de este mes. Se reinicia el día 1.",
+  sin_portales: "Conecta un portal para empezar.",
+  sin_objetivo: "Cuéntanos qué buscas, en tu panel, para poder empezar.",
+  sin_token: "Conecta la extensión con tu cuenta desde tu panel.",
+  sin_conexion: "No pudimos consultar tu cuenta. Revisa tu conexión e inténtalo de nuevo.",
+  extension_no_responde: "La extensión no respondió. Recarga esta página e inténtalo de nuevo.",
+};
+
+export const MOTIVO_GENERICO_PONERSE = "No se pudo poner al día ahora. Inténtalo de nuevo en unos minutos.";
+
+export function textoMotivoPonerse(motivo: string | undefined): string {
+  return (motivo && MOTIVOS_PONERSE_AL_DIA[motivo]) || MOTIVO_GENERICO_PONERSE;
+}
+
+// Sin la extensión en ESTE navegador (el caso típico: el celular) el botón no
+// puede hacer nada, y lo dice -- en vez de quedarse mudo o fingir que empezó.
+// Es lo que documenta celular-y-escritorio.md: la ráfaga corre en el computador.
+export const SIN_EXTENSION_PONERSE =
+  "Esto corre en tu computador, con la extensión de Chrome. Ábrelo ahí y se pone al día sola.";

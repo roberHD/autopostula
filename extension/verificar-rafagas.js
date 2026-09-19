@@ -17,6 +17,11 @@ function tick(ms) {
   return new Promise(r => setTimeout(r, ms || 5));
 }
 
+// Cada bloque de prueba corre por su lado y el reporte espera a TODOS, en vez
+// de a un tiempo fijo que se queda corto cada vez que se agrega uno.
+const bloques = [];
+function bloque(fn) { bloques.push(Promise.resolve().then(fn)); }
+
 // ── Contexto compartido: carga background.js real en un vm de Node ────────
 function cargarBackgroundJs(opts) {
   const onMessageListeners = [];
@@ -131,11 +136,21 @@ function cargarBackgroundJs(opts) {
       for (const fn of onMessageListeners) fn(msg, sender || {}, (r) => { respuesta = r; });
       return respuesta;
     },
+    // Para los mensajes que contestan más tarde (PONERSE_AL_DIA y
+    // ESTADO_PONERSE_AL_DIA): devuelve la respuesta cuando llega. Si el
+    // listener nunca contesta -- el bug que dejaría a la persona mirando un
+    // botón que dice "Empezando…" para siempre -- se resuelve con esa marca.
+    enviarMensajeAsync(msg, sender) {
+      return new Promise((resolve) => {
+        const espera = setTimeout(() => resolve({ __sinRespuesta: true }), 400);
+        for (const fn of onMessageListeners) fn(msg, sender || {}, (r) => { clearTimeout(espera); resolve(r); });
+      });
+    },
   };
 }
 
 // ── 1. asegurarAlarma es idempotente (arregla docs/rafagas-y-ponerse-al-dia.md §2.1) ──
-(async () => {
+bloque(async () => {
   const b = cargarBackgroundJs();
   await tick();
   check('al cargar el script, la alarma automática ya existe (llamada de nivel superior)', b.alarmsStore.has('autopostula-scan'));
@@ -152,10 +167,10 @@ function cargarBackgroundJs(opts) {
     'un segundo "despertar" (onInstalled) NO reinicia una alarma que ya existe',
     opcionesTrasSegundoDespertar.marcaDePrueba === true && opcionesTrasSegundoDespertar.periodInMinutes === 999
   );
-})();
+});
 
 // ── 2. Máquina de estados de la ráfaga: dos pasos, avanza por eventos ──────
-(async () => {
+bloque(async () => {
   const b = cargarBackgroundJs();
   await tick();
 
@@ -220,10 +235,10 @@ function cargarBackgroundJs(opts) {
   check('tras el último paso, la ráfaga queda "terminada"', b.storageLocal.rafaga.estado === 'terminada');
   check('se guardó ultimaRafagaFin', typeof b.storageLocal.ultimaRafagaFin === 'number');
   check('no quedan más pestañas abiertas que las que se cerraron', b.removidos.length === 2);
-})();
+});
 
 // ── 3. El seguro de tiempo (chrome.alarms) avanza si ESCANEO_TERMINADO nunca llega ──
-(async () => {
+bloque(async () => {
   const b = cargarBackgroundJs();
   await tick();
   await b.ctx.iniciarRafaga('chequeo', [{ tipo: 'busqueda', portal: 'Trabajando', url: 'https://www.trabajando.cl/x' }]);
@@ -236,10 +251,10 @@ function cargarBackgroundJs(opts) {
   check('el seguro de tiempo cierra la pestaña colgada', b.removidos.includes(b.tabsCreados[0].id));
   check('el seguro de tiempo cuenta un error, no un éxito', b.storageLocal.rafaga.conteos.errores === 1);
   check('la ráfaga de un solo paso queda terminada tras el seguro', b.storageLocal.rafaga.estado === 'terminada');
-})();
+});
 
 // ── 4. retomarORafagaInterrumpida: solo toca ráfagas con latido viejo ──────
-(async () => {
+bloque(async () => {
   const b = cargarBackgroundJs();
   await tick();
 
@@ -269,10 +284,10 @@ function cargarBackgroundJs(opts) {
   await tick();
   check('una ráfaga con latido de hace 1 min NO se toca (puede seguir en curso de verdad)', b2.storageLocal.rafaga.estado === 'en_curso');
   check('no se cierra ninguna pestaña de una ráfaga reciente', !b2.removidos.includes(888));
-})();
+});
 
 // ── 5. quizasRafaga: los disparadores reales pasan por el umbral (§3.1) ───
-(async () => {
+bloque(async () => {
   // estado-automatico "permitido", con un objetivo y un portal -- alcanza
   // para que escanearAutomatico llegue hasta iniciarRafaga si nada la frena.
   const fetchOk = async (url) => {
@@ -332,10 +347,10 @@ function cargarBackgroundJs(opts) {
     await tick();
     check('pasado el umbral de 3 horas, quizasRafaga sí arranca una nueva', b.tabsCreados.length === 1);
   }
-})();
+});
 
 // ── 6. Disparadores conectados a los eventos reales de Chrome ─────────────
-(async () => {
+bloque(async () => {
   const b = cargarBackgroundJs();
   await tick();
   check('onStartup dispara quizasRafaga("inicio_chrome") -- hoy no existía (§3.1)', b.onStartupListeners.length >= 2);
@@ -350,10 +365,10 @@ function cargarBackgroundJs(opts) {
     await tick();
   } catch (e) { reventó = true; }
   check('la alarma automática no revienta el listener aunque el backend falle', !reventó);
-})();
+});
 
 // ── 7. chrome.power: que no se suspenda a la mitad, con tope de 25 min (§3.3) ──
-(async () => {
+bloque(async () => {
   const unPaso = [{ tipo: 'busqueda', portal: 'Trabajando', url: 'https://www.trabajando.cl/x' }];
 
   // 7a. Iniciar una ráfaga pide el bloqueo (nivel 'system') y arma el tope.
@@ -451,10 +466,10 @@ function cargarBackgroundJs(opts) {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
     check('manifest.json declara el permiso "power"', manifest.permissions.includes('power'));
   }
-})();
+});
 
 // ── 8. Registro de la ráfaga en el backend (§3.4) ─────────────────────────
-(async () => {
+bloque(async () => {
   const unPaso = [{ tipo: 'busqueda', portal: 'Trabajando', url: 'https://www.trabajando.cl/x' }];
 
   // 8a. Al empezar se reporta "en_curso", con el token y sin fin ni duración.
@@ -550,10 +565,10 @@ function cargarBackgroundJs(opts) {
     await tick();
     check('sin token de AutoPostula no se reporta la ráfaga', b.reportesRafaga().length === 0);
   }
-})();
+});
 
 // ── 9. El número en el ícono de la extensión (§3.5) ───────────────────────
-(async () => {
+bloque(async () => {
   const unPaso = [{ tipo: 'busqueda', portal: 'Trabajando', url: 'https://www.trabajando.cl/x' }];
 
   // Corre una ráfaga de un paso hasta el final con los conteos dados.
@@ -627,10 +642,10 @@ function cargarBackgroundJs(opts) {
     await tick();
     check('el número ya estaba puesto cuando se intentó reportar (un backend colgado no lo demora)', numeroYaPuestoAlReportar);
   }
-})();
+});
 
 // ── 10. El popup: la línea de "te pusimos al día" (§3.5) ──────────────────
-(async () => {
+bloque(async () => {
   const fuente = fs.readFileSync(path.join(__dirname, 'popup.js'), 'utf8');
   const desde = fuente.indexOf('function haceCuanto(');
   const hasta = fuente.indexOf('// ── Cargar estado');
@@ -735,9 +750,391 @@ function cargarBackgroundJs(opts) {
   check('la fila va arriba: antes del toggle maestro', html.indexOf('id="rafaga-row"') < html.indexOf('class="master-row"'));
   check('la fila arranca oculta (no parpadea vacía al abrir)', /class="rafaga-row hidden"/.test(html));
   check('popup.js pide las ráfagas a storage al cargar y limpia el número', /chrome\.storage\.local\.get\(\[[^\]]*'rafaga'[^\]]*\]/.test(fuente) && fuente.includes('limpiarInsigniaRafaga();\n'));
-})();
+});
 
-setTimeout(() => {
-  console.log('\n' + (fallos === 0 ? '✓ Todo OK' : '✗ ' + fallos + ' fallo(s)'));
-  process.exit(fallos === 0 ? 0 : 1);
-}, 700);
+// ── 11. "Ponerme al día ahora": el service worker (§3.6) ──────────────────
+bloque(async () => {
+  const unPaso = [{ tipo: 'busqueda', portal: 'Trabajando', url: 'https://www.trabajando.cl/x' }];
+  const estadoBase = {
+    busquedaAutomatica: true, disponibleEnPlan: true, motivo: null,
+    objetivos: [{ etiqueta: 'vendedor', peso: 1 }],
+    plataformasConectadas: ['Trabajando'],
+  };
+  // El backend simulado: estado-automatico configurable; acepta el registro de ráfagas.
+  const conEstado = (cambios) => async (url) => {
+    if (/\/api\/account\/estado-automatico/.test(String(url))) return { ok: true, json: async () => ({ ...estadoBase, ...cambios }) };
+    return { ok: /\/api\/extension\/rafaga/.test(String(url)), json: async () => ({}) };
+  };
+  const pulsar = (b) => b.enviarMensajeAsync({ type: 'PONERSE_AL_DIA' });
+  const estadoBoton = (b) => b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
+  const nuevo = async (cambios, opts) => {
+    const b = cargarBackgroundJs({ fetchImpl: conEstado(cambios), ...(opts || {}) });
+    await tick();
+    return b;
+  };
+  const enCurso = (latidoHaceMin, tabActual) => ({
+    id: 'r_previa', disparador: 'chequeo', inicio: Date.now() - 40 * 60000, latido: Date.now() - latidoHaceMin * 60000,
+    pasos: unPaso, pasoActual: 0, tabActual,
+    conteos: { postuladas: 0, descartadas: 0, gris: 0, observadas: 0, errores: 0 }, estado: 'en_curso',
+  });
+
+  // ── Apretarlo ──
+  let b = await nuevo({});
+  let r = await pulsar(b);
+  await tick();
+  check('Premium: apretar el botón arranca una ráfaga', r.ok === true && b.tabsCreados.length === 1, r);
+  check('la ráfaga arrancada dice que fue "manual"', b.storageLocal.rafaga && b.storageLocal.rafaga.disparador === 'manual');
+  check('...y así se reporta al backend', b.reportesRafaga().length >= 1 && b.reportesRafaga()[0].body.disparador === 'manual');
+  check('sin ráfagas previas no hay estimación todavía (no se inventa una duración)', r.estimadoMs === null, r);
+
+  // ── Sin el umbral de 3 h (a diferencia de los disparadores automáticos) ──
+  b = await nuevo({});
+  b.storageLocal.ultimaRafagaFin = Date.now() - 60 * 60000; // hace 1 h: dentro de las 3 h del umbral
+  await b.ctx.quizasRafaga('chequeo');
+  await tick();
+  check('control: un disparador automático SÍ respeta el umbral (terminó hace 1 h)', b.tabsCreados.length === 0);
+  r = await pulsar(b);
+  await tick();
+  check('el botón NO respeta el umbral de 3 h: la persona lo pidió a propósito', r.ok === true && b.tabsCreados.length === 1, r);
+
+  // ── Enfriamiento corto (lo único que sí frena al botón por tiempo) ──
+  b = await nuevo({});
+  b.storageLocal.ultimaRafagaFin = Date.now() - 2 * 60000;
+  r = await pulsar(b);
+  check('terminó hace 2 min: "reciente", no abre nada', r.ok === false && r.motivo === 'reciente' && b.tabsCreados.length === 0, r);
+  b = await nuevo({});
+  b.storageLocal.ultimaRafagaFin = Date.now() - 6 * 60000;
+  r = await pulsar(b);
+  check('terminó hace 6 min: ya se puede', r.ok === true, r);
+
+  // ── Ya hay una corriendo ──
+  b = await nuevo({});
+  b.storageLocal.rafaga = enCurso(1, 4242); // latido de hace 1 min: viva
+  r = await pulsar(b);
+  check('con una ráfaga viva en curso: "en_curso", no abre otra', r.ok === false && r.motivo === 'en_curso' && b.tabsCreados.length === 0, r);
+  b = await nuevo({});
+  b.storageLocal.rafaga = enCurso(30, 4242); // latido de hace 30 min: el worker la perdió
+  r = await pulsar(b);
+  await tick();
+  check('una "en_curso" que el worker perdió NO deja el botón bloqueado para siempre', r.ok === true && b.tabsCreados.length === 1, r);
+  check('...y de paso cierra la pestaña huérfana de la vieja', b.removidos.includes(4242));
+
+  // ── Lo que dice el servidor: plan, pausa, cupo, portales ──
+  const casosServidor = [
+    [{ busquedaAutomatica: false, disponibleEnPlan: false, motivo: 'sin-plan' }, 'sin_plan'],
+    [{ busquedaAutomatica: false, motivo: 'pausada' }, 'pausada'],
+    [{ busquedaAutomatica: false, motivo: 'sin-cupo' }, 'sin_cupo'],
+    [{ busquedaAutomatica: false, motivo: 'sin-portales' }, 'sin_portales'],
+    [{ busquedaAutomatica: false, motivo: undefined }, 'no_disponible'], // backend viejo, sin `motivo`
+  ];
+  for (const [cambios, esperado] of casosServidor) {
+    b = await nuevo(cambios);
+    r = await pulsar(b);
+    check('el servidor dice "' + (cambios.motivo || 'sin motivo') + '" → la extensión explica "' + esperado + '" y no abre nada', r.ok === false && r.motivo === esperado && b.tabsCreados.length === 0, r);
+  }
+
+  // ── Lo que falta de la cuenta ──
+  b = await nuevo({ objetivos: [], cargoObjetivo: null });
+  r = await pulsar(b);
+  check('sin objetivo: "sin_objetivo"', r.ok === false && r.motivo === 'sin_objetivo', r);
+  b = await nuevo({ plataformasConectadas: [] });
+  r = await pulsar(b);
+  check('sin portales conectados: "sin_portales"', r.ok === false && r.motivo === 'sin_portales', r);
+  b = await nuevo({ plataformasConectadas: ['PortalSinAdaptador'] });
+  r = await pulsar(b);
+  check('un portal conectado que la extensión no sabe recorrer tampoco arranca nada: "sin_portales"', r.ok === false && r.motivo === 'sin_portales' && b.tabsCreados.length === 0, r);
+
+  // ── Sin red / sin cuenta ──
+  b = cargarBackgroundJs({ fetchImpl: async () => { throw new Error('sin red'); } });
+  await tick();
+  r = await pulsar(b);
+  check('sin red: "sin_conexion"', r.ok === false && r.motivo === 'sin_conexion', r);
+  b = cargarBackgroundJs({ fetchImpl: async () => ({ ok: false, json: async () => ({}) }) });
+  await tick();
+  r = await pulsar(b);
+  check('el backend responde error: "sin_conexion"', r.ok === false && r.motivo === 'sin_conexion', r);
+  b = await nuevo({}, { sinToken: true });
+  r = await pulsar(b);
+  check('extensión sin conectar a una cuenta: "sin_token"', r.ok === false && r.motivo === 'sin_token', r);
+
+  // ── "Poner al día" es con TODO: todos los objetivos, y no toca el contador de ciclos ──
+  const dosObjetivos = { objetivos: [{ etiqueta: 'vendedor', peso: 1 }, { etiqueta: 'cajero', peso: 0.5 }] };
+  b = await nuevo(dosObjetivos);
+  await pulsar(b);
+  check('el botón recorre TODOS los objetivos (2 objetivos × 1 portal = 2 pasos)', b.storageLocal.rafaga.pasos.length === 2, b.storageLocal.rafaga.pasos);
+  check('...y no consume el contador de ciclos (no descuadra la alternancia de las automáticas)', b.storageLocal.cicloBusquedaAutomatica === undefined);
+  b = await nuevo(dosObjetivos);
+  await b.ctx.quizasRafaga('chequeo');
+  await tick();
+  check('control: la automática, en su primer ciclo, sigue visitando solo el objetivo principal (1 paso)', b.storageLocal.rafaga.pasos.length === 1 && b.storageLocal.cicloBusquedaAutomatica === 1);
+
+  // ── Un fallo por dentro igual contesta ──
+  b = await nuevo({});
+  b.ctx.chrome.storage.local.get = () => Promise.reject(new Error('storage roto'));
+  r = await pulsar(b);
+  check('si algo revienta por dentro, igual se responde (no deja el botón en "Empezando…")', r && r.ok === false && r.__sinRespuesta !== true, r);
+
+  // ── Guardar las duraciones: las últimas 5 que TERMINARON ──
+  b = cargarBackgroundJs();
+  await tick();
+  for (let i = 0; i < 7; i++) {
+    await b.ctx.iniciarRafaga('chequeo', unPaso);
+    await tick();
+    const tab = b.tabsCreados[b.tabsCreados.length - 1];
+    b.completarTab(tab.id);
+    await tick();
+    b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: {} }, { tab: { id: tab.id } });
+    await tick();
+  }
+  check('se guardan solo las últimas 5 duraciones (7 ráfagas terminadas → 5)', Array.isArray(b.storageLocal.duracionesRafaga) && b.storageLocal.duracionesRafaga.length === 5, b.storageLocal.duracionesRafaga);
+  check('...y cada una es un número no negativo', b.storageLocal.duracionesRafaga.every(d => typeof d === 'number' && d >= 0));
+  b = cargarBackgroundJs();
+  await tick();
+  b.storageLocal.rafaga = enCurso(30, 77);
+  await b.ctx.retomarORafagaInterrumpida();
+  await tick();
+  check('una ráfaga interrumpida NO cuenta para la estimación (no dice cuánto tarda una completa)', b.storageLocal.duracionesRafaga === undefined);
+
+  // ── Dibujar el botón sin apretarlo ──
+  b = await nuevo({ disponibleEnPlan: false, busquedaAutomatica: false, motivo: 'sin-plan' });
+  r = await estadoBoton(b);
+  check('cuenta gratis: el botón NO se muestra', r.mostrar === false, r);
+  b = await nuevo({}, { sinToken: true });
+  r = await estadoBoton(b);
+  check('sin cuenta conectada: no se muestra', r.mostrar === false, r);
+  b = cargarBackgroundJs({ fetchImpl: async () => ({ ok: false, json: async () => ({}) }) });
+  await tick();
+  r = await estadoBoton(b);
+  check('sin respuesta del servidor no se sabe si el plan lo permite: no se ofrece', r.mostrar === false, r);
+  b = await nuevo({ disponibleEnPlan: undefined });
+  r = await estadoBoton(b);
+  check('un backend viejo (no manda disponibleEnPlan) tampoco lo muestra', r.mostrar === false, r);
+
+  b = await nuevo({});
+  b.storageLocal.duracionesRafaga = [60000, 480000, 300000];
+  r = await estadoBoton(b);
+  check('Premium disponible: se muestra, sin bloqueo, con la MEDIANA de las duraciones (300000)', r.mostrar === true && r.bloqueo === null && r.estimadoMs === 300000, r);
+  b = await nuevo({});
+  b.storageLocal.duracionesRafaga = [60000, 120000];
+  r = await estadoBoton(b);
+  check('con cantidad par la mediana es el promedio de las dos del medio (90000)', r.estimadoMs === 90000, r);
+  b = await nuevo({});
+  b.storageLocal.duracionesRafaga = [60000, 60000, 60000, 60000, 3000000];
+  r = await estadoBoton(b);
+  check('la mediana no se deja correr por UNA ráfaga colgada (60000, no el promedio)', r.estimadoMs === 60000, r);
+  b = await nuevo({});
+  r = await estadoBoton(b);
+  check('sin ráfagas terminadas, estimadoMs es null', r.mostrar === true && r.estimadoMs === null, r);
+
+  const bloqueos = [
+    [{ busquedaAutomatica: false, motivo: 'pausada' }, null, 'pausada'],
+    [{ busquedaAutomatica: false, motivo: 'sin-cupo' }, null, 'sin_cupo'],
+    [{ objetivos: [] }, null, 'sin_objetivo'],
+    [{ plataformasConectadas: [] }, null, 'sin_portales'],
+    [{}, { rafaga: enCurso(1, 5) }, 'en_curso'],
+    [{}, { ultimaRafagaFin: Date.now() - 60000 }, 'reciente'],
+  ];
+  for (const [cambios, almacen, esperado] of bloqueos) {
+    b = await nuevo(cambios);
+    Object.assign(b.storageLocal, almacen || {});
+    r = await estadoBoton(b);
+    check('Premium bloqueado por "' + esperado + '": se muestra, con el bloqueo (para explicarlo)', r.mostrar === true && r.bloqueo === esperado, r);
+  }
+  b = await nuevo({});
+  await estadoBoton(b);
+  await tick();
+  check('preguntar el estado NO tiene efectos: no abre pestañas ni arranca ráfagas', b.tabsCreados.length === 0 && b.storageLocal.rafaga === undefined);
+});
+
+// ── 12. bridge.js: el evento del panel (§3.6) ─────────────────────────────
+bloque(async () => {
+  const fuente = fs.readFileSync(path.join(__dirname, 'bridge.js'), 'utf8');
+  function cargarBridge() {
+    const window = new EventTarget();
+    const enviados = [];
+    const resultados = [];
+    const est = { respuesta: undefined, error: null };
+    window.addEventListener('autopostula:ponerse-al-dia-resultado', (e) => resultados.push(e.detail));
+    const ctx = {
+      window, CustomEvent, console,
+      document: { documentElement: { dataset: {} } },
+      chrome: {
+        runtime: {
+          getManifest: () => ({ version: '9.9.9' }),
+          sendMessage: (m, cb) => { enviados.push(m); cb(est.respuesta); },
+          get lastError() { return est.error; },
+        },
+      },
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fuente, ctx, { filename: 'bridge.js' });
+    return { ctx, window, enviados, resultados, est };
+  }
+
+  let br = cargarBridge();
+  check('bridge.js sigue dejando la marca de la extensión en el DOM', br.ctx.document.documentElement.dataset.autopostulaExtension === '9.9.9');
+
+  br.est.respuesta = { ok: true, estimadoMs: 480000 };
+  br.window.dispatchEvent(new CustomEvent('autopostula:ponerse-al-dia'));
+  check('el evento del panel se convierte en el mensaje PONERSE_AL_DIA a la extensión', br.enviados.length === 1 && br.enviados[0].type === 'PONERSE_AL_DIA');
+  check('la respuesta de la extensión vuelve al panel como evento, tal cual', br.resultados.length === 1 && JSON.stringify(br.resultados[0]) === JSON.stringify({ ok: true, estimadoMs: 480000 }), br.resultados);
+
+  br.est.respuesta = { ok: false, motivo: 'pausada' };
+  br.window.dispatchEvent(new CustomEvent('autopostula:ponerse-al-dia'));
+  check('un rechazo lleva su motivo al panel sin tocarlo (el panel lo explica)', br.resultados[1] && br.resultados[1].ok === false && br.resultados[1].motivo === 'pausada', br.resultados);
+
+  br.est.respuesta = undefined;
+  br.window.dispatchEvent(new CustomEvent('autopostula:ponerse-al-dia'));
+  check('si la extensión no contesta nada, el panel recibe "extension_no_responde" (no queda esperando)', br.resultados[2] && br.resultados[2].motivo === 'extension_no_responde', br.resultados);
+
+  br.est.error = { message: 'Extension context invalidated.' };
+  br.est.respuesta = { ok: true };
+  br.window.dispatchEvent(new CustomEvent('autopostula:ponerse-al-dia'));
+  check('con la extensión recargada (lastError) también: "extension_no_responde"', br.resultados[3] && br.resultados[3].ok === false && br.resultados[3].motivo === 'extension_no_responde', br.resultados);
+
+  // Lo que ya existía no se rompió: conectar con el token.
+  br = cargarBridge();
+  br.est.respuesta = { ok: true };
+  br.window.dispatchEvent(new CustomEvent('autopostula:conectar', { detail: { token: 'tok' } }));
+  check('el evento "conectar" sigue mandando GUARDAR_TOKEN', br.enviados.length === 1 && br.enviados[0].type === 'GUARDAR_TOKEN' && br.enviados[0].token === 'tok');
+});
+
+// ── 13. El popup: el botón "Ponerme al día ahora" (§3.6) ──────────────────
+bloque(async () => {
+  const fuente = fs.readFileSync(path.join(__dirname, 'popup.js'), 'utf8');
+  const desde = fuente.indexOf('function haceCuanto(');
+  const hasta = fuente.indexOf('// ── Cargar estado');
+
+  function cargarPopup() {
+    const ids = ['ponerse-row', 'ponerse-btn', 'ponerse-hint', 'rafaga-row', 'rafaga-titulo', 'rafaga-detalle'];
+    const elementos = {};
+    for (const id of ids) {
+      const clases = new Set(id.endsWith('-row') ? ['hidden'] : []);
+      elementos[id] = {
+        id, textContent: '', disabled: false,
+        classList: { toggle: (c, f) => { if (f) clases.add(c); else clases.delete(c); }, contains: (c) => clases.has(c) },
+      };
+    }
+    const enviados = [];
+    const estado = { respuestas: {}, error: null };
+    const escuchas = [];
+    const ctx = {
+      Date,
+      document: { getElementById: (id) => elementos[id] || null },
+      chrome: {
+        runtime: {
+          sendMessage: (m, cb) => { enviados.push(m); cb(estado.respuestas[m.type]); },
+          get lastError() { return estado.error; },
+        },
+        storage: { onChanged: { addListener: (fn) => escuchas.push(fn) } },
+        action: { setBadgeText: () => {} },
+      },
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fuente.slice(desde, hasta), ctx, { filename: 'popup.js (bloque de ráfaga)' });
+    return {
+      ctx, elementos, enviados, estado, escuchas,
+      oculto: (id) => elementos[id].classList.contains('hidden'),
+      leer: (nombre) => vm.runInContext(nombre, ctx), // también alcanza a las `const`
+    };
+  }
+
+  const p = cargarPopup();
+
+  // ── duracionAproximada / estimación (misma tabla que scripts/verificar-texto-rafaga.ts) ──
+  const tabla = [
+    [null, 'unos minutos'], [0, 'unos minutos'], [30000, 'menos de un minuto'], [60000, 'un minuto'],
+    [89000, 'un minuto'], [90000, 'unos 2 minutos'], [480000, 'unos 8 minutos'], [3540000, 'unos 59 minutos'], [3600000, 'más de una hora'], [7200000, 'más de una hora'],
+  ];
+  for (const [ms, esperado] of tabla) {
+    check('duracionAproximada(' + ms + ') = "' + esperado + '"', p.ctx.duracionAproximada(ms) === esperado, p.ctx.duracionAproximada(ms));
+  }
+  check('con estimación: "Suele tardar unos 8 minutos."', p.ctx.textoEstimadoPonerse(480000) === 'Suele tardar unos 8 minutos.');
+  check('sin estimación no inventa un número: "Puede tardar unos minutos."', p.ctx.textoEstimadoPonerse(null) === 'Puede tardar unos minutos.');
+
+  // ── Qué muestra según el estado ──
+  check('cuenta gratis / sin estado: la fila no se muestra', p.ctx.estadoBotonPonerse(undefined) === null && p.ctx.estadoBotonPonerse({ mostrar: false }) === null);
+  let e = p.ctx.estadoBotonPonerse({ mostrar: true, bloqueo: 'pausada', estimadoMs: 480000 });
+  check('bloqueado: deshabilitado y explica por qué', e.deshabilitado === true && e.hint === 'La búsqueda automática está en pausa. Reanúdala desde tu panel.', e);
+  e = p.ctx.estadoBotonPonerse({ mostrar: true, bloqueo: null, estimadoMs: 480000 });
+  check('disponible: habilitado y dice cuánto suele tardar', e.deshabilitado === false && e.hint === 'Suele tardar unos 8 minutos.', e);
+  e = p.ctx.estadoBotonPonerse({ mostrar: true, bloqueo: 'algo_que_no_conozco' });
+  check('un bloqueo desconocido cae al texto genérico, nunca a una clave cruda', e.hint === 'No se pudo poner al día ahora. Inténtalo de nuevo en unos minutos.', e);
+
+  // ── El render ──
+  p.ctx.renderPonerse({ mostrar: true, bloqueo: null, estimadoMs: 480000 });
+  check('render: la fila aparece, el botón habilitado, con la estimación debajo', !p.oculto('ponerse-row') && p.elementos['ponerse-btn'].disabled === false && p.elementos['ponerse-hint'].textContent === 'Suele tardar unos 8 minutos.');
+  p.ctx.renderPonerse({ mostrar: true, bloqueo: 'reciente' });
+  check('render: bloqueado se ve deshabilitado con la razón', !p.oculto('ponerse-row') && p.elementos['ponerse-btn'].disabled === true && p.elementos['ponerse-hint'].textContent.startsWith('Te pusimos al día hace muy poco'));
+  p.ctx.renderPonerse({ mostrar: false });
+  check('render: cuenta gratis, la fila se oculta', p.oculto('ponerse-row'));
+
+  // ── Apretarlo ──
+  let q = cargarPopup();
+  q.estado.respuestas.PONERSE_AL_DIA = { ok: true, estimadoMs: 480000 };
+  q.ctx.apretarPonerse();
+  check('apretar manda PONERSE_AL_DIA a la extensión', q.enviados.length === 1 && q.enviados[0].type === 'PONERSE_AL_DIA');
+  check('si arrancó: lo dice, y el botón queda deshabilitado (ya está corriendo)', q.elementos['ponerse-hint'].textContent === q.leer('TEXTO_EMPEZO_PONERSE') && q.elementos['ponerse-btn'].disabled === true, q.elementos['ponerse-hint'].textContent);
+
+  q = cargarPopup();
+  q.estado.respuestas.PONERSE_AL_DIA = { ok: false, motivo: 'reciente' };
+  q.ctx.apretarPonerse();
+  check('si no se puede por algo que no cambia apretando de nuevo ("reciente"), explica y queda deshabilitado', q.elementos['ponerse-hint'].textContent.startsWith('Te pusimos al día hace muy poco') && q.elementos['ponerse-btn'].disabled === true);
+
+  q = cargarPopup();
+  q.estado.respuestas.PONERSE_AL_DIA = { ok: false, motivo: 'sin_conexion' };
+  q.ctx.apretarPonerse();
+  check('si falló la conexión, explica y deja REINTENTAR', q.elementos['ponerse-hint'].textContent.startsWith('No pudimos consultar tu cuenta') && q.elementos['ponerse-btn'].disabled === false);
+
+  q = cargarPopup();
+  q.estado.error = { message: 'The message port closed before a response was received.' };
+  q.ctx.apretarPonerse();
+  check('si el worker no contesta: "la extensión no respondió" y deja reintentar', q.elementos['ponerse-hint'].textContent.startsWith('La extensión no respondió') && q.elementos['ponerse-btn'].disabled === false);
+
+  // ── Se vuelve a evaluar cuando la ráfaga TERMINA, no en cada paso ──
+  q = cargarPopup();
+  q.escuchas[0]({ rafaga: { newValue: { estado: 'en_curso', pasos: [1, 2], pasoActual: 1, latido: Date.now(), inicio: Date.now(), conteos: {} } } }, 'local');
+  check('un paso de una ráfaga en curso NO vuelve a consultar el estado del botón', !q.enviados.some(m => m.type === 'ESTADO_PONERSE_AL_DIA'));
+  q.escuchas[0]({ rafaga: { newValue: { estado: 'terminada', fin: Date.now(), conteos: {} } } }, 'local');
+  check('cuando la ráfaga termina, sí (vuelve el enfriamiento y hay que decirlo)', q.enviados.some(m => m.type === 'ESTADO_PONERSE_AL_DIA'));
+
+  // ── Los textos son LOS MISMOS que los del panel (backend/lib/texto-rafaga.ts) ──
+  const ts = fs.readFileSync(path.join(__dirname, '..', 'backend', 'lib', 'texto-rafaga.ts'), 'utf8');
+  const ini = ts.indexOf('export const MOTIVOS_PONERSE_AL_DIA');
+  const bloqueTs = ts.slice(ini, ts.indexOf('};', ini));
+  const delPanel = {};
+  for (const m of bloqueTs.matchAll(/^\s*(\w+):\s*"([^"]*)",?\s*$/gm)) delPanel[m[1]] = m[2];
+  const delPopup = q.leer('MOTIVOS_PONERSE_AL_DIA');
+  const clavesPanel = Object.keys(delPanel).sort().join(',');
+  const clavesPopup = Object.keys(delPopup).sort().join(',');
+  check('el popup y el panel explican los MISMOS motivos (' + clavesPopup + ')', clavesPanel.length > 0 && clavesPanel === clavesPopup, { clavesPanel, clavesPopup });
+  const distintos = Object.keys(delPopup).filter(k => delPanel[k] !== delPopup[k]);
+  check('...con las MISMAS palabras', distintos.length === 0, distintos);
+  const genericoTs = (ts.match(/MOTIVO_GENERICO_PONERSE\s*=\s*"([^"]*)"/) || [])[1];
+  check('el texto genérico es el mismo en los dos', genericoTs && genericoTs === q.leer('MOTIVO_GENERICO_PONERSE'));
+  const tsx = fs.readFileSync(path.join(__dirname, '..', 'backend', 'app', 'dashboard', 'BotonPonerseAlDia.tsx'), 'utf8');
+  const empezoTsx = (tsx.match(/TEXTO_EMPEZO\s*=\s*"([^"]*)"/) || [])[1];
+  check('lo que dice cuando arrancó es lo mismo en el popup y en el panel', empezoTsx && empezoTsx === q.leer('TEXTO_EMPEZO_PONERSE'));
+  const estimadoTs = /Suele tardar \$\{duracionAproximada\(ms\)\}\./.test(ts) && /Puede tardar unos minutos\./.test(ts);
+  check('la frase de la estimación es la misma en los dos', estimadoTs);
+
+  // ── El HTML ──
+  const html = fs.readFileSync(path.join(__dirname, 'popup.html'), 'utf8');
+  check('popup.html trae la fila del botón con sus ids', ['ponerse-row', 'ponerse-btn', 'ponerse-hint'].every(id => html.includes('id="' + id + '"')));
+  check('la fila del botón arranca oculta (una cuenta gratis nunca la ve parpadear)', /class="ponerse-row hidden"/.test(html));
+  check('va arriba: después de la línea de la última puesta al día y antes del toggle maestro', html.indexOf('id="rafaga-row"') < html.indexOf('id="ponerse-row"') && html.indexOf('id="ponerse-row"') < html.indexOf('class="master-row"'));
+  check('popup.js conecta el clic del botón y pide el estado al abrir', fuente.includes("getElementById('ponerse-btn')?.addEventListener('click', apretarPonerse)") && /loadState[\s\S]{0,900}cargarEstadoPonerse\(\)/.test(fuente));
+});
+
+const tope = setTimeout(() => {
+  console.error('✗ tiempo agotado: algún bloque de prueba nunca terminó');
+  process.exit(1);
+}, 20000);
+
+Promise.all(bloques)
+  .catch((e) => { fallos++; console.error('✗ un bloque de prueba lanzó una excepción:', e); })
+  .then(() => {
+    clearTimeout(tope);
+    console.log('\n' + (fallos === 0 ? '✓ Todo OK' : '✗ ' + fallos + ' fallo(s)'));
+    process.exit(fallos === 0 ? 0 : 1);
+  });
