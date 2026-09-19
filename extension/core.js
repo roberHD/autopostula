@@ -66,7 +66,7 @@ const AP_ESTADOS = {
 
 // Los colores viejos se siguen aceptando: hay llamadas con hex por todo
 // el archivo y no vale la pena tocarlas todas.
-const AP_HEX_A_ESTADO = { '#16A34A': 'ok', '#DC2626': 'error', '#D97706': 'trabajando' };
+const AP_HEX_A_ESTADO = { '#16A34A': 'ok', '#DC2626': 'error', '#D97706': 'trabajando', '#7C3AED': 'trabajando', '#9CA3AF': 'neutral' };
 
 AP.msg = function (texto, estado) {
   const clave = AP_ESTADOS[estado] ? estado : (AP_HEX_A_ESTADO[estado] || 'ok');
@@ -1228,6 +1228,24 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
     raiz.getElementById('ap-rev-confirm').onclick = () => cerrar('confirm');
     raiz.getElementById('ap-rev-skip').onclick = () => cerrar('skip');
   });
+};
+
+// §5 (docs/revision-2026-09-16.md): en Computrabajo cada oferta quedaba
+// registrada DOS veces en un mismo escaneo (40 líneas para 20 tarjetas). Un
+// escaneo tiene esperas largas (abrir avisos, revisar grises) durante las que
+// el MutationObserver de abajo -- o el AUTO_SCAN de la ráfaga, que llega ~2 s
+// después del arranque propio -- lanza OTRO escaneo sobre las mismas
+// tarjetas, todavía no marcadas como vistas. Además de ensuciar el log, dos
+// escaneos a la vez podían postular dos veces la misma oferta. Mientras uno
+// corre, los demás disparos se ignoran; el tope de 10 min evita que un
+// escaneo colgado bloquee para siempre a la pestaña.
+AP.sinReentrada = function (escanear) {
+  const TOPE_MS = 10 * 60 * 1000;
+  return function () {
+    if (AP._escaneandoDesde && Date.now() - AP._escaneandoDesde < TOPE_MS) return;
+    AP._escaneandoDesde = Date.now();
+    return Promise.resolve(escanear()).finally(() => { AP._escaneandoDesde = 0; });
+  };
 };
 
 // §2.10: pide confirmación antes del clic que envía una postulación de un

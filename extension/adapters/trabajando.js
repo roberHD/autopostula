@@ -421,7 +421,7 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
   let analisis = null;
   if (pendientesIA.length) {
     const preguntasParaIA = pendientesIA.map((pd, i) => ({ id: 'o' + i, pregunta: pd.pregunta, opciones: pd.opciones.map(o => o.texto) }));
-    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', '#7C3AED');
+    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', 'trabajando');
     const resultado = await analizarYResponder(contexto, preguntasParaIA);
     analisis = resultado.analisis;
     for (let i = 0; i < pendientesIA.length; i++) {
@@ -511,7 +511,7 @@ async function rellenar(contexto) {
   let analisis = analisisDeOpciones;
   if (pendientesTexto.length) {
     const preguntasParaIA = pendientesTexto.map((pd, i) => ({ id: 't' + i, pregunta: pd.labelRaw, opciones: null }));
-    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', '#7C3AED');
+    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', 'trabajando');
     const resultado = await analizarYResponder(contexto, preguntasParaIA);
     if (resultado.analisis) analisis = resultado.analisis;
     for (let i = 0; i < pendientesTexto.length; i++) {
@@ -821,7 +821,7 @@ async function escanear() {
   // razonamiento completo en computrabajo.js, es el mismo acá.
   for (const cand of candidatosGris) {
     if (!AP.activo) break;
-    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', 'trabajando');
     const btn = await activar(cand.t);
     let resultadoFinal = null;
     let detalleAviso = null;
@@ -913,7 +913,10 @@ async function escanear() {
 
   if (siguientePaginaClick(tarjetas.length, botonVerMas)) return;
   AP.reportarEscaneoTerminado(conteos);
-  msg('Escaneo completo', '#16A34A');
+  // §5: el aviso final se quedaba en "Escaneo completo" sin el resumen que sí
+  // muestran los otros dos portales.
+  const resumenFinal = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
+  msg(resumenFinal.texto, resumenFinal.estado);
 }
 
 // ── Postular directo a UNA oferta ya aprobada en banda gris (§8.6) ──────
@@ -933,13 +936,13 @@ async function aplicarDirecto(decisionOfertaId) {
 }
 
 // ── Registro en el núcleo compartido (core.js) ──────────────────
-AP.escanear = escanear;
+AP.escanear = AP.sinReentrada(escanear);
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function() {
   console.log('[AP-TJ] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible);
   if (AP.activo) {
     msg('Activado — escaneando…', '#16A34A');
-    setTimeout(escanear, 1800);
+    setTimeout(() => AP.escanear(), 1800);
   }
 };
 

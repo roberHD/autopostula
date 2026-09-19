@@ -384,7 +384,7 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
   let analisis = null;
   if (pendientesIA.length) {
     const preguntasParaIA = pendientesIA.map((pd, i) => ({ id: 'o' + i, pregunta: pd.pregunta, opciones: pd.opciones.map(o => o.texto) }));
-    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', '#7C3AED');
+    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', 'trabajando');
     const resultado = await analizarYResponder(contexto, preguntasParaIA);
     analisis = resultado.analisis;
     for (let i = 0; i < pendientesIA.length; i++) {
@@ -487,7 +487,7 @@ async function rellenar(contexto) {
   let analisis = analisisDeOpciones;
   if (pendientesTexto.length) {
     const preguntasParaIA = pendientesTexto.map((pd, i) => ({ id: 't' + i, pregunta: pd.labelRaw, opciones: null }));
-    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', '#7C3AED');
+    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', 'trabajando');
     const resultado = await analizarYResponder(contexto, preguntasParaIA);
     if (resultado.analisis) analisis = resultado.analisis;
     for (let i = 0; i < pendientesTexto.length; i++) {
@@ -745,7 +745,7 @@ async function escanear() {
   // justo donde la información vale más -- ver §B "Costo").
   for (const cand of candidatosGris) {
     if (!AP.activo) break;
-    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', 'trabajando');
     const btn = await activar(cand.t);
     let resultadoFinal = null;
     let detalleAviso = null;
@@ -792,7 +792,7 @@ async function escanear() {
   if (!usarScorerLocal && AP.cfg.usarIAFiltros && AP.iaDisponible && pendientes.length) {
     const objetivo = await obtenerObjetivoLaboral();
     if (objetivo) {
-      msg('IA filtrando ' + pendientes.length + ' ofertas…', '#7C3AED');
+      msg('IA filtrando ' + pendientes.length + ' ofertas…', 'trabajando');
       const relevantes = await clasificarOfertasIA(pendientes.map(p => p.titulo), objetivo);
       if (relevantes) {
         const descartadas = pendientes.filter((p, i) => !relevantes.has(i + 1));
@@ -872,7 +872,10 @@ async function escanear() {
   // terminada, para no dejar sin revisar el resto del listado.
   if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return;
   AP.reportarEscaneoTerminado(conteos);
-  msg('Escaneo completo', '#16A34A');
+  // §5: el resumen del escaneo ("👁 Solo observar · …", "N postuladas · …") se
+  // quedaba tapado por un "Escaneo completo" sin datos.
+  const resumenFinal = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
+  msg(resumenFinal.texto, resumenFinal.estado);
 }
 
 // ── Seguimiento de estados en "Mis postulaciones" ───────────────
@@ -904,7 +907,7 @@ async function escanearMisPostulaciones() {
   const boxes = document.querySelectorAll('[match-div-offers] .box[data-match]');
   if (!boxes.length) { AP.reportarEscaneoTerminado(); return; }
 
-  msg('Revisando estados de postulaciones…', '#7C3AED');
+  msg('Revisando estados de postulaciones…', 'trabajando');
   let actualizadas = 0;
 
   for (const box of boxes) {
@@ -955,10 +958,10 @@ async function aplicarDirecto(decisionOfertaId) {
 // ofertas: el escaneo de listados solo diría "Sin tarjetas" y avisaría que
 // terminó antes de que escanearMisPostulaciones() (que arranca en onInit)
 // acabe -- la ráfaga pasaría al siguiente paso con los estados a medias.
-AP.escanear = function () {
+AP.escanear = AP.sinReentrada(function () {
   if (location.pathname.indexOf('/candidate/match') !== -1) return;
   return escanear();
-};
+});
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function() {
   console.log('[AP-CT] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible);
@@ -966,7 +969,7 @@ AP.onInit = function() {
     setTimeout(escanearMisPostulaciones, 1500);
   } else if (AP.activo) {
     msg('Activado — escaneando…', '#16A34A');
-    setTimeout(escanear, 1800);
+    setTimeout(() => AP.escanear(), 1800);
   }
 };
 

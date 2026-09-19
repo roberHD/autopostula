@@ -282,7 +282,7 @@ async function rellenarYEnviarPreguntas(contexto) {
     return { grupo, id };
   });
 
-  msg(preguntasIA.length ? 'IA respondiendo ' + preguntasIA.length + ' pregunta(s)…' : 'Analizando aviso…', '#7C3AED');
+  msg(preguntasIA.length ? 'IA respondiendo ' + preguntasIA.length + ' pregunta(s)…' : 'Analizando aviso…', 'trabajando');
   const resultado = await analizarYResponder(contexto, preguntasIA);
   const analisis = resultado.analisis;
 
@@ -724,7 +724,7 @@ async function escanear() {
     sessionStorage.setItem(CLAVE_ETAPA2_PENDIENTE, JSON.stringify({
       id: cand.id, titulo: cand.titulo, url: cand.url, empresa: cand.empresa, ubicacion: cand.ubicacion,
     }));
-    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', 'trabajando');
     location.href = cand.url;
     return;
   }
@@ -794,13 +794,13 @@ async function aplicarDirecto(decisionOfertaId) {
 }
 
 // ── Registro en el núcleo compartido ────────────────────────────
-AP.escanear = escanear;
+AP.escanear = AP.sinReentrada(escanear);
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function () {
   console.log('[AP-Laborum] listo — activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length);
   if (AP.activo) {
     msg('Activado — escaneando…', '#16A34A');
-    setTimeout(escanear, 1800);
+    setTimeout(() => AP.escanear(), 1800);
   }
 };
 
