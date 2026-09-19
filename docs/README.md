@@ -1,6 +1,6 @@
 # Documentos de diseño de AutoPostula
 
-> Índice y estado del trabajo. **Actualizado: 2026-09-17.**
+> Índice y estado del trabajo. **Actualizado: 2026-09-19.**
 > Si vas a implementar algo, empieza por acá: dice qué está hecho, qué falta y en qué orden.
 
 > 🔴 **Antes que cualquier otra cosa: [`revision-2026-09-16.md`](revision-2026-09-16.md).** Una cuenta
@@ -24,6 +24,7 @@
 | [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | 🔴 **Prioridad 1** |
 | [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | 🔨 En curso — pasos 1 a 7 hechos; del 7b al 10 pendiente |
 | [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 💡 Propuesta — va después de la revisión del 16-09 |
+| [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | 🔨 Pendiente — decidido el 19-09 |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -165,11 +166,13 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 | Tarea | Estado | Bloquea a |
 |---|---|---|
 | Revisión legal de privacidad y términos | ⏸ Con el abogado | Chrome Web Store |
-| Definir la política de devolución (`§7.2` de Términos, hoy en borrador) | ⏸ Con el abogado | Chrome Web Store |
+| Definir la política de devolución (`§7.2` de Términos, hoy en borrador), **ahora para pases** | ⏸ Con el abogado | Cobrar de verdad |
+| **Inicio de actividades en el SII** y cómo se emiten las boletas | ⚠️ Lo hace Roberto | Cobrar de verdad: desde 2025 toda pasarela lo exige |
 | Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ✅ Resuelto en `323f2a4` | Recuperación de contraseña real |
-| Cuenta de comercio Flow aprobada + `FLOW_SANDBOX=false` | ⚠️ Verificar | Cobrar de verdad |
-| Plan de Flow con el `urlCallback` del dominio propio | ⚠️ Verificar | Renovaciones |
-| Ficha y envío a la Chrome Web Store | Pendiente | — |
+| Cuenta de comercio Flow aprobada + `FLOW_SANDBOX=false` | ⚠️ Verificar — como **persona natural**, solo pagos únicos | Cobrar de verdad |
+| Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | 🔨 Pendiente | Cobrar de verdad: la suscripción actual no funciona sin empresa |
+| ~~Plan de Flow con el `urlCallback` del dominio propio~~ | Ya no aplica: sin suscripción no hay plan en Flow | — |
+| Ficha y envío a la Chrome Web Store | ✅ Publicada | — |
 
 > **Plazo legal real:** la **Ley 21.719** (protección de datos personales) entra en vigencia a
 > fines de 2026 y es bastante más exigente que la 19.628 — ver `preguntas-abogado.md` §B. Es la
