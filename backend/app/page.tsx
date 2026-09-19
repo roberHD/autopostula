@@ -58,6 +58,7 @@ const PLAN_LIBRE = [
 
 const PLAN_PRO = [
   "80 postulaciones al mes",
+  "Sin renovación automática: pagas solo cuando lo necesitas",
   "Los tres portales conectados a la vez",
   "Busca y postula sola, según tus filtros",
   "Perfil dinámico e instrucciones propias",
@@ -321,7 +322,7 @@ export default function LandingPage() {
               <article className="lp-plan lp-plan--pro">
                 <p className="lp-plan__n">Premium</p>
                 <p className="lp-plan__p ap-tnum">
-                  $3.990 <small>al mes</small>
+                  $3.990 <small>por 30 días</small>
                 </p>
                 <ul className="lp-plan__list">
                   {PLAN_PRO.map((item) => (
@@ -334,6 +335,9 @@ export default function LandingPage() {
                 <Link className="ap-btn ap-btn--mark ap-btn--full" href="/registro?plan=premium">
                   Empezar con Premium
                 </Link>
+                <p className="lp-plan__nota" style={{ fontSize: 12.5, marginTop: 10, opacity: 0.75 }}>
+                  ¿Buscas por más tiempo? Pase de 90 días: $9.990.
+                </p>
               </article>
             </Revelar>
           </div>

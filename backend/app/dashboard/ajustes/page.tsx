@@ -17,10 +17,11 @@ export default function AjustesPage() {
   const [pruebaRestantes, setPruebaRestantes] = useState<number | null>(null);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
   const [esPremium, setEsPremium] = useState(false);
+  // docs/pase-prepagado.md §6: hasta cuándo llega el Premium (ISO), o null.
+  const [premiumHasta, setPremiumHasta] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
-  const [redirigiendo, setRedirigiendo] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
   const [mostrarEliminar, setMostrarEliminar] = useState(false);
@@ -38,6 +39,7 @@ export default function AjustesPage() {
       setPruebaRestantes(data.modo === "prueba" ? data.pruebaRestantes ?? null : null);
       setPlanNombre(data.planNombre);
       setEsPremium(data.esPremium ?? false);
+      setPremiumHasta(data.premiumHasta ?? null);
       setEmail(data.email);
     } catch (err) {
       console.error("Error cargando ajustes:", err);
@@ -73,45 +75,6 @@ export default function AjustesPage() {
       setMensaje("No se pudo guardar el cambio — revisa la consola");
     } finally {
       setGuardando(false);
-    }
-  }
-
-  async function pasarAPremium() {
-    setRedirigiendo(true);
-    setMensaje("");
-    try {
-      const res = await fetch("/api/flow/checkout", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || !data.url) {
-        setMensaje(data.error ?? "No se pudo continuar — intenta de nuevo");
-        setRedirigiendo(false);
-        return;
-      }
-      window.location.href = data.url;
-    } catch (err) {
-      console.error("Error abriendo Flow:", err);
-      setMensaje("No se pudo continuar — revisa la consola");
-      setRedirigiendo(false);
-    }
-  }
-
-  async function cancelarSuscripcion() {
-    if (!confirm("¿Cancelar tu suscripción premium? Sigues teniendo acceso hasta el final del período que ya pagaste.")) return;
-    setRedirigiendo(true);
-    setMensaje("");
-    try {
-      const res = await fetch("/api/flow/cancelar", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setMensaje(data.error ?? "No se pudo cancelar — intenta de nuevo");
-        return;
-      }
-      setMensaje(data.mensaje ?? "Suscripción cancelada.");
-    } catch (err) {
-      console.error("Error cancelando suscripción:", err);
-      setMensaje("No se pudo cancelar — revisa la consola");
-    } finally {
-      setRedirigiendo(false);
     }
   }
 
@@ -187,14 +150,19 @@ export default function AjustesPage() {
               </div>
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Plan actual</p>
-                <p style={{ fontSize: 13, fontWeight: 500 }}>{planNombre ?? "Plan gratuito"}</p>
+                <p style={{ fontSize: 13, fontWeight: 500 }}>
+                  {esPremium && premiumHasta
+                    ? `Premium hasta el ${new Date(premiumHasta).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" })}`
+                    : planNombre ?? "Plan gratuito"}
+                </p>
               </div>
+              {/* §5.4: ya no hay suscripción que cancelar -- el pase dura lo que se
+                  compró y no se renueva solo. Acá solo se renueva o se compra. */}
               <button
                 className={esPremium ? "ap-button-ghost" : "ap-button"}
-                disabled={redirigiendo}
-                onClick={esPremium ? cancelarSuscripcion : pasarAPremium}
+                onClick={() => router.push("/dashboard/premium")}
               >
-                {redirigiendo ? "Un momento..." : esPremium ? "Cancelar suscripción" : "Pasar a Premium"}
+                {esPremium ? "Renovar" : "Pasar a Premium"}
               </button>
             </div>
 

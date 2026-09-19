@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { limpiarTitulo } from "@/lib/text";
@@ -25,10 +26,7 @@ export async function GET() {
       where: { id: userId },
       select: { rol: true, busquedaAutomaticaActiva: true, ultimaRafagaEn: true, pruebaAutomaticaRestantes: true },
     }),
-    prisma.subscription.findFirst({
-      where: { userId, estado: "ACTIVA" },
-      include: { plan: true },
-    }),
+    obtenerSubscripcionVigente(userId),
     obtenerEstadoPostulaciones(userId),
     prisma.application.findFirst({
       where: { userId },

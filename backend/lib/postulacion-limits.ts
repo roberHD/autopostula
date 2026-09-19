@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 
 /**
  * Cuántas postulaciones lleva el usuario este mes y cuántas le quedan según su
@@ -15,10 +16,7 @@ export async function obtenerEstadoPostulaciones(userId: string) {
     return { permitido: true, restantes: null as number | null, limite: null as number | null };
   }
 
-  const subscripcion = await prisma.subscription.findFirst({
-    where: { userId, estado: "ACTIVA" },
-    include: { plan: true },
-  });
+  const subscripcion = await obtenerSubscripcionVigente(userId);
 
   const limite = subscripcion?.plan.limitePostulacionesMes ?? 20;
 

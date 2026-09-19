@@ -1,6 +1,10 @@
 # Pase prepagado: Premium por 30 o 90 días, sin cobro automático — especificación
 
-> **Estado:** decidido por Roberto el 2026-09-19 (camino A), sin implementar.
+> **Estado:** decidido por Roberto el 2026-09-19 (camino A). **Implementado el mismo día**, verificado
+> contra una base Postgres real (`backend/scripts/verificar-pagos.ts`: acreditación idempotente, apilado,
+> vigencia por fecha, monto alterado, cron de avisos) — **falta probarlo contra el sandbox de Flow**, que
+> necesita las claves. Pendiente además: regenerar `docs/legal/` (Word y PDF), cambiar la descripción de
+> la Chrome Web Store y todo el punto 0 de §9 (inicio de actividades y boleta).
 > **Para:** el chat de producción.
 > **Reemplaza:** la suscripción mensual con Cargo Automático de Flow.
 > **Relacionado:** `revision-2026-09-16.md` §1.3 (límites antes de enviar) y §8.3 (qué cuenta como

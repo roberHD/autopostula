@@ -28,6 +28,19 @@ function ErrorDesdeQuery({ onError, onInfo }: { onError: (msg: string) => void; 
   return null;
 }
 
+// A dónde volver después de entrar: solo rutas internas del panel. Un
+// callbackUrl que apunte a otro sitio (o a cualquier otra ruta) se ignora, para
+// que el login no sirva de redirección abierta.
+function destinoDespuesDeEntrar(): string {
+  try {
+    const pedido = new URLSearchParams(window.location.search).get("callbackUrl");
+    if (pedido && /^\/dashboard(\/[\w\-/]*)?(\?[\w\-=&%.]*)?$/.test(pedido)) return pedido;
+  } catch {
+    // sin window (no debería pasar en un handler de cliente)
+  }
+  return "/dashboard";
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,7 +66,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(destinoDespuesDeEntrar());
   }
 
   return (
@@ -73,7 +86,7 @@ export default function LoginPage() {
 
           <BotonGoogle
             texto="Entrar con Google"
-            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+            onClick={() => signIn("google", { callbackUrl: destinoDespuesDeEntrar() })}
           />
 
           <div className="ap-separador"><span>o con tu correo</span></div>

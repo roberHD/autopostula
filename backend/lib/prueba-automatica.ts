@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { obtenerSubscripcionVigente } from "./plan-vigente";
 import { modoAutomatico, type ModoAutomatico } from "./estado-automatico";
 
 // docs/rafagas-y-ponerse-al-dia.md §4.1: la prueba de 5 postulaciones
@@ -8,10 +9,7 @@ import { modoAutomatico, type ModoAutomatico } from "./estado-automatico";
 
 /** ¿El plan activo de esta cuenta incluye la búsqueda automática? */
 export async function planIncluyeBusquedaAutomatica(userId: string): Promise<boolean> {
-  const subscripcion = await prisma.subscription.findFirst({
-    where: { userId, estado: "ACTIVA" },
-    include: { plan: true },
-  });
+  const subscripcion = await obtenerSubscripcionVigente(userId);
   return subscripcion?.plan.busquedaAutomatica ?? false;
 }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { modoAutomatico, motivoInactivo, PRUEBA_TOTAL, type ModoAutomatico } from "@/lib/estado-automatico";
 
@@ -17,10 +18,7 @@ export async function GET(request: Request) {
   }
 
   const [subscripcion, cv, cuentasActivas, estadoPostulaciones, objetivosLaborales] = await Promise.all([
-    prisma.subscription.findFirst({
-      where: { userId: user.id, estado: "ACTIVA" },
-      include: { plan: true },
-    }),
+    obtenerSubscripcionVigente(user.id),
     prisma.cvProfile.findUnique({ where: { userId: user.id } }),
     prisma.platformAccount.findMany({
       where: { userId: user.id, activa: true },

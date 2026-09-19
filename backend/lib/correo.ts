@@ -96,3 +96,104 @@ export async function enviarCorreoPruebaTerminada(email: string, total: number) 
   const { subject, html } = armarCorreoPruebaTerminada(total);
   await getResend().emails.send({ from: remitente(), to: email, subject, html });
 }
+
+// ── Pases prepagados (docs/pase-prepagado.md §6, §7) ───────────────────
+
+function fechaLarga(fecha: Date): string {
+  return fecha.toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Santiago" });
+}
+
+const ESTILO_BOTON = "display: inline-block; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;";
+const ESTILO_MARCO = "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto;";
+
+// §7: comprobante al acreditar -- pase, monto, vigencia y número de orden de
+// Flow. NO es una boleta: la boleta electrónica depende del inicio de
+// actividades (preguntas-abogado.md §E) y el correo lo dice para no
+// confundirlas.
+export function armarComprobantePase(datos: { pase: string; monto: number; desde: Date; hasta: Date; flowOrder: string }) {
+  return {
+    subject: `Tu ${datos.pase} está activo hasta el ${fechaLarga(datos.hasta)}`,
+    html: `
+      <div style="${ESTILO_MARCO}">
+        <h2 style="color: #111827;">Recibimos tu pago</h2>
+        <p style="color: #4B5563; line-height: 1.6;">Tu Premium ya está activo.</p>
+        <table style="width: 100%; border-collapse: collapse; color: #111827; font-size: 14px;">
+          <tr><td style="padding: 6px 0; color: #6B7280;">Pase</td><td style="text-align: right;">${datos.pase}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6B7280;">Monto</td><td style="text-align: right;">$${datos.monto.toLocaleString("es-CL")} CLP</td></tr>
+          <tr><td style="padding: 6px 0; color: #6B7280;">Vigencia</td><td style="text-align: right;">${fechaLarga(datos.desde)} al ${fechaLarga(datos.hasta)}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6B7280;">Orden de Flow</td><td style="text-align: right;">${datos.flowOrder}</td></tr>
+        </table>
+        <p style="color: #4B5563; line-height: 1.6; margin-top: 18px;">
+          No se renueva solo: no vamos a volver a cobrarte. Te avisamos antes de que termine.
+        </p>
+        <p style="color: #9CA3AF; font-size: 12px;">Este correo es un comprobante de tu pago, no una boleta.</p>
+      </div>
+    `,
+  };
+}
+
+// Resend NO lanza cuando rechaza un envío (dominio sin verificar, clave mala):
+// devuelve { error }. Estos correos marcan "ya se mandó" en la base (los avisos
+// de vencimiento) o son un comprobante de dinero, así que un rechazo silencioso
+// no puede pasar por éxito.
+async function enviarOFallar(email: string, subject: string, html: string) {
+  const { error } = await getResend().emails.send({ from: remitente(), to: email, subject, html });
+  if (error) throw new Error(`Resend rechazó el correo: ${error.message}`);
+}
+
+export async function enviarComprobantePase(email: string, datos: { pase: string; monto: number; desde: Date; hasta: Date; flowOrder: string }) {
+  const { subject, html } = armarComprobantePase(datos);
+  await enviarOFallar(email, subject, html);
+}
+
+// §6: los tres avisos de vencimiento. Los enlaces de renovar llevan directo al
+// checkout del pase (con sesión, o pasando por el login que vuelve acá).
+export type AvisoPase = "cinco_dias" | "un_dia" | "vencio";
+
+export function armarAvisoPase(tipo: AvisoPase, venceEn: Date) {
+  const base = getBaseUrl();
+  const renovar = (pase: string) => `${base}/dashboard/premium/pago?pase=${pase}`;
+  const botones = `
+    <p style="margin: 20px 0;">
+      <a href="${renovar("pase_30")}" style="${ESTILO_BOTON} background: #16181A; color: #F4F5F3;">Renovar 30 días</a>
+      <a href="${renovar("pase_90")}" style="${ESTILO_BOTON} border: 1px solid #16181A; color: #16181A; margin-left: 8px;">Renovar 90 días</a>
+    </p>`;
+  const fecha = fechaLarga(venceEn);
+
+  if (tipo === "vencio") {
+    return {
+      subject: "Tu Premium terminó: volviste al plan gratis",
+      html: `
+        <div style="${ESTILO_MARCO}">
+          <h2 style="color: #111827;">Tu Premium terminó</h2>
+          <p style="color: #4B5563; line-height: 1.6;">
+            Volviste al plan gratis. Tu historial y tu perfil siguen intactos.
+          </p>
+          ${botones}
+          <p style="color: #9CA3AF; font-size: 12px;">No se renueva solo: no te cobramos nada más.</p>
+        </div>
+      `,
+    };
+  }
+
+  const cuando = tipo === "un_dia" ? "mañana" : `el ${fecha}`;
+  return {
+    subject: tipo === "un_dia" ? "Tu Premium vence mañana" : `Tu Premium vence el ${fecha}`,
+    html: `
+      <div style="${ESTILO_MARCO}">
+        <h2 style="color: #111827;">Tu Premium vence ${cuando}</h2>
+        <p style="color: #4B5563; line-height: 1.6;">
+          Después vuelves al plan gratis (20 postulaciones al mes, un portal, sin búsqueda automática).
+          Si quieres seguir con Premium, renueva antes: los días nuevos se suman a los que te quedan.
+        </p>
+        ${botones}
+        <p style="color: #9CA3AF; font-size: 12px;">No se renueva solo: no te cobramos nada sin que tú lo pidas.</p>
+      </div>
+    `,
+  };
+}
+
+export async function enviarAvisoPase(email: string, tipo: AvisoPase, venceEn: Date) {
+  const { subject, html } = armarAvisoPase(tipo, venceEn);
+  await enviarOFallar(email, subject, html);
+}

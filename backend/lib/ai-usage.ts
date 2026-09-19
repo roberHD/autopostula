@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 
 // Se siguen registrando en AiUsageLog para métricas, pero no cuentan para el
 // límite de "resto de llamadas de IA" de acá -- tienen su propio control (tope
@@ -35,10 +36,7 @@ export async function checkAndLogAiUsage(userId: string, tipo: string) {
     return { permitido: true, restantes: null, limite: null };
   }
 
-  const subscripcion = await prisma.subscription.findFirst({
-    where: { userId, estado: "ACTIVA" },
-    include: { plan: true },
-  });
+  const subscripcion = await obtenerSubscripcionVigente(userId);
 
   // Sin plan, trátalo como free bien restringido. El default subió de 20 a 150
   // porque una sola postulación ya dispara varias llamadas (responder cada

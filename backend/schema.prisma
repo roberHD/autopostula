@@ -34,8 +34,13 @@ enum EstadoSuscripcion {
 }
 
 enum EstadoPago {
+  // docs/pase-prepagado.md §4: el pago existe ANTES que el pase -- se crea al
+  // iniciar el pago en Flow, cuando todavía no hay nada pagado.
+  PENDIENTE
   PAGADO
   FALLIDO
+  // Status 4 de Flow.
+  ANULADO
   REEMBOLSADO
 }
 
@@ -159,6 +164,7 @@ model User {
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
+  payments          Payment[]
   platformAccounts  PlatformAccount[]
   cvProfile         CvProfile?
   styleProfiles     StyleProfile[]
@@ -231,6 +237,10 @@ model Subscription {
   flowSubscriptionId     String?           @map("flow_subscription_id")
   periodoInicio          DateTime?         @map("periodo_inicio")
   periodoFin             DateTime?         @map("periodo_fin")
+  // Idempotencia de los avisos de vencimiento (docs/pase-prepagado.md §6): cada
+  // correo sale una sola vez por pase.
+  avisoPrevioEn          DateTime?         @map("aviso_previo_en")
+  avisoFinalEn           DateTime?         @map("aviso_final_en")
 
   user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   plan     Plan      @relation(fields: [planId], references: [id])
@@ -239,15 +249,32 @@ model Subscription {
   @@map("subscriptions")
 }
 
+// Un pago de un pase prepagado (docs/pase-prepagado.md §4). Se crea PENDIENTE al
+// iniciar el pago y, cuando Flow confirma, se enlaza al pase (Subscription) que
+// se acredita.
 model Payment {
   id              String     @id @default(uuid())
-  subscriptionId  String     @map("subscription_id")
+  // Opcional: un pago PENDIENTE todavía no tiene pase. Se enlaza al acreditarse.
+  // SetNull (antes Cascade): un pase que se borra no puede arrastrar el registro
+  // del pago, que se conserva por normativa tributaria.
+  subscriptionId  String?    @map("subscription_id")
+  // Directo al usuario porque el pago existe antes que el pase. SetNull por la
+  // misma razón que Subscription: los registros de pago sobreviven al borrado de
+  // la cuenta (política de privacidad §7).
+  userId          String?    @map("user_id")
+  // Lo generamos nosotros y se lo pasamos a Flow. Es lo que identifica el pago
+  // cuando Flow avisa -- nunca el email del pagador, que puede ser distinto del
+  // de la cuenta.
+  commerceOrder   String     @unique @map("commerce_order")
+  pase            String     // "pase_30" | "pase_90" (lib/pases.ts)
+  dias            Int
   flowOrder       String?    @map("flow_order")
   monto           Float
-  estado          EstadoPago @default(PAGADO)
+  estado          EstadoPago @default(PENDIENTE)
   fecha           DateTime   @default(now())
 
-  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("payments")
 }

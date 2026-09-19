@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { asegurarPlataformasBase } from "@/lib/platforms";
 import { asegurarPlanesBase } from "@/lib/plans";
 
@@ -25,10 +26,7 @@ export async function GET() {
         applications: { select: { estadoActual: true, enviadaEn: true } },
       },
     }),
-    prisma.subscription.findFirst({
-      where: { userId, estado: "ACTIVA" },
-      include: { plan: true },
-    }),
+    obtenerSubscripcionVigente(userId),
     prisma.user.findUnique({ where: { id: userId }, select: { rol: true } }),
   ]);
 
@@ -78,10 +76,7 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { rol: true } });
 
-  const subscripcion = await prisma.subscription.findFirst({
-    where: { userId, estado: "ACTIVA" },
-    include: { plan: true },
-  });
+  const subscripcion = await obtenerSubscripcionVigente(userId);
 
   // Sin suscripción activa, se trata como free (1 portal) — salvo cuentas ADMIN,
   // que no tienen límite (mismo criterio que checkAndLogAiUsage).

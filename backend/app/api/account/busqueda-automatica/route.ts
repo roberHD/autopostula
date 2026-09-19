@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { obtenerSubscripcionVigente, finDelUltimoPase } from "@/lib/plan-vigente";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { modoAutomatico, PRUEBA_TOTAL } from "@/lib/estado-automatico";
 
@@ -11,10 +12,7 @@ export async function GET() {
 
   const [user, subscripcion] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { rol: true, email: true, busquedaAutomaticaActiva: true, pruebaAutomaticaRestantes: true } }),
-    prisma.subscription.findFirst({
-      where: { userId, estado: "ACTIVA" },
-      include: { plan: true },
-    }),
+    obtenerSubscripcionVigente(userId),
   ]);
 
   const modo = modoAutomatico({
@@ -23,6 +21,10 @@ export async function GET() {
     pruebaRestantes: user?.pruebaAutomaticaRestantes ?? 0,
   });
   const disponibleEnPlan = modo === "premium";
+  // docs/pase-prepagado.md §6: hasta cuándo llega el Premium (con pases
+  // apilados, el que termina último). null si no hay un pase vigente -- un
+  // admin es Premium sin pase.
+  const premiumHasta = subscripcion ? await finDelUltimoPase(userId) : null;
 
   return NextResponse.json({
     activa: user?.busquedaAutomaticaActiva ?? true,
@@ -35,6 +37,7 @@ export async function GET() {
     pruebaTotal: PRUEBA_TOTAL,
     planNombre: subscripcion?.plan.nombre ?? null,
     esPremium: subscripcion?.plan.tipo === "PREMIUM",
+    premiumHasta: premiumHasta ? premiumHasta.toISOString() : null,
     email: user?.email ?? null,
   });
 }
