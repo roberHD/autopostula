@@ -117,7 +117,8 @@ export default function LandingPage() {
                 </a>
               </div>
               <p className="lp-hero__sub lp-rise lp-rise--4" style={{ fontSize: 13, marginTop: 12 }}>
-                Es una extensión de Chrome:{" "}
+                <b>Configúralo desde el celular · Trabaja en tu computador.</b> Es una extensión de
+                Chrome:{" "}
                 <a href={URL_CHROME_WEB_STORE} target="_blank" rel="noreferrer">
                   instálala desde la Chrome Web Store ↗
                 </a>

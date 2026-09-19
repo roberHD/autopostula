@@ -10,6 +10,7 @@ import { Skel } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
 import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
+import { sinSoporteExtension } from "@/lib/dispositivo";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -104,7 +105,12 @@ export default function OnboardingPage() {
         else if (!objetivoListo) calculado = 2;
         else if (!triajeListo) calculado = 3;
         else if (!conversacionLista) calculado = 4;
-        else if (!extensionLista) calculado = 5;
+        // §3.3 (docs/celular-y-escritorio.md): en un aparato que no puede
+        // instalarla, "falta la extensión" no se resuelve ahí -- mandarlo al
+        // paso 5 lo dejaba en un bucle (entra, ve el muro, vuelve a entrar).
+        // Se sigue a Portales y a Listo; la extensión queda como pendiente
+        // visible en el panel, no como tope del onboarding.
+        else if (!extensionLista && !sinSoporteExtension()) calculado = 5;
         else if (!portalConectado) calculado = 6;
         else calculado = 7;
 
@@ -859,7 +865,58 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
   );
 }
 
+// §3.2 (docs/celular-y-escritorio.md): en un teléfono el paso de la extensión
+// no se salta ni se esconde -- cambia de contenido. Dice qué se puede hacer ya,
+// qué se desbloquea con un computador, y no bloquea el avance.
+function PasoExtensionEnMovil({ onSiguiente }: { onSiguiente: () => void }) {
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiarEnlace() {
+    try {
+      await navigator.clipboard.writeText("https://autopostula.cl");
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      // Sin portapapeles el enlace igual es corto: se muestra escrito abajo.
+    }
+  }
+
+  return (
+    <>
+      <Header
+        Icon={Puzzle}
+        titulo="Para postular por ti necesitas un computador"
+        sub="Las extensiones de navegador no funcionan en teléfonos. Desde el celular decides; en el computador se postula."
+      />
+      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Mientras tanto ya puedes:</p>
+      <ul style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.7, paddingLeft: 18, marginBottom: 16 }}>
+        <li>Ver qué ofertas calzan contigo</li>
+        <li>Decidir cuáles te interesan</li>
+        <li>Revisar tus postulaciones</li>
+      </ul>
+      <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 12 }}>
+        Cuando tengas un computador: abre <b>autopostula.cl</b> con Chrome, entra con la misma cuenta e instala la
+        extensión (te lo recordamos en el panel).
+      </p>
+      <button onClick={copiarEnlace} className="ap-button-ghost" style={{ width: "100%", marginBottom: 10 }}>
+        {copiado ? "Enlace copiado ✓" : "Copiar autopostula.cl para abrirlo en el computador"}
+      </button>
+      <button onClick={onSiguiente} className="ap-button" style={{ width: "100%" }}>
+        Continuar en el celular
+      </button>
+    </>
+  );
+}
+
 function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
+  // Se decide después de montar: el servidor no sabe qué aparato es.
+  const [enMovil, setEnMovil] = useState(false);
+  useEffect(() => { setEnMovil(sinSoporteExtension()); }, []);
+  if (enMovil) return <PasoExtensionEnMovil onSiguiente={onSiguiente} />;
+  return <PasoExtensionEscritorio onSiguiente={onSiguiente} onOmitir={onOmitir} />;
+}
+
+function PasoExtensionEscritorio({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   // null = todavía detectando si la extensión está instalada.
   const [extensionDetectada, setExtensionDetectada] = useState<boolean | null>(null);
   const [conectandoExt, setConectandoExt] = useState(false);
@@ -1204,6 +1261,8 @@ const BUSQUEDA_POR_PORTAL: Record<string, (etiqueta: string, slug: string) => st
 // ya armada -- no "ir al dashboard".
 function PasoListo({ onTerminar }: { onTerminar: () => void }) {
   const [busqueda, setBusqueda] = useState<{ portal: string; etiqueta: string; url: string } | null>(null);
+  const [enMovil, setEnMovil] = useState(false);
+  useEffect(() => { setEnMovil(sinSoporteExtension()); }, []);
 
   useEffect(() => {
     async function cargar() {
@@ -1234,16 +1293,19 @@ function PasoListo({ onTerminar }: { onTerminar: () => void }) {
         Icon={CheckCircle2}
         titulo="¡Todo listo!"
         sub={
-          busqueda
+          enMovil
+            ? "Tu cuenta quedó configurada. Para que postule por ti, abre autopostula.cl en tu computador con Chrome e instala la extensión."
+            : busqueda
             ? `Abre ${busqueda.portal} y busca "${busqueda.etiqueta}": la extensión empieza sola.`
             : "Abre tu portal de empleo con la extensión instalada: empieza sola. Puedes completar tu perfil cuando quieras desde el panel."
         }
       />
       <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 16 }}>
-        Tu cuenta arranca en modo prueba: la extensión mira las ofertas y te muestra a cuáles postularía, pero no envía
-        nada hasta que lo actives desde el panel.
+        {enMovil
+          ? "Desde el celular puedes decidir qué ofertas te interesan y revisar tus postulaciones."
+          : "Tu cuenta arranca en modo prueba: la extensión mira las ofertas y te muestra a cuáles postularía, pero no envía nada hasta que lo actives desde el panel."}
       </p>
-      {busqueda && (
+      {busqueda && !enMovil && (
         <a
           href={busqueda.url}
           target="_blank"
@@ -1254,7 +1316,7 @@ function PasoListo({ onTerminar }: { onTerminar: () => void }) {
           Abrir {busqueda.portal} con tu búsqueda ↗
         </a>
       )}
-      <button onClick={onTerminar} className={busqueda ? "ap-button-ghost" : "ap-button"} style={{ width: "100%" }}>
+      <button onClick={onTerminar} className={busqueda && !enMovil ? "ap-button-ghost" : "ap-button"} style={{ width: "100%" }}>
         Ir al panel
       </button>
     </>

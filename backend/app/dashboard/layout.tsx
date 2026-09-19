@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 import BarraMaquina from "./BarraMaquina";
 import BannerVerificacion from "./BannerVerificacion";
 import BannerModoPrueba from "./BannerModoPrueba";
+import BannerExtension from "./BannerExtension";
 
 export default async function DashboardLayout({
   children,
@@ -45,6 +46,7 @@ export default async function DashboardLayout({
         <main className="ap-main">
           <BannerVerificacion verificadoAlCargar={!!dbUser.emailVerificado} />
           <BannerModoPrueba habilitadaAlCargar={!!dbUser.postulacionHabilitada} />
+          <BannerExtension />
           {children}
         </main>
       </div>
