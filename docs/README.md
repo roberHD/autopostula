@@ -22,7 +22,7 @@
 | [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Pendiente — ⚠️ verificado el 16-09: **son los 3 portales**, Computrabajo tampoco sincroniza (revisión §8.2) |
 | [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente — verificado el 16-09: la parte A no está |
 | [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | 🔴 **Prioridad 1** |
-| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | 🔨 En curso — pasos 1 a 9 hechos; solo el 10 pendiente |
+| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | ✅ Programada — los 10 pasos hechos; falta publicar la extensión y verificar a mano |
 | [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 💡 Propuesta — va después de la revisión del 16-09 |
 | [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | 🔨 Pendiente — decidido el 19-09 |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
@@ -135,7 +135,7 @@ Justo después de la Fase 1. Sus pasos 1 y 2 (la alarma que se reinicia y la rá
 estados) son bugs latentes de la búsqueda automática actual, no solo una función nueva. El permiso
 `power` obliga a publicar otra versión en la tienda: conviene que salga en la misma que la Fase 1.
 
-**Avance (2026-09-19):** pasos 1 a 9 hechos — alarma que ya no se reinicia, ráfaga como máquina de
+**Avance (2026-09-19):** los 10 pasos hechos — alarma que ya no se reinicia, ráfaga como máquina de
 estados persistida, disparadores reales con umbral de 3 h, `chrome.power` con tope de 25 min (el
 permiso ya está en el manifest), el registro de cada ráfaga en el backend (`Rafaga`,
 `/api/extension/rafaga`, purga a 90 días), y que la persona se entere: número en el ícono, línea en
@@ -145,7 +145,9 @@ gratis (una ráfaga de inmediato al activar la postulación, el contador en el p
 en medio al llegar a 5, "Ver las 5" en el historial y el correo de fin de prueba) y que lo aprobado en
 "Por decidir" vaya primero en cada ráfaga y cuente en su resumen (se envía en todos los planes, no solo en
 Premium), y el recordatorio por correo cuando lleva 48 h sin ponerse al día (solo Premium, un correo cada
-72 h como máximo, con baja en un clic y sin iniciar sesión). Queda el 10: textos.
+72 h como máximo, con baja en un clic y sin iniciar sesión), y los textos: la landing, Premium, Ajustes, términos
+y privacidad ya no prometen "cada dos horas" ni "postula sola" sin condiciones. Falta subir la versión 2.13.0
+de la extensión con los textos de la ficha (listos en §5 del doc) y verificar a mano lo que necesita un Chrome real.
 
 ### 1. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 
@@ -177,6 +179,7 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 | Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | 🔨 Pendiente | Cobrar de verdad: la suscripción actual no funciona sin empresa |
 | ~~Plan de Flow con el `urlCallback` del dominio propio~~ | Ya no aplica: sin suscripción no hay plan en Flow | — |
 | Ficha y envío a la Chrome Web Store | ✅ Publicada | — |
+| Versión 2.13.0 de la extensión (ráfagas y permiso `power`) y textos nuevos de la ficha ([`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) §5) | 🔨 Falta subirla y pegar los textos | Que la landing y la tienda digan lo mismo |
 
 > **Plazo legal real:** la **Ley 21.719** (protección de datos personales) entra en vigencia a
 > fines de 2026 y es bastante más exigente que la 19.628 — ver `preguntas-abogado.md` §B. Es la

@@ -125,6 +125,13 @@ export default function TerminosPage() {
         Existe un plan gratuito con límites mensuales de postulaciones, de portales conectados
         simultáneamente y de uso de la IA. Los límites vigentes se muestran en tu cuenta.
       </p>
+      <p>
+        Incluye además una <strong>prueba única de 5 postulaciones automáticas</strong>: las
+        primeras cinco postulaciones que la extensión envía por sí sola, sin que entres a ningún
+        portal, y que cuentan dentro de tu límite mensual. Fuera de esa prueba, en el plan gratuito
+        las búsquedas las inicias tú: entras a un portal y la extensión completa y envía los
+        formularios ahí mismo.
+      </p>
 
       <h3>6.2 Plan de pago: pases de 30 y de 90 días</h3>
       <p>

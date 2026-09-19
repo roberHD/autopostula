@@ -1,8 +1,8 @@
 # Ráfagas: que se ponga al día cada vez que abres el computador — especificación
 
-> **Estado:** en implementación. Pasos 1 a 9 de §7 hechos y con test (`extension/verificar-rafagas.js`,
-> `backend/scripts/verificar-texto-rafaga.ts`, `backend/scripts/verificar-recordatorio-rafaga.ts`, 2026-09-19);
-> solo el 10 pendiente. **Falta verificar a
+> **Estado:** implementada: los 10 pasos de §7 hechos y con test (`extension/verificar-rafagas.js`,
+> `backend/scripts/verificar-texto-rafaga.ts`, `backend/scripts/verificar-recordatorio-rafaga.ts`, 2026-09-19).
+> Falta publicar la versión 2.13.0 de la extensión con los textos de la ficha (§5) y **verificar a
 > mano** el criterio de `powercfg /requests` (§3.3, criterios 2 y 3 de §8): el test cubre la lógica con
 > `chrome.power` simulado, no el Windows real. Tampoco se vio la tarjeta del panel con una sesión iniciada
 > (§3.5): está probado el texto y la consulta contra Postgres, no el dibujo en pantalla.
@@ -135,6 +135,31 @@
 >   contenido, la lógica contra Postgres con envío simulado y las rutas por HTTP) y cómo se ve el correo en Gmail
 >   y Outlook, incluido el botón "Cancelar suscripción". Tampoco se puede reactivar desde Ajustes: solo con el
 >   enlace del último correo. Antes de desplegar hay que tener `CRON_SECRET`, `AUTH_SECRET` y `RESEND_*` en Vercel.
+>
+> **Lo que el paso 10 hizo distinto de §5** (o que §5 no decía):
+> - **Más lugares que la tabla.** Además de los de §5, decían "postula sola" o "cada 2 horas" sin condiciones:
+>   el paso 3 de la landing ("Define qué te sirve"), el subtítulo de precios de la landing, el subtítulo y la
+>   confirmación "Ya eres Premium" de `/dashboard/premium`, los dos textos de Ajustes (el del plan gratuito y el de
+>   Premium activo) y el aviso de pausa de la tarjeta del Inicio. Se cambiaron también.
+> - **`/dashboard/premium`: la tabla tiene dos filas, no una.** La vieja "Búsqueda y postulación automática" se
+>   reemplazó por "Postulaciones automáticas (sin entrar al portal)" (Gratis: "Prueba de 5", Premium: ✅) y "Se pone
+>   al día sola al abrir tu computador" (solo Premium): son dos promesas distintas, y las dos son ciertas.
+> - **Privacidad: se declaran los datos nuevos**, que §5 no mencionaba. Sin eso la política quedaría describiendo
+>   lo que hace la extensión pero no lo que guardamos para hacerlo: §2.4 (el registro de cada puesta al día, la fecha
+>   de conexión de la extensión y las postulaciones de la prueba), §3 (dos filas de finalidad), §6 (la puesta al día
+>   automática con sus disparadores, las pestañas de a una, el bloqueo de suspensión con tope de 25 min y su límite
+>   —la pantalla se puede apagar y cerrar la tapa suspende—, y los recordatorios por correo) y §7 (el registro se
+>   elimina a los 90 días). **Conviene que el abogado lo vea**: es texto legal nuevo (`preguntas-abogado.md`), y las
+>   copias en `docs/legal/` (.docx y .pdf, del 13-09) ya no coinciden con la página.
+> - **Lo aprobado en "Por decidir"** ya aparece en la política como se envía de verdad (paso 8): en todos los planes.
+> - **La ficha de la Chrome Web Store no está en el repositorio**: vive en el panel de la tienda. Abajo van los textos
+>   listos para pegar. El criterio 10 de §8 se cumple hoy en la web (no queda ningún "cada dos horas" en el código
+>   que ve una persona) y en la tienda recién cuando se peguen.
+> - **Lo que no se tocó a propósito:** la descripción corta del `manifest.json` ("Postulación automática
+>   inteligente…"), que no promete un intervalo, y los nombres de los planes (`estrategia-y-rediseno.md` propone
+>   otros, sin decidir).
+> - Falta verificar a mano, en un Chrome real, lo que ningún test alcanza: criterios 1, 2, 3, 6 y 8 de §8; la entrega
+>   del correo del paso 9; y la página `/dashboard/premium`, que exige sesión (el cambio es de texto y compila).
 > **Para:** el chat de producción.
 > **Fecha:** 2026-09-17.
 > **Va después de:** la Fase 1 de `revision-2026-09-16.md` (pasos 1 a 4d de su §6). No sirve ponerse
@@ -549,6 +574,31 @@ Todo lo que hoy promete "cada dos horas" o "sola" sin condiciones:
 El permiso `power` obliga a publicar una versión nueva en la tienda y pasa por revisión. Conviene
 mandarlo junto con los arreglos de la Fase 1, en la misma versión.
 
+### Textos para la ficha de la Chrome Web Store
+
+La ficha vive en el panel de la tienda, no en el repositorio: hay que pegar esto ahí, **junto con la versión
+nueva de la extensión** (`manifest.json` en 2.13.0, que ya trae el permiso `power`; permisos actuales: `storage`,
+`tabs`, `alarms`, `power`). Al agregar un permiso, la tienda revisa la versión otra vez.
+
+**Descripción.** Donde hoy dice *"…búsqueda automática cada dos horas mientras tengas Chrome abierto."*, poner:
+
+> …se pone al día sola cada vez que abres tu computador.
+
+Si conviene un párrafo entero en vez de la frase:
+
+> Con Premium, AutoPostula se pone al día sola cada vez que abres tu computador: abre las búsquedas en pestañas
+> en segundo plano, de a una, y postula a lo que calza con tu perfil. En el plan gratuito, entras al portal y la
+> extensión postula por ti; además tienes una prueba de 5 postulaciones automáticas.
+
+**Justificación del permiso `alarms`** (reemplaza a *"Programar la búsqueda automática cada dos horas…"*):
+
+> Revisar periódicamente si corresponde ponerse al día, y poner un tope de tiempo a cada paso.
+
+**Justificación del permiso `power`** (nueva):
+
+> Evitar que el computador se suspenda por inactividad solo mientras la extensión termina una búsqueda en curso
+> (máximo 25 minutos). Se libera al terminar.
+
 ---
 
 ## 6. Lo que se descartó
@@ -592,7 +642,7 @@ celular, con *"estas ofertas calzan contigo"* y postulación a mano (`celular-y-
 | ~~7b~~ | ~~Prueba de 5 postulaciones automáticas~~ | 4.1 | ✅ Hecho — ver "Lo que el paso 7b hizo distinto de §4.1" arriba |
 | ~~8~~ | ~~Cola del celular primero~~ | 3.7 | ✅ Hecho, y se envía en todos los planes — ver "Lo que el paso 8 hizo distinto de §3.7" arriba |
 | ~~9~~ | ~~Recordatorio por correo~~ | 3.8 | ✅ Hecho — ver "Lo que el paso 9 hizo distinto de §3.8" arriba |
-| 10 | Textos: landing, Premium, privacidad, ficha de la tienda | 5 | En el mismo deploy que el 4 |
+| ~~10~~ | ~~Textos: landing, Premium, privacidad, ficha de la tienda~~ | 5 | ✅ Hecho en la web; los textos de la ficha están listos para pegar (§5) — ver "Lo que el paso 10 hizo distinto de §5" arriba |
 
 ---
 

@@ -218,7 +218,7 @@ export default function AjustesPage() {
             <div>
               <p style={{ fontSize: 13, fontWeight: 600 }}>Disponible en un plan superior</p>
               <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.5 }}>
-                Con búsqueda automática, AutoPostula revisa ofertas nuevas cada 2 horas y postula solo, sin que abras nada — sin este beneficio, sigues pudiendo postular manualmente cuando quieras.
+                Con Premium, AutoPostula se pone al día sola cada vez que abres tu computador, sin que entres a ningún portal. Sin él sigues postulando: entras a Computrabajo, Laborum o Trabajando y la extensión postula por ti.
               </p>
             </div>
           </div>
@@ -244,7 +244,7 @@ export default function AjustesPage() {
                       ? `${textoPruebaEnCurso(pruebaRestantes, PRUEBA_TOTAL)}. Se envían solas, sin que entres a ningún portal.`
                       : "Pausada — la prueba no envía nada hasta que la reanudes."
                     : activa
-                    ? "Activo — AutoPostula revisa ofertas nuevas cada 2 horas en tus portales conectados y postula por ti."
+                    ? "Activo — AutoPostula se pone al día sola cada vez que abres tu computador: revisa ofertas nuevas en tus portales conectados y postula por ti."
                     : "Pausado — solo vas a postular cuando lo hagas tú manualmente."}
                 </p>
               </div>
