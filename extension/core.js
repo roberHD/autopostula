@@ -968,7 +968,13 @@ AP.analizarYResponder = async function (contexto, preguntas) {
 // Igual que el overlay: vive dentro del portal, así que va en un shadow
 // root para que su CSS no nos deforme, y sobre tinta para que no se
 // confunda con la página de abajo.
-AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
+//
+// `opciones.mensaje` (§2.10, docs/revision-2026-09-16.md) la convierte en una
+// confirmación SIN respuestas -- para postulaciones que se envían con un solo
+// clic, donde no hay formulario que revisar y el clic ya es el envío: el
+// "Revisar antes de enviar" tiene que pedir el visto bueno ANTES de ese clic.
+AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
+  const soloConfirmar = !!(opciones && opciones.mensaje);
   return new Promise(resolve => {
     document.getElementById('ap-revision-panel')?.remove();
 
@@ -1083,7 +1089,7 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
           '<div class="cab" id="ap-rev-header" title="Arrastra para mover el panel">' +
             '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
             '<span style="min-width:0">' +
-              '<h2>Revisa antes de enviar</h2>' +
+              '<h2>' + (soloConfirmar ? 'Confirma antes de postular' : 'Revisa antes de enviar') + '</h2>' +
               '<p>' + esc(titulo.slice(0, 80)) + '</p>' +
             '</span>' +
             '<span class="agarre" aria-hidden="true">⋮⋮</span>' +
@@ -1091,13 +1097,13 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
 
           '<div class="pest" role="tablist">' +
             '<button role="tab" aria-selected="true" class="ap-tab-btn" data-tab="respuestas">' +
-              'Respuestas (' + respuestasLog.length + ')</button>' +
+              (soloConfirmar ? 'Postulación' : 'Respuestas (' + respuestasLog.length + ')') + '</button>' +
             '<button role="tab" aria-selected="false" class="ap-tab-btn" data-tab="aviso">El aviso completo</button>' +
           '</div>' +
 
           '<div class="cuerpo">' +
             '<div class="ap-tab-content" data-tab-content="respuestas">' +
-              (filas || '<p class="vacio">Este formulario no tenía preguntas que responder.</p>') +
+              (filas || '<p class="vacio">' + esc(soloConfirmar ? opciones.mensaje : 'Este formulario no tenía preguntas que responder.') + '</p>') +
             '</div>' +
             '<div class="ap-tab-content" data-tab-content="aviso" style="display:none">' +
               '<div class="aviso">' + esc(contexto || 'El portal no entregó el texto del aviso.') + '</div>' +
@@ -1105,7 +1111,7 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
           '</div>' +
 
           '<div class="pie">' +
-            '<button class="btn enviar" id="ap-rev-confirm">Confirmar y enviar</button>' +
+            '<button class="btn enviar" id="ap-rev-confirm">' + (soloConfirmar ? 'Sí, postular' : 'Confirmar y enviar') + '</button>' +
             '<button class="btn saltar" id="ap-rev-skip">Saltar esta oferta</button>' +
             '<span class="reloj" id="ap-rev-reloj"></span>' +
           '</div>' +
@@ -1222,6 +1228,12 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
     raiz.getElementById('ap-rev-confirm').onclick = () => cerrar('confirm');
     raiz.getElementById('ap-rev-skip').onclick = () => cerrar('skip');
   });
+};
+
+// §2.10: pide confirmación antes del clic que envía una postulación de un
+// solo paso. Devuelve 'confirm' o 'skip' (también si vence el tiempo).
+AP.confirmarAntesDeEnviar = function (titulo, contexto, mensaje) {
+  return AP.mostrarRevision(titulo, [], contexto, { mensaje: mensaje });
 };
 
 // ── Mensajería compartida ──────────────────────────────────────────

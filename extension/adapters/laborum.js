@@ -415,6 +415,20 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
 
   if (!AP.activo) return { ok: false, expirada: false };
 
+  // §2.10 (docs/revision-2026-09-16.md): "Postulación rápida" se envía con
+  // este mismo clic y no pasa por ningún formulario, así que con "Revisar
+  // antes de enviar" el visto bueno se pide ANTES. Las que abren el modal de
+  // preguntas ("Postularme") ya tienen su propia revisión más abajo.
+  if (AP.cfg && AP.cfg.modoRevision && n(btn.textContent).includes('postulacion rapida')) {
+    msg('⏸ Revisión pendiente…', '#2563EB');
+    const decision = await AP.confirmarAntesDeEnviar(titulo, extraerTextoAviso(),
+      'Esta oferta se postula con un clic, sin preguntas: al confirmar se envía tu CV. ¿Enviar?');
+    if (decision === 'skip') {
+      addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: 'Saltada en revisión manual' });
+      return { ok: false, expirada: false };
+    }
+  }
+
   btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
   await sleep(400);
   btn.click();

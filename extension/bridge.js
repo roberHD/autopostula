@@ -50,6 +50,20 @@ window.addEventListener('autopostula:conectar', (e) => {
   });
 });
 
+// docs/revision-2026-09-16.md §2.9: un "Sí" en "Por decidir" avisa acá para
+// que la extensión postule lo aprobado ahora, sin esperar a una búsqueda
+// automática (que el plan gratis no tiene). El evento no lleva ninguna oferta:
+// la extensión pide sus aprobadas al backend con su token, así que esta página
+// no puede hacerle abrir una dirección cualquiera.
+window.addEventListener('autopostula:aprobar', () => {
+  chrome.runtime.sendMessage({ type: 'APROBAR_PENDIENTES' }, (respuesta) => {
+    const detail = chrome.runtime.lastError || !respuesta
+      ? { ok: false, motivo: 'extension_no_responde' }
+      : respuesta;
+    window.dispatchEvent(new CustomEvent('autopostula:aprobar-resultado', { detail }));
+  });
+});
+
 // docs/rafagas-y-ponerse-al-dia.md §3.6: el botón "Ponerme al día ahora" del
 // panel viaja igual que "conectar" -- evento del DOM de esta misma página (no
 // postMessage de cualquier origen), y la respuesta vuelve como otro evento.

@@ -11,15 +11,49 @@ const BACKEND_URL = 'https://autopostula.cl';
 
 let queue = [];
 let busy  = false;
+// docs/revision-2026-09-16.md §2.9: una aprobación puede llegar por tres
+// caminos a la vez (el panel, la ráfaga, el chequeo periódico) -- sin esto la
+// misma oferta se abriría y postularía dos veces.
+const decisionesEnCola = new Set();
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Encola las aprobadas de banda gris que todavía no están en la cola. Devuelve
+// cuántas quedaron nuevas.
+function encolarAprobadas(aprobadas) {
+  let nuevas = 0;
+  for (const item of aprobadas || []) {
+    if (!item.url || decisionesEnCola.has(item.id)) continue;
+    decisionesEnCola.add(item.id);
+    queue.push({ url: item.url, titulo: item.titulo, decisionId: item.id, plataforma: item.plataforma });
+    nuevas++;
+  }
+  return nuevas;
+}
 
 async function processQueue() {
   if (busy || !queue.length) return;
   busy = true;
   while (queue.length) {
     const item = queue.shift();
+    // §1.3: lo aprobado a mano también respeta el tope del mes y el portal
+    // conectado -- antes de abrir nada. Sin cupo se corta todo (lo que quede
+    // sigue aprobado en el backend y se reintenta en el próximo ciclo); si es
+    // solo ese portal, se salta esa oferta y se sigue con las demás.
+    if (item.decisionId && item.plataforma) {
+      const verificacion = await puedePostularBackend(item.plataforma);
+      if (!verificacion.permitido) {
+        decisionesEnCola.delete(item.decisionId);
+        if (verificacion.motivo === 'limite') {
+          queue.forEach((q) => q.decisionId && decisionesEnCola.delete(q.decisionId));
+          queue = [];
+          break;
+        }
+        continue;
+      }
+    }
     const resultado = await applyInTab(item.url, item.titulo, item.decisionId);
+    if (item.decisionId) decisionesEnCola.delete(item.decisionId);
     // §8.4/§8.6: si la oferta aprobada en banda gris ya no existe o no tiene
     // botón de postular, se marca EXPIRADA en vez de reintentarla para
     // siempre en cada ciclo -- "silencio ahí sería peor que el error".
@@ -224,6 +258,36 @@ async function actualizarEstadoBackend(datos) {
   }
 }
 
+// docs/revision-2026-09-16.md §2.9: un "Sí" en "Por decidir" se enviaba solo
+// dentro de escanearAutomatico(), que termina de entrada si el plan no permite
+// búsqueda automática (plan gratis, o Premium en pausa): la aprobación no se
+// enviaba nunca y nadie se enteraba. Esto la saca de ahí -- el panel avisa por
+// bridge.js y se postula lo aprobado, con o sin búsqueda automática. Solo
+// depende de tener la extensión conectada y de que la cuenta pueda postular.
+//
+// Las URLs no viajan en el evento del panel: la extensión pide sus aprobadas al
+// backend con su propio token, así que la página no puede mandarle ninguna
+// dirección para que la abra.
+async function procesarAprobadas() {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return { ok: false, motivo: 'sin_token' };
+
+  const { bandaGrisAprobadas } = await actualizarFiltrosDesdeBackend(autopostulaToken);
+  if (!bandaGrisAprobadas.length) return { ok: true, encoladas: 0 };
+
+  // "Solo observar" (o cuenta en modo prueba, §1.2): la aprobación no se
+  // envía todavía -- DO_APPLY se niega por dentro. Se avisa ahora en vez de
+  // abrir pestañas para nada.
+  const { config } = await chrome.storage.local.get('config');
+  if (config && (config.soloObservar || config.postulacionHabilitada === false)) {
+    return { ok: false, motivo: 'solo_observar' };
+  }
+
+  const nuevas = encolarAprobadas(bandaGrisAprobadas);
+  processQueue();
+  return { ok: true, encoladas: nuevas, pendientes: bandaGrisAprobadas.length };
+}
+
 // ── Búsqueda automática en background (premium) ─────────────────
 // Requiere el permiso "alarms" en manifest.json.
 const NOMBRE_ALARMA_AUTOMATICA = 'autopostula-scan';
@@ -280,6 +344,12 @@ retomarORafagaInterrumpida();
 // (un mensaje de un content script, una pestaña) -- colgarlo de más lados
 // abriría una ráfaga cada vez que la persona simplemente navega un portal.
 chrome.runtime.onStartup.addListener(() => quizasRafaga('inicio_chrome'));
+
+// §2.9: lo que se aprobó en el panel desde un celular, o con la extensión
+// apagada, se envía la próxima vez que Chrome abre -- no depende del plan ni
+// de la ráfaga. Es la respuesta a "se enviará cuando abras AutoPostula en tu
+// computador".
+chrome.runtime.onStartup.addListener(() => { procesarAprobadas().catch(() => {}); });
 
 function normalizarParaUrl(texto) {
   return (texto || '')
@@ -419,6 +489,12 @@ async function actualizarFiltrosDesdeBackend(token) {
         // popup) para que la búsqueda automática use el perfil compilado más
         // reciente sin depender de que alguien haya abierto el popup antes.
         scorer: data.scorer || (config && config.scorer) || null,
+        // §1.2: el interruptor de la cuenta se activa desde el panel web. Si
+        // acá no se refrescara, la extensión seguiría en modo prueba hasta que
+        // alguien abriera el popup -- justo lo que nunca pasa en una ráfaga.
+        // `!== false`, como en el popup: un backend viejo que no lo manda no
+        // debe dejar a nadie en modo prueba.
+        postulacionHabilitada: data.postulacionHabilitada !== false,
       }
     });
     // Se devuelve directo (no solo se guarda en storage) para que
@@ -502,9 +578,7 @@ async function escanearAutomatico(disparador) {
   // §8.6: postular lo ya aprobado en banda gris no depende de tener un
   // cargoObjetivo configurado -- cada item ya trae su propia URL concreta,
   // no hace falta armar ninguna búsqueda para llegar a ella.
-  for (const item of bandaGrisAprobadas || []) {
-    queue.push({ url: item.url, titulo: item.titulo, decisionId: item.id });
-  }
+  encolarAprobadas(bandaGrisAprobadas);
   processQueue();
 
   const objetivos = objetivosDeEstado(estado);
@@ -555,7 +629,9 @@ async function escanearAutomatico(disparador) {
   // pegadas para siempre en ENVIADO. escanearMisPostulaciones() (ver
   // adapters/computrabajo.js) se autodispara sola al cargar esta página.
   if (plataformas.includes('Computrabajo')) {
-    pasos.push({ tipo: 'estados', portal: 'Computrabajo', url: 'https://cl.computrabajo.com/candidate/match' });
+    // §8.2 (docs/revision-2026-09-16.md): la página real vive en el subdominio
+    // "candidato." -- la de cl.computrabajo.com/candidate/match da 404.
+    pasos.push({ tipo: 'estados', portal: 'Computrabajo', url: 'https://candidato.cl.computrabajo.com/candidate/match/' });
   }
 
   // Portales conectados pero ninguno con adaptador de búsqueda automática.
@@ -870,6 +946,9 @@ try {
     if (alarm.name === NOMBRE_ALARMA_AUTOMATICA) {
       const retrasoMin = alarm.scheduledTime ? (Date.now() - alarm.scheduledTime) / 60000 : 0;
       quizasRafaga(retrasoMin >= RETRASO_DESPERTAR_MIN ? 'despertar' : 'chequeo');
+      // §2.9: además de la ráfaga, revisa lo aprobado en el panel que aún no
+      // salió -- una ráfaga que no corre (plan gratis) no puede dejarlo varado.
+      procesarAprobadas().catch(() => {});
     } else if (alarm.name === NOMBRE_ALARMA_SEGURO_RAFAGA) {
       pasoTerminado(null);
     } else if (alarm.name === NOMBRE_ALARMA_TOPE_RAFAGA) {
@@ -1060,6 +1139,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'PONERSE_AL_DIA') {
     ponerseAlDia().then(sendResponse).catch((e) => {
       console.warn('[AP] Falló "Ponerme al día ahora":', e);
+      sendResponse({ ok: false, motivo: 'sin_conexion' });
+    });
+    return true;
+  }
+  if (msg.type === 'APROBAR_PENDIENTES') {
+    procesarAprobadas().then(sendResponse).catch((e) => {
+      console.warn('[AP] Falló procesar las aprobadas de "Por decidir":', e);
       sendResponse({ ok: false, motivo: 'sin_conexion' });
     });
     return true;

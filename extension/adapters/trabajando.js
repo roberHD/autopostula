@@ -727,6 +727,17 @@ async function postular(url, id, titulo, decisionOfertaId) {
       return { ok: false, expirada: false };
     }
   } else {
+    // §2.10 (docs/revision-2026-09-16.md): sin preguntas, este es el clic que
+    // envía -- con "Revisar antes de enviar" el visto bueno se pide antes.
+    if (AP.cfg && AP.cfg.modoRevision) {
+      msg('⏸ Revisión pendiente…', '#2563EB');
+      const decision = await AP.confirmarAntesDeEnviar(titulo, contexto,
+        'Esta oferta se postula sin preguntas: al confirmar se envía tu CV. ¿Enviar?');
+      if (decision === 'skip') {
+        addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
+        return { ok: false, expirada: false };
+      }
+    }
     await confirmarPostulacionFinal();
     if (!huboEvidenciaDeExito()) {
       addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se hizo clic en Postular pero el portal nunca confirmó la postulación'});

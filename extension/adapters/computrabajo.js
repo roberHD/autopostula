@@ -555,6 +555,21 @@ async function postular(url, id, titulo, decisionOfertaId) {
   // así que si se lee después, se corre el riesgo de capturar el formulario en vez del aviso.
   const contexto = extraerTextoAviso();
 
+  // §2.10 (docs/revision-2026-09-16.md): con "Revisar antes de enviar" la
+  // revisión de abajo solo existe si hay formulario. Una postulación directa
+  // se envía con este mismo clic, así que el visto bueno se pide ANTES. No se
+  // sabe de antemano cuál de las dos es (el botón es el mismo), por eso el
+  // texto cubre las dos.
+  if (AP.cfg && AP.cfg.modoRevision) {
+    msg('⏸ Revisión pendiente…', '#2563EB');
+    const decision = await AP.confirmarAntesDeEnviar(titulo, contexto,
+      'Vas a postular a esta oferta. Si el portal la deja postular con un clic, se envía apenas confirmes; si tiene preguntas, las revisas antes del envío. ¿Continuar?');
+    if (decision === 'skip') {
+      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
+      return { ok: false, expirada: false };
+    }
+  }
+
   btn.scrollIntoView({behavior:'smooth', block:'center'});
   await sleep(400);
   btn.click();
@@ -875,6 +890,16 @@ function extraerHashOferta(url) {
   return m ? m[1].toUpperCase() : null;
 }
 
+// §8.2 (docs/revision-2026-09-16.md): el texto del estado no siempre tiene la
+// misma clase -- "Postulado"/"En proceso" van en `.fc_link`, pero "Proceso
+// finalizado" va en `p.fc_aux`, así que buscar solo `.fc_link` se saltaba en
+// silencio justo las postulaciones que ya habían avanzado. Lo estable es su
+// posición: el primer <p> del bloque que sigue al ícono de estado.
+function textoDeEstado(box) {
+  const p = box.querySelector('.icon_status ~ div > p') || box.querySelector('.fc_link');
+  return (p ? p.textContent : '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 async function escanearMisPostulaciones() {
   const boxes = document.querySelectorAll('[match-div-offers] .box[data-match]');
   if (!boxes.length) { AP.reportarEscaneoTerminado(); return; }
@@ -888,8 +913,7 @@ async function escanearMisPostulaciones() {
     const externalId = extraerHashOferta(url);
     if (!externalId) continue;
 
-    const estadoTexto = (box.querySelector('.fc_link')?.textContent || '').trim().toLowerCase();
-    const estado = MAPA_ESTADO_COMPUTRABAJO[estadoTexto];
+    const estado = MAPA_ESTADO_COMPUTRABAJO[textoDeEstado(box)];
     if (!estado) continue;
 
     const resultado = await actualizarEstadoPostulacion({
@@ -927,7 +951,14 @@ async function aplicarDirecto(decisionOfertaId) {
 // AUTO_SCAN/DO_APPLY), el MutationObserver que dispara reescaneos, y cargar
 // AP.cfg/active/log/token al iniciar. Acá solo conectamos las funciones de
 // Computrabajo y qué hacer una vez que el estado ya cargó.
-AP.escanear = escanear;
+// En "Mis postulaciones" (candidato.cl.computrabajo.com) no hay tarjetas de
+// ofertas: el escaneo de listados solo diría "Sin tarjetas" y avisaría que
+// terminó antes de que escanearMisPostulaciones() (que arranca en onInit)
+// acabe -- la ráfaga pasaría al siguiente paso con los estados a medias.
+AP.escanear = function () {
+  if (location.pathname.indexOf('/candidate/match') !== -1) return;
+  return escanear();
+};
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function() {
   console.log('[AP-CT] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible);
