@@ -249,12 +249,25 @@ function PasoBienvenida({ onSiguiente, onOmitir }: { onSiguiente: () => void; on
       <Header
         Icon={Sparkles}
         titulo="¡Bienvenido a AutoPostula!"
-        sub="En 4 pasos cortos dejamos todo listo para que la IA empiece a postular por ti con tu información real."
+        sub={`En ${PASOS.length - 1} pasos dejamos todo listo para que la IA empiece a postular por ti con tu información real.`}
       />
       <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} siguienteTexto="Empecemos" />
     </>
   );
 }
+
+type CampoLeido = "nombre" | "telefono" | "comuna" | "expectativaRenta";
+const CAMPOS_LEIDOS: { key: CampoLeido; label: string; placeholder: string; ayuda?: string }[] = [
+  { key: "nombre", label: "Nombre completo", placeholder: "Ej: Camila Soto Pérez" },
+  { key: "telefono", label: "Teléfono", placeholder: "+56 9 1234 5678" },
+  { key: "comuna", label: "Comuna donde vives", placeholder: "Ej: Maipú" },
+  {
+    key: "expectativaRenta",
+    label: "Pretensión de renta",
+    placeholder: "Ej: $650.000 líquidos",
+    ayuda: "Muchos formularios la preguntan. Si la dejas vacía, la IA no inventa una y puede que el envío quede a medias.",
+  },
+];
 
 function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   const [subiendo, setSubiendo] = useState(false);
@@ -264,6 +277,43 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
   const [mensaje, setMensaje] = useState("");
   const [subidoOk, setSubidoOk] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // §4.2 (docs/revision-2026-09-16.md): "La IA completó tu perfil" sin mostrar
+  // qué leyó dejó a una cuenta con el nombre "Roberto Hidalgo Andrés Bizama" y
+  // sin cómo verlo. Acá se muestran los datos que más se usan al responder y se
+  // pueden corregir -- incluida la pretensión de renta, una de las preguntas
+  // más comunes de los formularios, que el CV casi nunca trae.
+  const [datosLeidos, setDatosLeidos] = useState<Record<CampoLeido, string> | null>(null);
+  const [datosEditados, setDatosEditados] = useState(false);
+
+  function mostrarDatos(perfil: Record<string, unknown> | null | undefined) {
+    const texto = (v: unknown) => (typeof v === "string" ? v : "");
+    setDatosLeidos({
+      nombre: texto(perfil?.nombre),
+      telefono: texto(perfil?.telefono),
+      comuna: texto(perfil?.comuna),
+      expectativaRenta: texto(perfil?.expectativaRenta),
+    });
+    setDatosEditados(false);
+  }
+
+  // Solo se manda lo que la persona tocó, y nunca un campo vacío que borre lo
+  // que la IA había leído.
+  async function guardarDatosLeidos() {
+    if (!datosLeidos || !datosEditados) return;
+    const cambios: Record<string, string> = {};
+    for (const campo of CAMPOS_LEIDOS) {
+      if (datosLeidos[campo.key].trim()) cambios[campo.key] = datosLeidos[campo.key].trim();
+    }
+    try {
+      await fetch("/api/perfil", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cambios),
+      });
+    } catch (e) {
+      console.error("No se pudieron guardar las correcciones del perfil:", e);
+    }
+  }
 
   useEffect(() => {
     async function revisarCvExistente() {
@@ -271,7 +321,10 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
         const res = await fetch("/api/perfil");
         if (res.ok) {
           const data = await parsearRespuesta(res);
-          if (data?.nombreArchivo) setNombreArchivo(data.nombreArchivo);
+          if (data?.nombreArchivo) {
+            setNombreArchivo(data.nombreArchivo);
+            mostrarDatos(data);
+          }
         }
       } catch (e) {
         console.error("No se pudo revisar si ya había un CV cargado:", e);
@@ -314,7 +367,8 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(dataAI.datos),
           });
-          setMensaje("Tu CV se subió y la IA completó tu perfil automáticamente.");
+          setMensaje("Tu CV se subió y la IA completó tu perfil. Revisa abajo lo que leyó.");
+          mostrarDatos(dataAI.datos);
         } else {
           setMensaje(dataAI.error || "Tu CV se subió correctamente. Completa tus datos manualmente en tu perfil.");
         }
@@ -372,7 +426,37 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
           {mensaje}
         </div>
       )}
-      <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} />
+      {datosLeidos && (
+        <div style={{ marginTop: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Esto es lo que leímos de tu CV</p>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+            Corrige lo que esté mal: son los datos con los que se responden los formularios.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {CAMPOS_LEIDOS.map((campo) => (
+              <div key={campo.key}>
+                <label className="ap-label" style={{ display: "block", marginBottom: 4 }}>{campo.label}</label>
+                <input
+                  className="ap-input"
+                  value={datosLeidos[campo.key]}
+                  placeholder={campo.placeholder}
+                  onChange={(e) => {
+                    setDatosLeidos({ ...datosLeidos, [campo.key]: e.target.value });
+                    setDatosEditados(true);
+                  }}
+                />
+                {campo.ayuda && (
+                  <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 3 }}>{campo.ayuda}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <Footer
+        onSiguiente={async () => { await guardarDatosLeidos(); onSiguiente(); }}
+        onOmitir={onOmitir}
+      />
     </>
   );
 }
@@ -882,7 +966,7 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
       <Header
         Icon={Puzzle}
         titulo="Instala la extensión"
-        sub="Es la que hace las postulaciones por ti en Computrabajo — sin ella no hay nada que conectar."
+        sub="Es la que hace las postulaciones por ti en Computrabajo, Laborum y Trabajando.com — sin ella no hay nada que conectar."
       />
 
       {extConectada ? (
@@ -1028,12 +1112,16 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
   const [conectadas, setConectadas] = useState<Set<string>>(new Set());
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+  // §4.2: se dice el límite del plan ANTES de que la persona choque con él.
+  // null = sin límite (o todavía no se sabe).
+  const [maxPortales, setMaxPortales] = useState<number | null>(null);
 
   useEffect(() => {
     async function cargar() {
       try {
         const res = await fetch("/api/platform-accounts");
         const data = await parsearRespuesta(res);
+        setMaxPortales(data.maxPlataformasActivas ?? null);
         setPlataformas(data.plataformas ?? []);
         setConectadas(new Set((data.cuentas ?? []).filter((c: any) => c.activa).map((c: any) => c.platformId)));
       } finally {
@@ -1060,7 +1148,15 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
 
   return (
     <>
-      <Header Icon={Globe} titulo="Conecta un portal" sub="Elige dónde quieres que la extensión postule por ti." />
+      <Header
+        Icon={Globe}
+        titulo="Conecta un portal"
+        sub={
+          maxPortales === 1
+            ? "Elige dónde quieres que la extensión postule por ti. Tu plan gratuito conecta un portal a la vez; con Premium puedes tener los tres."
+            : "Elige dónde quieres que la extensión postule por ti."
+        }
+      />
       {cargando ? (
         <p style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Cargando...</p>
       ) : (
@@ -1085,12 +1181,81 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
   );
 }
 
+// Misma normalización que extension/background.js (normalizarParaUrl): la
+// búsqueda que se arma acá tiene que caer en la misma página que la de la
+// extensión.
+function slugDeBusqueda(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+const BUSQUEDA_POR_PORTAL: Record<string, (etiqueta: string, slug: string) => string> = {
+  Computrabajo: (_e, slug) => `https://cl.computrabajo.com/trabajo-de-${slug}`,
+  Laborum: (_e, slug) => `https://www.laborum.cl/empleos-busqueda-${slug}.html`,
+  Trabajando: (etiqueta) => `https://www.trabajando.cl/trabajo-empleo/${encodeURIComponent(etiqueta.toLowerCase())}`,
+};
+
+// §4.2: "¡Todo listo!" sin la acción que da valor. La extensión trabaja
+// DENTRO del portal, así que lo que sigue es abrir el portal con la búsqueda
+// ya armada -- no "ir al dashboard".
 function PasoListo({ onTerminar }: { onTerminar: () => void }) {
+  const [busqueda, setBusqueda] = useState<{ portal: string; etiqueta: string; url: string } | null>(null);
+
+  useEffect(() => {
+    async function cargar() {
+      try {
+        const [resObj, resCuentas] = await Promise.all([fetch("/api/objetivos"), fetch("/api/platform-accounts")]);
+        const objetivos = await parsearRespuesta(resObj);
+        const cuentas = await parsearRespuesta(resCuentas);
+        const etiqueta: string | undefined = objetivos.objetivos?.[0]?.etiqueta ?? objetivos.sugerenciaCv ?? undefined;
+        if (!etiqueta) return;
+        const idsConectados = new Set((cuentas.cuentas ?? []).filter((c: any) => c.activa).map((c: any) => c.platformId));
+        const portal: string | undefined = (cuentas.plataformas ?? []).find(
+          (p: any) => idsConectados.has(p.id) && BUSQUEDA_POR_PORTAL[p.nombre]
+        )?.nombre;
+        if (!portal) return;
+        const slug = slugDeBusqueda(etiqueta);
+        if (!slug) return;
+        setBusqueda({ portal, etiqueta, url: BUSQUEDA_POR_PORTAL[portal](etiqueta, slug) });
+      } catch (e) {
+        console.error("No se pudo armar la búsqueda de cierre del onboarding:", e);
+      }
+    }
+    cargar();
+  }, []);
+
   return (
     <>
-      <Header Icon={CheckCircle2} titulo="¡Todo listo!" sub="Ya puedes ir a tu dashboard — siempre puedes volver a completar tu perfil desde ahí." />
-      <button onClick={onTerminar} className="ap-button" style={{ width: "100%" }}>
-        Ir al dashboard
+      <Header
+        Icon={CheckCircle2}
+        titulo="¡Todo listo!"
+        sub={
+          busqueda
+            ? `Abre ${busqueda.portal} y busca "${busqueda.etiqueta}": la extensión empieza sola.`
+            : "Abre tu portal de empleo con la extensión instalada: empieza sola. Puedes completar tu perfil cuando quieras desde el panel."
+        }
+      />
+      <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 16 }}>
+        Tu cuenta arranca en modo prueba: la extensión mira las ofertas y te muestra a cuáles postularía, pero no envía
+        nada hasta que lo actives desde el panel.
+      </p>
+      {busqueda && (
+        <a
+          href={busqueda.url}
+          target="_blank"
+          rel="noreferrer"
+          className="ap-button"
+          style={{ display: "block", width: "100%", textAlign: "center", marginBottom: 10, textDecoration: "none" }}
+        >
+          Abrir {busqueda.portal} con tu búsqueda ↗
+        </a>
+      )}
+      <button onClick={onTerminar} className={busqueda ? "ap-button-ghost" : "ap-button"} style={{ width: "100%" }}>
+        Ir al panel
       </button>
     </>
   );

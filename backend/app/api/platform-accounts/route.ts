@@ -94,7 +94,9 @@ export async function POST(request: Request) {
   if (limite !== null && activasActuales >= limite) {
     return NextResponse.json(
       {
-        error: `Tu plan permite ${limite} portal(es) activo(s) a la vez. Desconecta uno o mejora tu plan.`,
+        error: limite === 1
+          ? "Tu plan gratuito conecta un portal a la vez. Desconecta el que ya tienes o pasa a Premium para usar los tres."
+          : `Tu plan permite ${limite} portales activos a la vez. Desconecta uno o mejora tu plan.`,
       },
       { status: 403 }
     );

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ShieldCheck, KeyRound, Eye, EyeOff, Copy, Check, RefreshCw, Plug, PlugZap } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ShieldCheck, KeyRound, Eye, EyeOff, Copy, Check, RefreshCw, Plug, PlugZap, Puzzle } from "lucide-react";
+import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 
 type Plataforma = { id: string; nombre: string; urlBase: string };
 type Cuenta = {
@@ -34,6 +35,11 @@ export default function PortalesPage() {
   const [copiado, setCopiado] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [cargando, setCargando] = useState(true);
+  // §4.4 (docs/revision-2026-09-16.md): reconectar la extensión sin copiar el
+  // token a mano. `null` = todavía detectando si está instalada.
+  const [extensionPresente, setExtensionPresente] = useState<boolean | null>(null);
+  const [conexion, setConexion] = useState<{ estado: "libre" | "conectando" | "ok" | "error"; texto?: string }>({ estado: "libre" });
+  const temporizadorConexion = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function cargar() {
     try {
@@ -69,6 +75,69 @@ export default function PortalesPage() {
     cargar();
     cargarToken();
   }, []);
+
+  // Mismos eventos que usa el onboarding (extension/bridge.js): la marca en el
+  // DOM avisa si la extensión está, y "conectado"/"error-conexion" responden al
+  // pedido de conectar.
+  useEffect(() => {
+    const limpiarTemporizador = () => {
+      if (temporizadorConexion.current) clearTimeout(temporizadorConexion.current);
+    };
+    const alDetectar = () => setExtensionPresente(true);
+    const alConectar = () => {
+      limpiarTemporizador();
+      setConexion({ estado: "ok", texto: "Listo: la extensión quedó conectada a esta cuenta." });
+    };
+    const alFallar = (e: Event) => {
+      limpiarTemporizador();
+      const detalle = (e as CustomEvent).detail;
+      setConexion({ estado: "error", texto: detalle?.error ?? "No se pudo conectar la extensión." });
+    };
+    window.addEventListener("autopostula:extension-presente", alDetectar);
+    window.addEventListener("autopostula:conectado", alConectar);
+    window.addEventListener("autopostula:error-conexion", alFallar);
+    if (document.documentElement.dataset.autopostulaExtension) {
+      alDetectar();
+    } else {
+      window.dispatchEvent(new CustomEvent("autopostula:ping"));
+    }
+    const t = setTimeout(() => setExtensionPresente((v) => (v === null ? false : v)), 700);
+    return () => {
+      window.removeEventListener("autopostula:extension-presente", alDetectar);
+      window.removeEventListener("autopostula:conectado", alConectar);
+      window.removeEventListener("autopostula:error-conexion", alFallar);
+      clearTimeout(t);
+      limpiarTemporizador();
+    };
+  }, []);
+
+  async function conectarExtension() {
+    setConexion({ estado: "conectando" });
+    let t = token;
+    if (!t) {
+      try {
+        const res = await fetch("/api/account/token", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.apiToken) {
+          setConexion({ estado: "error", texto: data.error ?? "No se pudo generar el token." });
+          return;
+        }
+        t = data.apiToken as string;
+        setToken(t);
+      } catch {
+        setConexion({ estado: "error", texto: "No pudimos conectar con el servidor." });
+        return;
+      }
+    }
+    window.dispatchEvent(new CustomEvent("autopostula:conectar", { detail: { token: t } }));
+    temporizadorConexion.current = setTimeout(() => {
+      setConexion((c) =>
+        c.estado === "conectando"
+          ? { estado: "error", texto: "La extensión no respondió. Recarga la página e inténtalo de nuevo." }
+          : c
+      );
+    }, 4000);
+  }
 
   async function conectar(platformId: string) {
     setMensaje("");
@@ -274,6 +343,61 @@ export default function PortalesPage() {
         </div>
       )}
 
+      {/* §4.4: reconectar la extensión con un clic */}
+      <div
+        style={{
+          display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 14,
+          background: "var(--bg-elevated)", border: "1px solid var(--border)",
+          borderRadius: "var(--radius)", padding: 18,
+        }}
+      >
+        <div
+          style={{
+            width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+            background: "var(--accent)", color: "var(--accent-contrast)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <Puzzle size={17} />
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h3 style={{ fontSize: 13.5, fontWeight: 600 }}>Conectar esta extensión</h3>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, marginBottom: 12, lineHeight: 1.5 }}>
+            Si reinstalaste la extensión, cambiaste de computador o de cuenta, conéctala de nuevo con un clic —
+            sin copiar nada.
+          </p>
+          {extensionPresente === false ? (
+            <a
+              className="ap-button-ghost"
+              href={URL_CHROME_WEB_STORE}
+              target="_blank"
+              rel="noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <Puzzle size={14} /> No detectamos la extensión: instalarla desde Chrome Web Store
+            </a>
+          ) : (
+            <button
+              className="ap-button-ghost"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              onClick={conectarExtension}
+              disabled={extensionPresente === null || conexion.estado === "conectando"}
+            >
+              <PlugZap size={14} />
+              {conexion.estado === "conectando" ? "Conectando..." : "Conectar esta extensión"}
+            </button>
+          )}
+          {conexion.texto && (
+            <p
+              role="status"
+              style={{ fontSize: 12.5, marginTop: 10, color: conexion.estado === "error" ? "var(--status-rechazado)" : "var(--text)" }}
+            >
+              {conexion.texto}
+            </p>
+          )}
+        </div>
+      </div>
+
       {/* Token de la extensión */}
       <div
         style={{
@@ -294,7 +418,7 @@ export default function PortalesPage() {
         <div style={{ minWidth: 0, flex: 1 }}>
           <h3 style={{ fontSize: 13.5, fontWeight: 600 }}>Token de la extensión</h3>
           <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, marginBottom: 14, lineHeight: 1.5 }}>
-            Normalmente no necesitas esto — la extensión se conecta sola desde el onboarding. Úsalo solo si tienes que reconectarla a mano.
+            Normalmente no necesitas esto: usa "Conectar esta extensión" más arriba. El token es solo para reconectarla a mano si eso no funciona.
           </p>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
