@@ -95,6 +95,15 @@ export default function PrivacidadPage() {
         </li>
         <li>Estado de cada postulación y su historial de cambios.</li>
         <li>Registro de las llamadas a la IA realizadas, para controlar los límites de tu plan.</li>
+        <li>
+          El registro de cada puesta al día automática (ver 6): cuándo empezó y terminó, qué la
+          disparó y cuántas ofertas postuló, descartó o dejó esperando tu decisión. También cuándo
+          conectaste la extensión.
+        </li>
+        <li>
+          En el plan gratuito, cuántas de tus 5 postulaciones automáticas de prueba te quedan y
+          cuáles fueron.
+        </li>
       </ul>
 
       <h3>2.5 Ofertas que la extensión revisa</h3>
@@ -242,6 +251,20 @@ export default function PrivacidadPage() {
           <tr>
             <td>Historial de postulaciones</td>
             <td>Mostrarte tu actividad y evitar postular dos veces a lo mismo.</td>
+          </tr>
+          <tr>
+            <td>Registro de puestas al día y fecha en que conectaste la extensión</td>
+            <td>
+              Mostrarte cuándo se puso al día por última vez y cuánto suele tardar. Con Premium,
+              además, avisarte por correo si lleva 48 horas o más sin hacerlo (ver 6).
+            </td>
+          </tr>
+          <tr>
+            <td>Tus postulaciones automáticas de prueba</td>
+            <td>
+              Contar las 5 de la prueba gratuita, mostrártelas y avisarte por correo cuando la
+              prueba termina.
+            </td>
           </tr>
           <tr>
             <td>Registro de uso de IA</td>
@@ -404,12 +427,43 @@ export default function PrivacidadPage() {
         La extensión solo se puede conectar a tu cuenta después de que confirmes tu correo
         electrónico.
       </p>
-      <h3>Búsqueda automática</h3>
+      <h3>Puesta al día automática</h3>
       <p>
-        Si activas la búsqueda automática, la extensión abre cada dos horas una pestaña en segundo
-        plano con los resultados de búsqueda de los portales que conectaste, revisa las ofertas
-        nuevas, postula a las que calzan con tu perfil de búsqueda y cierra la pestaña sola.
-        Puedes desactivarla en cualquier momento desde el panel de la extensión o desde tu cuenta.
+        Si tu plan la incluye (Premium, o la prueba de 5 postulaciones automáticas del plan
+        gratuito) y no la pausaste, la extensión se pone al día sola, en tandas: cuando abres
+        Chrome, cuando el computador despierta, en una revisión periódica mientras Chrome está
+        abierto, cuando activas la postulación desde tu panel y cuando aprietas &ldquo;Ponerme al
+        día ahora&rdquo; (solo Premium). Sin que lo pidas tú, no hace más de una tanda cada unas
+        3 horas.
+      </p>
+      <p>
+        En cada tanda la extensión abre pestañas en segundo plano, <strong>de a una</strong>, con
+        los resultados de búsqueda de los portales que conectaste (y, en Computrabajo, la página de
+        &ldquo;Mis postulaciones&rdquo; para actualizar el estado de las que ya enviaste), revisa
+        las ofertas nuevas, postula a las que calzan con tu perfil de búsqueda y cierra cada
+        pestaña sola. Antes de buscar, envía las ofertas que aprobaste y estaban esperando (ver más
+        abajo).
+      </p>
+      <p>
+        <strong>
+          Mientras dura una tanda, la extensión evita que tu computador se suspenda por
+          inactividad
+        </strong>
+        , con un tope de 25 minutos, y lo libera apenas termina. No impide que la pantalla se
+        apague ni que el computador se suspenda si cierras la tapa o lo apagas tú.
+      </p>
+      <p>
+        Puedes pausarla en cualquier momento desde el panel de la extensión o desde tu cuenta. En
+        el plan gratuito, fuera de esa prueba, la extensión no busca ofertas por sí sola: actúa
+        cuando entras tú a un portal, o cuando apruebas una oferta que quedó esperando tu decisión.
+      </p>
+      <h3>Recordatorios por correo</h3>
+      <p>
+        Si tienes Premium y la extensión lleva 48 horas o más sin ponerse al día, te podemos
+        mandar un correo para recordártelo: uno cada 72 horas como máximo, y ninguno pasados 14
+        días. Para eso guardamos cuándo terminó la última puesta al día y cuándo conectaste la
+        extensión. Cada correo trae un enlace para dejar de recibirlos, que funciona sin iniciar
+        sesión.
       </p>
       <h3>Ofertas que quedan esperando tu decisión</h3>
       <p>
@@ -435,6 +489,10 @@ export default function PrivacidadPage() {
         <li>
           <strong>Las ofertas revisadas a las que nunca postulaste</strong> y sobre las que no
           tomaste una decisión (ver 2.5) se eliminan a los <strong>90 días</strong>.
+        </li>
+        <li>
+          <strong>El registro de cada puesta al día automática</strong> (ver 2.4) se elimina a los{" "}
+          <strong>90 días</strong>.
         </li>
         <li>
           <strong>Las ofertas que quedan esperando tu decisión</strong> vencen a los 7 días si no

@@ -10,7 +10,8 @@ type Fila = { texto: string; free: string | boolean; premium: string | boolean }
 const FILAS: Fila[] = [
   { texto: "Postulaciones por mes", free: "20", premium: "80" },
   { texto: "Portales conectados a la vez", free: "1", premium: "Todos" },
-  { texto: "Búsqueda y postulación automática", free: false, premium: true },
+  { texto: "Postulaciones automáticas (sin entrar al portal)", free: "Prueba de 5", premium: true },
+  { texto: "Se pone al día sola al abrir tu computador", free: false, premium: true },
   { texto: "Seguir conversando con la IA para afinar tu perfil", free: false, premium: true },
   { texto: "Calibración de estilo completa (6 preguntas)", free: false, premium: true },
   { texto: "Instrucciones personalizadas en Entrenar IA", free: false, premium: true },
@@ -134,7 +135,7 @@ export default function PremiumPage() {
             Ya eres {planNombre ?? "Premium"}
           </h2>
           <p style={{ fontSize: 13.5, color: "var(--text-muted)", maxWidth: 420, margin: "0 auto 18px" }}>
-            80 postulaciones al mes, búsqueda automática, calibración completa y todo lo demás ya
+            80 postulaciones al mes, se pone al día sola al abrir tu computador, calibración completa y todo lo demás ya
             está activo en tu cuenta. No se renueva solo: al vencer vuelves al plan gratuito, sin perder
             tu historial ni tu perfil.
           </p>
@@ -173,7 +174,7 @@ export default function PremiumPage() {
         </div>
         <h1 className="ap-page-title" style={{ fontSize: 26 }}>Postula más rápido, sin límites de siempre</h1>
         <p className="ap-page-sub" style={{ maxWidth: 480, margin: "0 auto" }}>
-          Deja que la IA busque y postule sola mientras tú te enfocas en las entrevistas.
+          Deja que AutoPostula se ponga al día sola cada vez que abres tu computador, mientras tú te enfocas en las entrevistas.
         </p>
       </div>
 

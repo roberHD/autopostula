@@ -324,7 +324,7 @@ export default function InicioPage() {
   const asistenteActivo = estadoAuto ? estadoAuto.activa : datos.portalesActivos > 0;
   const totalPrueba = estadoAuto?.pruebaTotal ?? PRUEBA_TOTAL;
   const textoInactivo: Record<string, { t: string; d: string; href?: string; cta?: string; extra?: { href: string; cta: string } }> = {
-    pausada: { t: "Tu búsqueda automática está en pausa", d: "Reanúdala desde la barra de arriba y vuelve a postular sola." },
+    pausada: { t: "Tu búsqueda automática está en pausa", d: "Reanúdala desde la barra de arriba y vuelve a ponerse al día sola." },
     // §4.1: la prueba se demuestra con resultados concretos -- "Ver las 5" lleva
     // al historial filtrado, y las dos salidas (Premium, o entrar a mano a un
     // portal) se dicen sin rodeos.

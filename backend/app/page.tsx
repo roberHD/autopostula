@@ -13,7 +13,7 @@ import "./landing.css";
 export const metadata: Metadata = {
   title: "Postula 80 veces al mes. Escribe una sola.",
   description:
-    "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo, Laborum y Trabajando.com con tus palabras. Tú revisas y envías, o lo dejas corriendo solo.",
+    "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo, Laborum y Trabajando.com con tus palabras. Tú revisas y envías, o deja que se ponga al día sola cada vez que abres tu computador.",
 };
 
 const PORTALES = ["Computrabajo", "Laborum", "Trabajando.com"];
@@ -30,7 +30,7 @@ const PASOS = [
   },
   {
     titulo: "Define qué te sirve",
-    desc: "Rubro, comuna, jornada y sueldo mínimo. De ahí en adelante postula sola y tú revisas el historial.",
+    desc: "Rubro, comuna, jornada y sueldo mínimo. De ahí en adelante la extensión postula por ti y tú revisas el historial.",
   },
 ];
 
@@ -53,14 +53,15 @@ const SEMANA = [
 const PLAN_LIBRE = [
   "20 postulaciones al mes",
   "Un portal conectado a la vez",
-  "Postulación asistida: la IA responde, tú envías",
+  "Entras al portal y la extensión postula por ti",
+  "Prueba: 5 postulaciones automáticas",
 ];
 
 const PLAN_PRO = [
   "80 postulaciones al mes",
   "Sin renovación automática: pagas solo cuando lo necesitas",
   "Los tres portales conectados a la vez",
-  "Busca y postula sola, según tus filtros",
+  "Se pone al día sola cada vez que abres tu computador",
   "Perfil dinámico e instrucciones propias",
 ];
 
@@ -106,7 +107,7 @@ export default function LandingPage() {
 
               <p className="lp-hero__sub lp-rise lp-rise--3">
                 AutoPostula lee tu CV, aprende cómo escribes y responde cada formulario con tus
-                palabras y tu experiencia real. Tú revisas y envías, o lo dejas corriendo solo.
+                palabras y tu experiencia real. Tú revisas y envías, o deja que se ponga al día sola cada vez que abres tu computador.
               </p>
 
               <div className="lp-hero__cta lp-rise lp-rise--4">
@@ -299,7 +300,7 @@ export default function LandingPage() {
             <Revelar className="lp-head">
               <div className="lp-head__rule" />
               <h2>Precios simples.</h2>
-              <p>Empieza gratis. Pasa a Premium cuando quieras que postule sola.</p>
+              <p>Empieza gratis. Pasa a Premium cuando quieras que se ponga al día sola.</p>
             </Revelar>
 
             <Revelar className="lp-planes" retraso={1}>
