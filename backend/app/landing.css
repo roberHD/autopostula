@@ -21,6 +21,67 @@
 .lp-band--tight { padding-block: clamp(40px, 5vw, 64px); }
 .lp-band--sheet { background: var(--bg-elevated); border-block: 1px solid var(--border); }
 
+/* ── Fondo de papeleo ─────────────────────────────────────────────
+   Formularios, avisos y estados reales, desvanecidos y moviéndose más
+   lento que la página. Es textura hecha del material del producto: si
+   fueran rectángulos genéricos sería decoración y daría lo mismo.
+   Asoman desde los bordes para no competir nunca con el texto. */
+
+.lp-papeleo {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* Se apaga hacia el centro, donde vive todo lo que hay que leer. */
+  mask-image: radial-gradient(120% 80% at 50% 40%, transparent 30%, #000 78%);
+  -webkit-mask-image: radial-gradient(120% 80% at 50% 40%, transparent 30%, #000 78%);
+}
+@media (max-width: 900px) { .lp-papeleo { display: none; } }
+
+.lp-fantasma {
+  position: absolute;
+  width: 300px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  opacity: 0;
+  transition: opacity 0.9s var(--ease);
+}
+.lp-fantasma.is-visible { opacity: 0.42; }
+.lp-fantasma__q { font-size: 11.5px; color: var(--text-muted); margin-bottom: 7px; }
+.lp-fantasma__campo {
+  height: 34px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lp-fantasma__fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lp-fantasma__cargo { font-size: 12.5px; font-weight: 700; color: var(--text-muted); }
+.lp-fantasma__meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.lp-fantasma__chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex: none;
+}
+.lp-fantasma__casilla { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-muted); }
+.lp-fantasma__casilla i { width: 13px; height: 13px; border: 1px solid var(--border-strong); border-radius: 3px; flex: none; }
+
+/* Todo el contenido va encima del papeleo. */
+.lp-encima { position: relative; z-index: 1; }
+
 /* ── Nav ─────────────────────────────────────────────────────────── */
 
 .lp-nav {
@@ -66,7 +127,7 @@
 
 /* En angosto se esconden los anchors de sección: si no, el nav no entra en
    una fila y desborda toda la página (pasaba en 375px). */
-@media (max-width: 760px) { .lp-navlink--anchor { display: none; } }
+@media (max-width: 900px) { .lp-navlink--anchor { display: none; } }
 
 /* Bajo 440px tampoco entra "marca + Iniciar sesión + Crear cuenta": el botón
    quedaba cortado contra el borde. Se saca el nombre de la marca y queda solo
@@ -83,15 +144,15 @@
 .lp-hero { padding-block: clamp(48px, 7vw, 88px) clamp(56px, 7vw, 96px); }
 .lp-hero__grid {
   display: grid;
-  gap: clamp(40px, 5vw, 72px);
-  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  gap: clamp(40px, 5vw, 64px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
 }
 @media (max-width: 940px) { .lp-hero__grid { grid-template-columns: 1fr; } }
 
 /* El titular no lleva destacador: lleva contraste de pesos. Un color
    sobre una palabra es el recurso de todas las paginas del rubro. */
-.lp-hero h1 { font-size: clamp(36px, 5.4vw, 62px); font-variation-settings: "wdth" 100; }
+.lp-hero h1 { font-size: clamp(36px, 5.2vw, 60px); font-variation-settings: "wdth" 100; }
 .lp-hero h1 .lp-fino {
   display: block;
   font-weight: 300;
@@ -100,25 +161,6 @@
 }
 
 .lp-head h2 .lp-fino { font-weight: 300; color: var(--text-muted); }
-
-.lp-flag {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 12.5px;
-  font-weight: 600;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  padding: 6px 12px 6px 8px;
-  border-radius: 999px;
-  margin-bottom: 22px;
-}
-.lp-flag i {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
-}
 
 .lp-hero__sub {
   margin-top: 22px;
@@ -159,9 +201,11 @@
 .lp-rise--5 { animation-delay: 0.38s; }
 @keyframes lp-rise { to { opacity: 1; transform: none; } }
 
-/* ── La ficha (demo del autorrelleno) ────────────────────────────── */
+/* ── La mesa (el producto decidiendo) ─────────────────────────────
+   Antes acá había una ficha que se llenaba sola: mostraba que escribe,
+   que es lo que vende toda la competencia. Esto muestra que decide. */
 
-.lp-ficha {
+.lp-mesa {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -173,7 +217,7 @@
   animation: lp-rise 0.7s 0.42s var(--ease) forwards;
 }
 
-.lp-ficha__bar {
+.lp-mesa__bar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -182,8 +226,9 @@
   background: var(--bg-elevated-2);
 }
 .lp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); flex: none; }
-.lp-ficha__url {
+.lp-mesa__url {
   margin-left: 6px;
+  min-width: 0;
   font-size: 11.5px;
   color: var(--text-muted);
   background: var(--bg);
@@ -194,7 +239,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.lp-ficha__badge {
+.lp-mesa__estado {
   margin-left: auto;
   flex: none;
   display: inline-flex;
@@ -202,120 +247,80 @@
   gap: 6px;
   font-size: 11px;
   font-weight: 700;
-  color: var(--accent);
-  background: var(--accent-soft);
   padding: 4px 9px;
   border-radius: 999px;
+  border: 1px solid var(--border-strong);
 }
-.lp-ficha__badge i {
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: lp-pulse 1.6s ease-in-out infinite;
-}
+.lp-mesa__estado i { width: 6px; height: 6px; border-radius: 50%; background: var(--marker); flex: none; }
+.lp-mesa.is-corriendo .lp-mesa__estado i { animation: lp-pulse 1.3s ease-in-out infinite; }
 @keyframes lp-pulse { 50% { opacity: 0.25; transform: scale(0.7); } }
 
-.lp-ficha__body { padding: 20px 20px 22px; }
-
-.lp-aviso {
+.lp-mesa__head {
   display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 12px;
-  align-items: flex-start;
-  padding-bottom: 16px;
-  border-bottom: 1px dashed var(--border);
+  padding: 16px 18px 10px;
 }
-.lp-aviso__logo {
-  width: 38px; height: 38px;
-  flex: none;
-  border-radius: 9px;
-  background: var(--accent-soft);
-  color: var(--accent);
+.lp-mesa__t { font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em; }
+.lp-mesa__c { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+.lp-mesa__lista { list-style: none; margin: 0; padding: 0 10px; display: grid; gap: 2px; }
+.lp-of {
   display: grid;
-  place-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 8px;
+  border-radius: 9px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.25s ease;
+}
+.lp-of:last-child { border-bottom: 0; }
+.lp-of.is-leyendo { background: var(--bg-elevated-2); }
+.lp-of__t { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-of__m { font-size: 12px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-of--fuera .lp-of__t { color: var(--text-muted); font-weight: 500; }
+
+.lp-veredicto {
+  justify-self: end;
+  text-align: right;
+  min-width: 124px;
+  transition: opacity 0.3s ease, transform 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.lp-of.is-pendiente .lp-veredicto { opacity: 0; transform: scale(0.85) translateX(6px); }
+.lp-veredicto__v { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.lp-veredicto__v i { width: 7px; height: 7px; border-radius: 50%; flex: none; background: currentColor; }
+.lp-veredicto__r { display: block; font-size: 11.5px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; }
+.lp-v--sirve { color: var(--ok); }
+.lp-v--decide { color: var(--warn); }
+.lp-v--fuera { color: var(--text-muted); }
+
+.lp-mesa__pie {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.lp-pila { padding: 14px 16px 16px; }
+.lp-pila + .lp-pila { border-left: 1px solid var(--border); }
+.lp-pila__n {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--ff-display);
   font-variation-settings: "wdth" 100;
+  font-size: 24px;
   font-weight: 800;
-  font-size: 15px;
+  letter-spacing: -0.03em;
 }
-.lp-aviso__t { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.lp-aviso__m { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.lp-pila__n i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.lp-pila__l { font-size: 12.5px; font-weight: 600; margin-top: 2px; }
+.lp-pila__d { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; line-height: 1.45; }
 
-.lp-campo { margin-top: 18px; }
-.lp-campo__q { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-.lp-campo__box {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-elevated-2);
-  padding: 12px 13px;
-  min-height: 104px;
-  font-size: 13.5px;
-  line-height: 1.6;
-  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
-}
-.lp-campo__box.is-live {
-  border-color: var(--accent);
-  background: var(--bg-elevated);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.lp-caret {
-  display: inline-block;
-  width: 2px; height: 1.05em;
-  vertical-align: -2px;
-  background: var(--accent);
-  margin-left: 1px;
-  animation: lp-blink 1s steps(1) infinite;
-}
-@keyframes lp-blink { 50% { opacity: 0; } }
-
-.lp-pensando { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted); }
-.lp-pensando > span {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: lp-bob 1s ease-in-out infinite;
-}
-.lp-pensando > span:nth-child(2) { animation-delay: 0.13s; }
-.lp-pensando > span:nth-child(3) { animation-delay: 0.26s; }
-@keyframes lp-bob {
-  0%, 100% { transform: translateY(0); opacity: 0.4; }
-  50%      { transform: translateY(-4px); opacity: 1; }
-}
-
-.lp-check { display: flex; align-items: center; gap: 9px; margin-top: 14px; font-size: 13px; color: var(--text-muted); }
-.lp-check__box {
-  width: 17px; height: 17px;
-  flex: none;
-  border-radius: 5px;
-  border: 1.6px solid var(--border-strong);
-  background: var(--bg-elevated);
-  display: grid;
-  place-items: center;
-  transition: background 0.25s ease, border-color 0.25s ease,
-              transform 0.25s cubic-bezier(0.2, 1.5, 0.4, 1);
-}
-.lp-check__box svg { width: 11px; height: 11px; opacity: 0; transition: opacity 0.2s 0.08s ease; }
-.lp-check.is-on { color: var(--text); }
-.lp-check.is-on .lp-check__box {
-  background: var(--accent);
-  border-color: var(--accent);
-  transform: scale(1.12);
-}
-.lp-check.is-on .lp-check__box svg { opacity: 1; color: var(--accent-contrast); }
-
-.lp-ficha__foot { display: flex; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
-.lp-ficha__pie { font-size: 12px; color: var(--text-muted); }
-
-.lp-spinner {
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--accent-contrast) 35%, transparent);
-  border-top-color: var(--accent-contrast);
-  animation: lp-spin 0.7s linear infinite;
-}
-@keyframes lp-spin { to { transform: rotate(360deg); } }
-
-.lp-replay {
+.lp-mesa__foot { display: flex; align-items: center; gap: 12px; padding: 0 16px 14px; min-height: 44px; }
+.lp-mesa__nota { font-size: 11.5px; color: var(--text-muted); }
+.lp-repetir {
   margin-left: auto;
   flex: none;
   background: var(--bg-elevated);
@@ -327,36 +332,17 @@
   padding: 6px 10px;
   border-radius: 7px;
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
-.lp-replay:hover { color: var(--text); border-color: var(--text); transform: translateY(-1px); }
+.lp-repetir:hover { color: var(--text); border-color: var(--text); transform: translateY(-1px); }
 
-.lp-stamp {
-  position: absolute;
-  right: 22px; bottom: 78px;
-  z-index: 2;
-  font-family: var(--ff-display);
-  font-variation-settings: "wdth" 100;
-  font-weight: 800;
-  font-size: 15px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ok);
-  border: 2.5px solid var(--ok);
-  border-radius: 7px;
-  padding: 5px 11px;
-  opacity: 0;
-  transform: rotate(-14deg) scale(1.9);
-  pointer-events: none;
-}
-.lp-stamp.is-on { animation: lp-stamp 0.42s cubic-bezier(0.2, 0.9, 0.3, 1) forwards; }
-@keyframes lp-stamp {
-  0%   { opacity: 0; transform: rotate(-14deg) scale(1.9); }
-  60%  { opacity: 1; transform: rotate(-14deg) scale(0.94); }
-  100% { opacity: 0.92; transform: rotate(-14deg) scale(1); }
+@media (max-width: 520px) {
+  .lp-mesa__pie { grid-template-columns: 1fr; }
+  .lp-pila + .lp-pila { border-left: 0; border-top: 1px solid var(--border); }
+  .lp-pila { display: grid; grid-template-columns: 58px 1fr; align-items: center; column-gap: 10px; padding-block: 12px; }
+  .lp-pila__n { grid-row: span 2; }
+  .lp-veredicto { min-width: 0; }
+  .lp-veredicto__r { white-space: normal; }
 }
 
 /* ── Franja de portales ────────────────────────────────────────────
@@ -407,6 +393,38 @@
   line-height: 1.65;
 }
 
+/* ── Siempre / nunca ──────────────────────────────────────────────
+   Un reglamento en dos columnas. Sin íconos ni tarjetas: cuatro
+   promesas con ícono en fila es el recurso de todas las páginas del
+   rubro, y acá lo que importa es que cada regla sea verificable. */
+
+.lp-reglas { display: grid; grid-template-columns: 1fr 1fr; gap: 0 clamp(28px, 5vw, 64px); }
+@media (max-width: 820px) { .lp-reglas { grid-template-columns: 1fr; gap: 36px; } }
+
+.lp-reglas__col h3 {
+  font-family: var(--ff-body);
+  font-variation-settings: normal;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-strong);
+}
+.lp-regla {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 4px 12px;
+}
+.lp-regla__s { font-family: var(--ff-display); font-weight: 800; font-size: 15px; line-height: 1.35; }
+.lp-reglas__col--si .lp-regla__s { color: var(--ok); }
+.lp-reglas__col--no .lp-regla__s { color: var(--text-muted); }
+.lp-regla__t { font-size: 16px; font-weight: 600; line-height: 1.4; letter-spacing: -0.005em; }
+.lp-regla__d { grid-column: 2; font-size: 14px; color: var(--text-muted); line-height: 1.6; max-width: 46ch; }
+
 /* ── Antes / después ─────────────────────────────────────────────── */
 
 .lp-versus { display: grid; gap: 22px; grid-template-columns: 1fr 1fr; align-items: start; }
@@ -437,10 +455,106 @@
 .lp-hoja--tuya .lp-fuente svg { color: var(--marker-deep); }
 .lp-hoja--gris .lp-fuente { border-top-color: var(--border-strong); }
 
+/* ── Perfil y conversación ────────────────────────────────────────
+   De dónde sale lo que la IA escribe: un perfil con el origen de cada
+   dato, y la conversación que lo completa cuando falta algo. */
+
+.lp-perfil { display: grid; gap: 22px; grid-template-columns: 1fr 1fr; align-items: stretch; }
+@media (max-width: 880px) { .lp-perfil { grid-template-columns: 1fr; } }
+
+.lp-tarjeta {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sheet);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.lp-tarjeta__bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated-2);
+}
+.lp-tarjeta__t { font-size: 13.5px; font-weight: 700; }
+.lp-tarjeta__m { font-size: 12px; color: var(--text-muted); }
+
+.lp-campos { margin: 0; padding: 6px 18px 18px; }
+.lp-campo-fila {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+}
+.lp-campo-fila:last-child { border-bottom: 0; }
+.lp-campo-fila dt { font-size: 12.5px; color: var(--text-muted); }
+.lp-campo-fila dd { margin: 0; font-size: 14px; line-height: 1.5; }
+.lp-origen {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+@media (max-width: 420px) {
+  .lp-campo-fila { grid-template-columns: 1fr; gap: 3px; }
+}
+
+/* El hilo de la conversación. Mismo trato que en el panel: la IA en
+   gris, tú en citrón — se distingue de un vistazo quién dijo qué. */
+/* El hilo se centra: al lado del perfil, que es más largo, si se apoyaba
+   arriba quedaba un hueco grande debajo de la última burbuja. */
+.lp-hilo { padding: 18px; display: grid; gap: 12px; flex-grow: 1; align-content: center; }
+.lp-burbuja { display: flex; align-items: flex-end; gap: 8px; }
+.lp-burbuja[data-de="ia"] { justify-content: flex-start; }
+.lp-burbuja[data-de="tu"] { justify-content: flex-end; }
+.lp-burbuja__quien {
+  width: 26px; height: 26px;
+  flex: none;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.lp-burbuja[data-de="ia"] .lp-burbuja__quien { background: var(--accent); color: var(--accent-contrast); }
+.lp-burbuja[data-de="tu"] .lp-burbuja__quien { background: var(--marker); color: var(--on-marker); }
+.lp-burbuja__texto {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.lp-burbuja[data-de="ia"] .lp-burbuja__texto {
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.lp-burbuja[data-de="tu"] .lp-burbuja__texto {
+  background: var(--marker);
+  color: var(--on-marker);
+  font-weight: 500;
+  border-bottom-right-radius: 4px;
+}
+.lp-hilo__pie {
+  margin-top: auto;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
 /* ── Pasos (sí es una secuencia, por eso van numerados) ──────────── */
 
 .lp-pasos { display: grid; gap: 26px; grid-template-columns: repeat(3, 1fr); }
-@media (max-width: 820px) { .lp-pasos { grid-template-columns: 1fr; gap: 20px; } }
+@media (max-width: 820px) { .lp-pasos { grid-template-columns: 1fr; gap: 28px; } }
 
 .lp-paso { position: relative; padding-top: 26px; }
 .lp-paso__line {
@@ -484,82 +598,12 @@
 .is-in .lp-paso:nth-child(2) .lp-paso__n { transition-delay: 0.5s; }
 .is-in .lp-paso:nth-child(3) .lp-paso__n { transition-delay: 0.8s; }
 
-.lp-paso h3 { margin-top: 18px; font-size: clamp(17px, 1.6vw, 20px); }
+/* Casi todo el tráfico llega por celular, y la extensión pide computador:
+   cada paso dice dónde se hace antes de decir qué es. */
+.lp-paso__donde { display: block; margin-top: 18px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.lp-paso h3 { margin-top: 6px; font-size: clamp(17px, 1.6vw, 20px); }
 .lp-paso p { margin-top: 8px; font-size: 14px; color: var(--text-muted); line-height: 1.62; max-width: 34ch; }
-
-/* ── Tablero ─────────────────────────────────────────────────────── */
-
-.lp-tablero {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-sheet);
-  overflow: hidden;
-}
-.lp-tablero__bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated-2);
-}
-.lp-tablero__t { font-size: 13.5px; font-weight: 700; }
-.lp-tablero__meta { font-size: 12px; color: var(--text-muted); }
-.lp-tablero__in { padding: 20px 18px 22px; display: grid; gap: 24px; grid-template-columns: 1.15fr 1fr; }
-@media (max-width: 820px) { .lp-tablero__in { grid-template-columns: 1fr; } }
-
-.lp-pipe { display: grid; gap: 9px; }
-.lp-pipe__row { display: grid; grid-template-columns: 118px 1fr 34px; align-items: center; gap: 12px; }
-.lp-pipe__lab { font-size: 12.5px; color: var(--text-muted); display: flex; align-items: center; gap: 7px; }
-.lp-pipe__lab i { width: 7px; height: 7px; border-radius: 2px; flex: none; background: currentColor; }
-.lp-pipe__track {
-  height: 9px;
-  border-radius: 5px;
-  background: var(--bg-elevated-2);
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-.lp-pipe__fill {
-  display: block;
-  height: 100%;
-  border-radius: 4px;
-  width: 0;
-  background: currentColor;
-  transition: width 0.8s var(--ease);
-}
-.is-in .lp-pipe__fill { width: var(--w); }
-
-/* Solo el escalon que importa lleva color; el resto es la rampa de grises. */
-.lp-pipe__row--clave .lp-pipe__fill { background: var(--marker) !important; }
-.lp-pipe__n { font-size: 12.5px; font-weight: 600; text-align: right; }
-
-.lp-semana { display: flex; align-items: flex-end; gap: 8px; height: 118px; }
-.lp-dia {
-  flex: 1;
-  display: grid;
-  grid-template-rows: 1fr auto;
-  gap: 7px;
-  height: 100%;
-  justify-items: center;
-}
-.lp-dia__bar {
-  width: 100%;
-  align-self: end;
-  border-radius: 5px 5px 2px 2px;
-  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 62%, transparent));
-  height: 0;
-  transition: height 0.7s var(--ease);
-}
-.lp-dia--alto .lp-dia__bar { background: var(--marker); }
-.is-in .lp-dia__bar { height: var(--h); }
-.is-in .lp-dia:nth-child(2) .lp-dia__bar { transition-delay: 0.07s; }
-.is-in .lp-dia:nth-child(3) .lp-dia__bar { transition-delay: 0.14s; }
-.is-in .lp-dia:nth-child(4) .lp-dia__bar { transition-delay: 0.21s; }
-.is-in .lp-dia:nth-child(5) .lp-dia__bar { transition-delay: 0.28s; }
-.lp-dia__l { font-size: 11px; color: var(--text-muted); }
-.lp-semana__cap { font-size: 12px; color: var(--text-muted); margin-top: 12px; }
+.lp-paso .ap-enlace { font-size: 13.5px; }
 
 /* ── Precios ─────────────────────────────────────────────────────── */
 
@@ -597,6 +641,36 @@
 .lp-plan__list svg { width: 15px; height: 15px; flex: none; margin-top: 3px; }
 .lp-plan--libre .lp-plan__list svg { color: var(--text-muted); }
 .lp-plan--pro .lp-plan__list svg { color: var(--ok); }
+.lp-plan__letra { margin-top: 12px; font-size: 12.5px; color: var(--text-muted); text-align: center; }
+.lp-planes__pie { margin-top: 22px; font-size: 13.5px; color: var(--text-muted); max-width: 62ch; }
+
+/* ── Preguntas ────────────────────────────────────────────────────
+   Acordeón nativo: abre sin JS y Google lo lee junto con el FAQPage. */
+
+.lp-faq { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); gap: clamp(28px, 5vw, 72px); align-items: start; }
+@media (max-width: 880px) { .lp-faq { grid-template-columns: 1fr; } }
+.lp-faq .lp-head { margin-bottom: 0; }
+
+.lp-faq__lista { border-top: 1px solid var(--border-strong); }
+.lp-faq details { border-bottom: 1px solid var(--border); }
+.lp-faq summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 2px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  min-height: 44px;
+}
+.lp-faq summary::-webkit-details-marker { display: none; }
+.lp-faq summary svg { width: 18px; height: 18px; flex: none; color: var(--text-muted); transition: transform 0.25s var(--ease); }
+.lp-faq details[open] summary svg { transform: rotate(45deg); }
+.lp-faq summary:hover { color: var(--text); }
+.lp-faq__r { padding: 0 2px 20px; font-size: 14.5px; color: var(--text-muted); line-height: 1.68; max-width: 62ch; }
 
 /* ── Cierre ──────────────────────────────────────────────────────── */
 
@@ -608,7 +682,7 @@
 
 /* ── Pie ─────────────────────────────────────────────────────────── */
 
-.lp-pie { border-top: 1px solid var(--border); }
+.lp-pie { border-top: 1px solid var(--border); background: var(--bg); }
 .lp-pie__in {
   display: flex;
   flex-wrap: wrap;
@@ -622,8 +696,36 @@
 .lp-pie__links { display: flex; gap: 22px; flex-wrap: wrap; }
 .lp-pie small { font-size: 12.5px; color: var(--text-muted); }
 
+/* ── Barra fija del celular ───────────────────────────────────────
+   En el teléfono el botón principal se va con el primer scroll y no
+   vuelve nunca. Esta barra aparece pasado el hero. */
+
+.lp-movil {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 70;
+  display: none;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  transform: translateY(110%);
+  transition: transform 0.35s var(--ease);
+}
+.lp-movil.is-on { transform: none; }
+.lp-movil__in { display: flex; align-items: center; gap: 12px; }
+.lp-movil__txt { font-size: 12.5px; color: var(--text-muted); line-height: 1.35; }
+.lp-movil__txt b { display: block; color: var(--text); font-size: 13.5px; }
+.lp-movil .ap-btn { margin-left: auto; padding: 12px 16px; }
+@media (max-width: 760px) {
+  .lp-movil { display: block; }
+  /* El botón de volver arriba se sube para no quedar bajo la barra. */
+  .lp .ap-arriba { bottom: 84px; }
+  .lp .ap-avisos:not(:empty) ~ .ap-arriba { bottom: 148px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .lp-rise, .lp-ficha { opacity: 1; transform: none; }
+  .lp-rise, .lp-mesa { opacity: 1; transform: none; }
   .lp-head__rule, .lp-paso__line { transform: scaleX(1); }
-  .lp-tira__row { animation: none; }
+  .lp-fantasma { opacity: 0.4; }
 }
