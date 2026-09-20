@@ -102,17 +102,21 @@ const PASOS = [
   },
 ];
 
+/* Los textos de los planes salen de rafagas-y-ponerse-al-dia.md §5: nada de
+   "postula sola" sin condiciones. La linea entre planes es quien entra al
+   portal, no cuantas postulaciones hace. */
 const PLAN_LIBRE = [
   "20 postulaciones al mes",
-  "Entras al portal y la extensión postula por ti",
   "Un portal conectado a la vez",
-  "Perfil armado desde tu CV",
+  "Entras al portal y la extensión postula por ti",
+  "Prueba: 5 postulaciones automáticas",
 ];
 
 const PLAN_PRO = [
   "80 postulaciones al mes",
-  "Los tres portales a la vez",
-  "Busca y postula sola, según tus filtros",
+  "Sin renovación automática: pagas solo cuando lo necesitas",
+  "Los tres portales conectados a la vez",
+  "Se pone al día sola cada vez que abres tu computador",
   "Perfil dinámico: sigue aprendiendo de tus conversaciones",
 ];
 
@@ -134,6 +138,10 @@ const PREGUNTAS = [
   {
     q: "¿Funciona en el celular?",
     r: "Desde el celular creas tu cuenta, subes tu CV, conversas con la IA, decides las ofertas que quedaron en Por decidir y ves tus postulaciones. Para postular necesitas Chrome en un computador.",
+  },
+  {
+    q: "¿Tengo que dejar el computador prendido?",
+    r: "No. Con Premium se pone al día sola cada vez que abres tu computador, y tú no tienes que hacer nada. Con el plan gratis, la extensión postula mientras estás en el portal.",
   },
   {
     q: "¿Puedo cancelar cuando quiera?",
@@ -197,7 +205,8 @@ export default function LandingPage() {
               <p className="lp-hero__sub lp-rise lp-rise--3">
                 AutoPostula revisa las ofertas de Computrabajo, Laborum y Trabajando.com, deja
                 fuera las que no calzan contigo y responde los formularios con tu experiencia real.
-                Tú revisas y envías, o la dejas postular sola.
+                Tú revisas y envías, o deja que se ponga al día sola cada vez que abres tu
+                computador.
               </p>
 
               <div className="lp-hero__cta lp-rise lp-rise--4">
@@ -429,7 +438,7 @@ export default function LandingPage() {
             <Revelar className="lp-head">
               <div className="lp-head__rule" />
               <h2>Precios simples.</h2>
-              <p>Empieza gratis. Pasa a Premium cuando quieras que postule sola.</p>
+              <p>Empieza gratis. Pasa a Premium cuando quieras que se ponga al día sola.</p>
             </Revelar>
 
             <Revelar className="lp-planes" retraso={1}>
@@ -465,9 +474,6 @@ export default function LandingPage() {
                 <Link className="ap-btn ap-btn--mark ap-btn--full" href="/registro?plan=premium">
                   Empezar con Premium
                 </Link>
-                <p className="lp-plan__letra">
-                  Cancelas cuando quieras. Sigue activo hasta el fin del mes pagado.
-                </p>
               </article>
             </Revelar>
 
