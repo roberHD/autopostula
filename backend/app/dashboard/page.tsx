@@ -9,7 +9,7 @@ import {
   Tooltip,
   XAxis,
 } from "recharts";
-import { ArrowUpRight, ArrowDownRight, Sparkles, Send, CheckCheck, Trophy, Target } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, CheckCheck, Info, Send, Sparkles, Target, Trophy } from "lucide-react";
 import { SkelStats, SkelGrafico, SkelFilas } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
 import {
@@ -29,6 +29,14 @@ type Resumen = {
   postulacionesEnviadas: number;
   cambioSemanal: number;
   tasaRespuesta: number;
+  tasaSobre: number;
+  conMovimiento: number;
+  cobertura: {
+    conSeguimiento: number;
+    sinSeguimiento: number;
+    portalesSinSeguimiento: string[];
+    portalesConSeguimiento: readonly string[];
+  };
   entrevistasEsteMes: number;
   matchPromedio: number | null;
   actividad: { etiqueta: string; enviadas: number; respuestas: number }[];
@@ -281,12 +289,17 @@ export default function InicioPage() {
       Icon: Send,
       color: "var(--chart-1)",
     },
+    // docs/estado-real-de-postulaciones.md §4: acá estaba "Tasa de respuesta",
+    // un porcentaje calculado sobre postulaciones que dos de los tres portales
+    // no pueden mover de ENVIADO. Además de estar mal, no le sirve de nada a
+    // alguien que está buscando trabajo: no puede hacer nada con un 16%.
+    // Se reemplaza por lo que sí puede accionar — cuáles se movieron.
     {
-      label: "Tasa de respuesta",
-      value: `${datos.tasaRespuesta}%`,
+      label: "Con movimiento",
+      value: String(datos.conMovimiento),
       delta: null,
       up: true,
-      hint: "empresas que respondieron",
+      hint: datos.conMovimiento ? "revísalas en Postulaciones" : "sin novedades todavía",
       Icon: CheckCheck,
       color: "var(--chart-2)",
     },
@@ -403,6 +416,24 @@ export default function InicioPage() {
           <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
             Dónde se te quedan las postulaciones
           </p>
+
+          {/* docs/estado-real-de-postulaciones.md §4: el embudo se arma con lo
+              que reportan los portales, y dos de los tres no reportan nada. Sin
+              decirlo, estos números se leen como la realidad completa -- y la
+              entrevista que se coordinó por correo no aparece en ninguno. */}
+          {datos.cobertura.sinSeguimiento > 0 && (
+            <p className="ap-cobertura">
+              <Info size={13} />
+              <span>
+                Esto sale de lo que reportan los portales.{" "}
+                <b>{datos.cobertura.portalesSinSeguimiento.join(" y ")}</b>{" "}
+                {datos.cobertura.portalesSinSeguimiento.length > 1 ? "no avisan" : "no avisa"} cuando algo
+                cambia, así que {datos.cobertura.sinSeguimiento} de tus {datos.cobertura.sinSeguimiento + datos.cobertura.conSeguimiento}{" "}
+                postulaciones se quedan en «Enviada» aunque hayan avanzado. Lo que te escriban por
+                correo o teléfono tampoco se ve acá.
+              </span>
+            </p>
+          )}
 
           <div className="ap-embudo">
             {datos.embudo.map(({ etiqueta, cantidad }) => (

@@ -2443,3 +2443,23 @@
 }
 
 .ap-comunas__listo:hover { border-color: var(--text-muted); }
+
+/* Nota de cobertura de las métricas (docs/estado-real-de-postulaciones.md §4).
+   Tono apagado a propósito: informa sobre qué se sabe y qué no, no es una
+   alarma -- que no haya seguimiento en un portal es lo normal hoy. */
+.ap-cobertura {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+
+.ap-cobertura svg { flex: none; margin-top: 2px; }
+.ap-cobertura b { color: var(--text); font-weight: 600; }

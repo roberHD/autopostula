@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { portalSigueEstado, PORTALES_CON_SEGUIMIENTO } from "@/lib/platforms";
 import { limpiarTitulo } from "@/lib/text";
 
 export async function GET() {
@@ -78,7 +79,34 @@ export async function GET() {
   // responder.
   const enviadasDeVerdad = todas.filter((a) => a.estadoActual !== "INCOMPLETA");
   const conRespuesta = enviadasDeVerdad.filter((a) => a.estadoActual !== "ENVIADO").length;
-  const tasaRespuesta = enviadasDeVerdad.length ? Math.round((conRespuesta / enviadasDeVerdad.length) * 100) : 0;
+
+  // docs/estado-real-de-postulaciones.md §4. La tasa de respuesta se calculaba
+  // sobre TODAS las postulaciones, pero solo Computrabajo sincroniza estado:
+  // lo de Laborum y Trabajando queda en ENVIADO para siempre. Meterlas en el
+  // denominador garantiza un porcentaje bajo aunque a la persona le esté yendo
+  // bien -- el caso que origino esto fue "16% y 0 finalistas" con cuatro
+  // entrevistas coordinadas por correo.
+  //
+  // Un numero equivocado es peor que ninguno, asi que el porcentaje deja de
+  // ser la metrica destacada. En su lugar va algo accionable (cuantas se
+  // movieron) y la cobertura, para que se vea sobre que se sabe y sobre que no.
+  const conSeguimiento = enviadasDeVerdad.filter((a) => portalSigueEstado(a.platformAccount.platform.nombre));
+  const sinSeguimiento = enviadasDeVerdad.length - conSeguimiento.length;
+
+  const portalesSinSeguimiento = [
+    ...new Set(
+      enviadasDeVerdad
+        .map((a) => a.platformAccount.platform.nombre)
+        .filter((n) => !portalSigueEstado(n))
+    ),
+  ];
+
+  // La tasa se sigue calculando, pero solo sobre lo que algun portal puede
+  // reportar, y viaja junto a su denominador: quien la muestre tiene que decir
+  // sobre cuantas la calculo (criterio de aceptacion 7).
+  const tasaRespuesta = conSeguimiento.length
+    ? Math.round((conSeguimiento.filter((a) => a.estadoActual !== "ENVIADO").length / conSeguimiento.length) * 100)
+    : 0;
 
   const matches = todas.map((a) => a.jobOffer.relevanciaAi).filter((v): v is number => v != null);
   const matchPromedio = matches.length
@@ -139,7 +167,15 @@ export async function GET() {
   return NextResponse.json({
     postulacionesEnviadas: total,
     cambioSemanal,
+    conMovimiento: conRespuesta,
+    cobertura: {
+      conSeguimiento: conSeguimiento.length,
+      sinSeguimiento,
+      portalesSinSeguimiento,
+      portalesConSeguimiento: PORTALES_CON_SEGUIMIENTO,
+    },
     tasaRespuesta,
+    tasaSobre: conSeguimiento.length,
     entrevistasEsteMes,
     matchPromedio,
     actividad,
