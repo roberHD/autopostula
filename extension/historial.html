@@ -7,27 +7,37 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Misma paleta que el popup y la web. Antes esta pantalla seguía en el
-     azul #2563EB, que ya no usa ninguna otra parte del producto. */
-  --bg:        #F2F3EE;
+  /* Misma paleta que la web: monocroma, con el citrón como único color.
+     Fuera el morado — era la firma visual de página hecha con IA.
+     --accent es el par de contraste del tema, no un tono. */
+  --bg:        #F4F5F3;
   --surface:   #FFFFFF;
-  --surface-2: #FAFAF6;
-  --border:    #DFE0D8;
-  --ink:       #1B1A2E;
-  --accent:    #5A2FD6;
-  --accent-h:  #4A24B8;
-  --accent-s:  #EEE9FD;
+  --surface-2: #FAFAF9;
+  --border:    #DFE1DE;
+  --border-2:  #C6C9C5;
+
+  --ink:       #16181A;
+  --accent:    #16181A;
+  --accent-h:  #000000;
+  --accent-s:  #EDEEEB;
+
   --marker:    #D6F24B;
+  --marker-d:  #A8C023;
+  --on-marker: #16181A;
+
   --danger:    #B3283C;
-  --danger-s:  #FBE9EC;
+  --danger-s:  #FAEAEC;
   --success:   #17784F;
-  --success-s: #E2F3EA;
-  --warn:      #9A5B00;
-  --text-1:    #1B1A2E;
-  --text-2:    #4A4960;
-  --text-3:    #6B6A7D;
-  --radius:    10px;
-  --shadow:    0 1px 0 var(--border), 0 12px 28px -20px rgba(27,26,46,.45);
+  --success-s: #E4F1E9;
+  --warn:      #8A5200;
+  --warn-s:    #F7EFDF;
+
+  --text-1:    #16181A;
+  --text-2:    #3F4448;
+  --text-3:    #5D6468;
+
+  --radius:    9px;
+  --shadow:    0 1px 0 var(--border), 0 10px 24px -18px rgba(22,24,26,.5);
 }
 
 html { font-size: 15px; }
@@ -37,7 +47,8 @@ html { font-size: 15px; }
 .marca { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
 .marca-ico {
   width: 30px; height: 30px; flex: none; border-radius: 8px;
-  background: var(--accent); display: grid; place-items: center;
+  background: var(--surface-2); border: 1.5px solid var(--border);
+  display: grid; place-items: center;
 }
 .marca-ico svg { width: 17px; height: 17px; display: block; }
 .marca-ico path {

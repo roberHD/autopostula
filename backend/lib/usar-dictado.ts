@@ -5,9 +5,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * Dictado por voz con la Web Speech API del navegador.
  *
- * Se usa la API nativa y no un servicio de transcripción por tres razones:
- * el audio nunca sale del navegador, no hay costo por minuto, y el texto
- * aparece mientras la persona habla en vez de al terminar.
+ * Se usa la API nativa y no un servicio de transcripción propio por dos
+ * razones: no hay costo por minuto, y el texto aparece mientras la persona
+ * habla en vez de al terminar.
+ *
+ * Ojo con lo que NO resuelve: el audio SÍ sale del computador. En Chrome, sin
+ * `processLocally`, la Web Speech API manda el audio a los servidores de Google
+ * para reconocerlo. A nuestro backend no le llega -- solo recibe el texto --,
+ * pero a Google sí, y la política de privacidad (§2.3) lo declara así. Si algún
+ * día se activa el reconocimiento en el dispositivo, hay que actualizar esa
+ * sección en el mismo commit.
  *
  * El precio es que solo existe en navegadores basados en Chromium (y Safari
  * parcialmente). Por eso el hook expone `soportado`: quien lo use debe

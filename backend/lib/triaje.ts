@@ -61,6 +61,32 @@ function barajar<T>(arr: T[]): T[] {
 // escribió libre -- docs/objetivo-laboral.md §4), se filtra DIRECTO por ese
 // código: no hay nada que desambiguar, la persona ya resolvió la ambigüedad
 // al elegir de una lista.
+// §2.5 (docs/revision-2026-09-16.md): "operaria de bodega" no matcheaba
+// "operario de bodega" (el catálogo solo guarda la forma masculina) -- ni
+// exacto ni por substring, así que caía a la muestra al azar de más abajo
+// (19 de 20 tarjetas sin relación real: "novelista", "cargador de
+// tronaduras", "cientista político"...). El género se marca en la PRIMERA
+// palabra del cargo ("operaria de bodega", "vendedora de tienda"), nunca en
+// las que siguen -- por eso se flexiona solo esa, no la frase entera. Mismo
+// principio que el scorer (extension/core.js, apPatronPalabra / commit
+// aae7a50), acá aplicado a la palabra completa en vez de a un patrón.
+function variantesDeGenero(frase: string): string[] {
+  const variantes = new Set<string>();
+  // Marca pegada tipo "operario(a) de bodega" / "operario/a" -- se saca
+  // entera primero.
+  const sinMarca = frase.replace(/^(\S+?)[/(]\s*[ao]\s*\)?(\s|$)/, "$1$2").trim();
+  if (sinMarca && sinMarca !== frase) variantes.add(sinMarca);
+
+  const palabras = (sinMarca || frase).split(" ");
+  const primera = palabras[0] || "";
+  if (primera.length > 2) {
+    if (/a$/.test(primera)) variantes.add([primera.slice(0, -1) + "o", ...palabras.slice(1)].join(" ").trim());
+    else if (/o$/.test(primera)) variantes.add([primera.slice(0, -1) + "a", ...palabras.slice(1)].join(" ").trim());
+  }
+  variantes.delete(frase);
+  return [...variantes];
+}
+
 async function buscarCandidatos(objetivo: ObjetivoTriaje): Promise<FilaCatalogo[]> {
   if (objetivo.ciuo) {
     return prisma.tituloCanonico.findMany({
@@ -73,28 +99,26 @@ async function buscarCandidatos(objetivo: ObjetivoTriaje): Promise<FilaCatalogo[
   const objetivoNorm = normalizar(objetivo.etiqueta || "");
   if (!objetivoNorm) return [];
 
-  const exactos = await prisma.tituloCanonico.findMany({
-    where: { formaCruda: objetivoNorm, ciuo: { not: null } },
-    select: { id: true, formaCruda: true, ciuo: true },
-  });
-  if (exactos.length) return exactos;
+  const intentos = [objetivoNorm, ...variantesDeGenero(objetivoNorm)];
 
-  return prisma.tituloCanonico.findMany({
-    where: { formaCruda: { contains: objetivoNorm }, ciuo: { not: null } },
-    select: { id: true, formaCruda: true, ciuo: true },
-    take: 500,
-  });
-}
+  for (const texto of intentos) {
+    const exactos = await prisma.tituloCanonico.findMany({
+      where: { formaCruda: texto, ciuo: { not: null } },
+      select: { id: true, formaCruda: true, ciuo: true },
+    });
+    if (exactos.length) return exactos;
+  }
 
-async function muestraVariada(excluir: string[], cantidad: number): Promise<TituloTriaje[]> {
-  if (cantidad <= 0) return [];
-  const variados = await prisma.tituloCanonico.findMany({
-    where: { origen: "CATALOGO_OFICIAL", formaCruda: { notIn: excluir } },
-    take: 300,
-  });
-  return barajar(variados)
-    .slice(0, cantidad)
-    .map((t) => ({ id: t.id, titulo: t.formaCruda, ciuo: t.ciuo }));
+  for (const texto of intentos) {
+    const contienen = await prisma.tituloCanonico.findMany({
+      where: { formaCruda: { contains: texto }, ciuo: { not: null } },
+      select: { id: true, formaCruda: true, ciuo: true },
+      take: 500,
+    });
+    if (contienen.length) return contienen;
+  }
+
+  return [];
 }
 
 // Cargo genuinamente ambiguo (§8.3, "El ancla no siempre existe"): "operario"
@@ -217,9 +241,15 @@ async function seleccionarParaUnObjetivo(objetivo: ObjetivoTriaje, excluir: stri
   const candidatos = await buscarCandidatos(objetivo);
 
   if (!candidatos.length) {
-    // Sin candidatos -- no se pudo ubicar el objetivo en el catálogo -- se
-    // cae a una muestra variada para no dejar su cupo vacío.
-    return muestraVariada(excluir, cupo);
+    // Sin candidatos -- no se pudo ubicar el objetivo en el catálogo, ni
+    // exacto, ni por substring, ni con la forma del otro género (§2.5,
+    // docs/revision-2026-09-16.md). Antes esto caía a una muestra AL AZAR de
+    // todo el catálogo (19 de 20 tarjetas sin relación: "novelista",
+    // "cargador de tronaduras"...): para la persona, 20 respuestas que no
+    // enseñan nada justo cuando más interesada está; para el sistema, 19
+    // "no" que ensucian el perfil. Sin ancla, cero tarjetas es mejor que
+    // veinte irrelevantes -- el triaje se omite (ver route.ts / PasoTriaje).
+    return [];
   }
 
   const porFamilia = new Map<string, FilaCatalogo[]>();
@@ -266,14 +296,14 @@ export async function seleccionarTitulosTriaje(userId: string, objetivos: Objeti
   });
   const excluirBase = yaDecididos.map((d) => d.tituloCrudo);
 
+  // §2.5: sin objetivo no hay ancla -- antes esto devolvía 20 títulos al
+  // azar; ahora, lista vacía (el triaje se omite).
   const objetivosValidos = (objetivos || []).filter((o) => o.etiqueta || o.ciuo);
-  if (!objetivosValidos.length) {
-    return barajar(await muestraVariada(excluirBase, TOTAL));
-  }
+  if (!objetivosValidos.length) return [];
 
   const cupos = repartirCupos(objetivosValidos, TOTAL);
 
-  let seleccion: TituloTriaje[] = [];
+  const seleccion: TituloTriaje[] = [];
   let excluir = [...excluirBase];
   for (let i = 0; i < objetivosValidos.length; i++) {
     const parcial = await seleccionarParaUnObjetivo(objetivosValidos[i], excluir, cupos[i]);
@@ -281,12 +311,9 @@ export async function seleccionarTitulosTriaje(userId: string, objetivos: Objeti
     excluir = [...excluir, ...parcial.map((t) => t.titulo)];
   }
 
-  // Relleno final si por poca cobertura no se llegó al total (puede pasar
-  // con el reparto entre familias si alguna tiene pocos títulos disponibles).
-  if (seleccion.length < TOTAL) {
-    const usados = new Set(seleccion.map((t) => t.titulo));
-    seleccion = [...seleccion, ...(await muestraVariada([...excluirBase, ...usados], TOTAL - seleccion.length))];
-  }
+  // Ya no hay "relleno final" con una muestra al azar cuando la cobertura es
+  // baja (§2.5): menos de 20 tarjetas reales enseñan más que 20 con relleno
+  // sin relación. Si quedaron 0, el triaje se omite.
 
   const vistos = new Set<string>();
   const sinRepetir = seleccion.filter((t) => {

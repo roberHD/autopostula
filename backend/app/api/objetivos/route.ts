@@ -50,6 +50,20 @@ export async function PUT(request: Request) {
   if (!Array.isArray(objetivosIn) || !objetivosIn.length) {
     return NextResponse.json({ error: "Falta al menos un objetivo" }, { status: 400 });
   }
+
+  // §2.1 (docs/revision-2026-09-16.md): mismo paso del onboarding, mismo
+  // guardado -- si vino ubicacionDeclarada en el body, se persiste ANTES de
+  // recompilar (más abajo) para que la recompilación ya la use, en vez de
+  // quedar un ciclo atrás. Opcional: /dashboard/filtros puede guardar
+  // ubicación aparte, sin tocar objetivos, vía /api/preferencias-busqueda.
+  const ubicacionDeclarada = body?.ubicacionDeclarada;
+  if (ubicacionDeclarada !== undefined) {
+    await prisma.searchPreferences.upsert({
+      where: { userId },
+      create: { userId, ubicacionDeclarada },
+      update: { ubicacionDeclarada },
+    });
+  }
   if (objetivosIn.length > 4) {
     return NextResponse.json({ error: "Como máximo 4 objetivos a la vez" }, { status: 400 });
   }

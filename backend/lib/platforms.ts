@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 export const PLATAFORMAS_BASE = [
   { nombre: "Computrabajo", urlBase: "https://www.computrabajo.cl", adapterVersion: "v1" },
   { nombre: "Laborum", urlBase: "https://www.laborum.cl", adapterVersion: "v1" },
+  { nombre: "Trabajando", urlBase: "https://www.trabajando.cl", adapterVersion: "v1" },
 ] as const;
 
 // Se llama desde cualquier endpoint que necesite la lista de portales, en vez

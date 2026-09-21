@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { asegurarPlataformasBase } from "@/lib/platforms";
 import { asegurarPlanesBase } from "@/lib/plans";
 
@@ -16,7 +17,7 @@ export async function GET() {
   // tanto en local como recién desplegado en un ambiente nuevo.
   await Promise.all([asegurarPlataformasBase(), asegurarPlanesBase()]);
 
-  const [plataformas, cuentas, subscripcion] = await Promise.all([
+  const [plataformas, cuentas, subscripcion, usuario] = await Promise.all([
     prisma.jobPlatform.findMany(),
     prisma.platformAccount.findMany({
       where: { userId },
@@ -25,10 +26,8 @@ export async function GET() {
         applications: { select: { estadoActual: true, enviadaEn: true } },
       },
     }),
-    prisma.subscription.findFirst({
-      where: { userId, estado: "ACTIVA" },
-      include: { plan: true },
-    }),
+    obtenerSubscripcionVigente(userId),
+    prisma.user.findUnique({ where: { id: userId }, select: { rol: true } }),
   ]);
 
   return NextResponse.json({
@@ -54,7 +53,11 @@ export async function GET() {
               .toISOString()
           : null,
     })),
-    maxPlataformasActivas: subscripcion?.plan.maxPlataformasActivas ?? 1,
+    // §3.2 (docs/revision-2026-09-16.md): la cuenta ADMIN no tiene tope (el POST
+    // de abajo ya la trata así con limite=null) -- antes esto devolvía el
+    // del plan igual, y la pantalla decía "Plan gratuito · 3 de 1 portales
+    // activos" para una cuenta que sí puede tener los tres.
+    maxPlataformasActivas: usuario?.rol === "ADMIN" ? null : (subscripcion?.plan.maxPlataformasActivas ?? 1),
     planNombre: subscripcion?.plan.nombre ?? null,
   });
 }
@@ -73,10 +76,7 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { rol: true } });
 
-  const subscripcion = await prisma.subscription.findFirst({
-    where: { userId, estado: "ACTIVA" },
-    include: { plan: true },
-  });
+  const subscripcion = await obtenerSubscripcionVigente(userId);
 
   // Sin suscripción activa, se trata como free (1 portal) — salvo cuentas ADMIN,
   // que no tienen límite (mismo criterio que checkAndLogAiUsage).
@@ -89,7 +89,9 @@ export async function POST(request: Request) {
   if (limite !== null && activasActuales >= limite) {
     return NextResponse.json(
       {
-        error: `Tu plan permite ${limite} portal(es) activo(s) a la vez. Desconecta uno o mejora tu plan.`,
+        error: limite === 1
+          ? "Tu plan gratuito conecta un portal a la vez. Desconecta el que ya tienes o pasa a Premium para usar los tres."
+          : `Tu plan permite ${limite} portales activos a la vez. Desconecta uno o mejora tu plan.`,
       },
       { status: 403 }
     );

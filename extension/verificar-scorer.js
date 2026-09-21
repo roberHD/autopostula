@@ -40,8 +40,11 @@ function crearContexto() {
 }
 
 const ctx = crearContexto();
-const codigo = fs.readFileSync(path.join(__dirname, 'core.js'), 'utf8');
-vm.runInContext(codigo, ctx, { filename: 'core.js' });
+// Mismo orden que manifest.json: la lista de comunas se carga antes que core.js
+// (sin ella la ubicación de la oferta nunca se reconoce -- §2.1).
+for (const archivo of ['data/comunas-cl.js', 'core.js']) {
+  vm.runInContext(fs.readFileSync(path.join(__dirname, archivo), 'utf8'), ctx, { filename: archivo });
+}
 const AP = ctx.window.AP;
 
 let fallos = 0;
@@ -111,7 +114,7 @@ const perfil = {
   const r = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Trabajo presencial', ubicacion: 'Puente Alto' }, perfil);
   const razonUbicacion = r.razones.find((x) => x.tipo === 'ubicacion');
   check('fuera de comuna y no remoto -> penalización aplicada', !!razonUbicacion);
-  check('la razón de ubicación trae la comuna real de la oferta, no un string genérico', razonUbicacion && razonUbicacion.ofertaEn === 'Puente Alto');
+  check('la razón de ubicación trae la comuna real de la oferta, no un string genérico', razonUbicacion && razonUbicacion.ofertaEn === 'puente alto');
   check('la razón de ubicación trae las comunas buscadas', razonUbicacion && JSON.stringify(razonUbicacion.buscadas) === JSON.stringify(perfil.ubicacion.comunas));
   check('score bajó por ubicación (no llega a postular)', r.score < 100);
 }
@@ -252,9 +255,9 @@ const perfil = {
 // resumen (p.ej. si alguna dejara de pasar objetos y volviera a strings).
 {
   const ofertas = [
-    { titulo: 'Ingeniero de software senior', empresa: '', cuerpo: '', ubicacion: 'Las Condes' }, // sin_rol -> descartar (score 0)
-    { titulo: 'Gerente de finanzas', empresa: '', cuerpo: '', ubicacion: 'Vitacura' }, // sin_rol -> descartar (score 0)
-    { titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Trabajo presencial', ubicacion: 'Puente Alto' }, // rol ok, ubicacion penaliza -> score 60 -> gris
+    { titulo: 'Ingeniero de software senior', empresa: '', cuerpo: '', ubicacion: 'Ñuñoa' }, // sin_rol -> descartar (score 0)
+    { titulo: 'Gerente de finanzas', empresa: '', cuerpo: '', ubicacion: 'Providencia' }, // sin_rol -> descartar (score 0)
+    { titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Trabajo presencial', ubicacion: 'Sector norte' }, // rol ok, comuna no reconocida penaliza -> score 60 -> gris
   ];
   const conteos = { postular: 0, gris: 0, descartar: 0 };
   const razonesDescartadas = [];
@@ -270,6 +273,48 @@ const perfil = {
   check('integración: la razón más frecuente es "sin_rol" (2 de 2 descartes), no la de ubicación (que ni se descartó)', resumen.texto.includes('no se encontró ninguno de los roles buscados'));
   check('integración: estado pendiente (nada postulado, pero hay 1 en gris)', resumen.estado === 'pendiente');
 }
+
+// 18. Nivel del cargo (docs/revision-2026-09-16.md §2.7): el rol "ventas" calza
+// con "Gerente Comercial", pero una persona que busca de vendedor no busca
+// gerencia. perfil.nivelDirectivo lo calcula el backend desde el CIUO.
+{
+  const base = Object.assign({}, perfil, { ubicacion: { comunas: [], aceptaRemoto: false } });
+  const oferta = (titulo) => ({ titulo, empresa: 'Falabella', cuerpo: 'Ventas', ubicacion: '' });
+  const conNivel = (nivelDirectivo) => Object.assign({}, base, { nivelDirectivo });
+  const titulos = ['Gerente Comercial y Marketing de ventas', 'Subgerente de ventas', 'Jefa Zonal de ventas Grandes Tiendas', 'Jefe de ventas', 'Director de ventas', 'Directora comercial de ventas'];
+  for (const t of titulos) {
+    const r = AP.puntuarOferta(oferta(t), conNivel(false));
+    check('nivel: "' + t + '" se descarta si no busca jefatura', r.banda === 'descartar' && r.razones[0].tipo === 'nivel');
+  }
+  const rIncierto = AP.puntuarOferta(oferta('Gerente ejecutivo de ventas'), conNivel(null));
+  check('nivel: sin certeza (CIUO desconocido) va a gris, no postula', rIncierto.banda === 'gris' && rIncierto.razones[0].tipo === 'nivel' && rIncierto.razones[0].certeza === 'desconocida');
+  const rAusente = AP.puntuarOferta(oferta('Gerente ejecutivo de ventas'), base);
+  check('nivel: perfil sin el campo (anterior al cambio) también va a gris', rAusente.banda === 'gris');
+  const rBusca = AP.puntuarOferta(oferta('Gerente ejecutivo de ventas'), conNivel(true));
+  check('nivel: si busca jefatura, no se toca', rBusca.banda === 'postular' && !rBusca.razones.some((x) => x.tipo === 'nivel'));
+  const rVendedor = AP.puntuarOferta(oferta('Vendedor de tienda'), conNivel(false));
+  check('nivel: un vendedor normal sigue postulando', rVendedor.banda === 'postular');
+  const rApoyo = AP.puntuarOferta(oferta('Vendedor asistente de gerente comercial'), conNivel(false));
+  check('nivel: "asistente de gerente" no es cargo directivo', rApoyo.banda === 'postular');
+  const rGerencia = AP.puntuarOferta(oferta('Vendedor gerencia de personas'), conNivel(false));
+  check('nivel: "gerencia" (área) no es "gerente" (cargo)', rGerencia.banda === 'postular');
+  const rSinRol = AP.puntuarOferta(oferta('Gerente de finanzas'), conNivel(null));
+  check('nivel: directivo con nivel incierto y sin rol sigue descartando por rol', rSinRol.banda === 'descartar');
+}
+
+// 19. Duplicados (§2.8): clave título + empresa normalizados.
+{
+  const k = AP.claveDuplicado;
+  check('duplicado: mayúsculas, tildes y símbolos no cambian la clave',
+    k('Asesor Comercial Remoto | Ventas Consultivas', 'AVAN-C Chile') === k('ASESOR comercial remoto  ventas consultivas', 'avan c chile'));
+  check('duplicado: distinta empresa -> distinta clave', k('Vendedor', 'Falabella') !== k('Vendedor', 'Paris'));
+  check('duplicado: distinto título -> distinta clave', k('Vendedor', 'Falabella') !== k('Cajero', 'Falabella'));
+  check('duplicado: sin empresa la clave incluye el día (no junta todos los "Vendedor")',
+    k('Vendedor', '') !== k('Vendedor', 'Falabella') && /\|\|/.test(k('Vendedor', '')));
+  check('duplicado: sin título no hay clave (no se puede afirmar nada)', k('', 'Falabella') === null);
+  check('duplicado: usa solo la primera línea del título (Computrabajo mete etiquetas)', k('Vendedor\nPostulado', 'Falabella') === k('Vendedor', 'Falabella'));
+}
+
 
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));
 process.exit(fallos === 0 ? 0 : 1);

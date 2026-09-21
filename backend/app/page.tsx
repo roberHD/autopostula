@@ -7,28 +7,16 @@ import FichaDemo from "@/components/landing/FichaDemo";
 import Revelar from "@/components/Revelar";
 import VolverArriba from "@/components/VolverArriba";
 import { Marca } from "@/components/Marca";
+import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 import "./landing.css";
 
 export const metadata: Metadata = {
   title: "Postula 80 veces al mes. Escribe una sola.",
   description:
-    "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo y Laborum con tus palabras. Tú revisas y envías, o lo dejas corriendo solo.",
+    "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo, Laborum y Trabajando.com con tus palabras. Tú revisas y envías, o deja que se ponga al día sola cada vez que abres tu computador.",
 };
 
-// Cargos reales de los portales chilenos: la tira es textura, pero textura
-// del rubro de la persona que está mirando.
-const CARGOS = [
-  ["Operario/a de bodega", "Quilicura"],
-  ["Ejecutivo/a de call center", "Santiago Centro"],
-  ["Auxiliar de aseo", "Providencia"],
-  ["Vendedor/a integral", "Maipú"],
-  ["Cajero/a part time", "La Florida"],
-  ["Asistente contable", "Las Condes"],
-  ["Conductor clase B", "San Bernardo"],
-  ["Guardia de seguridad OS10", "Puente Alto"],
-  ["Reponedor/a de sala", "Ñuñoa"],
-  ["Secretaria administrativa", "Viña del Mar"],
-];
+const PORTALES = ["Computrabajo", "Laborum", "Trabajando.com"];
 
 const PASOS = [
   {
@@ -37,11 +25,12 @@ const PASOS = [
   },
   {
     titulo: "Instala la extensión",
-    desc: "Conecta tu cuenta de Computrabajo o Laborum. La extensión trabaja dentro del portal, con tu sesión.",
+    desc: "Conecta tu cuenta de Computrabajo, Laborum o Trabajando.com. La extensión trabaja dentro del portal, con tu sesión.",
+    enlace: { texto: "Instalar desde Chrome Web Store", href: URL_CHROME_WEB_STORE },
   },
   {
     titulo: "Define qué te sirve",
-    desc: "Rubro, comuna, jornada y sueldo mínimo. De ahí en adelante postula sola y tú revisas el historial.",
+    desc: "Rubro, comuna, jornada y sueldo mínimo. De ahí en adelante la extensión postula por ti y tú revisas el historial.",
   },
 ];
 
@@ -64,13 +53,15 @@ const SEMANA = [
 const PLAN_LIBRE = [
   "20 postulaciones al mes",
   "Un portal conectado a la vez",
-  "Postulación asistida: la IA responde, tú envías",
+  "Entras al portal y la extensión postula por ti",
+  "Prueba: 5 postulaciones automáticas",
 ];
 
 const PLAN_PRO = [
   "80 postulaciones al mes",
-  "Computrabajo y Laborum conectados a la vez",
-  "Busca y postula sola, según tus filtros",
+  "Sin renovación automática: pagas solo cuando lo necesitas",
+  "Los tres portales conectados a la vez",
+  "Se pone al día sola cada vez que abres tu computador",
   "Perfil dinámico e instrucciones propias",
 ];
 
@@ -78,9 +69,30 @@ function Tilde({ color }: { color?: string }) {
   return <Check size={15} color={color} strokeWidth={2.6} />;
 }
 
+const DATOS_ESTRUCTURADOS = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "AutoPostula",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Chrome",
+  inLanguage: "es-CL",
+  description:
+    "Extensión y panel que responden los formularios de postulación de Computrabajo, Laborum y Trabajando.com con tu CV y tu forma de escribir.",
+  url: "https://autopostula.cl",
+  offers: [
+    { "@type": "Offer", name: "Gratis", price: "0", priceCurrency: "CLP" },
+    { "@type": "Offer", name: "Premium", price: "3990", priceCurrency: "CLP" },
+  ],
+  areaServed: { "@type": "Country", name: "Chile" },
+};
+
 export default function LandingPage() {
   return (
     <div className="lp">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(DATOS_ESTRUCTURADOS) }}
+      />
       <NavLanding />
 
       <main id="inicio">
@@ -88,20 +100,14 @@ export default function LandingPage() {
         <section className="lp-hero">
           <div className="lp-wrap lp-hero__grid">
             <div>
-              <span className="lp-flag lp-rise lp-rise--1">
-                <i />
-                Computrabajo y Laborum, conectados
-              </span>
-
               <h1 className="lp-rise lp-rise--2">
                 Postula 80 veces al mes.
-                <br />
-                <span className="ap-swipe ap-swipe--auto">Escribe una sola.</span>
+                <span className="lp-fino">Escribe una sola.</span>
               </h1>
 
               <p className="lp-hero__sub lp-rise lp-rise--3">
                 AutoPostula lee tu CV, aprende cómo escribes y responde cada formulario con tus
-                palabras y tu experiencia real. Tú revisas y envías, o lo dejas corriendo solo.
+                palabras y tu experiencia real. Tú revisas y envías, o deja que se ponga al día sola cada vez que abres tu computador.
               </p>
 
               <div className="lp-hero__cta lp-rise lp-rise--4">
@@ -112,13 +118,26 @@ export default function LandingPage() {
                   Ver cómo funciona
                 </a>
               </div>
+              <p className="lp-hero__sub lp-rise lp-rise--4" style={{ fontSize: 13, marginTop: 12 }}>
+                <b>Configúralo desde el celular · Trabaja en tu computador.</b> Es una extensión de
+                Chrome:{" "}
+                <a href={URL_CHROME_WEB_STORE} target="_blank" rel="noreferrer">
+                  instálala desde la Chrome Web Store ↗
+                </a>
+              </p>
 
-              <div className="lp-terms lp-rise lp-rise--5">
-                <span className="lp-term">
-                  <Check strokeWidth={2.6} /> 20 postulaciones gratis al mes
+              <div className="lp-datos lp-rise lp-rise--5">
+                <span>
+                  <span className="lp-dato__n">20</span>
+                  <span className="lp-dato__l">gratis al mes</span>
                 </span>
-                <span className="lp-term">
-                  <Check strokeWidth={2.6} /> Sin tarjeta de crédito
+                <span>
+                  <span className="lp-dato__n">3</span>
+                  <span className="lp-dato__l">portales conectados</span>
+                </span>
+                <span>
+                  <span className="lp-dato__n">0</span>
+                  <span className="lp-dato__l">datos de tarjeta</span>
                 </span>
               </div>
             </div>
@@ -127,14 +146,12 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── Tira de avisos ───────────────────────────────────── */}
-        <div className="lp-tira" aria-hidden="true">
-          <div className="lp-tira__row">
-            {/* Duplicada para que el loop no corte al llegar al final. */}
-            {[...CARGOS, ...CARGOS].map(([cargo, comuna], i) => (
-              <span className="lp-tira__item" key={`${cargo}-${i}`}>
-                <b>{cargo}</b> {comuna}
-              </span>
+        {/* ── Dónde funciona ───────────────────────────────────── */}
+        <div className="lp-portales">
+          <div className="lp-wrap lp-portales__in">
+            <span className="lp-portales__l">Funciona dentro de</span>
+            {PORTALES.map((n) => (
+              <span className="lp-portales__n" key={n}>{n}</span>
             ))}
           </div>
         </div>
@@ -144,7 +161,7 @@ export default function LandingPage() {
           <div className="lp-wrap">
             <Revelar className="lp-head">
               <div className="lp-head__rule" />
-              <h2>La misma pregunta, dos respuestas.</h2>
+              <h2>La misma pregunta. <span className="lp-fino">Dos respuestas.</span></h2>
               <p>
                 Todos los portales preguntan lo mismo. La diferencia está en si la respuesta
                 podría ser de cualquiera, o solamente tuya.
@@ -181,7 +198,7 @@ export default function LandingPage() {
                 </p>
                 <p className="lp-fuente">
                   <Highlighter size={14} />
-                  Lo marcado salió de tu CV y de tu calibración de estilo. Nada inventado.
+                  Lo marcado sale de tu CV y de tu calibración de estilo. Revisa antes de enviar: la IA puede equivocarse.
                 </p>
               </article>
             </Revelar>
@@ -198,12 +215,17 @@ export default function LandingPage() {
             </Revelar>
 
             <Revelar className="lp-pasos" retraso={1}>
-              {PASOS.map(({ titulo, desc }, i) => (
+              {PASOS.map(({ titulo, desc, enlace }, i) => (
                 <div className="lp-paso" key={titulo}>
                   <span className="lp-paso__line" />
                   <span className="lp-paso__n ap-tnum">{i + 1}</span>
                   <h3>{titulo}</h3>
                   <p>{desc}</p>
+                  {enlace && (
+                    <p>
+                      <a href={enlace.href} target="_blank" rel="noreferrer">{enlace.texto} ↗</a>
+                    </p>
+                  )}
                 </div>
               ))}
             </Revelar>
@@ -215,9 +237,10 @@ export default function LandingPage() {
           <div className="lp-wrap">
             <Revelar className="lp-head">
               <div className="lp-head__rule" />
-              <h2>Sabes en qué quedó cada una.</h2>
+              <h2>Sabes en qué quedó <span className="lp-fino">cada una.</span></h2>
               <p>
-                Cada postulación queda registrada con su estado real, actualizado desde el portal.
+                Cada postulación queda registrada con su portal y su fecha, y no se repite a la
+                misma oferta. Si el portal informa que la vieron o avanzó, el estado se actualiza.
                 Se acabó el &ldquo;¿a esta ya postulé?&rdquo;.
               </p>
             </Revelar>
@@ -225,13 +248,16 @@ export default function LandingPage() {
             <Revelar className="lp-tablero" retraso={1}>
               <div className="lp-tablero__bar">
                 <span className="lp-tablero__t">Tus postulaciones</span>
-                <span className="lp-tablero__meta ap-tnum">Últimos 30 días · 76 enviadas</span>
+                <span className="lp-tablero__meta ap-tnum">Ejemplo · últimos 30 días · 76 enviadas</span>
               </div>
 
               <div className="lp-tablero__in">
                 <div className="lp-pipe">
                   {PIPELINE.map(({ estado, n, w, color }) => (
-                    <div className="lp-pipe__row" key={estado}>
+                    <div
+                      className={`lp-pipe__row${estado === "Finalista" ? " lp-pipe__row--clave" : ""}`}
+                      key={estado}
+                    >
                       <span className="lp-pipe__lab">
                         <i style={{ color }} />
                         {estado}
@@ -274,7 +300,7 @@ export default function LandingPage() {
             <Revelar className="lp-head">
               <div className="lp-head__rule" />
               <h2>Precios simples.</h2>
-              <p>Empieza gratis. Pasa a Premium cuando quieras que postule sola.</p>
+              <p>Empieza gratis. Pasa a Premium cuando quieras que se ponga al día sola.</p>
             </Revelar>
 
             <Revelar className="lp-planes" retraso={1}>
@@ -297,7 +323,7 @@ export default function LandingPage() {
               <article className="lp-plan lp-plan--pro">
                 <p className="lp-plan__n">Premium</p>
                 <p className="lp-plan__p ap-tnum">
-                  $3.990 <small>al mes</small>
+                  $3.990 <small>por 30 días</small>
                 </p>
                 <ul className="lp-plan__list">
                   {PLAN_PRO.map((item) => (
@@ -310,6 +336,9 @@ export default function LandingPage() {
                 <Link className="ap-btn ap-btn--mark ap-btn--full" href="/registro?plan=premium">
                   Empezar con Premium
                 </Link>
+                <p className="lp-plan__nota" style={{ fontSize: 12.5, marginTop: 10, opacity: 0.75 }}>
+                  ¿Buscas por más tiempo? Pase de 90 días: $9.990.
+                </p>
               </article>
             </Revelar>
           </div>
@@ -321,7 +350,8 @@ export default function LandingPage() {
             <div>
               <h2>Deja de llenar formularios a mano.</h2>
               <p>
-                Crea tu cuenta, sube tu CV y postula a tu primera oferta en menos de diez minutos.
+                Crea tu cuenta, sube tu CV e instala la extensión de Chrome. Después abres tu portal
+                de siempre y ella se encarga.
               </p>
             </div>
             <Link

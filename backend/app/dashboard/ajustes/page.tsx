@@ -4,17 +4,24 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Zap, Lock, Mail, BadgeCheck, TriangleAlert, LogOut, LifeBuoy, ChevronRight } from "lucide-react";
+import { textoPruebaEnCurso } from "@/lib/texto-rafaga";
+import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
 
 export default function AjustesPage() {
   const router = useRouter();
   const [activa, setActiva] = useState(false);
+  // "Hay algo automático que pausar": el plan Premium, o la prueba de una cuenta
+  // gratis mientras dura (docs/rafagas-y-ponerse-al-dia.md §4.1). Con la prueba
+  // gastada, el ajuste se ofrece como parte de un plan superior.
   const [disponibleEnPlan, setDisponibleEnPlan] = useState(false);
+  const [pruebaRestantes, setPruebaRestantes] = useState<number | null>(null);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
   const [esPremium, setEsPremium] = useState(false);
+  // docs/pase-prepagado.md §6: hasta cuándo llega el Premium (ISO), o null.
+  const [premiumHasta, setPremiumHasta] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
-  const [redirigiendo, setRedirigiendo] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
   const [mostrarEliminar, setMostrarEliminar] = useState(false);
@@ -28,9 +35,11 @@ export default function AjustesPage() {
       const data = await res.json();
       if (!res.ok) { setMensaje(data.error ?? `Error ${res.status}`); return; }
       setActiva(data.activa);
-      setDisponibleEnPlan(data.disponibleEnPlan);
+      setDisponibleEnPlan(data.modo ? data.modo !== "manual" : data.disponibleEnPlan);
+      setPruebaRestantes(data.modo === "prueba" ? data.pruebaRestantes ?? null : null);
       setPlanNombre(data.planNombre);
       setEsPremium(data.esPremium ?? false);
+      setPremiumHasta(data.premiumHasta ?? null);
       setEmail(data.email);
     } catch (err) {
       console.error("Error cargando ajustes:", err);
@@ -66,45 +75,6 @@ export default function AjustesPage() {
       setMensaje("No se pudo guardar el cambio — revisa la consola");
     } finally {
       setGuardando(false);
-    }
-  }
-
-  async function pasarAPremium() {
-    setRedirigiendo(true);
-    setMensaje("");
-    try {
-      const res = await fetch("/api/flow/checkout", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || !data.url) {
-        setMensaje(data.error ?? "No se pudo continuar — intenta de nuevo");
-        setRedirigiendo(false);
-        return;
-      }
-      window.location.href = data.url;
-    } catch (err) {
-      console.error("Error abriendo Flow:", err);
-      setMensaje("No se pudo continuar — revisa la consola");
-      setRedirigiendo(false);
-    }
-  }
-
-  async function cancelarSuscripcion() {
-    if (!confirm("¿Cancelar tu suscripción premium? Sigues teniendo acceso hasta el final del período que ya pagaste.")) return;
-    setRedirigiendo(true);
-    setMensaje("");
-    try {
-      const res = await fetch("/api/flow/cancelar", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setMensaje(data.error ?? "No se pudo cancelar — intenta de nuevo");
-        return;
-      }
-      setMensaje(data.mensaje ?? "Suscripción cancelada.");
-    } catch (err) {
-      console.error("Error cancelando suscripción:", err);
-      setMensaje("No se pudo cancelar — revisa la consola");
-    } finally {
-      setRedirigiendo(false);
     }
   }
 
@@ -180,14 +150,19 @@ export default function AjustesPage() {
               </div>
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Plan actual</p>
-                <p style={{ fontSize: 13, fontWeight: 500 }}>{planNombre ?? "Plan gratuito"}</p>
+                <p style={{ fontSize: 13, fontWeight: 500 }}>
+                  {esPremium && premiumHasta
+                    ? `Premium hasta el ${new Date(premiumHasta).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" })}`
+                    : planNombre ?? "Plan gratuito"}
+                </p>
               </div>
+              {/* §5.4: ya no hay suscripción que cancelar -- el pase dura lo que se
+                  compró y no se renueva solo. Acá solo se renueva o se compra. */}
               <button
                 className={esPremium ? "ap-button-ghost" : "ap-button"}
-                disabled={redirigiendo}
-                onClick={esPremium ? cancelarSuscripcion : pasarAPremium}
+                onClick={() => router.push("/dashboard/premium")}
               >
-                {redirigiendo ? "Un momento..." : esPremium ? "Cancelar suscripción" : "Pasar a Premium"}
+                {esPremium ? "Renovar" : "Pasar a Premium"}
               </button>
             </div>
 
@@ -243,7 +218,7 @@ export default function AjustesPage() {
             <div>
               <p style={{ fontSize: 13, fontWeight: 600 }}>Disponible en un plan superior</p>
               <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.5 }}>
-                Con búsqueda automática, AutoPostula revisa ofertas nuevas cada 2 horas y postula solo, sin que abras nada — sin este beneficio, sigues pudiendo postular manualmente cuando quieras.
+                Con Premium, AutoPostula se pone al día sola cada vez que abres tu computador, sin que entres a ningún portal. Sin él sigues postulando: entras a Computrabajo, Laborum o Trabajando y la extensión postula por ti.
               </p>
             </div>
           </div>
@@ -264,8 +239,12 @@ export default function AjustesPage() {
                   Postular automáticamente{planNombre ? ` (${planNombre})` : ""}
                 </p>
                 <p className="ap-toggle-desc">
-                  {activa
-                    ? "Activo — AutoPostula revisa ofertas nuevas cada 2 horas en tus portales conectados y postula por ti."
+                  {pruebaRestantes !== null
+                    ? activa
+                      ? `${textoPruebaEnCurso(pruebaRestantes, PRUEBA_TOTAL)}. Se envían solas, sin que entres a ningún portal.`
+                      : "Pausada — la prueba no envía nada hasta que la reanudes."
+                    : activa
+                    ? "Activo — AutoPostula se pone al día sola cada vez que abres tu computador: revisa ofertas nuevas en tus portales conectados y postula por ti."
                     : "Pausado — solo vas a postular cuando lo hagas tú manualmente."}
                 </p>
               </div>

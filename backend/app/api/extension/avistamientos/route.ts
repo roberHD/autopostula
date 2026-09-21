@@ -32,12 +32,18 @@ export async function POST(request: Request) {
   let guardados = 0;
   for (const a of avistamientos.slice(0, 200)) {
     if (!a?.externalId || !a?.titulo) continue;
-    // update: {} a propósito -- si la fila ya existe no se le toca nada, ni
-    // título/empresa (pueden variar entre escaneos por A/B del portal) ni,
-    // sobre todo, postulada: nunca se debe pisar un true con un false.
+    // Se refresca empresa/url en cada escaneo -- un bug de extracción del
+    // adaptador (ej. Laborum guardando la fecha como si fuera la empresa,
+    // corregido en ef6d639) quedaba grabado para siempre porque acá no se
+    // tocaba nada nunca. `|| undefined` evita que una lectura fallida (vacía)
+    // borre un valor bueno ya guardado. postulada NUNCA se toca en el update:
+    // nunca se debe pisar un true con un false.
     await prisma.jobOffer.upsert({
       where: { platformId_externalId: { platformId: platform.id, externalId: a.externalId } },
-      update: {},
+      update: {
+        empresa: a.empresa || undefined,
+        url: a.url || undefined,
+      },
       create: {
         platformId: platform.id,
         externalId: a.externalId,

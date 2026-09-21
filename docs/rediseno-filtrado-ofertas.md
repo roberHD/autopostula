@@ -1014,6 +1014,11 @@ Batchear las preguntas es más simple y ahorra más. No perder tiempo en caching
 
 ### Nota sobre el model ID
 
+> ✅ Resuelto (2026-09-12). Se verificó contra la API real que ambos IDs resuelven al mismo
+> snapshot (`claude-haiku-4-5` es el alias vigente de `claude-haiku-4-5-20251001`); se cambiaron
+> los 10 archivos que llamaban a Haiku para usar el alias sin fecha, no solo los 4 nombrados acá
+> abajo.
+
 El código actual usa `"claude-haiku-4-5-20251001"`. El ID correcto y completo es **`claude-haiku-4-5`**, sin sufijo de fecha. Corregir donde aparezca (`analizar-oferta`, `clasificar-ofertas`, `responder-pregunta`, `sugerir-filtros`).
 
 ---

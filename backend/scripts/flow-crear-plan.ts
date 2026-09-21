@@ -3,6 +3,10 @@ import { flow } from "../lib/flow";
 import { FLOW_PLAN_ID } from "../lib/flow-plan";
 import { getBaseUrl } from "../lib/base-url";
 
+// SIN USO desde 2026-09-19 (docs/pase-prepagado.md): Premium son pases de pago
+// único y no hace falta ningún plan en Flow. Este script (y el plan mensual que
+// crea) solo servirá si se vuelve al Cargo Automático como empresa.
+//
 // Corre esto UNA sola vez (npx tsx scripts/flow-crear-plan.ts), después de
 // configurar FLOW_API_KEY y FLOW_SECRET_KEY en .env. Si ya existe, Flow
 // debería devolver un error de negocio -- no es idempotente como los seed de

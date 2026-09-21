@@ -1059,7 +1059,7 @@
 /* Las etiquetas en versalita de la tabla se quedan, pero sin gritar. */
 .ap-table th { font-size: 11px; letter-spacing: 0.06em; }
 
-.ap-brand-mark { background: var(--accent); }
+.ap-brand-mark { background: var(--bg-elevated-2); border: 1.5px solid var(--border-strong); }
 
 /* Transición entre páginas del dashboard: entra el contenido, no la
    estructura — el sidebar no debe parpadear al navegar. */

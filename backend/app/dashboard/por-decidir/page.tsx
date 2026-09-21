@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Building2, TriangleAlert, Star } from "lucide-react";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import { formatearRazon, esRazonPositiva } from "@/lib/formatear-razon";
@@ -51,10 +51,62 @@ function diasRestantes(venceEn: string | null): string {
   return `vence en ${dias} días`;
 }
 
+// docs/revision-2026-09-16.md §2.9: nunca mostrar "aprobada" sin decir cuándo
+// se envía. La extensión responde por bridge.js con { ok, encoladas } o
+// { ok: false, motivo }.
+type ResultadoAprobar = { ok: boolean; encoladas?: number; motivo?: string };
+
+function textoDeAprobacion(r: ResultadoAprobar | null): string {
+  if (!r) {
+    return "Aprobada. Se enviará cuando abras Chrome con la extensión de AutoPostula en tu computador.";
+  }
+  if (r.ok) {
+    return r.encoladas
+      ? "Aprobada. La extensión la está enviando ahora; en unos minutos aparece en tu historial."
+      : "Aprobada. La extensión ya la tiene en cola.";
+  }
+  switch (r.motivo) {
+    case "solo_observar":
+      return "Aprobada, pero no se envía todavía: tienes \"Solo observar\" activado (o tu cuenta sigue en modo prueba). Se enviará cuando lo desactives.";
+    case "sin_token":
+      return "Aprobada, pero la extensión no está conectada a tu cuenta. Conéctala desde Portales para que se envíe.";
+    default:
+      return "Aprobada. La extensión no respondió ahora; se enviará cuando vuelva a revisar (al abrir Chrome o dentro de la hora).";
+  }
+}
+
 export default function PorDecidirPage() {
   const [pendientes, setPendientes] = useState<DecisionGris[] | null>(null);
   const [expiradasSinRevisar, setExpiradasSinRevisar] = useState(0);
   const [mensaje, setMensaje] = useState("");
+  const [aviso, setAviso] = useState("");
+  const temporizadorAviso = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Le avisa a la extensión que hay aprobadas por enviar. Se junta el aviso de
+  // varios "sí" seguidos en uno solo: la extensión pide sus aprobadas al backend,
+  // no necesita un evento por cada una.
+  function avisarALaExtension() {
+    if (temporizadorAviso.current) clearTimeout(temporizadorAviso.current);
+    temporizadorAviso.current = setTimeout(() => {
+      // bridge.js deja esta marca en el DOM apenas carga (ver extension/bridge.js).
+      if (!document.documentElement.dataset.autopostulaExtension) {
+        setAviso(textoDeAprobacion(null));
+        return;
+      }
+      let respondio = false;
+      const alResponder = (e: Event) => {
+        respondio = true;
+        setAviso(textoDeAprobacion((e as CustomEvent<ResultadoAprobar>).detail ?? null));
+      };
+      window.addEventListener("autopostula:aprobar-resultado", alResponder, { once: true });
+      window.dispatchEvent(new CustomEvent("autopostula:aprobar"));
+      setTimeout(() => {
+        if (respondio) return;
+        window.removeEventListener("autopostula:aprobar-resultado", alResponder);
+        setAviso(textoDeAprobacion({ ok: false, motivo: "extension_no_responde" }));
+      }, 8000);
+    }, 1500);
+  }
 
   async function cargar() {
     try {
@@ -78,11 +130,12 @@ export default function PorDecidirPage() {
 
   async function decidir(item: ItemSwipe, veredicto: "SI" | "NO") {
     try {
-      await fetch("/api/banda-gris", {
+      const res = await fetch("/api/banda-gris", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: item.id, veredicto }),
       });
+      if (res.ok && veredicto === "SI") avisarALaExtension();
     } catch (err) {
       console.error("Error guardando decisión:", err);
     }
@@ -105,11 +158,23 @@ export default function PorDecidirPage() {
       <div className="ap-page-header">
         <h1 className="ap-page-title">Por decidir</h1>
         <p className="ap-page-sub">
-          Ofertas que el scorer no pudo ubicar con confianza — tu sí o no ayuda a que tu perfil aprenda.
+          Ofertas que no pudimos ubicar con confianza — tu sí o no ayuda a que tu perfil aprenda.
+        </p>
+        {/* docs/modo-solo-observar.md §4.3: si la extensión tiene "solo observar"
+            activado, un "sí" acá queda pendiente hasta que se desactive -- no
+            hay forma de saber desde el dashboard si está prendido, así que se
+            avisa siempre en vez de dejarlo como una sorpresa silenciosa. */}
+        <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>
+          Si tienes "Solo observar" activado en la extensión, un "sí" acá queda pendiente hasta que lo desactives.
         </p>
       </div>
 
       {mensaje && <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>{mensaje}</p>}
+      {aviso && (
+        <p role="status" style={{ fontSize: 13, marginBottom: 12, color: "var(--text)" }}>
+          {aviso}
+        </p>
+      )}
 
       {expiradasSinRevisar > 0 && (
         <div
@@ -133,7 +198,7 @@ export default function PorDecidirPage() {
           <div style={{ textAlign: "center", padding: "24px 0" }}>
             <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No hay nada pendiente</p>
             <p style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-              Cuando el scorer encuentre una oferta ambigua, va a aparecer acá para que decidas.
+              Cuando encontremos una oferta ambigua, va a aparecer acá para que decidas.
             </p>
           </div>
         ) : (

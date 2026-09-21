@@ -26,6 +26,21 @@ AP.log = [];
 AP.escanear = null;
 AP.onInit = null;
 
+// Único punto de verdad para "¿esta oferta se envía de verdad o no?"
+// (docs/revision-2026-09-16.md §1.2). Combina el toggle del popup con la red
+// de seguridad de la cuenta (User.postulacionHabilitada, expuesta acá como
+// AP.cfg.postulacionHabilitada por /api/extension/perfil): una cuenta nueva
+// postuló a 55/55 ofertas reales apenas conectó la extensión, con el toggle
+// del popup en su valor por defecto -- la cuenta necesita su propio freno,
+// que la persona activa desde el panel, no solo el switch local del popup.
+// postulacionHabilitada llega `undefined` en extensiones viejas que todavía
+// no piden este campo al backend -- ahí no se bloquea nada (`=== false`,
+// nunca `!== true`), para no dejar a cuentas existentes en modo prueba por
+// error de versión.
+AP.soloObservarEfectivo = function () {
+  return !!(AP.cfg && AP.cfg.soloObservar) || !!(AP.cfg && AP.cfg.postulacionHabilitada === false);
+};
+
 // ── Overlay: la máquina hablando dentro del portal ────────────────
 //
 // Vive dentro del sitio de Computrabajo/Laborum, así que tiene dos
@@ -45,13 +60,13 @@ const AP_ESTADOS = {
   // tercer y cuarto matiz que 'ok'/'trabajando'/'error' no cubrían -- "hay
   // banda gris pendiente" no es ni éxito ni error, y "todo se descartó" no
   // es un error tampoco, solo no hubo nada que hacer.
-  pendiente:  { punto: '#60A5FA', late: false },
-  neutral:    { punto: '#8B8AA0', late: false },
+  pendiente:  { punto: '#C7CBCC', late: false },
+  neutral:    { punto: '#8E9599', late: false },
 };
 
 // Los colores viejos se siguen aceptando: hay llamadas con hex por todo
 // el archivo y no vale la pena tocarlas todas.
-const AP_HEX_A_ESTADO = { '#16A34A': 'ok', '#DC2626': 'error', '#D97706': 'trabajando' };
+const AP_HEX_A_ESTADO = { '#16A34A': 'ok', '#DC2626': 'error', '#D97706': 'trabajando', '#7C3AED': 'trabajando', '#9CA3AF': 'neutral' };
 
 AP.msg = function (texto, estado) {
   const clave = AP_ESTADOS[estado] ? estado : (AP_HEX_A_ESTADO[estado] || 'ok');
@@ -67,16 +82,16 @@ AP.msg = function (texto, estado) {
       '<style>' +
       ':host,*{box-sizing:border-box}' +
       '.chip{display:flex;align-items:center;gap:10px;min-width:216px;max-width:320px;' +
-        'padding:10px 14px 10px 11px;border-radius:12px;background:#1B1A2E;color:#ECECF3;' +
+        'padding:10px 14px 10px 11px;border-radius:12px;background:#16181A;color:#E9EBEA;' +
         'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12.5px;line-height:1.4;' +
         'box-shadow:0 12px 30px -10px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.1);' +
         'animation:entra .28s cubic-bezier(.2,.8,.3,1)}' +
       '@keyframes entra{from{opacity:0;transform:translateY(8px)}}' +
-      '.marca{width:26px;height:26px;flex:none;border-radius:7px;background:#5A2FD6;display:grid;place-items:center}' +
+      '.marca{width:26px;height:26px;flex:none;border-radius:7px;background:#26292D;border:1.5px solid #3C4145;display:grid;place-items:center}' +
       '.marca svg{width:15px;height:15px;display:block}' +
       '.marca path{fill:none;stroke:#D6F24B;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}' +
       '.cuerpo{min-width:0;flex:1}' +
-      '.quien{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#9998AC;margin-bottom:1px}' +
+      '.quien{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#8E9599;margin-bottom:1px}' +
       '.punto{width:6px;height:6px;border-radius:50%;flex:none}' +
       '.punto.late{animation:late 1.6s ease-out infinite}' +
       '@keyframes late{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}' +
@@ -111,17 +126,28 @@ AP.limpiarOverlay = function () { if (ov) { ov.remove(); ov = null; ovRaiz = nul
 // mezcla, y la razón real ya se calculaba (iba a addLog por oferta) pero
 // nunca se mostraba donde la persona está mirando. Compartido entre los dos
 // adaptadores para no duplicar el armado del texto ni los umbrales de color.
-AP.mensajeEscaneo = function (conteos, razonTop) {
+// soloObservar (docs/modo-solo-observar.md §3.4): en ese modo nada se
+// postula de verdad, así que el mensaje tiene que decirlo explícito -- la
+// persona nunca puede quedar en duda sobre si la extensión está enviando
+// postulaciones o no. c.observado reemplaza a c.postular en el desglose.
+AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
   const c = conteos || {};
   const partes = [];
-  if (c.postular) partes.push(c.postular + (c.postular === 1 ? ' postulada' : ' postuladas'));
+  if (soloObservar) {
+    if (c.observado) partes.push(c.observado + ' habría postulado');
+  } else if (c.postular) {
+    partes.push(c.postular + (c.postular === 1 ? ' postulada' : ' postuladas'));
+  }
   if (c.gris) partes.push(c.gris + ' por decidir');
   if (c.descartar) partes.push(c.descartar + (c.descartar === 1 ? ' descartada' : ' descartadas'));
 
   let texto = partes.length ? partes.join(' · ') : 'Sin ofertas nuevas';
+  if (soloObservar) texto = '👁 Solo observar · ' + texto;
   if (razonTop) texto += ' — la mayoría: ' + razonTop;
 
-  const estado = c.postular > 0 ? 'ok' : c.gris > 0 ? 'pendiente' : 'neutral';
+  const estado = soloObservar
+    ? (c.observado > 0 || c.gris > 0 ? 'pendiente' : 'neutral')
+    : (c.postular > 0 ? 'ok' : c.gris > 0 ? 'pendiente' : 'neutral');
   return { texto: texto, estado: estado };
 };
 
@@ -158,10 +184,18 @@ AP.formatearRazonCorta = function (r) {
   if (typeof r === 'string') return r;
   if (!r || !r.tipo) return 'sin razón';
   switch (r.tipo) {
+    case 'sin_perfil': return 'Tu perfil de búsqueda todavía no está listo';
     case 'rol': return 'calza con "' + r.rol + '" (' + r.termino + ')';
     case 'sin_rol': return 'no se encontró ninguno de los roles buscados';
     case 'veto': return r.razon + (r.donde === 'cuerpo' ? ' (mención en el cuerpo del aviso, no en título/empresa)' : '');
     case 'ubicacion': return r.ofertaEn ? (r.ofertaEn + ' no está en tus comunas') : 'fuera de las comunas que buscas';
+    case 'ubicacion_desconocida': return 'no se pudo saber en qué comuna es';
+    case 'nivel': return r.certeza === 'desconocida'
+      ? 'cargo de jefatura o dirección ("' + r.termino + '"): no está claro si buscas ese nivel'
+      : 'cargo de jefatura o dirección ("' + r.termino + '"): buscas otro nivel';
+    case 'duplicado': return r.fecha
+      ? 'ya postulaste a este mismo cargo en esta empresa el ' + AP.formatearFechaCorta(r.fecha)
+      : 'este mismo cargo de esta empresa ya apareció en este escaneo';
     case 'senal': return (r.delta >= 0 ? '+' : '') + r.delta + ' por "' + r.patron + '"';
     case 'sin_senales': return 'sin señales claras';
     default: return 'sin razón';
@@ -203,6 +237,33 @@ AP.siguientePagina = function (cantidadEnPagina, construirUrlPagina) {
   return true;
 };
 
+// Igual que AP.siguientePagina, pero para portales que paginan con un botón
+// "cargar más" que agrega tarjetas a la misma página (Trabajando) en vez de
+// navegar a una URL nueva -- mismo contador y mismo límite, solo cambia
+// CÓMO se avanza. No hace falta relanzar el escaneo a mano después del
+// click: el MutationObserver de más abajo detecta las tarjetas nuevas en el
+// DOM y dispara AP.escanear() solo.
+AP.siguientePaginaClick = function (cantidadEnPagina, boton) {
+  if (!document.hidden) return false;
+  if (!cantidadEnPagina || !boton) return false;
+
+  const actual = Number(sessionStorage.getItem(AP.LLAVE_PAGINA) || '1');
+  if (actual >= AP.MAX_PAGINAS_AUTOMATICO) return false;
+
+  sessionStorage.setItem(AP.LLAVE_PAGINA, String(actual + 1));
+  boton.click();
+  return true;
+};
+
+// docs/rafagas-y-ponerse-al-dia.md §3.2: le avisa a background.js que este
+// paso de la ráfaga terminó de verdad (nada más por paginar, nada más por
+// postular) para que avance al siguiente paso YA en vez de esperar el timeout
+// fijo de 5 min -- background.js igual se queda con ese timeout como red de
+// seguridad si este mensaje nunca llega (pestaña abierta a mano, error, etc).
+AP.reportarEscaneoTerminado = function (conteos) {
+  AP.safeSend({ type: 'ESCANEO_TERMINADO', conteos: conteos || {} });
+};
+
 AP.addLog = function (entry) {
   AP.log.push(entry);
   if (AP.log.length > 200) AP.log = AP.log.slice(-200);
@@ -212,6 +273,7 @@ AP.addLog = function (entry) {
   // así que un error o un salto pasaban totalmente desapercibidos al depurar.
   if (entry.status === 'err') console.warn('[AP] postulación con error:', entry.title, '—', entry.reason, entry);
   else if (entry.status === 'skip') console.log('[AP] postulación saltada:', entry.title, '—', entry.reason);
+  else if (entry.status === 'observado') console.log('[AP] solo observar — habría postulado:', entry.title);
 };
 
 // ── Reportar postulación al backend de AutoPostula (web) ─────────
@@ -221,12 +283,25 @@ AP.addLog = function (entry) {
 // de extensión para hacer la llamada sin que CORS se meta.
 // "plataforma" identifica el JobPlatform en el backend (ver background.js) —
 // si se omite, background.js asume "Computrabajo" por compatibilidad.
+//
+// Ya NO es fire-and-forget (§1.3, docs/revision-2026-09-16.md): devuelve
+// {ok, error} de verdad -- antes el background siempre respondía ok:true sin
+// importar si el backend había rechazado la postulación (403 por tope
+// mensual, 400 por portal desconectado), así que la persona postulaba de
+// verdad en el portal externo y esa postulación quedaba invisible, sin que
+// nada se lo dijera.
 AP.reportarPostulacion = function (oferta) {
-  try {
-    chrome.runtime.sendMessage({ type: 'REPORTAR_POSTULACION', oferta: oferta });
-  } catch (e) {
-    console.warn('[AP] No se pudo avisar al background:', e);
-  }
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({ type: 'REPORTAR_POSTULACION', oferta: oferta }, (respuesta) => {
+        if (chrome.runtime.lastError) { resolve({ ok: false, error: chrome.runtime.lastError.message }); return; }
+        resolve(respuesta || { ok: false, error: 'Sin respuesta del background' });
+      });
+    } catch (e) {
+      console.warn('[AP] No se pudo avisar al background:', e);
+      resolve({ ok: false, error: String(e) });
+    }
+  });
 };
 
 // ── Reportar títulos vistos al backend (cosecha pasiva del corpus de títulos) ──
@@ -273,6 +348,88 @@ AP.actualizarEstadoPostulacion = function (datos) {
   });
 };
 
+// ── ¿Se puede postular ahora? (docs/revision-2026-09-16.md §1.3) ─────────
+// Se consulta antes de cada tanda de "Postulando:" -- si el mes ya se acabó
+// el cupo, o el portal no está conectado en el plan, corta el escaneo antes
+// de hacer un solo clic. Si algo falla en el camino (sin red, sin token),
+// resuelve permitido:true: /api/applications valida lo mismo después como
+// defensa en profundidad, así que fallar acá no debe trabar el escaneo.
+AP.puedePostular = function (plataforma) {
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({ type: 'PUEDE_POSTULAR', plataforma: plataforma }, (respuesta) => {
+        if (chrome.runtime.lastError || !respuesta) { resolve({ permitido: true, motivo: null, restantes: null }); return; }
+        resolve(respuesta);
+      });
+    } catch (e) { resolve({ permitido: true, motivo: null, restantes: null }); }
+  });
+};
+
+// ── Duplicados (docs/revision-2026-09-16.md §2.8) ─────────────────────
+// El mismo cargo de la misma empresa aparece con ids distintos: repetido en la
+// misma página, o republicado días después (Laborum: 3 postulaciones el mismo
+// día a "Asesor Comercial Remoto | AVAN-C Chile"). Clave: título + empresa
+// normalizados; sin empresa, título + el mismo día (un título solo es
+// demasiado poco para llamarlo "el mismo aviso").
+AP.claveDuplicado = function (titulo, empresa) {
+  const limpiar = (s) => AP.n(s).replace(/[^a-z0-9]+/g, ' ').trim();
+  const t = limpiar(String(titulo || '').split('\n')[0]);
+  if (!t) return null;
+  const e = limpiar(empresa);
+  return e ? t + '|' + e : t + '||' + new Date().toDateString();
+};
+
+AP.formatearFechaCorta = function (iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0');
+};
+
+// Quita de `pendientes` (ítems con .titulo y .empresa) lo que ya está
+// repetido en este mismo escaneo o ya se postuló en los últimos 30 días según
+// el backend. `alDescartar(item, razon)` deja que cada adaptador registre el
+// descarte a su manera (log, conteos, vistos). Si el backend no responde, solo
+// rige el filtro local: no trabar el escaneo por esto.
+AP.quitarDuplicados = async function (plataforma, pendientes, alDescartar) {
+  if (!pendientes.length) return pendientes;
+
+  const vistas = new Set();
+  const unicas = [];
+  for (const p of pendientes) {
+    const clave = AP.claveDuplicado(p.titulo, p.empresa);
+    if (clave && vistas.has(clave)) { alDescartar(p, { tipo: 'duplicado', fecha: null }); continue; }
+    if (clave) vistas.add(clave);
+    unicas.push(p);
+  }
+
+  const previas = await new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({
+        type: 'DUPLICADOS', plataforma: plataforma,
+        ofertas: unicas.map(p => ({ titulo: p.titulo, empresa: p.empresa || null })),
+      }, (respuesta) => {
+        if (chrome.runtime.lastError || !respuesta || !Array.isArray(respuesta.duplicados)) { resolve([]); return; }
+        resolve(respuesta.duplicados);
+      });
+    } catch (e) { resolve([]); }
+  });
+  const fechas = new Map(previas.map(d => [d.indice, d.fecha]));
+  return unicas.filter((p, i) => {
+    if (!fechas.has(i)) return true;
+    alDescartar(p, { tipo: 'duplicado', fecha: fechas.get(i) });
+    return false;
+  });
+};
+
+// Texto corto y accionable para cada motivo de rechazo -- compartido por los
+// tres adaptadores para no repetir el mismo switch tres veces.
+AP.motivoPuedePostular = function (motivo) {
+  if (motivo === 'limite') return 'Usaste todas tus postulaciones del mes — no se va a postular';
+  if (motivo === 'portal') return 'Este portal no está conectado en tu plan — no se va a postular';
+  if (motivo === 'prueba_terminada') return 'La prueba de postulaciones automáticas terminó — no se va a postular';
+  return 'No se puede postular ahora';
+};
+
 // Palabras que delatan modalidad/jornada en el texto de la oferta -- estas
 // dos solo se filtran "en positivo" (exigiendo que el aviso mencione alguna)
 // cuando el criterio es remoto/hibrido o full_time/part_time. "presencial" y
@@ -300,7 +457,12 @@ AP.coincideFiltros = function (textoCompleto, ubicacion) {
   if (cfg.excTags && cfg.excTags.length) {
     if (cfg.excTags.some(tag => t.includes(AP.n(tag)))) return false;
   }
-  if (cfg.incTags && cfg.incTags.length) {
+  // §1.1 (docs/revision-2026-09-16.md): sin incTags, esto devolvía `true`
+  // para cualquier oferta -- una cuenta nueva sin palabras configuradas
+  // "pasaba" el filtro entero y postulaba a todo. Una lista vacía significa
+  // "no sé qué buscas", no "acepto todo".
+  if (!cfg.incTags || !cfg.incTags.length) return false;
+  {
     const expandido = t.replace(/\bpt\b/g, 'part time').replace(/\(a\)/g, 'a').replace(/\/a\b/g, 'a');
     if (!cfg.incTags.some(tag => expandido.includes(AP.n(tag)))) return false;
   }
@@ -359,13 +521,68 @@ function apPatronPalabra(palabra) {
   return escapada;
 }
 
+// Bug real encontrado en vivo el 2026-09-14: avisos chilenos marcan el género
+// pegado a la PRIMERA palabra de una frase de varias ("Ejecutivo(a) de
+// Ventas", "Asesor/a de Ventas") -- el "(a)"/"/a" quedaba justo donde este
+// patrón exigía "\s+" entre palabras, así que la frase completa nunca
+// coincidía aunque el título calzara perfecto (se verificó contra
+// Computrabajo real: "Ejecutivo(a) de Ventas Retail" caía a "sin_rol" pese a
+// tener "ejecutivo de ventas" como sinónimo exacto configurado). Se permite
+// este ruido de género, opcional, entre cada par de palabras.
+const AP_RUIDO_GENERO = '(?:\\s*[/(][ao]s?\\)?)?';
+
 // Frase completa con límites de palabra, nunca subcadena (§6, mismo bug que
 // tenía coincideFiltros con "aseo"/"paseo"). El texto de entrada ya debe venir
 // normalizado con AP.n antes de construir/usar este patrón.
 function apConstruirPatron(patronNormalizado) {
   const palabras = patronNormalizado.split(/\s+/).filter(Boolean).map(apPatronPalabra);
   if (!palabras.length) return null;
-  return new RegExp('\\b' + palabras.join('\\s+') + '\\b');
+  return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + '\\s+') + '\\b');
+}
+
+// ── Comuna conocida de una oferta (docs/revision-2026-09-16.md §2.1, punto 4) ──
+// AP.COMUNAS_CL (data/comunas-cl.js, cargado antes que este archivo) trae las
+// comunas normalizadas (minúsculas, sin tildes) con su región. ubicacionNorm
+// y tituloNorm ya deben venir normalizados con AP.n.
+//
+// Formatos reales verificados en vivo (2026-09-16/17): Computrabajo
+// "santiago - providencia, r.metropolitana" (con guion) o "san bernardo,
+// r.metropolitana" (sin guion); Laborum "providencia, región metropolitana";
+// Trabajando "pudahuel, metropolitana de santiago" -- los tres calzan con
+// UNA sola regla: si hay " - ", la comuna es lo que sigue al ÚLTIMO " - ";
+// si no, es lo que va antes de la primera coma. Sin campo o sin calce ahí,
+// se busca cualquier comuna conocida como palabra completa en el título.
+function apExtraerComunaConocida(ubicacionNorm, tituloNorm) {
+  const comunas = AP.COMUNAS_CL;
+  if (!comunas || !comunas.length) return null;
+
+  if (ubicacionNorm) {
+    const idxGuion = ubicacionNorm.lastIndexOf(' - ');
+    let candidato = idxGuion >= 0 ? ubicacionNorm.slice(idxGuion + 3) : ubicacionNorm;
+    const idxComa = candidato.indexOf(',');
+    if (idxComa >= 0) candidato = candidato.slice(0, idxComa);
+    candidato = candidato.trim();
+    const match = comunas.find((c) => c.nombre === candidato);
+    if (match) return match;
+  }
+
+  if (tituloNorm) {
+    for (const c of comunas) {
+      const rx = apConstruirPatron(c.nombre);
+      if (rx && rx.test(tituloNorm)) return c;
+    }
+  }
+  return null;
+}
+
+// §2.7: términos de jefatura/dirección en un título (ya normalizado, sin
+// tildes). Mismos que backend/lib/nivel-cargo.ts. "Asistente de gerente" o
+// "secretaria de gerencia" no son cargos directivos: se quita la frase antes.
+const AP_NIVEL_DIRECTIVO = /\b(?:sub)?(?:gerent[ea]|director[a]?|jef[ea]|jefatura)\b|\bhead of\b/;
+const AP_NIVEL_DE_APOYO = /\b(?:asistente|secretari[oa]|ayudante|apoyo)\s+(?:de|del|a|al)\s+(?:la\s+|el\s+)?(?:sub)?(?:gerent[ea]|director[a]?|jef[ea]|jefatura)\b/g;
+function apTerminoDirectivo(tituloNorm) {
+  const m = AP_NIVEL_DIRECTIVO.exec(tituloNorm.replace(AP_NIVEL_DE_APOYO, ' '));
+  return m ? m[0] : null;
 }
 
 AP.puntuarOferta = function (campos, perfil) {
@@ -412,6 +629,23 @@ AP.puntuarOferta = function (campos, perfil) {
     vetoCuerpo = { patron: veto.patron, razon: veto.razon || ('posible: ' + veto.patron) };
   }
 
+  // 1b. Nivel del cargo (docs/revision-2026-09-16.md §2.7). El rol "ventas"
+  // calzaba con "Gerente Comercial" y "Subgerente de ventas" -- el nivel no se
+  // miraba. Es solo por título, determinista: perfil.nivelDirectivo lo pone el
+  // backend según el CIUO de los objetivos declarados (true = busca ese nivel,
+  // false = no, ausente/null = no se sabe). Sin certeza no se descarta ni se
+  // postula: banda gris más abajo, para que lo decida la persona.
+  let nivelIncierto = null;
+  if (perfil.nivelDirectivo !== true) {
+    const terminoNivel = apTerminoDirectivo(titulo);
+    if (terminoNivel) {
+      if (perfil.nivelDirectivo === false) {
+        return { score: 0, banda: 'descartar', razones: [{ tipo: 'nivel', termino: terminoNivel }] };
+      }
+      nivelIncierto = { tipo: 'nivel', termino: terminoNivel, certeza: 'desconocida' };
+    }
+  }
+
   // 2. Roles -- puntaje del mejor match (canónico o sinónimo) × peso del rol,
   // con el campo donde matcheó pesando más (título, luego empresa, luego
   // cuerpo -- ver §6). Los multiplicadores tienen que ser FACTORES <= 1: con
@@ -451,24 +685,38 @@ AP.puntuarOferta = function (campos, perfil) {
     razones.push({ tipo: 'veto', patron: vetoCuerpo.patron, razon: vetoCuerpo.razon, donde: 'cuerpo' });
   }
 
-  // 3. Ubicación -- penalización fuerte si hay comunas configuradas, ninguna
-  // matchea, y no acepta remoto (o el aviso no parece remoto).
+  // 3. Ubicación (docs/revision-2026-09-16.md §2.1). Antes: penalización de
+  // -40 si NINGUNA comuna declarada aparecía como texto libre en cualquier
+  // campo -- un "fuera de lo declarado" y un "no se pudo saber dónde es"
+  // se trataban exactamente igual (los dos caían en gris), y llenaban "Por
+  // decidir" de ofertas de regiones que la persona nunca pidió. Ahora se
+  // usa AP.COMUNAS_CL para reconocer la comuna REAL de la oferta cuando se
+  // puede, y los dos casos se separan:
+  //   comuna reconocida y DENTRO de lo declarado -> sin penalización
+  //   comuna reconocida y FUERA de lo declarado  -> DESCARTAR de una (no
+  //     "por decidir": la persona ya dijo que esa zona no le sirve)
+  //   no se pudo reconocer ninguna comuna                -> gris, como
+  //     siempre ("no sé" no es lo mismo que "no calza")
+  //   remoto + aceptaRemoto -> sin penalización
   const ubicacionCfg = perfil.ubicacion || {};
-  const comunas = ubicacionCfg.comunas || [];
-  if (comunas.length) {
-    const matcheaComuna = comunas.some((c) => {
-      const rx = apConstruirPatron(AP.n(c));
-      return rx && (rx.test(ubicacion) || rx.test(titulo) || rx.test(cuerpo));
-    });
-    const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo);
-    if (!matcheaComuna && !(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
-      score = Math.max(0, score - 40);
-      // §C: se guarda la comuna real de la oferta (sin normalizar, para
-      // mostrarla tal como la escribió el portal) y las comunas buscadas --
-      // antes el string decía "fuera de las comunas que buscas" sin decir
-      // cuál, así que dos ofertas descartadas por ubicación distinta se
-      // veían idénticas en la tarjeta de "Por decidir".
-      razones.push({ tipo: 'ubicacion', ofertaEn: (campos && campos.ubicacion) || null, buscadas: comunas });
+  const comunasDeclaradas = ubicacionCfg.comunas || [];
+  if (comunasDeclaradas.length || ubicacionCfg.aceptaRemoto) {
+    const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo) || /\bremot[oa]\b/.test(ubicacion);
+    if (!(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
+      const comunaOferta = apExtraerComunaConocida(ubicacion, titulo);
+      if (comunaOferta) {
+        const dentro = comunasDeclaradas.some((c) => AP.n(c) === comunaOferta.nombre);
+        if (!dentro) {
+          return {
+            score: 0,
+            banda: 'descartar',
+            razones: [{ tipo: 'ubicacion', ofertaEn: comunaOferta.nombre, buscadas: comunasDeclaradas }],
+          };
+        }
+      } else {
+        score = Math.max(0, score - 40);
+        razones.push({ tipo: 'ubicacion_desconocida', ofertaEn: (campos && campos.ubicacion) || null });
+      }
     }
   }
 
@@ -491,6 +739,11 @@ AP.puntuarOferta = function (campos, perfil) {
   else if (score <= umbralGris) banda = 'descartar';
   else banda = 'gris';
 
+  if (nivelIncierto && banda !== 'descartar') {
+    razones.unshift(nivelIncierto);
+    banda = 'gris';
+  }
+
   if (!razones.length) razones.push({ tipo: 'sin_senales' });
 
   return { score: score, banda: banda, razones: razones };
@@ -499,11 +752,13 @@ AP.puntuarOferta = function (campos, perfil) {
 // Portal-agnóstico: cada adaptador arma sus propios "campos" (título, empresa,
 // cuerpo, ubicación -- lo que pueda leer sin abrir el aviso) y llama acá. Si
 // el scorer local está activo (AP.cfg.scorer.usarScorerLocal) y hay perfil
-// compilado, puntúa con AP.puntuarOferta; si no, cae al filtro viejo
-// (coincideFiltros) tratando cualquier "pasa" como banda 'postular' -- así
-// las dos rutas conviven detrás del flag sin que el adaptador tenga que saber
-// cuál está activa (§13: "no borrar coincideFiltros hasta que el scorer esté
-// validado").
+// compilado, puntúa con AP.puntuarOferta. Si no, YA NO cae al filtro viejo
+// para decidir 'postular' (§1.1, docs/revision-2026-09-16.md): una cuenta
+// nueva de punta a punta, sin perfil compilado, habría postulado a 55/55
+// ofertas reales en los 3 portales (comunas que la persona pidió evitar,
+// turnos de noche) porque coincideFiltros con todo vacío devolvía `true`
+// para cualquier oferta. "Sin perfil" ya no es "acepto todo" -- es "no sé
+// qué buscas", y eso va a gris, nunca a postular.
 AP.evaluarOferta = function (campos) {
   const scorerCfg = AP.cfg && AP.cfg.scorer;
   if (scorerCfg && scorerCfg.usarScorerLocal && scorerCfg.perfilCompilado) {
@@ -525,12 +780,10 @@ AP.evaluarOferta = function (campos) {
     const resultado = AP.puntuarOferta(campos, scorerCfg.perfilCompilado);
     return { banda: resultado.banda, score: resultado.score, razones: resultado.razones, usoScorer: true };
   }
-  const textoCompleto = [campos.titulo, campos.empresa, campos.cuerpo].filter(Boolean).join(' ');
-  const pasaFiltroViejo = AP.coincideFiltros(textoCompleto, campos.ubicacion);
   return {
-    banda: pasaFiltroViejo ? 'postular' : 'descartar',
+    banda: 'gris',
     score: null,
-    razones: pasaFiltroViejo ? [] : ['no calza con tus filtros de búsqueda'],
+    razones: [{ tipo: 'sin_perfil' }],
     usoScorer: false,
   };
 };
@@ -687,18 +940,27 @@ AP.seleccionarOpcion = function (el) {
 //
 // preguntas: [{ id, pregunta, opciones: string[]|null }] -- puede venir vacío si
 // solo se quiere el análisis (matchScore) sin preguntas de formulario que responder.
-// Devuelve { analisis, respuestas: {[id]: string|null}, error }.
+// Devuelve { analisis, respuestas: {[id]: string|null}, datosFaltantes: {[id]: string}, error }.
+// datosFaltantes (§8.4, docs/revision-2026-09-16.md): la IA puede decir que
+// una pregunta pide un hecho verificable (licencia, vehículo, renta...) que
+// no está en el perfil, en vez de inventar un "sí"/"no" con el nombre de la
+// persona -- ver la regla 1b del prompt en procesar-postulacion/route.ts.
 AP.analizarYResponder = async function (contexto, preguntas) {
-  if (!contexto) return { analisis: null, respuestas: {}, error: null };
+  if (!contexto) return { analisis: null, respuestas: {}, datosFaltantes: {}, error: null };
   const p = (AP.cfg && AP.cfg.perfil) || {};
   const info = (AP.cfg && AP.cfg.info || []).map(it => it.texto);
   const data = await AP.llamarBackendIA('procesar_postulacion', {
     contexto, perfil: p, info, preguntas: preguntas || []
   });
-  if (!data || data.error) return { analisis: null, respuestas: {}, error: data && data.error };
+  if (!data || data.error) return { analisis: null, respuestas: {}, datosFaltantes: {}, error: data && data.error };
   const respuestas = {};
-  (data.respuestas || []).forEach(r => { if (r && r.id) respuestas[r.id] = r.respuesta; });
-  return { analisis: data.analisis || null, respuestas, error: null };
+  const datosFaltantes = {};
+  (data.respuestas || []).forEach(r => {
+    if (!r || !r.id) return;
+    respuestas[r.id] = r.respuesta;
+    if (r.datoFaltante) datosFaltantes[r.id] = r.datoFaltante;
+  });
+  return { analisis: data.analisis || null, respuestas, datosFaltantes, error: null };
 };
 
 // ── Panel de revisión antes de enviar (editable) — genérico, cualquier
@@ -707,7 +969,13 @@ AP.analizarYResponder = async function (contexto, preguntas) {
 // Igual que el overlay: vive dentro del portal, así que va en un shadow
 // root para que su CSS no nos deforme, y sobre tinta para que no se
 // confunda con la página de abajo.
-AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
+//
+// `opciones.mensaje` (§2.10, docs/revision-2026-09-16.md) la convierte en una
+// confirmación SIN respuestas -- para postulaciones que se envían con un solo
+// clic, donde no hay formulario que revisar y el clic ya es el envío: el
+// "Revisar antes de enviar" tiene que pedir el visto bueno ANTES de ese clic.
+AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
+  const soloConfirmar = !!(opciones && opciones.mensaje);
   return new Promise(resolve => {
     document.getElementById('ap-revision-panel')?.remove();
 
@@ -726,6 +994,12 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
       let tono, etiqueta;
       if (esLimite) { tono = 'aviso'; etiqueta = 'Se acabó tu cupo de IA este mes: complétala tú'; }
       else if (r.errorIA) { tono = 'malo'; etiqueta = 'La IA no pudo responder (' + esc(r.errorIA) + '): complétala tú'; }
+      // §8.4 (docs/revision-2026-09-16.md): distinto de "vacía" a secas --
+      // acá la IA SÍ identificó qué falta (un hecho verificable que no está
+      // en el perfil), pero decidió no inventarlo. Antes de esto no existía
+      // esta distinción: o se inventaba un "sí"/"no" con el nombre de la
+      // persona, o quedaba vacía sin decir por qué.
+      else if (r.datoFaltante) { tono = 'aviso'; etiqueta = 'No está en tu perfil (' + esc(r.datoFaltante) + ') — complétalo'; }
       else if (r.vacia) { tono = 'malo'; etiqueta = 'Quedó vacía: complétala antes de enviar'; }
       else if (r.fueIA) { tono = 'bueno'; etiqueta = 'La escribió la IA con tu perfil: puedes editarla'; }
       else { tono = 'bueno'; etiqueta = 'Lista'; }
@@ -759,30 +1033,30 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
       '.velo{position:fixed;inset:0;background:rgba(15,14,22,.5);display:grid;place-items:center;padding:20px;' +
         'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}' +
       '.panel{width:660px;max-width:100%;max-height:86vh;display:flex;flex-direction:column;' +
-        'background:#F2F3EE;color:#1B1A2E;border-radius:14px;overflow:hidden;' +
+        'background:#F4F5F3;color:#16181A;border-radius:14px;overflow:hidden;' +
         'box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:sube .3s cubic-bezier(.2,.8,.3,1)}' +
       '@keyframes sube{from{opacity:0;transform:translateY(12px)}}' +
 
       /* Cabecera de tinta: se lee al tiro como algo que no es el portal */
-      '.cab{display:flex;align-items:center;gap:11px;padding:15px 20px;background:#1B1A2E;color:#ECECF3;cursor:move;user-select:none}' +
-      '.marca{width:30px;height:30px;flex:none;border-radius:8px;background:#5A2FD6;display:grid;place-items:center}' +
+      '.cab{display:flex;align-items:center;gap:11px;padding:15px 20px;background:#16181A;color:#E9EBEA;cursor:move;user-select:none}' +
+      '.marca{width:30px;height:30px;flex:none;border-radius:8px;background:#26292D;border:1.5px solid #3C4145;display:grid;place-items:center}' +
       '.marca svg{width:17px;height:17px;display:block}' +
       '.marca path{fill:none;stroke:#D6F24B;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}' +
       '.cab h2{margin:0;font-size:14.5px;font-weight:700;letter-spacing:-.01em}' +
-      '.cab p{margin:1px 0 0;font-size:11.5px;color:#9998AC;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-      '.agarre{margin-left:auto;flex:none;color:#5F5D77;letter-spacing:2px;font-size:13px}' +
+      '.cab p{margin:1px 0 0;font-size:11.5px;color:#8E9599;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.agarre{margin-left:auto;flex:none;color:#3C4145;letter-spacing:2px;font-size:13px}' +
 
       /* Pestañas con el filo de destacador, igual que en el tablero */
-      '.pest{display:flex;gap:2px;padding:0 20px;background:#F2F3EE;border-bottom:1px solid #DFE0D8}' +
-      '.pest button{border:none;background:none;font:inherit;font-size:12.5px;font-weight:600;color:#6B6A7D;' +
+      '.pest{display:flex;gap:2px;padding:0 20px;background:#F4F5F3;border-bottom:1px solid #DFE1DE}' +
+      '.pest button{border:none;background:none;font:inherit;font-size:12.5px;font-weight:600;color:#5D6468;' +
         'padding:11px 13px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}' +
-      '.pest button:hover{color:#1B1A2E}' +
-      '.pest button[aria-selected="true"]{color:#1B1A2E;border-bottom-color:#D6F24B}' +
+      '.pest button:hover{color:#16181A}' +
+      '.pest button[aria-selected="true"]{color:#16181A;border-bottom-color:#D6F24B}' +
 
       '.cuerpo{flex:1;overflow-y:auto;padding:18px 20px}' +
       '.aviso{white-space:pre-wrap;font-size:12.5px;line-height:1.7;color:#43415A;max-width:74ch}' +
 
-      '.item{margin-bottom:12px;padding:13px 14px;background:#fff;border:1px solid #DFE0D8;border-radius:10px}' +
+      '.item{margin-bottom:12px;padding:13px 14px;background:#fff;border:1px solid #DFE1DE;border-radius:10px}' +
       '.item:last-child{margin-bottom:0}' +
       '.preg{margin:0 0 7px;font-size:12.5px;font-weight:700;line-height:1.45}' +
       '.estado{margin:0 0 9px;display:flex;align-items:center;gap:6px;font-size:11px}' +
@@ -791,22 +1065,22 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
       '.estado[data-tono="aviso"]{color:#9A5B00}' +
       '.estado[data-tono="malo"]{color:#B3283C}' +
 
-      'textarea,select{width:100%;padding:9px 11px;font:inherit;font-size:12.5px;color:#1B1A2E;' +
-        'background:#FAFAF6;border:1px solid #DFE0D8;border-radius:8px;resize:vertical}' +
-      'textarea:focus,select:focus{outline:none;border-color:#5A2FD6;box-shadow:0 0 0 3px #EEE9FD}' +
-      '.cuenta{margin:4px 0 0;font-size:10.5px;color:#6B6A7D;text-align:right;font-variant-numeric:tabular-nums}' +
-      '.vacio{color:#6B6A7D;font-size:12.5px;text-align:center;padding:20px}' +
+      'textarea,select{width:100%;padding:9px 11px;font:inherit;font-size:12.5px;color:#16181A;' +
+        'background:#FAFAF9;border:1px solid #DFE1DE;border-radius:8px;resize:vertical}' +
+      'textarea:focus,select:focus{outline:none;border-color:#D6F24B;box-shadow:0 0 0 3px #26292D}' +
+      '.cuenta{margin:4px 0 0;font-size:10.5px;color:#5D6468;text-align:right;font-variant-numeric:tabular-nums}' +
+      '.vacio{color:#5D6468;font-size:12.5px;text-align:center;padding:20px}' +
 
-      '.pie{display:flex;align-items:center;gap:10px;padding:14px 20px;background:#fff;border-top:1px solid #DFE0D8}' +
+      '.pie{display:flex;align-items:center;gap:10px;padding:14px 20px;background:#fff;border-top:1px solid #DFE1DE}' +
       '.btn{font:inherit;font-size:13px;font-weight:600;border-radius:9px;padding:11px 16px;cursor:pointer;' +
         'border:1px solid transparent;transition:transform .15s,box-shadow .2s}' +
       '.btn:active{transform:translateY(1px)}' +
       /* El destacador se gasta acá: es la decisión de la pantalla */
-      '.btn.enviar{flex:1;background:#D6F24B;color:#1B1A2E;border-color:#B9D62E}' +
-      '.btn.enviar:hover{transform:translateY(-1px);box-shadow:0 10px 20px -12px #B9D62E}' +
-      '.btn.saltar{background:#fff;color:#1B1A2E;border-color:#C9CABF}' +
-      '.btn.saltar:hover{border-color:#1B1A2E}' +
-      '.reloj{font-size:11.5px;color:#6B6A7D;font-variant-numeric:tabular-nums}' +
+      '.btn.enviar{flex:1;background:#D6F24B;color:#16181A;border-color:#A8C023}' +
+      '.btn.enviar:hover{transform:translateY(-1px);box-shadow:0 10px 20px -12px #A8C023}' +
+      '.btn.saltar{background:#fff;color:#16181A;border-color:#C6C9C5}' +
+      '.btn.saltar:hover{border-color:#16181A}' +
+      '.reloj{font-size:11.5px;color:#5D6468;font-variant-numeric:tabular-nums}' +
       '.reloj b{color:#B3283C}' +
       '@media (prefers-reduced-motion:reduce){.panel{animation:none}}' +
       '</style>' +
@@ -816,7 +1090,7 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
           '<div class="cab" id="ap-rev-header" title="Arrastra para mover el panel">' +
             '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
             '<span style="min-width:0">' +
-              '<h2>Revisa antes de enviar</h2>' +
+              '<h2>' + (soloConfirmar ? 'Confirma antes de postular' : 'Revisa antes de enviar') + '</h2>' +
               '<p>' + esc(titulo.slice(0, 80)) + '</p>' +
             '</span>' +
             '<span class="agarre" aria-hidden="true">⋮⋮</span>' +
@@ -824,13 +1098,13 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
 
           '<div class="pest" role="tablist">' +
             '<button role="tab" aria-selected="true" class="ap-tab-btn" data-tab="respuestas">' +
-              'Respuestas (' + respuestasLog.length + ')</button>' +
+              (soloConfirmar ? 'Postulación' : 'Respuestas (' + respuestasLog.length + ')') + '</button>' +
             '<button role="tab" aria-selected="false" class="ap-tab-btn" data-tab="aviso">El aviso completo</button>' +
           '</div>' +
 
           '<div class="cuerpo">' +
             '<div class="ap-tab-content" data-tab-content="respuestas">' +
-              (filas || '<p class="vacio">Este formulario no tenía preguntas que responder.</p>') +
+              (filas || '<p class="vacio">' + esc(soloConfirmar ? opciones.mensaje : 'Este formulario no tenía preguntas que responder.') + '</p>') +
             '</div>' +
             '<div class="ap-tab-content" data-tab-content="aviso" style="display:none">' +
               '<div class="aviso">' + esc(contexto || 'El portal no entregó el texto del aviso.') + '</div>' +
@@ -838,7 +1112,7 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
           '</div>' +
 
           '<div class="pie">' +
-            '<button class="btn enviar" id="ap-rev-confirm">Confirmar y enviar</button>' +
+            '<button class="btn enviar" id="ap-rev-confirm">' + (soloConfirmar ? 'Sí, postular' : 'Confirmar y enviar') + '</button>' +
             '<button class="btn saltar" id="ap-rev-skip">Saltar esta oferta</button>' +
             '<span class="reloj" id="ap-rev-reloj"></span>' +
           '</div>' +
@@ -920,9 +1194,8 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
     }
 
     // -- Cuenta regresiva --
-    // El panel se auto-confirma y ENVÍA a los 3 minutos. Antes eso pasaba
-    // en silencio: te ibas a buscar un café y volvías con la postulación
-    // mandada. Ahora se ve, y los últimos 30 segundos se marcan en rojo.
+    // Cuenta regresiva de 3 minutos, visible; los últimos 30 segundos se
+    // marcan en rojo. Al llegar a cero la oferta se salta (ver abajo).
     const LIMITE_MS = 180000;
     const vence = Date.now() + LIMITE_MS;
     const reloj = raiz.getElementById('ap-rev-reloj');
@@ -932,9 +1205,14 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
       const restan = Math.max(0, Math.round((vence - Date.now()) / 1000));
       const mm = Math.floor(restan / 60), ss = String(restan % 60).padStart(2, '0');
       reloj.innerHTML = restan <= 30
-        ? 'Se envía sola en <b>' + mm + ':' + ss + '</b>'
-        : 'Se envía sola en ' + mm + ':' + ss;
-      if (restan <= 0) cerrar('confirm');
+        ? 'Se salta sola en <b>' + mm + ':' + ss + '</b>'
+        : 'Se salta sola en ' + mm + ':' + ss;
+      // §2.10 (docs/revision-2026-09-16.md): al vencer se SALTA la oferta, no
+      // se envía. Antes se auto-confirmaba y mandaba la postulación: "Revisar
+      // antes de enviar" no garantizaba revisión (te ibas a buscar un café y
+      // volvías con la postulación mandada), y los Términos (§5) prometen
+      // que se puede leer y editar cada respuesta ANTES de que se envíe.
+      if (restan <= 0) cerrar('skip');
     }
     pintarReloj();
     tic = setInterval(pintarReloj, 1000);
@@ -951,6 +1229,30 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto) {
     raiz.getElementById('ap-rev-confirm').onclick = () => cerrar('confirm');
     raiz.getElementById('ap-rev-skip').onclick = () => cerrar('skip');
   });
+};
+
+// §5 (docs/revision-2026-09-16.md): en Computrabajo cada oferta quedaba
+// registrada DOS veces en un mismo escaneo (40 líneas para 20 tarjetas). Un
+// escaneo tiene esperas largas (abrir avisos, revisar grises) durante las que
+// el MutationObserver de abajo -- o el AUTO_SCAN de la ráfaga, que llega ~2 s
+// después del arranque propio -- lanza OTRO escaneo sobre las mismas
+// tarjetas, todavía no marcadas como vistas. Además de ensuciar el log, dos
+// escaneos a la vez podían postular dos veces la misma oferta. Mientras uno
+// corre, los demás disparos se ignoran; el tope de 10 min evita que un
+// escaneo colgado bloquee para siempre a la pestaña.
+AP.sinReentrada = function (escanear) {
+  const TOPE_MS = 10 * 60 * 1000;
+  return function () {
+    if (AP._escaneandoDesde && Date.now() - AP._escaneandoDesde < TOPE_MS) return;
+    AP._escaneandoDesde = Date.now();
+    return Promise.resolve(escanear()).finally(() => { AP._escaneandoDesde = 0; });
+  };
+};
+
+// §2.10: pide confirmación antes del clic que envía una postulación de un
+// solo paso. Devuelve 'confirm' o 'skip' (también si vence el tiempo).
+AP.confirmarAntesDeEnviar = function (titulo, contexto, mensaje) {
+  return AP.mostrarRevision(titulo, [], contexto, { mensaje: mensaje });
 };
 
 // ── Mensajería compartida ──────────────────────────────────────────
@@ -992,6 +1294,15 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
   // porque la postulación real toma varios segundos -- hay que devolver
   // true para que Chrome no cierre el canal antes del sendResponse.
   if (m.type === 'DO_APPLY') {
+    // docs/modo-solo-observar.md §4.3: "solo observar" tiene que significar
+    // lo que dice -- una aprobación de banda gris NO puede postular por esta
+    // puerta mientras el modo esté activo. No se marca expirada (expirada:
+    // false): queda pendiente para reintentarse en el próximo ciclo, cuando
+    // la persona salga del modo observar.
+    if (AP.soloObservarEfectivo()) {
+      sendResponse({ success: false, expirada: false, motivo: 'Estás en modo solo observar' });
+      return true;
+    }
     if (!AP.aplicarDirecto) { sendResponse({ success: false, expirada: false }); return true; }
     AP.aplicarDirecto(m.decisionId).then(sendResponse);
     return true;

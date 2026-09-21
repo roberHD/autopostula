@@ -1,14 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, X, Filter, FlaskConical, Target, Plus } from "lucide-react";
-
-type Preferencias = {
-  palabrasIncluir: string[];
-  palabrasExcluir: string[];
-  modalidad: string;
-  jornada: string;
-};
+import { X, FlaskConical, Target, Plus, MapPin } from "lucide-react";
+import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 
 type PerfilCompilado = {
   version: number;
@@ -19,88 +13,11 @@ type PerfilCompilado = {
 
 type ObjetivoItem = { ciuo: string | null; etiqueta: string; peso: number };
 
-const OPCIONES_MODALIDAD = [
-  { valor: "cualquiera", titulo: "Cualquiera", desc: "No filtrar por modalidad" },
-  { valor: "remoto", titulo: "Remoto", desc: "Solo trabajo a distancia" },
-  { valor: "hibrido", titulo: "Híbrido", desc: "Combinación presencial/remoto" },
-  { valor: "presencial", titulo: "Presencial", desc: "Solo en el lugar de trabajo" },
-];
-
-const OPCIONES_JORNADA = [
-  { valor: "cualquiera", titulo: "Cualquiera" },
-  { valor: "full_time", titulo: "Full time" },
-  { valor: "part_time", titulo: "Part time" },
-];
-
-function TagInput({
-  etiqueta, descripcion, valores, onChange, placeholder, modo,
-}: {
-  etiqueta: string; descripcion: string; valores: string[];
-  onChange: (v: string[]) => void; placeholder: string;
-  modo: "pasa" | "descarta";
-}) {
-  const [input, setInput] = useState("");
-
-  function agregar() {
-    const v = input.trim();
-    if (v && !valores.includes(v)) onChange([...valores, v]);
-    setInput("");
-  }
-
-  return (
-    <div className="ap-criba__col" data-modo={modo}>
-      <label className="ap-label">{etiqueta}</label>
-      <p className="ap-section-sub">{descripcion}</p>
-
-      {valores.length > 0 && (
-        <div className="ap-etiquetas" style={{ marginBottom: 10 }}>
-          {valores.map((v) => (
-            <span key={v} className="ap-etiqueta" data-modo={modo}>
-              {v}
-              <button
-                type="button"
-                className="ap-etiqueta__x"
-                onClick={() => onChange(valores.filter((x) => x !== v))}
-                aria-label={`Quitar ${v}`}
-              >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      <input
-        className="ap-input"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") {
-            e.preventDefault();
-            agregar();
-          }
-        }}
-        onBlur={agregar}
-        placeholder={placeholder}
-      />
-    </div>
-  );
-}
-
 export default function FiltrosPage() {
-  const [prefs, setPrefs] = useState<Preferencias>({
-    palabrasIncluir: [], palabrasExcluir: [], modalidad: "cualquiera", jornada: "cualquiera",
-  });
   const [cargando, setCargando] = useState(true);
-  const [guardando, setGuardando] = useState(false);
-  const [sugiriendo, setSugiriendo] = useState(false);
-  const [mensaje, setMensaje] = useState("");
-  const [guardado, setGuardado] = useState(false);
 
-  const [usarScorerLocal, setUsarScorerLocal] = useState(false);
   const [perfilCompilado, setPerfilCompilado] = useState<PerfilCompilado | null>(null);
   const [compilando, setCompilando] = useState(false);
-  const [guardandoScorer, setGuardandoScorer] = useState(false);
   const [mensajeScorer, setMensajeScorer] = useState("");
 
   // Objetivo laboral (docs/objetivo-laboral.md) -- distinto de cargoObjetivo
@@ -113,27 +30,30 @@ export default function FiltrosPage() {
   const [mensajeObjetivo, setMensajeObjetivo] = useState("");
   const [sugerirRetriaje, setSugerirRetriaje] = useState(false);
 
+  // §2.1 (docs/revision-2026-09-16.md): mismo picker que el onboarding, para
+  // que corregir la ubicación después sea tan fácil como declararla la
+  // primera vez.
+  const [ubicacion, setUbicacion] = useState<UbicacionValor>(ubicacionVacia());
+  const [guardandoUbicacion, setGuardandoUbicacion] = useState(false);
+  const [mensajeUbicacion, setMensajeUbicacion] = useState("");
+
   useEffect(() => {
     async function cargar() {
       try {
-        const [resPrefs, resPerfil, resObjetivos] = await Promise.all([
-          fetch("/api/preferencias-busqueda"),
+        const [resPerfil, resObjetivos, resPrefs] = await Promise.all([
           fetch("/api/ai/compilar-perfil"),
           fetch("/api/objetivos"),
+          fetch("/api/preferencias-busqueda"),
         ]);
-        const data = await resPrefs.json();
-        if (!resPrefs.ok) { setMensaje(data.error ?? `Error ${resPrefs.status}`); return; }
-        setPrefs({
-          palabrasIncluir: data.palabrasIncluir ?? [],
-          palabrasExcluir: data.palabrasExcluir ?? [],
-          modalidad: data.modalidad ?? "cualquiera",
-          jornada: data.jornada ?? "cualquiera",
-        });
-        setUsarScorerLocal(!!data.usarScorerLocal);
 
         if (resPerfil.ok) {
           const perfilData = await resPerfil.json();
           setPerfilCompilado(perfilData.perfilCompilado ?? null);
+        }
+
+        if (resPrefs.ok) {
+          const prefsData = await resPrefs.json();
+          if (prefsData?.ubicacionDeclarada) setUbicacion({ ...ubicacionVacia(), ...prefsData.ubicacionDeclarada });
         }
 
         if (resObjetivos.ok) {
@@ -152,7 +72,6 @@ export default function FiltrosPage() {
         }
       } catch (err) {
         console.error("Error cargando filtros:", err);
-        setMensaje("No se pudo cargar — revisa la consola");
       } finally {
         setCargando(false);
       }
@@ -166,82 +85,34 @@ export default function FiltrosPage() {
     try {
       const res = await fetch("/api/ai/compilar-perfil", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) { setMensajeScorer(data.error ?? "No se pudo compilar"); return; }
+      if (!res.ok) { setMensajeScorer(data.error ?? "No se pudo actualizar tu búsqueda"); return; }
       setPerfilCompilado(data.perfilCompilado);
-      setMensajeScorer("Perfil compilado — ya lo puede usar el motor nuevo.");
+      setMensajeScorer("Búsqueda actualizada.");
     } catch (err) {
       console.error("Error compilando perfil:", err);
-      setMensajeScorer("No se pudo compilar — revisa la consola");
+      setMensajeScorer("No se pudo actualizar tu búsqueda — revisa la consola");
     } finally {
       setCompilando(false);
     }
   }
 
-  async function alternarScorerLocal() {
-    if (!perfilCompilado) return;
-    const nuevoValor = !usarScorerLocal;
-    setGuardandoScorer(true);
-    setUsarScorerLocal(nuevoValor); // optimista
+  async function guardarUbicacion() {
+    setGuardandoUbicacion(true);
+    setMensajeUbicacion("");
     try {
       const res = await fetch("/api/preferencias-busqueda", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...prefs, usarScorerLocal: nuevoValor }),
+        body: JSON.stringify({ ubicacionDeclarada: ubicacion }),
       });
-      if (!res.ok) {
-        setUsarScorerLocal(!nuevoValor);
-        const data = await res.json().catch(() => ({}));
-        setMensajeScorer(data.error ?? "No se pudo guardar el cambio");
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setMensajeUbicacion(data.error ?? "No se pudo guardar"); return; }
+      setMensajeUbicacion("Guardado. Actualiza tu búsqueda (más abajo) para que la extensión la use.");
     } catch (err) {
-      setUsarScorerLocal(!nuevoValor);
-      console.error("Error guardando el flag del scorer:", err);
+      console.error("Error guardando ubicación:", err);
+      setMensajeUbicacion("No se pudo guardar — revisa la consola");
     } finally {
-      setGuardandoScorer(false);
-    }
-  }
-
-  async function guardar() {
-    setGuardando(true);
-    setMensaje("");
-    setGuardado(false);
-    try {
-      const res = await fetch("/api/preferencias-busqueda", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(prefs),
-      });
-      const data = await res.json();
-      if (!res.ok) { setMensaje(data.error ?? "No se pudo guardar"); return; }
-      setGuardado(true);
-    } catch (err) {
-      console.error("Error guardando filtros:", err);
-      setMensaje("No se pudo guardar — revisa la consola");
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  async function sugerirConIA() {
-    setSugiriendo(true);
-    setMensaje("");
-    setGuardado(false);
-    try {
-      const res = await fetch("/api/ai/sugerir-filtros", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) { setMensaje(data.error ?? "No se pudo generar la sugerencia"); return; }
-      setPrefs({
-        palabrasIncluir: data.sugerido.palabrasIncluir ?? [],
-        palabrasExcluir: data.sugerido.palabrasExcluir ?? [],
-        modalidad: data.sugerido.modalidad ?? "cualquiera",
-        jornada: data.sugerido.jornada ?? "cualquiera",
-      });
-      setMensaje("Sugerencia generada — revísala y guarda si te sirve.");
-    } catch (err) {
-      console.error("Error sugiriendo filtros:", err);
-      setMensaje("No se pudo generar la sugerencia — revisa la consola");
-    } finally {
-      setSugiriendo(false);
+      setGuardandoUbicacion(false);
     }
   }
 
@@ -268,7 +139,7 @@ export default function FiltrosPage() {
       setMensajeObjetivo(
         data.avisoCompilacion
           ? "Objetivo guardado. " + data.avisoCompilacion
-          : "Objetivo guardado y perfil recompilado."
+          : "Objetivo guardado y búsqueda actualizada."
       );
     } catch (err) {
       console.error("Error guardando objetivo:", err);
@@ -282,94 +153,22 @@ export default function FiltrosPage() {
 
   return (
     <div className="ap-glow-bg">
-      <div className="ap-page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <h1 className="ap-page-title">Filtros de búsqueda</h1>
-          <p className="ap-page-sub">
-            Define qué ofertas quieres que la extensión postule por ti — se aplica tanto al escaneo manual como a la búsqueda automática.
-          </p>
-        </div>
-        <button className="ap-button-ghost" onClick={sugerirConIA} disabled={sugiriendo} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          <Sparkles size={14} />
-          {sugiriendo ? "Pensando..." : "Sugerir con IA"}
-        </button>
+      <div className="ap-page-header">
+        <h1 className="ap-page-title">Filtros de búsqueda</h1>
+        <p className="ap-page-sub">
+          Define qué ofertas quieres que la extensión postule por ti — se aplica tanto al escaneo manual como a la búsqueda automática.
+        </p>
       </div>
 
-      {mensaje && (
-        <p style={{ color: mensaje.includes("Sugerencia") ? "var(--status-finalizado)" : "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>
-          {mensaje}
-        </p>
-      )}
-
       <div className="ap-hoja" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <div className="ap-criba ap-animate-in">
-          <TagInput
-            modo="pasa"
-            etiqueta="Deja pasar si menciona"
-            descripcion="Solo se consideran ofertas que mencionen al menos una de estas palabras"
-            valores={prefs.palabrasIncluir}
-            onChange={(v) => setPrefs((p) => ({ ...p, palabrasIncluir: v }))}
-            placeholder="vendedor, retail… y Enter"
-          />
-          <TagInput
-            modo="descarta"
-            etiqueta="Descarta si menciona"
-            descripcion="Se botan las ofertas que mencionen cualquiera de estas, aunque calcen en lo demás"
-            valores={prefs.palabrasExcluir}
-            onChange={(v) => setPrefs((p) => ({ ...p, palabrasExcluir: v }))}
-            placeholder="comisión pura… y Enter"
-          />
-        </div>
-
-        <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.05s" }}>
-          <p className="ap-section-title">Modalidad</p>
-          <p className="ap-section-sub">Dónde estás dispuesto a trabajar</p>
-          <div className="ap-segmento" style={{ marginBottom: 20 }}>
-            {OPCIONES_MODALIDAD.map((o) => (
-              <button
-                key={o.valor}
-                type="button"
-                className="ap-segmento__op"
-                aria-pressed={prefs.modalidad === o.valor}
-                onClick={() => setPrefs((p) => ({ ...p, modalidad: o.valor }))}
-              >
-                {o.titulo}
-              </button>
-            ))}
-          </div>
-
-          <p className="ap-section-title">Jornada</p>
-          <p className="ap-section-sub">Cuántas horas te acomodan</p>
-          <div className="ap-segmento">
-            {OPCIONES_JORNADA.map((o) => (
-              <button
-                key={o.valor}
-                type="button"
-                className="ap-segmento__op"
-                aria-pressed={prefs.jornada === o.valor}
-                onClick={() => setPrefs((p) => ({ ...p, jornada: o.valor }))}
-              >
-                {o.titulo}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <p className="ap-nota">
-          <Filter size={15} />
-          Antes de postular a una oferta, la extensión revisa estos filtros. Si no calza, la salta sin
-          gastar tiempo ni cupo de IA. &ldquo;Sugerir con IA&rdquo; los arma a partir de tu CV y de lo
-          que conversaste en Conversación IA.
-        </p>
-
-        <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.1s", borderColor: "color-mix(in oklch, var(--chart-3) 35%, transparent)" }}>
+        <div className="ap-section ap-animate-in" style={{ marginBottom: 0, borderColor: "color-mix(in oklch, var(--chart-3) 35%, transparent)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <Target size={15} color="var(--chart-3)" />
           <p className="ap-section-title" style={{ marginBottom: 0 }}>Objetivo laboral</p>
         </div>
         <p className="ap-section-sub">
           Tu CV describe de dónde vienes. Esto es a dónde vas — puede ser distinto, sobre todo si te
-          estás cambiando de rubro. El motor nuevo de abajo usa esto (no tu CV) para decidir qué
+          estás cambiando de rubro. El motor de búsqueda usa esto (no tu CV) para decidir qué
           ofertas te calzan.
         </p>
 
@@ -452,44 +251,51 @@ export default function FiltrosPage() {
         </div>
       </div>
 
-      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.2s", borderColor: "color-mix(in oklch, var(--chart-2) 35%, transparent)" }}>
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.08s", borderColor: "color-mix(in oklch, var(--chart-4, var(--chart-2)) 35%, transparent)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <FlaskConical size={15} color="var(--chart-2)" />
-          <p className="ap-section-title" style={{ marginBottom: 0 }}>Motor de filtrado nuevo (beta)</p>
+          <MapPin size={15} />
+          <p className="ap-section-title" style={{ marginBottom: 0 }}>Ubicación</p>
         </div>
         <p className="ap-section-sub">
-          En vez de palabras sueltas, compila un perfil con IA a partir de tu CV y tus decisiones, y puntúa
-          cada oferta con más matices (sinónimos, vetos con razón, ubicación). Reemplaza a los filtros de
-          arriba cuando lo actives.
+          Dónde estás dispuesto a trabajar. Antes esto se adivinaba con IA a partir de tu CV — se
+          declara acá para no equivocarse (agregar una comuna que quieres evitar, u omitir una que sí pediste).
+        </p>
+
+        {mensajeUbicacion && (
+          <p style={{ fontSize: 12.5, color: mensajeUbicacion.startsWith("Guardado") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
+            {mensajeUbicacion}
+          </p>
+        )}
+
+        <UbicacionPicker valor={ubicacion} onChange={setUbicacion} />
+
+        <div style={{ marginTop: 14 }}>
+          <button className="ap-button-ghost" disabled={guardandoUbicacion} onClick={guardarUbicacion}>
+            {guardandoUbicacion ? "Guardando..." : "Guardar ubicación"}
+          </button>
+        </div>
+      </div>
+
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.1s", borderColor: "color-mix(in oklch, var(--chart-2) 35%, transparent)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <FlaskConical size={15} color="var(--chart-2)" />
+          <p className="ap-section-title" style={{ marginBottom: 0 }}>Perfil de búsqueda</p>
+        </div>
+        <p className="ap-section-sub">
+          Es lo que la extensión usa para decidir a qué ofertas postular: los cargos que buscas, lo que
+          descartas y dónde. Se arma con tu CV, tus objetivos y tus decisiones.
         </p>
 
         {mensajeScorer && (
-          <p style={{ fontSize: 12.5, color: mensajeScorer.includes("compilado") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
+          <p style={{ fontSize: 12.5, color: mensajeScorer.includes("actualizada") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
             {mensajeScorer}
           </p>
         )}
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: perfilCompilado ? 16 : 0, flexWrap: "wrap" }}>
           <button className="ap-button-ghost" onClick={compilarPerfil} disabled={compilando}>
-            {compilando ? "Compilando..." : perfilCompilado ? "Recompilar perfil" : "Compilar mi perfil"}
+            {compilando ? "Actualizando..." : perfilCompilado ? "Actualizar mi búsqueda" : "Armar mi búsqueda"}
           </button>
-
-          {perfilCompilado && (
-            <div className="ap-toggle-row" style={{ border: "none", padding: 0, flex: 1, minWidth: 220 }}>
-              <div>
-                <div className="ap-toggle-label">Usar el motor nuevo</div>
-                <div className="ap-toggle-desc">{usarScorerLocal ? "Activo" : "Apagado — se sigue usando el filtro de arriba"}</div>
-              </div>
-              <button
-                className={"ap-switch " + (usarScorerLocal ? "ap-switch-on" : "ap-switch-off")}
-                onClick={alternarScorerLocal}
-                disabled={guardandoScorer}
-                aria-pressed={usarScorerLocal}
-              >
-                <span className="ap-switch-knob" />
-              </button>
-            </div>
-          )}
         </div>
 
         {perfilCompilado && (
@@ -524,17 +330,6 @@ export default function FiltrosPage() {
             )}
           </div>
         )}
-        </div>
-
-        <div className="ap-guardar">
-          <button className="ap-button" disabled={guardando} onClick={guardar}>
-            {guardando ? "Guardando…" : "Guardar filtros"}
-          </button>
-          {guardado && (
-            <span className="ap-guardar__nota">
-              Guardado. La extensión ya usa estos filtros.
-            </span>
-          )}
         </div>
       </div>
     </div>

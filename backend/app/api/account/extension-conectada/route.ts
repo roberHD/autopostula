@@ -22,9 +22,12 @@ export async function POST() {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { extensionConectada: true },
+  // Solo la primera vez: el recordatorio de ráfagas (docs/rafagas-y-ponerse-al-dia.md
+  // §3.8) necesita saber desde cuándo está conectada. Reconectar no la cambia, ni se
+  // inventa una fecha para las cuentas que ya estaban conectadas antes de que existiera.
+  await prisma.user.updateMany({
+    where: { id: userId, extensionConectada: false },
+    data: { extensionConectada: true, extensionConectadaEn: new Date() },
   });
 
   return NextResponse.json({ ok: true });

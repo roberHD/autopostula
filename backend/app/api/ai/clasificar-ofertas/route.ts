@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       'Responde SOLO un JSON valido, sin texto adicional, sin markdown: {"relevantes":[1,3,5]} -- solo los numeros (segun la lista) de las ofertas relevantes.';
 
     const respuesta = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-haiku-4-5",
       max_tokens: 500,
       messages: [{ role: "user", content: instruccion }],
     });

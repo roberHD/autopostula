@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target, Search, Plus, X } from "lucide-react";
+import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target, Search, Plus, X, Download } from "lucide-react";
 import { quitarMarkdown } from "@/lib/text";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import { Marca } from "@/components/Marca";
 import { Skel } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
+import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
+import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
+import { sinSoporteExtension } from "@/lib/dispositivo";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -102,7 +105,12 @@ export default function OnboardingPage() {
         else if (!objetivoListo) calculado = 2;
         else if (!triajeListo) calculado = 3;
         else if (!conversacionLista) calculado = 4;
-        else if (!extensionLista) calculado = 5;
+        // §3.3 (docs/celular-y-escritorio.md): en un aparato que no puede
+        // instalarla, "falta la extensión" no se resuelve ahí -- mandarlo al
+        // paso 5 lo dejaba en un bucle (entra, ve el muro, vuelve a entrar).
+        // Se sigue a Portales y a Listo; la extensión queda como pendiente
+        // visible en el panel, no como tope del onboarding.
+        else if (!extensionLista && !sinSoporteExtension()) calculado = 5;
         else if (!portalConectado) calculado = 6;
         else calculado = 7;
 
@@ -247,12 +255,25 @@ function PasoBienvenida({ onSiguiente, onOmitir }: { onSiguiente: () => void; on
       <Header
         Icon={Sparkles}
         titulo="¡Bienvenido a AutoPostula!"
-        sub="En 4 pasos cortos dejamos todo listo para que la IA empiece a postular por ti con tu información real."
+        sub={`En ${PASOS.length - 1} pasos dejamos todo listo para que la IA empiece a postular por ti con tu información real.`}
       />
       <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} siguienteTexto="Empecemos" />
     </>
   );
 }
+
+type CampoLeido = "nombre" | "telefono" | "comuna" | "expectativaRenta";
+const CAMPOS_LEIDOS: { key: CampoLeido; label: string; placeholder: string; ayuda?: string }[] = [
+  { key: "nombre", label: "Nombre completo", placeholder: "Ej: Camila Soto Pérez" },
+  { key: "telefono", label: "Teléfono", placeholder: "+56 9 1234 5678" },
+  { key: "comuna", label: "Comuna donde vives", placeholder: "Ej: Maipú" },
+  {
+    key: "expectativaRenta",
+    label: "Pretensión de renta",
+    placeholder: "Ej: $650.000 líquidos",
+    ayuda: "Muchos formularios la preguntan. Si la dejas vacía, la IA no inventa una y puede que el envío quede a medias.",
+  },
+];
 
 function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   const [subiendo, setSubiendo] = useState(false);
@@ -262,6 +283,43 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
   const [mensaje, setMensaje] = useState("");
   const [subidoOk, setSubidoOk] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // §4.2 (docs/revision-2026-09-16.md): "La IA completó tu perfil" sin mostrar
+  // qué leyó dejó a una cuenta con el nombre "Roberto Hidalgo Andrés Bizama" y
+  // sin cómo verlo. Acá se muestran los datos que más se usan al responder y se
+  // pueden corregir -- incluida la pretensión de renta, una de las preguntas
+  // más comunes de los formularios, que el CV casi nunca trae.
+  const [datosLeidos, setDatosLeidos] = useState<Record<CampoLeido, string> | null>(null);
+  const [datosEditados, setDatosEditados] = useState(false);
+
+  function mostrarDatos(perfil: Record<string, unknown> | null | undefined) {
+    const texto = (v: unknown) => (typeof v === "string" ? v : "");
+    setDatosLeidos({
+      nombre: texto(perfil?.nombre),
+      telefono: texto(perfil?.telefono),
+      comuna: texto(perfil?.comuna),
+      expectativaRenta: texto(perfil?.expectativaRenta),
+    });
+    setDatosEditados(false);
+  }
+
+  // Solo se manda lo que la persona tocó, y nunca un campo vacío que borre lo
+  // que la IA había leído.
+  async function guardarDatosLeidos() {
+    if (!datosLeidos || !datosEditados) return;
+    const cambios: Record<string, string> = {};
+    for (const campo of CAMPOS_LEIDOS) {
+      if (datosLeidos[campo.key].trim()) cambios[campo.key] = datosLeidos[campo.key].trim();
+    }
+    try {
+      await fetch("/api/perfil", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cambios),
+      });
+    } catch (e) {
+      console.error("No se pudieron guardar las correcciones del perfil:", e);
+    }
+  }
 
   useEffect(() => {
     async function revisarCvExistente() {
@@ -269,7 +327,10 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
         const res = await fetch("/api/perfil");
         if (res.ok) {
           const data = await parsearRespuesta(res);
-          if (data?.nombreArchivo) setNombreArchivo(data.nombreArchivo);
+          if (data?.nombreArchivo) {
+            setNombreArchivo(data.nombreArchivo);
+            mostrarDatos(data);
+          }
         }
       } catch (e) {
         console.error("No se pudo revisar si ya había un CV cargado:", e);
@@ -312,7 +373,8 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(dataAI.datos),
           });
-          setMensaje("Tu CV se subió y la IA completó tu perfil automáticamente.");
+          setMensaje("Tu CV se subió y la IA completó tu perfil. Revisa abajo lo que leyó.");
+          mostrarDatos(dataAI.datos);
         } else {
           setMensaje(dataAI.error || "Tu CV se subió correctamente. Completa tus datos manualmente en tu perfil.");
         }
@@ -370,7 +432,37 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
           {mensaje}
         </div>
       )}
-      <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} />
+      {datosLeidos && (
+        <div style={{ marginTop: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Esto es lo que leímos de tu CV</p>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+            Corrige lo que esté mal: son los datos con los que se responden los formularios.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {CAMPOS_LEIDOS.map((campo) => (
+              <div key={campo.key}>
+                <label className="ap-label" style={{ display: "block", marginBottom: 4 }}>{campo.label}</label>
+                <input
+                  className="ap-input"
+                  value={datosLeidos[campo.key]}
+                  placeholder={campo.placeholder}
+                  onChange={(e) => {
+                    setDatosLeidos({ ...datosLeidos, [campo.key]: e.target.value });
+                    setDatosEditados(true);
+                  }}
+                />
+                {campo.ayuda && (
+                  <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 3 }}>{campo.ayuda}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <Footer
+        onSiguiente={async () => { await guardarDatosLeidos(); onSiguiente(); }}
+        onOmitir={onOmitir}
+      />
     </>
   );
 }
@@ -393,11 +485,19 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
   const [resultados, setResultados] = useState<ResultadoCatalogo[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+  // §2.1 (docs/revision-2026-09-16.md): la ubicación se declara acá, en el
+  // mismo paso -- nunca se infería del CV, y cuando se hacía con IA (más
+  // abajo, antes de este cambio) salía mal: agregaba la comuna del trabajo
+  // ANTERIOR de la persona (la que quería evitar) y omitía las que sí pidió.
+  const [ubicacion, setUbicacion] = useState<UbicacionValor>(ubicacionVacia());
 
   useEffect(() => {
     async function cargar() {
       try {
-        const res = await fetch("/api/objetivos");
+        const [res, resPrefs] = await Promise.all([
+          fetch("/api/objetivos"),
+          fetch("/api/preferencias-busqueda"),
+        ]);
         const data = await parsearRespuesta(res);
         setSugerenciaCv(data.sugerenciaCv ?? null);
         if (Array.isArray(data.objetivos) && data.objetivos.length) {
@@ -412,6 +512,12 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
         } else {
           setObjetivos([{ ciuo: null, etiqueta: "", peso: 1 }]);
           setModo("editar");
+        }
+        try {
+          const prefs = await parsearRespuesta(resPrefs);
+          if (prefs?.ubicacionDeclarada) setUbicacion({ ...ubicacionVacia(), ...prefs.ubicacionDeclarada });
+        } catch {
+          // Sin preferencias todavía -- se queda con ubicacionVacia().
         }
       } catch (e) {
         console.error("Error cargando objetivo:", e);
@@ -460,13 +566,21 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
       setError("Escribe o elige al menos un objetivo.");
       return;
     }
+    if (!ubicacion.regiones.length) {
+      setError("Elige al menos una región donde quieres trabajar.");
+      return;
+    }
+    if (!ubicacion.todaLaRegion && !ubicacion.comunas.length && !ubicacion.aceptaRemoto) {
+      setError("Elige comunas específicas, marca \"toda la región\", o acepta remoto.");
+      return;
+    }
     setGuardando(true);
     setError("");
     try {
       const res = await fetch("/api/objetivos", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ objetivos: limpios }),
+        body: JSON.stringify({ objetivos: limpios, ubicacionDeclarada: ubicacion }),
       });
       const data = await parsearRespuesta(res);
       if (!res.ok) {
@@ -494,6 +608,13 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
         sub="Tu CV describe de dónde vienes. Esto es a dónde vas — puede ser distinto, sobre todo si te estás cambiando de rubro."
       />
 
+      <div style={{ marginBottom: 20, paddingBottom: 18, borderBottom: "1px solid var(--border)" }}>
+        <label className="ap-label" style={{ marginBottom: 6, display: "block" }}>¿Dónde quieres trabajar?</label>
+        <UbicacionPicker valor={ubicacion} onChange={setUbicacion} />
+      </div>
+
+      {error && <p style={{ fontSize: 12.5, color: "var(--status-rechazado)", marginBottom: 12 }}>{error}</p>}
+
       {modo === "sugerencia" && sugerenciaCv ? (
         <div>
           <p style={{ fontSize: 14, marginBottom: 16, textAlign: "center" }}>
@@ -504,7 +625,7 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
               Busco otra cosa
             </button>
             <button className="ap-button" style={{ flex: 1 }} onClick={guardar} disabled={guardando}>
-              {guardando ? "Guardando..." : "Sí, es eso"}
+              {guardando ? "Armando tu búsqueda…" : "Sí, es eso"}
             </button>
           </div>
         </div>
@@ -573,9 +694,13 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
             </button>
           )}
 
-          {error && <p style={{ fontSize: 12.5, color: "var(--status-rechazado)", marginBottom: 12 }}>{error}</p>}
-
-          <Footer onSiguiente={guardar} onOmitir={onOmitir} siguienteTexto={guardando ? "Guardando..." : "Continuar"} deshabilitado={guardando} />
+          <Footer onSiguiente={guardar} onOmitir={onOmitir} siguienteTexto={guardando ? "Armando tu búsqueda…" : "Continuar"} deshabilitado={guardando} />
+          {/* §4.2: guardar arma tu búsqueda con IA y tarda ~10 s; sin aviso parecía colgado. */}
+          {guardando && (
+            <p role="status" style={{ fontSize: 12, color: "var(--text-muted)", textAlign: "right", marginTop: 8 }}>
+              Estamos armando tu búsqueda con lo que elegiste. Toma unos 10 segundos, no cierres esta página.
+            </p>
+          )}
         </>
       )}
     </>
@@ -746,13 +871,70 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
   );
 }
 
+// §3.2 (docs/celular-y-escritorio.md): en un teléfono el paso de la extensión
+// no se salta ni se esconde -- cambia de contenido. Dice qué se puede hacer ya,
+// qué se desbloquea con un computador, y no bloquea el avance.
+function PasoExtensionEnMovil({ onSiguiente }: { onSiguiente: () => void }) {
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiarEnlace() {
+    try {
+      await navigator.clipboard.writeText("https://autopostula.cl");
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      // Sin portapapeles el enlace igual es corto: se muestra escrito abajo.
+    }
+  }
+
+  return (
+    <>
+      <Header
+        Icon={Puzzle}
+        titulo="Para postular por ti necesitas un computador"
+        sub="Las extensiones de navegador no funcionan en teléfonos. Desde el celular decides; en el computador se postula."
+      />
+      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Mientras tanto ya puedes:</p>
+      <ul style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.7, paddingLeft: 18, marginBottom: 16 }}>
+        <li>Ver qué ofertas calzan contigo</li>
+        <li>Decidir cuáles te interesan</li>
+        <li>Revisar tus postulaciones</li>
+      </ul>
+      <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 12 }}>
+        Cuando tengas un computador: abre <b>autopostula.cl</b> con Chrome, entra con la misma cuenta e instala la
+        extensión (te lo recordamos en el panel).
+      </p>
+      <button onClick={copiarEnlace} className="ap-button-ghost" style={{ width: "100%", marginBottom: 10 }}>
+        {copiado ? "Enlace copiado ✓" : "Copiar autopostula.cl para abrirlo en el computador"}
+      </button>
+      <button onClick={onSiguiente} className="ap-button" style={{ width: "100%" }}>
+        Continuar en el celular
+      </button>
+    </>
+  );
+}
+
 function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
+  // Se decide después de montar: el servidor no sabe qué aparato es.
+  const [enMovil, setEnMovil] = useState(false);
+  useEffect(() => { setEnMovil(sinSoporteExtension()); }, []);
+  if (enMovil) return <PasoExtensionEnMovil onSiguiente={onSiguiente} />;
+  return <PasoExtensionEscritorio onSiguiente={onSiguiente} onOmitir={onOmitir} />;
+}
+
+function PasoExtensionEscritorio({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   // null = todavía detectando si la extensión está instalada.
   const [extensionDetectada, setExtensionDetectada] = useState<boolean | null>(null);
   const [conectandoExt, setConectandoExt] = useState(false);
   const [extConectada, setExtConectada] = useState(false);
   const [errorConexion, setErrorConexion] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  // docs/verificacion-de-correo.md §7: si /api/account/token responde 403
+  // con requiereVerificacion, no es un error cualquiera -- se explica acá
+  // mismo por qué está bloqueado, con el botón de reenviar a mano.
+  const [necesitaVerificacion, setNecesitaVerificacion] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const [avisoReenvio, setAvisoReenvio] = useState<string | null>(null);
 
   // bridge.js (extension/bridge.js) avisa con estos eventos si está instalada,
   // y si la conexión del token se completó o falló.
@@ -801,6 +983,10 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
   async function generarToken(): Promise<string | null> {
     const res = await fetch("/api/account/token", { method: "POST" });
     const data = await parsearRespuesta(res);
+    if (data.requiereVerificacion) {
+      setNecesitaVerificacion(true);
+      return null;
+    }
     setToken(data.apiToken ?? null);
     return data.apiToken ?? null;
   }
@@ -811,7 +997,7 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
     const t = token ?? (await generarToken());
     if (!t) {
       setConectandoExt(false);
-      setErrorConexion("No se pudo generar el token.");
+      if (!necesitaVerificacion) setErrorConexion("No se pudo generar el token.");
       return;
     }
     window.dispatchEvent(new CustomEvent("autopostula:conectar", { detail: { token: t } }));
@@ -824,12 +1010,26 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
     }, 4000);
   }
 
+  async function reenviarVerificacion() {
+    setReenviando(true);
+    setAvisoReenvio(null);
+    try {
+      const res = await fetch("/api/auth/reenviar-verificacion", { method: "POST" });
+      const data = await parsearRespuesta(res);
+      setAvisoReenvio(res.ok ? "Te enviamos un nuevo enlace — revisa tu correo." : (data.error ?? "No se pudo reenviar el correo."));
+    } catch {
+      setAvisoReenvio("No pudimos conectar con el servidor.");
+    } finally {
+      setReenviando(false);
+    }
+  }
+
   return (
     <>
       <Header
         Icon={Puzzle}
         titulo="Instala la extensión"
-        sub="Es la que hace las postulaciones por ti en Computrabajo — sin ella no hay nada que conectar."
+        sub="Es la que hace las postulaciones por ti en Computrabajo, Laborum y Trabajando.com — sin ella no hay nada que conectar."
       />
 
       {extConectada ? (
@@ -837,6 +1037,18 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
           <p style={{ fontSize: 13, color: "var(--status-finalizado)", fontWeight: 500 }}>
             Extensión conectada ✓
           </p>
+        </div>
+      ) : necesitaVerificacion ? (
+        <div className="ap-section" style={{ marginBottom: 20 }}>
+          <p className="ap-section-title">Confirma tu correo primero</p>
+          <p className="ap-section-sub">
+            No dejamos que una identidad sin verificar postule a trabajos en tu nombre. Te
+            mandamos un enlace al registrarte — revisa tu bandeja (y spam), o pide uno nuevo.
+          </p>
+          <button className="ap-button-ghost" onClick={reenviarVerificacion} disabled={reenviando}>
+            {reenviando ? "Enviando..." : "Reenviar correo de verificación"}
+          </button>
+          {avisoReenvio && <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>{avisoReenvio}</p>}
         </div>
       ) : extensionDetectada ? (
         <div className="ap-section" style={{ marginBottom: 20 }}>
@@ -851,11 +1063,23 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
         <div className="ap-section" style={{ marginBottom: 20 }}>
           <p className="ap-section-title">Todavía no la detectamos</p>
           <p className="ap-section-sub">
-            Instala la extensión de AutoPostula en tu navegador y vuelve a intentar.
-            Si prefieres dejarlo para después, omite este paso y conéctala cuando
-            quieras desde Portales — hasta entonces no podremos postular por ti.
+            Instálala desde Chrome Web Store y vuelve a esta página. Si prefieres dejarlo
+            para después, omite este paso y conéctala cuando quieras desde Portales —
+            hasta entonces no podremos postular por ti.
           </p>
-          <button className="ap-button-ghost" onClick={() => window.location.reload()}>
+          <a
+            href={URL_CHROME_WEB_STORE}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ap-button"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              textDecoration: "none", marginBottom: 10,
+            }}
+          >
+            <Download size={15} /> Descargar extensión
+          </a>
+          <button className="ap-button-ghost" style={{ display: "block" }} onClick={() => window.location.reload()}>
             Ya la instalé, verificar
           </button>
         </div>
@@ -922,7 +1146,7 @@ function PasoTriaje({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
       ) : titulos.length === 0 ? (
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <p style={{ fontSize: 13.5, color: "var(--text-muted)", marginBottom: 20 }}>
-            Por ahora no tenemos más cargos para mostrarte — puedes seguir.
+            No encontramos cargos parecidos al que buscas para preguntarte — no pasa nada, puedes seguir.
           </p>
           <button className="ap-button" onClick={onSiguiente}>
             Continuar
@@ -944,16 +1168,25 @@ function PasoTriaje({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
 
 function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   const [plataformas, setPlataformas] = useState<{ id: string; nombre: string }[]>([]);
-  const [conectada, setConectada] = useState(false);
+  // Antes era un solo boolean compartido por las tres plataformas -- al
+  // conectar una, la UI mostraba "Conectado ✓" en TODAS (la fila de la BD sí
+  // quedaba bien, era puramente un bug de esta pantalla). Un Set por
+  // platformId hace que cada fila refleje su propio estado.
+  const [conectadas, setConectadas] = useState<Set<string>>(new Set());
   const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
+  // §4.2: se dice el límite del plan ANTES de que la persona choque con él.
+  // null = sin límite (o todavía no se sabe).
+  const [maxPortales, setMaxPortales] = useState<number | null>(null);
 
   useEffect(() => {
     async function cargar() {
       try {
         const res = await fetch("/api/platform-accounts");
         const data = await parsearRespuesta(res);
+        setMaxPortales(data.maxPlataformasActivas ?? null);
         setPlataformas(data.plataformas ?? []);
-        setConectada((data.cuentas ?? []).some((c: any) => c.activa));
+        setConectadas(new Set((data.cuentas ?? []).filter((c: any) => c.activa).map((c: any) => c.platformId)));
       } finally {
         setCargando(false);
       }
@@ -962,17 +1195,31 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
   }, []);
 
   async function conectar(platformId: string) {
+    setError("");
     const res = await fetch("/api/platform-accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ platformId }),
     });
-    if (res.ok) setConectada(true);
+    const data = await parsearRespuesta(res);
+    if (res.ok) {
+      setConectadas((prev) => new Set(prev).add(platformId));
+    } else {
+      setError(data.error ?? "No se pudo conectar el portal");
+    }
   }
 
   return (
     <>
-      <Header Icon={Globe} titulo="Conecta un portal" sub="Elige dónde quieres que la extensión postule por ti." />
+      <Header
+        Icon={Globe}
+        titulo="Conecta un portal"
+        sub={
+          maxPortales === 1
+            ? "Elige dónde quieres que la extensión postule por ti. Tu plan gratuito conecta un portal a la vez; con Premium puedes tener los tres."
+            : "Elige dónde quieres que la extensión postule por ti."
+        }
+      />
       {cargando ? (
         <p style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Cargando...</p>
       ) : (
@@ -980,7 +1227,7 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
           {plataformas.map((p) => (
             <div key={p.id} className="ap-toggle-row">
               <span style={{ fontSize: 13.5, fontWeight: 500 }}>{p.nombre}</span>
-              {conectada ? (
+              {conectadas.has(p.id) ? (
                 <span style={{ fontSize: 12, color: "var(--status-finalizado)" }}>Conectado ✓</span>
               ) : (
                 <button className="ap-button-ghost" onClick={() => conectar(p.id)}>Conectar</button>
@@ -990,17 +1237,93 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
         </div>
       )}
 
+      {error && <p style={{ fontSize: 12.5, color: "var(--status-rechazado)", marginBottom: 12 }}>{error}</p>}
+
       <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} />
     </>
   );
 }
 
+// Misma normalización que extension/background.js (normalizarParaUrl): la
+// búsqueda que se arma acá tiene que caer en la misma página que la de la
+// extensión.
+function slugDeBusqueda(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+const BUSQUEDA_POR_PORTAL: Record<string, (etiqueta: string, slug: string) => string> = {
+  Computrabajo: (_e, slug) => `https://cl.computrabajo.com/trabajo-de-${slug}`,
+  Laborum: (_e, slug) => `https://www.laborum.cl/empleos-busqueda-${slug}.html`,
+  Trabajando: (etiqueta) => `https://www.trabajando.cl/trabajo-empleo/${encodeURIComponent(etiqueta.toLowerCase())}`,
+};
+
+// §4.2: "¡Todo listo!" sin la acción que da valor. La extensión trabaja
+// DENTRO del portal, así que lo que sigue es abrir el portal con la búsqueda
+// ya armada -- no "ir al dashboard".
 function PasoListo({ onTerminar }: { onTerminar: () => void }) {
+  const [busqueda, setBusqueda] = useState<{ portal: string; etiqueta: string; url: string } | null>(null);
+  const [enMovil, setEnMovil] = useState(false);
+  useEffect(() => { setEnMovil(sinSoporteExtension()); }, []);
+
+  useEffect(() => {
+    async function cargar() {
+      try {
+        const [resObj, resCuentas] = await Promise.all([fetch("/api/objetivos"), fetch("/api/platform-accounts")]);
+        const objetivos = await parsearRespuesta(resObj);
+        const cuentas = await parsearRespuesta(resCuentas);
+        const etiqueta: string | undefined = objetivos.objetivos?.[0]?.etiqueta ?? objetivos.sugerenciaCv ?? undefined;
+        if (!etiqueta) return;
+        const idsConectados = new Set((cuentas.cuentas ?? []).filter((c: any) => c.activa).map((c: any) => c.platformId));
+        const portal: string | undefined = (cuentas.plataformas ?? []).find(
+          (p: any) => idsConectados.has(p.id) && BUSQUEDA_POR_PORTAL[p.nombre]
+        )?.nombre;
+        if (!portal) return;
+        const slug = slugDeBusqueda(etiqueta);
+        if (!slug) return;
+        setBusqueda({ portal, etiqueta, url: BUSQUEDA_POR_PORTAL[portal](etiqueta, slug) });
+      } catch (e) {
+        console.error("No se pudo armar la búsqueda de cierre del onboarding:", e);
+      }
+    }
+    cargar();
+  }, []);
+
   return (
     <>
-      <Header Icon={CheckCircle2} titulo="¡Todo listo!" sub="Ya puedes ir a tu dashboard — siempre puedes volver a completar tu perfil desde ahí." />
-      <button onClick={onTerminar} className="ap-button" style={{ width: "100%" }}>
-        Ir al dashboard
+      <Header
+        Icon={CheckCircle2}
+        titulo="¡Todo listo!"
+        sub={
+          enMovil
+            ? "Tu cuenta quedó configurada. Para que postule por ti, abre autopostula.cl en tu computador con Chrome e instala la extensión."
+            : busqueda
+            ? `Abre ${busqueda.portal} y busca "${busqueda.etiqueta}": la extensión empieza sola.`
+            : "Abre tu portal de empleo con la extensión instalada: empieza sola. Puedes completar tu perfil cuando quieras desde el panel."
+        }
+      />
+      <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 16 }}>
+        {enMovil
+          ? "Desde el celular puedes decidir qué ofertas te interesan y revisar tus postulaciones."
+          : "Tu cuenta arranca en modo prueba: la extensión mira las ofertas y te muestra a cuáles postularía, pero no envía nada hasta que lo actives desde el panel."}
+      </p>
+      {busqueda && !enMovil && (
+        <a
+          href={busqueda.url}
+          target="_blank"
+          rel="noreferrer"
+          className="ap-button"
+          style={{ display: "block", width: "100%", textAlign: "center", marginBottom: 10, textDecoration: "none" }}
+        >
+          Abrir {busqueda.portal} con tu búsqueda ↗
+        </a>
+      )}
+      <button onClick={onTerminar} className={busqueda && !enMovil ? "ap-button-ghost" : "ap-button"} style={{ width: "100%" }}>
+        Ir al panel
       </button>
     </>
   );

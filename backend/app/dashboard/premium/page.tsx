@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Sparkles, PartyPopper } from "lucide-react";
+import { Check, Sparkles, PartyPopper, TriangleAlert, Clock } from "lucide-react";
+import { PASES, formatoPesos, type IdPase } from "@/lib/pases";
 
 type Fila = { texto: string; free: string | boolean; premium: string | boolean };
 
 const FILAS: Fila[] = [
   { texto: "Postulaciones por mes", free: "20", premium: "80" },
   { texto: "Portales conectados a la vez", free: "1", premium: "Todos" },
-  { texto: "Búsqueda y postulación automática", free: false, premium: true },
+  { texto: "Postulaciones automáticas (sin entrar al portal)", free: "Prueba de 5", premium: true },
+  { texto: "Se pone al día sola al abrir tu computador", free: false, premium: true },
   { texto: "Seguir conversando con la IA para afinar tu perfil", free: false, premium: true },
   { texto: "Calibración de estilo completa (6 preguntas)", free: false, premium: true },
   { texto: "Instrucciones personalizadas en Entrenar IA", free: false, premium: true },
@@ -27,11 +29,56 @@ function Celda({ valor, destacar }: { valor: string | boolean; destacar?: boolea
   return <span style={{ fontWeight: 600, color: destacar ? "var(--chart-3)" : undefined }}>{valor}</span>;
 }
 
+function fechaLarga(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" });
+}
+
+// docs/pase-prepagado.md §5.3: a lo que se vuelve de Flow (?pago=…) se le
+// contesta con lo que pasó de verdad, sin prometer más.
+function AvisoDePago({ resultado, hasta }: { resultado: string | null; hasta: string | null }) {
+  if (resultado === "exito") {
+    return (
+      <div className="ap-cartel-maqueta" role="status">
+        <PartyPopper size={17} />
+        <div>
+          <p className="ap-cartel-maqueta__t">{hasta ? `Premium activo hasta el ${fechaLarga(hasta)}` : "Recibimos tu pago"}</p>
+          <p className="ap-cartel-maqueta__d">Te mandamos el comprobante por correo.</p>
+        </div>
+      </div>
+    );
+  }
+  if (resultado === "pendiente") {
+    return (
+      <div className="ap-cartel-maqueta" role="status">
+        <Clock size={17} />
+        <div>
+          <p className="ap-cartel-maqueta__t">Tu pago se está procesando</p>
+          <p className="ap-cartel-maqueta__d">Te avisamos por correo apenas se confirme.</p>
+        </div>
+      </div>
+    );
+  }
+  if (resultado === "rechazado") {
+    return (
+      <div className="ap-cartel-maqueta" role="alert">
+        <TriangleAlert size={17} />
+        <div>
+          <p className="ap-cartel-maqueta__t">El pago no se completó</p>
+          <p className="ap-cartel-maqueta__d">No se hizo ningún cobro. Puedes intentarlo de nuevo cuando quieras.</p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 export default function PremiumPage() {
   const router = useRouter();
   const [cargando, setCargando] = useState(true);
   const [esPremium, setEsPremium] = useState(false);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
+  const [premiumHasta, setPremiumHasta] = useState<string | null>(null);
+  const [resultadoPago, setResultadoPago] = useState<string | null>(null);
 
   useEffect(() => {
     async function cargar() {
@@ -40,6 +87,7 @@ export default function PremiumPage() {
         const data = await res.json();
         setEsPremium(data.esPremium ?? false);
         setPlanNombre(data.planNombre);
+        setPremiumHasta(data.premiumHasta ?? null);
       } catch (err) {
         console.error("Error cargando estado del plan:", err);
       } finally {
@@ -47,13 +95,13 @@ export default function PremiumPage() {
       }
     }
     cargar();
+    // Se lee de la URL en el navegador (no con useSearchParams) para no obligar
+    // a envolver la página en Suspense.
+    setResultadoPago(new URLSearchParams(window.location.search).get("pago"));
   }, []);
 
-  // Antes esto saltaba directo a Flow. Ahora pasa por /dashboard/premium/pago,
-  // donde se eligen los datos de cobro -- ahí adentro sigue estando el botón
-  // que abre el checkout de Flow para quien prefiera pagar con tarjeta.
-  function pasarAPremium() {
-    router.push("/dashboard/premium/pago");
+  function elegirPase(pase: IdPase) {
+    router.push(`/dashboard/premium/pago?pase=${pase}`);
   }
 
   if (cargando) {
@@ -65,8 +113,11 @@ export default function PremiumPage() {
       <>
         <div className="ap-page-header">
           <h1 className="ap-page-title">Premium</h1>
-          <p className="ap-page-sub">Ya tienes todo lo que AutoPostula ofrece.</p>
+          <p className="ap-page-sub">
+            {premiumHasta ? `Tu Premium vence el ${fechaLarga(premiumHasta)}.` : "Ya tienes todo lo que AutoPostula ofrece."}
+          </p>
         </div>
+        <AvisoDePago resultado={resultadoPago} hasta={premiumHasta} />
         <div
           className="ap-section ap-animate-in"
           style={{ textAlign: "center", padding: "48px 24px", marginBottom: 0 }}
@@ -83,10 +134,25 @@ export default function PremiumPage() {
           <h2 style={{ fontSize: 17, fontWeight: 600, marginBottom: 6 }}>
             Ya eres {planNombre ?? "Premium"}
           </h2>
-          <p style={{ fontSize: 13.5, color: "var(--text-muted)", maxWidth: 420, margin: "0 auto" }}>
-            80 postulaciones al mes, búsqueda automática, calibración completa y todo lo demás ya
-            está activo en tu cuenta. Puedes gestionar o cancelar tu suscripción desde Ajustes.
+          <p style={{ fontSize: 13.5, color: "var(--text-muted)", maxWidth: 420, margin: "0 auto 18px" }}>
+            80 postulaciones al mes, se pone al día sola al abrir tu computador, calibración completa y todo lo demás ya
+            está activo en tu cuenta. No se renueva solo: al vencer vuelves al plan gratuito, sin perder
+            tu historial ni tu perfil.
           </p>
+          {premiumHasta && (
+            <p style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 14 }}>Premium hasta el {fechaLarga(premiumHasta)}</p>
+          )}
+          <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
+            Renovar suma los días nuevos a los que te quedan:
+          </p>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            <button className="ap-button" onClick={() => elegirPase("pase_30")}>
+              Renovar 30 días · ${formatoPesos(PASES.pase_30.monto)}
+            </button>
+            <button className="ap-button-ghost" onClick={() => elegirPase("pase_90")}>
+              Renovar 90 días · ${formatoPesos(PASES.pase_90.monto)}
+            </button>
+          </div>
         </div>
       </>
     );
@@ -94,6 +160,7 @@ export default function PremiumPage() {
 
   return (
     <div className="ap-glow-bg">
+      <AvisoDePago resultado={resultadoPago} hasta={premiumHasta} />
       <div className="ap-page-header" style={{ textAlign: "center" }}>
         <div
           style={{
@@ -107,11 +174,11 @@ export default function PremiumPage() {
         </div>
         <h1 className="ap-page-title" style={{ fontSize: 26 }}>Postula más rápido, sin límites de siempre</h1>
         <p className="ap-page-sub" style={{ maxWidth: 480, margin: "0 auto" }}>
-          Deja que la IA busque y postule sola mientras tú te enfocas en las entrevistas.
+          Deja que AutoPostula se ponga al día sola cada vez que abres tu computador, mientras tú te enfocas en las entrevistas.
         </p>
       </div>
 
-      <div className="ap-pricing-grid" style={{ maxWidth: 760, margin: "0 auto 28px" }}>
+      <div className="ap-pricing-grid" style={{ maxWidth: 980, margin: "0 auto 28px", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
         {/* Free */}
         <div className="ap-section ap-animate-in" style={{ marginBottom: 0 }}>
           <p className="ap-section-title">Free</p>
@@ -140,22 +207,41 @@ export default function PremiumPage() {
             >
               Recomendado
             </span>
-            <p className="ap-section-title">Premium</p>
+            <p className="ap-section-title">Premium · 30 días</p>
             <p style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
-              $3.990 <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-muted)" }}>/mes</span>
+              ${formatoPesos(PASES.pase_30.monto)} <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-muted)" }}>por 30 días</span>
             </p>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 18 }}>Cancela cuando quieras</p>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 18 }}>
+              Sin renovación automática: pagas solo cuando lo necesitas
+            </p>
             <button
               className="ap-gradient-accent"
               style={{
                 width: "100%", border: "none", borderRadius: 8, padding: "9px 16px",
                 fontSize: 13, fontWeight: 600, cursor: "pointer",
               }}
-              onClick={pasarAPremium}
+              onClick={() => elegirPase("pase_30")}
             >
               ✨ Pasar a Premium
             </button>
           </div>
+        </div>
+
+        <div className="ap-section ap-animate-in" style={{ marginBottom: 0, animationDelay: "0.1s" }}>
+          <p className="ap-section-title">Premium · 90 días</p>
+          <p style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
+            ${formatoPesos(PASES.pase_90.monto)} <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-muted)" }}>por 90 días</span>
+          </p>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 18 }}>
+            Para buscar con calma: sale más barato por día
+          </p>
+          <button
+            className="ap-button-ghost"
+            style={{ width: "100%", justifyContent: "center" }}
+            onClick={() => elegirPase("pase_90")}
+          >
+            Elegir 90 días
+          </button>
         </div>
       </div>
 

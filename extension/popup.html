@@ -8,36 +8,37 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Misma paleta que la web y el dashboard: papel bond, tinta índigo y
-     un destacador citrón que se gasta en un solo lugar por pantalla. */
-  --bg:        #F2F3EE;
+  /* Misma paleta que la web: monocroma, con el citrón como único color.
+     Fuera el morado — era la firma visual de página hecha con IA.
+     --accent es el par de contraste del tema, no un tono. */
+  --bg:        #F4F5F3;
   --surface:   #FFFFFF;
-  --surface-2: #FAFAF6;
-  --border:    #DFE0D8;
-  --border-2:  #C9CABF;
+  --surface-2: #FAFAF9;
+  --border:    #DFE1DE;
+  --border-2:  #C6C9C5;
 
-  --ink:       #1B1A2E;
-  --accent:    #5A2FD6;
-  --accent-h:  #4A24B8;
-  --accent-s:  #EEE9FD;
+  --ink:       #16181A;
+  --accent:    #16181A;
+  --accent-h:  #000000;
+  --accent-s:  #EDEEEB;
 
   --marker:    #D6F24B;
-  --marker-d:  #B9D62E;
-  --on-marker: #1B1A2E;
+  --marker-d:  #A8C023;
+  --on-marker: #16181A;
 
   --danger:    #B3283C;
-  --danger-s:  #FBE9EC;
+  --danger-s:  #FAEAEC;
   --success:   #17784F;
-  --success-s: #E2F3EA;
-  --warn:      #9A5B00;
-  --warn-s:    #FBF0DC;
+  --success-s: #E4F1E9;
+  --warn:      #8A5200;
+  --warn-s:    #F7EFDF;
 
-  --text-1:    #1B1A2E;
-  --text-2:    #4A4960;
-  --text-3:    #6B6A7D;
+  --text-1:    #16181A;
+  --text-2:    #3F4448;
+  --text-3:    #5D6468;
 
   --radius:    9px;
-  --shadow:    0 1px 0 var(--border), 0 10px 24px -18px rgba(27,26,46,.5);
+  --shadow:    0 1px 0 var(--border), 0 10px 24px -18px rgba(22,24,26,.5);
 }
 
 html { font-size: 13px; }
@@ -68,7 +69,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
    se lee al instante como AutoPostula y no como parte del sitio. */
 .header {
   background: var(--ink);
-  color: #ECECF3;
+  color: #E9EBEA;
   padding: 14px 16px;
   display: flex;
   align-items: center;
@@ -79,7 +80,8 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 }
 .header-logo {
   width: 32px; height: 32px;
-  background: var(--accent);
+  background: var(--surface-2);
+  border: 1.5px solid var(--border-2);
   border-radius: 9px;
   display: grid; place-items: center;
   flex-shrink: 0;
@@ -96,7 +98,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .header-info { flex: 1; min-width: 0; }
 .header-title { font-size: 14px; font-weight: 700; letter-spacing: -.2px; }
 .header-sub {
-  font-size: 11px; color: #9998AC;
+  font-size: 11px; color: #8E9599;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -105,7 +107,7 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .pulse {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: #5F5D77;
+  background: #3C4145;
   transition: background .3s;
 }
 .pulse.active  { background: #5BD59B; color: #5BD59B; animation: pulse-ring 1.6s ease-out infinite; }
@@ -115,9 +117,68 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   70%  { box-shadow: 0 0 0 5px transparent; }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
-.pulse-label { font-size: 11px; font-weight: 600; color: #9998AC; }
+.pulse-label { font-size: 11px; font-weight: 600; color: #8E9599; }
 .pulse-label.active  { color: #5BD59B; }
 .pulse-label.working { color: var(--marker); }
+
+/* ── Última puesta al día (docs/rafagas-y-ponerse-al-dia.md §3.5) ────────
+   Lo primero que se ve al abrir el popup: si la extensión se puso al día
+   mientras la persona hacía otra cosa, tiene que enterarse. */
+.rafaga-row {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.rafaga-titulo { font-size: 12.5px; font-weight: 700; color: var(--text-1); }
+.rafaga-detalle { font-size: 11px; color: var(--text-2); margin-top: 1px; }
+
+/* ── "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6) ───────
+   Solo Premium: en una cuenta gratis la fila ni aparece. Debajo del botón
+   va SIEMPRE una línea: cuánto suele tardar, o por qué no se puede ahora. */
+.ponerse-row {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.ponerse-row .btn { width: 100%; }
+.ponerse-hint { font-size: 10.5px; color: var(--text-3); margin-top: 6px; line-height: 1.45; }
+
+/* ── Prueba de 5 postulaciones automáticas (docs/rafagas-y-ponerse-al-dia.md §4.1) ──
+   Solo cuentas gratis: mientras dura, cuántas lleva; al terminar, qué pasó y
+   las dos salidas (Premium, o entrar a mano a un portal). */
+.prueba-row {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.prueba-titulo { font-size: 12px; font-weight: 700; color: var(--text-1); line-height: 1.4; }
+.prueba-detalle { font-size: 11px; color: var(--text-2); margin-top: 3px; line-height: 1.45; }
+.prueba-links { display: flex; gap: 14px; margin-top: 7px; }
+.prueba-links a { font-size: 11.5px; font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.prueba-links a:hover { text-decoration-thickness: 2px; }
+
+/* ── Solo observar (docs/modo-solo-observar.md §3.4) ────────────────────
+   Va pegado al toggle master, con su propio fondo, para que sea imposible
+   no verlo -- "la persona nunca puede quedar en duda sobre si la extensión
+   está postulando o no". */
+.observar-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--surface-2);
+  /* El filo dice "esta fila es distinta" sin inventar un color. */
+  border-left: 3px solid var(--border-2);
+  border-bottom: 1px solid var(--border);
+}
+.observar-left .label {
+  font-size: 12.5px; font-weight: 700; color: var(--text-1);
+  display: flex; align-items: center; gap: 5px;
+}
+.observar-left .hint { font-size: 10.5px; color: var(--text-2); margin-top: 1px; }
+.observar-row .toggle input:checked ~ .toggle-track { background: var(--text-1); }
+/* §4.4: observar le gana a "revisar antes de enviar" -- no hay nada que
+   revisar si no se envía nada, así que ese toggle se ve pero no importa. */
+.opcion-atenuada { opacity: .45; }
+.opcion-atenuada .toggle { pointer-events: none; }
 
 /* ── Toggle master ───────────────────────────────────────── */
 .master-row {
@@ -345,11 +406,33 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   <div class="header-logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></div>
   <div class="header-info">
     <div class="header-title">AutoPostula</div>
-    <div class="header-sub" id="header-sub">Automatización para Computrabajo</div>
+    <div class="header-sub" id="header-sub">Automatización para Computrabajo, Laborum y Trabajando</div>
   </div>
   <div class="pulse-wrap">
     <div class="pulse" id="pulse"></div>
     <span class="pulse-label" id="pulse-label">Inactivo</span>
+  </div>
+</div>
+
+<!-- ÚLTIMA PUESTA AL DÍA -->
+<div class="rafaga-row hidden" id="rafaga-row" role="status">
+  <div class="rafaga-titulo" id="rafaga-titulo"></div>
+  <div class="rafaga-detalle hidden" id="rafaga-detalle"></div>
+</div>
+
+<!-- PONERME AL DÍA AHORA (solo Premium) -->
+<div class="ponerse-row hidden" id="ponerse-row">
+  <button class="btn btn-primary" id="ponerse-btn" type="button">Ponerme al día ahora</button>
+  <div class="ponerse-hint" id="ponerse-hint"></div>
+</div>
+
+<!-- PRUEBA DE 5 POSTULACIONES AUTOMÁTICAS (solo cuentas gratis) -->
+<div class="prueba-row hidden" id="prueba-row" role="status">
+  <div class="prueba-titulo" id="prueba-titulo"></div>
+  <div class="prueba-detalle hidden" id="prueba-detalle"></div>
+  <div class="prueba-links hidden" id="prueba-links">
+    <a href="#" id="prueba-ver" target="_blank"></a>
+    <a href="#" id="prueba-premium" target="_blank"></a>
   </div>
 </div>
 
@@ -361,6 +444,19 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   </div>
   <label class="toggle">
     <input type="checkbox" id="toggle-main">
+    <div class="toggle-track"></div>
+    <div class="toggle-thumb"></div>
+  </label>
+</div>
+
+<!-- SOLO OBSERVAR -->
+<div class="observar-row">
+  <div class="observar-left">
+    <div class="label">👁 Solo observar</div>
+    <div class="hint" id="observar-hint">Escanea y puntúa, pero no postula ni gasta cupo</div>
+  </div>
+  <label class="toggle">
+    <input type="checkbox" id="toggle-observar">
     <div class="toggle-track"></div>
     <div class="toggle-thumb"></div>
   </label>
@@ -393,10 +489,6 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   <p style="font-size:10.5px;color:var(--text-3);margin-bottom:10px;line-height:1.5;">
     Se administran desde el dashboard para que también los use la búsqueda automática — acá solo se muestran.
   </p>
-  <p class="section-title" style="font-size:10px;margin-bottom:4px;">Incluir</p>
-  <div class="tags" id="inc-tags"></div>
-  <p class="section-title" style="font-size:10px;margin:6px 0 4px;">Excluir</p>
-  <div class="tags" id="exc-tags"></div>
   <div style="display:flex;gap:20px;margin-top:6px;">
     <div>
       <p class="section-title" style="font-size:10px;margin-bottom:4px;">Modalidad</p>
@@ -407,24 +499,6 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
       <span class="tag inc" id="filtro-jornada-badge">Cualquiera</span>
     </div>
   </div>
-</div>
-
-<div class="spacer"></div>
-
-<!-- FILTROS: UBICACIÓN -->
-<div class="section">
-  <div class="section-head">
-    <span class="section-title">Ubicación (comuna / ciudad)</span>
-  </div>
-  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;">
-    Si agregas al menos una comuna o ciudad, solo se postulará a ofertas ubicadas ahí. Déjalo vacío para no filtrar por ubicación.
-  </p>
-  <div class="tags" id="loc-tags"></div>
-  <div class="input-row">
-    <input class="field" id="loc-input" placeholder="ej: Las Condes, Providencia, Santiago Centro…">
-    <button class="btn btn-primary" id="loc-btn">+ Agregar</button>
-  </div>
-  <button class="btn btn-ghost" id="loc-usar-comuna-btn" style="margin-top:6px;width:100%;font-size:11px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex:none"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg> Usar mi comuna de residencia</button>
 </div>
 
 <div class="spacer"></div>
@@ -470,19 +544,12 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
     <span class="section-title">Opciones de IA</span>
   </div>
   <div style="display:flex;flex-direction:column;gap:8px;">
-    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+    <label id="opcion-revision" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
       <div>
         <div style="font-size:12px;font-weight:600;color:var(--text-1);">Revisar antes de enviar</div>
-        <div style="font-size:10px;color:var(--text-3);">Muestra las respuestas y pide confirmación</div>
+        <div style="font-size:10px;color:var(--text-3);" id="revision-hint">Muestra las respuestas y pide confirmación</div>
       </div>
       <label class="toggle"><input type="checkbox" id="toggle-revision"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
-    </label>
-    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
-      <div>
-        <div style="font-size:12px;font-weight:600;color:var(--text-1);">IA para filtrar ofertas</div>
-        <div style="font-size:10px;color:var(--text-3);">La IA decide si el aviso es relevante para ti</div>
-      </div>
-      <label class="toggle"><input type="checkbox" id="toggle-ia-filtros"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
     </label>
   </div>
 </div>

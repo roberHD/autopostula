@@ -46,6 +46,15 @@ function extraerFacetasAviso() {
   if (!panel) return {};
   const facetas = {};
 
+  // Ubicación del AVISO, no de la tarjeta (docs/revision-2026-09-16.md §2.3):
+  // verificado en vivo el 2026-09-17 contra 3 avisos reales (con rating, sin
+  // rating, sin empresa con perfil) -- '.header_detail p.fs16.mb5' es
+  // estable y único en el panel de detalle en los tres casos. La Etapa 2
+  // usa esto cuando existe, y la de la tarjeta (extraerUbicacion) solo como
+  // respaldo -- ver el llamado más abajo en escanear().
+  const ubicacionEl = panel.querySelector('.header_detail p.fs16.mb5');
+  if (ubicacionEl && ubicacionEl.textContent.trim()) facetas.ubicacion = n(ubicacionEl.textContent);
+
   panel.querySelectorAll('div.mbB p.dFlex.mb10').forEach((p) => {
     const icono = p.querySelector('span.icon');
     const claseIcono = (icono && icono.className) || '';
@@ -105,30 +114,38 @@ function tituloDeTarjeta(tarjeta) {
 }
 
 // ── Ubicación de una tarjeta (comuna/ciudad) ───────────────────
-// Intenta leer el elemento específico de ubicación de la tarjeta con los
-// selectores que suele usar Computrabajo; si ninguno calza, cae de vuelta
-// a todo el texto de la tarjeta (menos preciso, pero nunca deja de filtrar).
+// Bug real encontrado en revisión el 2026-09-16, verificado en vivo el
+// 2026-09-17 contra 20/20 tarjetas reales de
+// cl.computrabajo.com/trabajo-de-vendedor-en-rmetropolitana: el primer
+// selector de la lista vieja, '.fs16.fc_base' (querySelector devuelve el
+// PRIMERO que calza), agarraba la línea de "nota + empresa"
+// (<p class="dFlex vm_fx fs16 fc_base mt5">4,4 MD Soluciones</p>), no la de
+// ubicación -- las dos comparten esas dos clases, y la de nota/empresa viene
+// primero en el DOM. Eso hacía que "Por decidir" dijera cosas como "md
+// soluciones no está en tus comunas". La línea de ubicación es la OTRA
+// '.fs16.fc_base', la que NO tiene la clase 'dFlex' de la nota. Se quita
+// también el fallback a tarjeta.innerText: hacía calzar comunas que
+// aparecen en cualquier parte de la tarjeta (título, descripción), no solo
+// en el campo de ubicación real -- vacío es mejor que un falso calce.
 function extraerUbicacion(tarjeta) {
-  const candidatos = [
-    '.fs16.fc_base',
-    '[class*="location"]',
-    'p.fs16.t_ellipsis',
-    '.list_icons li'
-  ];
-  for (const sel of candidatos) {
-    const el = tarjeta.querySelector(sel);
-    if (el && el.textContent && el.textContent.trim().length > 1) return n(el.textContent);
-  }
-  return n(tarjeta.innerText || '');
+  const el = tarjeta.querySelector('p.fs16.fc_base:not(.dFlex)');
+  return el ? n(el.textContent) : '';
 }
 
 // ── Empresa de una tarjeta ──────────────────────────────────────
 // Verificado a mano contra el sitio real (2026-09-04): el link de la empresa
 // trae el atributo offer-grid-article-company-url, estable independiente del
-// hash de estilo del momento.
+// hash de estilo del momento. Pero ese atributo NO existe cuando la empresa
+// no tiene perfil propio en el sitio (ej. "Importante empresa del sector") --
+// verificado en vivo el 2026-09-17: esos casos SÍ tienen la línea
+// 'p.dFlex.fs16.fc_base' (la misma que en el caso normal trae la nota +
+// nombre de empresa, ej. "4,4 MD Soluciones"), solo que sin nota. Se le
+// quita el prefijo numérico de nota si lo trae; si no lo trae, queda igual.
 function extraerEmpresa(tarjeta) {
-  const el = tarjeta.querySelector('[offer-grid-article-company-url]');
-  return (el && el.textContent && el.textContent.trim()) || '';
+  const conLink = tarjeta.querySelector('[offer-grid-article-company-url]');
+  if (conLink && conLink.textContent.trim()) return conLink.textContent.trim();
+  const linea = tarjeta.querySelector('p.dFlex.fs16.fc_base');
+  return linea ? linea.textContent.trim().replace(/^\d+(?:,\d+)?\s+/, '') : '';
 }
 
 // ── Evaluar tarjeta (scorer local si está activo, si no el filtro viejo) ──
@@ -367,14 +384,20 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
   let analisis = null;
   if (pendientesIA.length) {
     const preguntasParaIA = pendientesIA.map((pd, i) => ({ id: 'o' + i, pregunta: pd.pregunta, opciones: pd.opciones.map(o => o.texto) }));
-    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', '#7C3AED');
+    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', 'trabajando');
     const resultado = await analizarYResponder(contexto, preguntasParaIA);
     analisis = resultado.analisis;
     for (let i = 0; i < pendientesIA.length; i++) {
       const pd = pendientesIA[i];
+      // §8.4 (docs/revision-2026-09-16.md): la IA puede decir que esta
+      // pregunta pide un hecho verificable (licencia, renta...) que no está
+      // en el perfil, en vez de inventar un "sí"/"no" -- ver la regla 1b del
+      // prompt en procesar-postulacion/route.ts. Si vino marcada así, no se
+      // intenta calzar ninguna opción con el texto de la IA.
+      const datoFaltante = resultado.datosFaltantes && resultado.datosFaltantes['o' + i];
       const respIA = resultado.respuestas['o' + i];
       let elegida = null;
-      if (respIA) {
+      if (!datoFaltante && respIA) {
         const rNorm = n(respIA);
         elegida = pd.opciones.find(o => rNorm.includes(n(o.texto)) || (n(o.texto).length < 4 && rNorm.startsWith(n(o.texto))));
       }
@@ -382,7 +405,7 @@ async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
         interacciones++;
         respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
       } else {
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
+        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante: datoFaltante || null, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
       }
       await sleep(250);
     }
@@ -464,13 +487,16 @@ async function rellenar(contexto) {
   let analisis = analisisDeOpciones;
   if (pendientesTexto.length) {
     const preguntasParaIA = pendientesTexto.map((pd, i) => ({ id: 't' + i, pregunta: pd.labelRaw, opciones: null }));
-    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', '#7C3AED');
+    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', 'trabajando');
     const resultado = await analizarYResponder(contexto, preguntasParaIA);
     if (resultado.analisis) analisis = resultado.analisis;
     for (let i = 0; i < pendientesTexto.length; i++) {
       const pd = pendientesTexto[i];
+      const datoFaltante = resultado.datosFaltantes && resultado.datosFaltantes['t' + i];
       const valIA = resultado.respuestas['t' + i];
-      if (valIA) {
+      if (datoFaltante) {
+        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', respuestaIa: '', vacia: true, datoFaltante, tipo:'texto', el: pd.el, errorIA: null });
+      } else if (valIA) {
         n2++;
         aplicarValorTexto(pd.el, valIA, pd.labelRaw, true, respuestasLog);
       } else if (pd.fallback) {
@@ -529,6 +555,21 @@ async function postular(url, id, titulo, decisionOfertaId) {
   // así que si se lee después, se corre el riesgo de capturar el formulario en vez del aviso.
   const contexto = extraerTextoAviso();
 
+  // §2.10 (docs/revision-2026-09-16.md): con "Revisar antes de enviar" la
+  // revisión de abajo solo existe si hay formulario. Una postulación directa
+  // se envía con este mismo clic, así que el visto bueno se pide ANTES. No se
+  // sabe de antemano cuál de las dos es (el botón es el mismo), por eso el
+  // texto cubre las dos.
+  if (AP.cfg && AP.cfg.modoRevision) {
+    msg('⏸ Revisión pendiente…', '#2563EB');
+    const decision = await AP.confirmarAntesDeEnviar(titulo, contexto,
+      'Vas a postular a esta oferta. Si el portal la deja postular con un clic, se envía apenas confirmes; si tiene preguntas, las revisas antes del envío. ¿Continuar?');
+    if (decision === 'skip') {
+      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
+      return { ok: false, expirada: false };
+    }
+  }
+
   btn.scrollIntoView({behavior:'smooth', block:'center'});
   await sleep(400);
   btn.click();
@@ -548,6 +589,20 @@ async function postular(url, id, titulo, decisionOfertaId) {
       const decision = await mostrarRevision(titulo, respuestasLog, contexto);
       if (decision === 'skip') {
         addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
+        return { ok: false, expirada: false };
+      }
+    } else {
+      // §8.4/§8.5 (docs/revision-2026-09-16.md): sin modo revisión no hay
+      // ningún humano mirando esta postulación antes de que se envíe -- si
+      // la IA marcó que le falta un hecho verificable (licencia, renta...)
+      // que no está en el perfil, no se manda con eso sin responder. Con
+      // modo revisión SÍ se deja seguir si la persona confirma igual: ya lo
+      // vio marcado ("No está en tu perfil — complétalo") y decidió enviar.
+      const faltaDato = respuestasLog.find(r => r.datoFaltante);
+      if (faltaDato) {
+        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
+          reason:'Falta "' + faltaDato.datoFaltante + '" en tu perfil para responder bien -- activa "Revisar antes de enviar" o completa tu perfil',
+          respuestas: respuestasLog});
         return { ok: false, expirada: false };
       }
     }
@@ -574,8 +629,17 @@ async function postular(url, id, titulo, decisionOfertaId) {
         reason:'Enviado (' + n2 + ' campos)',
         respuestas: respuestasParaLog
       });
-      reportarPostulacion({ id, titulo, url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
-      msg('✓ ' + titulo.slice(0,40), '#16A34A');
+      // §1.3 (docs/revision-2026-09-16.md): la postulación YA se envió en
+      // Computrabajo -- lo que puede fallar acá es solo el guardado en
+      // AutoPostula (tope mensual, portal desconectado). Antes ese rechazo
+      // se perdía en silencio y el aviso decía "✓" igual.
+      const reportado = await reportarPostulacion({ id, titulo, url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
+      if (!reportado || !reportado.ok) {
+        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
+        msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
+      } else {
+        msg('✓ ' + titulo.slice(0,40), '#16A34A');
+      }
       return { ok: true, expirada: false };
     } else {
       addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Sin botón Enviar mi CV'});
@@ -583,8 +647,13 @@ async function postular(url, id, titulo, decisionOfertaId) {
     }
   } else {
     addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
-    reportarPostulacion({ id, titulo, decisionOfertaId });
-    msg('✓ ' + titulo.slice(0,40), '#2563EB');
+    const reportado = await reportarPostulacion({ id, titulo, decisionOfertaId });
+    if (!reportado || !reportado.ok) {
+      addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
+      msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
+    } else {
+      msg('✓ ' + titulo.slice(0,40), '#2563EB');
+    }
     return { ok: true, expirada: false };
   }
 }
@@ -612,9 +681,9 @@ async function activar(tarjeta) {
 
 // ── Escanear ──────────────────────────────────────────────────
 async function escanear() {
-  if (!AP.activo || AP.procesando || !AP.cfg) return;
+  if (!AP.activo || AP.procesando || !AP.cfg) { AP.reportarEscaneoTerminado(); return; }
   const tarjetas = [...document.querySelectorAll('article.box_offer')];
-  if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en CT', '#9CA3AF'); return; }
+  if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en CT', '#9CA3AF'); AP.reportarEscaneoTerminado(); return; }
 
   let pendientes = [];
   const titulosVistos = [];
@@ -647,7 +716,7 @@ async function escanear() {
 
     const resultado = evaluarTarjeta(t);
     if (resultado.banda === 'postular') {
-      pendientes.push({t, id, idx, titulo});
+      pendientes.push({t, id, idx, titulo, empresa});
     } else if (resultado.banda === 'gris') {
       AP.vistos.add(id);
       candidatosGris.push({t, id, idx, titulo, url, empresa, resultado});
@@ -676,15 +745,18 @@ async function escanear() {
   // justo donde la información vale más -- ver §B "Costo").
   for (const cand of candidatosGris) {
     if (!AP.activo) break;
-    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', '#7C3AED');
+    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', 'trabajando');
     const btn = await activar(cand.t);
     let resultadoFinal = null;
     let detalleAviso = null;
     if (btn) {
       detalleAviso = extraerFacetasAviso();
+      // §2.3: la ubicación del aviso (más completa/confiable que la de la
+      // tarjeta) manda cuando existe; la de la tarjeta queda solo de
+      // respaldo si el panel no la trajo por algún motivo.
       const camposCompletos = {
         titulo: cand.titulo, empresa: cand.empresa,
-        cuerpo: extraerTextoAviso(), ubicacion: extraerUbicacion(cand.t),
+        cuerpo: extraerTextoAviso(), ubicacion: detalleAviso.ubicacion || extraerUbicacion(cand.t),
       };
       resultadoFinal = AP.evaluarOferta(camposCompletos);
     }
@@ -693,7 +765,7 @@ async function escanear() {
     const resultado = resultadoFinal || cand.resultado;
 
     if (resultadoFinal && resultadoFinal.banda === 'postular') {
-      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo});
+      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo, empresa: cand.empresa});
     } else if (resultadoFinal && resultadoFinal.banda === 'descartar') {
       conteos.descartar++;
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
@@ -720,7 +792,7 @@ async function escanear() {
   if (!usarScorerLocal && AP.cfg.usarIAFiltros && AP.iaDisponible && pendientes.length) {
     const objetivo = await obtenerObjetivoLaboral();
     if (objetivo) {
-      msg('IA filtrando ' + pendientes.length + ' ofertas…', '#7C3AED');
+      msg('IA filtrando ' + pendientes.length + ' ofertas…', 'trabajando');
       const relevantes = await clasificarOfertasIA(pendientes.map(p => p.titulo), objetivo);
       if (relevantes) {
         const descartadas = pendientes.filter((p, i) => !relevantes.has(i + 1));
@@ -730,27 +802,66 @@ async function escanear() {
     }
   }
 
+  // §2.8 (docs/revision-2026-09-16.md): lo que ya se postuló con otro id, o
+  // está repetido en esta misma página, no se vuelve a postular.
+  pendientes = await AP.quitarDuplicados('Computrabajo', pendientes, (p, razon) => {
+    conteos.descartar++;
+    razonesDescartadas.push(razon);
+    AP.vistos.add(p.id);
+    addLog({ts:Date.now(), status:'skip', title:p.titulo, url:'', uid:p.id, reason:AP.formatearRazonCorta(razon)});
+  });
+
+  // docs/modo-solo-observar.md §3.2: en modo observar esto no cuenta como
+  // "postular" -- son ofertas que SE HABRÍAN postulado, se cuentan aparte
+  // para que el mensaje no mienta.
+  const soloObservar = AP.soloObservarEfectivo();
   {
-    // conteos.postular se fija recién acá, después del filtro de IA viejo (si
-    // estuviera activo) -- para que el mensaje nunca diga más de lo que
-    // realmente va a pasar.
-    conteos.postular = pendientes.length;
-    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas));
+    // conteos.postular/observado se fija recién acá, después del filtro de
+    // IA viejo (si estuviera activo) -- para que el mensaje nunca diga más
+    // de lo que realmente va a pasar.
+    if (soloObservar) conteos.observado = pendientes.length;
+    else conteos.postular = pendientes.length;
+    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
     msg(resumen.texto, resumen.estado);
   }
   if (!pendientes.length) {
     if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return; // navegando a la página siguiente
+    AP.reportarEscaneoTerminado(conteos);
     return;
   }
 
+  // §1.3 (docs/revision-2026-09-16.md): se pregunta ANTES de abrir cada oferta --
+  // antes el tope y el portal conectado solo se sabían al llegar el 403/400 de
+  // /api/applications, DESPUÉS de haber postulado de verdad en el sitio externo.
+  // Es por oferta y no una vez por página (docs/rafagas-y-ponerse-al-dia.md
+  // §4.1): la prueba de 5 postulaciones automáticas se corta EN MEDIO al llegar
+  // a 5, y el tope mensual al llegar al límite -- no al terminar de recorrer 30
+  // ofertas cuando quedaban 2 cupos. Cada consulta ya ve la postulación
+  // anterior, porque reportarPostulacion se espera.
   AP.procesando = true;
+  let cortado = false;
+  let intentadas = 0;
   for (const {t, id, titulo} of pendientes) {
     if (!AP.activo) break;
     const a = t.querySelector('h2 a, a[href*="oferta"], a[href*="trabajo"]') || t.querySelector('a');
     const url = a && a.href.split('#')[0] || '';
+    // Modo solo observar: ni se abre el aviso ni se postula -- se deja
+    // constancia en el log con su propio status, distinto de 'ok'/'skip',
+    // para que nunca se confunda con una postulación real.
+    if (soloObservar) {
+      AP.vistos.add(id);
+      addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:'Habría postulado — modo solo observar'});
+      continue;
+    }
+    const verificacion = await AP.puedePostular('Computrabajo');
+    if (!verificacion.permitido) {
+      msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+      cortado = true;
+      break;
+    }
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
-    if (btn) await postular(url, id, titulo);
+    if (btn) { intentadas++; await postular(url, id, titulo); }
     else {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Panel no cargó'});
@@ -759,11 +870,25 @@ async function escanear() {
   }
   AP.procesando = false;
 
+  if (cortado) {
+    // `conteos.postular` era lo que se iba a postular (lo que dijo el resumen de
+    // arriba), no lo que pasó: al cortarse solo cuentan las que se llegaron a postular().
+    // Sin esto la ráfaga reportaría -- y el ícono mostraría -- postulaciones que
+    // nunca se enviaron. No se pagina ni se pisa el aviso rojo con el resumen.
+    conteos.postular = intentadas;
+    AP.reportarEscaneoTerminado(conteos);
+    return;
+  }
+
   // Ya se postuló a todo lo que calzaba en esta página -- si es una búsqueda
   // automática (pestaña oculta) sigue a la próxima página en vez de darse por
   // terminada, para no dejar sin revisar el resto del listado.
   if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return;
-  msg('Escaneo completo', '#16A34A');
+  AP.reportarEscaneoTerminado(conteos);
+  // §5: el resumen del escaneo ("👁 Solo observar · …", "N postuladas · …") se
+  // quedaba tapado por un "Escaneo completo" sin datos.
+  const resumenFinal = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
+  msg(resumenFinal.texto, resumenFinal.estado);
 }
 
 // ── Seguimiento de estados en "Mis postulaciones" ───────────────
@@ -781,11 +906,21 @@ function extraerHashOferta(url) {
   return m ? m[1].toUpperCase() : null;
 }
 
+// §8.2 (docs/revision-2026-09-16.md): el texto del estado no siempre tiene la
+// misma clase -- "Postulado"/"En proceso" van en `.fc_link`, pero "Proceso
+// finalizado" va en `p.fc_aux`, así que buscar solo `.fc_link` se saltaba en
+// silencio justo las postulaciones que ya habían avanzado. Lo estable es su
+// posición: el primer <p> del bloque que sigue al ícono de estado.
+function textoDeEstado(box) {
+  const p = box.querySelector('.icon_status ~ div > p') || box.querySelector('.fc_link');
+  return (p ? p.textContent : '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 async function escanearMisPostulaciones() {
   const boxes = document.querySelectorAll('[match-div-offers] .box[data-match]');
-  if (!boxes.length) return;
+  if (!boxes.length) { AP.reportarEscaneoTerminado(); return; }
 
-  msg('Revisando estados de postulaciones…', '#7C3AED');
+  msg('Revisando estados de postulaciones…', 'trabajando');
   let actualizadas = 0;
 
   for (const box of boxes) {
@@ -794,8 +929,7 @@ async function escanearMisPostulaciones() {
     const externalId = extraerHashOferta(url);
     if (!externalId) continue;
 
-    const estadoTexto = (box.querySelector('.fc_link')?.textContent || '').trim().toLowerCase();
-    const estado = MAPA_ESTADO_COMPUTRABAJO[estadoTexto];
+    const estado = MAPA_ESTADO_COMPUTRABAJO[textoDeEstado(box)];
     if (!estado) continue;
 
     const resultado = await actualizarEstadoPostulacion({
@@ -807,6 +941,7 @@ async function escanearMisPostulaciones() {
   }
 
   msg(actualizadas ? '✓ ' + actualizadas + ' estado(s) actualizado(s)' : 'Estados al día', '#16A34A');
+  AP.reportarEscaneoTerminado();
 }
 
 // ── Postular directo a UNA oferta ya aprobada en banda gris (§8.6) ──────
@@ -832,7 +967,14 @@ async function aplicarDirecto(decisionOfertaId) {
 // AUTO_SCAN/DO_APPLY), el MutationObserver que dispara reescaneos, y cargar
 // AP.cfg/active/log/token al iniciar. Acá solo conectamos las funciones de
 // Computrabajo y qué hacer una vez que el estado ya cargó.
-AP.escanear = escanear;
+// En "Mis postulaciones" (candidato.cl.computrabajo.com) no hay tarjetas de
+// ofertas: el escaneo de listados solo diría "Sin tarjetas" y avisaría que
+// terminó antes de que escanearMisPostulaciones() (que arranca en onInit)
+// acabe -- la ráfaga pasaría al siguiente paso con los estados a medias.
+AP.escanear = AP.sinReentrada(function () {
+  if (location.pathname.indexOf('/candidate/match') !== -1) return;
+  return escanear();
+});
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function() {
   console.log('[AP-CT] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible);
@@ -840,7 +982,7 @@ AP.onInit = function() {
     setTimeout(escanearMisPostulaciones, 1500);
   } else if (AP.activo) {
     msg('Activado — escaneando…', '#16A34A');
-    setTimeout(escanear, 1800);
+    setTimeout(() => AP.escanear(), 1800);
   }
 };
 

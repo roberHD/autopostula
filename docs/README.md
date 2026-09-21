@@ -1,7 +1,11 @@
 # Documentos de diseño de AutoPostula
 
-> Índice y estado del trabajo. **Actualizado: 2026-09-07.**
+> Índice y estado del trabajo. **Actualizado: 2026-09-19.**
 > Si vas a implementar algo, empieza por acá: dice qué está hecho, qué falta y en qué orden.
+
+> 🔴 **Antes que cualquier otra cosa: [`revision-2026-09-16.md`](revision-2026-09-16.md).** Una cuenta
+> nueva postula al 100% de las ofertas que ve (55 de 55 en la prueba), y varias cosas marcadas abajo
+> como implementadas no funcionan en producción. Su §6 dice en qué orden arreglarlo.
 
 ---
 
@@ -9,10 +13,18 @@
 
 | Documento | De qué trata | Estado |
 |---|---|---|
-| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ✅ **Implementado** |
-| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ✅ **Implementado** |
-| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ✅ **Implementado** |
+| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ⚠️ Implementado, **apagado por defecto para cuentas nuevas** — revisión §1.4 |
+| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ⚠️ Implementado, **autocompletado caído en producción** — revisión §2.4 |
+| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ⚠️ Parcial — **`detalleAviso` no se guarda** — revisión §2.3 |
 | [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 Pendiente — §3 (capturar la corrección) ya está |
+| [`modo-solo-observar.md`](modo-solo-observar.md) | Escanear y cosechar sin postular. Destraba la recolección de corpus y es el modo "pruébalo antes de dejarlo actuar" para usuarios nuevos | ✅ **Implementado** |
+| [`verificacion-de-correo.md`](verificacion-de-correo.md) | Verificar el correo antes de dejar que la cuenta actúe (token de la extensión, checkout), no antes de dejarla mirar | ✅ **Implementado** |
+| [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Pendiente — ⚠️ verificado el 16-09: **son los 3 portales**, Computrabajo tampoco sincroniza (revisión §8.2) |
+| [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente — verificado el 16-09: la parte A no está |
+| [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | 🔴 **Prioridad 1** |
+| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | ✅ Programada — los 10 pasos hechos; falta publicar la extensión y verificar a mano |
+| [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 💡 Propuesta — va después de la revisión del 16-09 |
+| [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | 🔨 Pendiente — decidido el 19-09 |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -75,6 +87,33 @@ sistema hoy.
 - **Filtro de IA viejo** — solo corre si el scorer local está desactivado (`!usarScorerLocal`);
   antes podía vetar ofertas que el scorer ya había aprobado con el objetivo declarado.
 
+### Modo solo observar
+
+- **`soloObservar`** (`AP.cfg`, popup con su propio toggle azul junto al maestro) — escanea,
+  puntúa y corre la Etapa 2 igual que siempre, pero no abre el aviso para postular ni llama a la
+  IA de postulación. Gana sobre "revisar antes de enviar" (no hay nada que revisar si no se
+  envía nada) y bloquea también las aprobaciones de banda gris (`DO_APPLY`, `core.js`) — sin
+  reintento silencioso: la decisión queda pendiente hasta que se apague el modo.
+- **Log con status propio** (`observado`, `extension/historial.js`) — nunca se ve ni se cuenta
+  como una postulación real.
+- Desbloquea el protocolo de recolección de corpus del Apéndice de
+  [`modo-solo-observar.md`](modo-solo-observar.md), para `scripts/solapamiento-portales.ts`.
+
+### Verificación de correo
+
+- **`emailVerificado`** (`User`, null = sin verificar) — se gatea "que la cuenta actúe", no "que
+  mire": sin verificar se puede registrar, subir CV, hacer el triaje y conversar con la IA, pero
+  no conectar la extensión (`/api/account/token`) ni contratar Premium (`/api/flow/checkout`).
+  Login nunca se bloquea, para no crear cuentas muertas por un typo de correo.
+- **Cuentas de Google se dan por verificadas solas** (`backend/auth.ts`) — Google ya confirma sus
+  correos, no se le vuelve a pedir a la persona.
+- **Reenvío con límite** (`/api/auth/reenviar-verificacion`) — un intervalo mínimo entre envíos
+  hace de tope tanto al "1 por minuto" como al "5 por hora" del diseño original con un solo campo
+  (`verifyUltimoEnvio`). El límite solo se quema si el correo salió de verdad.
+- **Banner persistente en el dashboard** y aviso en el paso "Extensión" del onboarding, ambos con
+  botón de reenviar. Página `/verificar` con sus tres estados (verificado / vencido / inválido).
+- Cuentas existentes se dieron por verificadas en la migración — nadie quedó bloqueado de golpe.
+
 ### Costos
 
 El rediseño llevó el costo de IA de **~US$3,40 a ~US$0,58 por usuario premium al mes**
@@ -83,6 +122,32 @@ El rediseño llevó el costo de IA de **~US$3,40 a ~US$0,58 por usuario premium 
 ---
 
 ## Lo que sigue
+
+### 0. Revisión del 16-09 — [`revision-2026-09-16.md`](revision-2026-09-16.md)
+
+Va antes que todo lo demás. Los pasos 1 a 4 de su §6 (sin perfil no se postula, cuentas nuevas en
+modo prueba, límites antes de enviar, motor nuevo para todos) salen juntos en la misma versión de la
+extensión, **antes de cualquier publicidad**.
+
+### 0b. Ráfagas — [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md)
+
+Justo después de la Fase 1. Sus pasos 1 y 2 (la alarma que se reinicia y la ráfaga como máquina de
+estados) son bugs latentes de la búsqueda automática actual, no solo una función nueva. El permiso
+`power` obliga a publicar otra versión en la tienda: conviene que salga en la misma que la Fase 1.
+
+**Avance (2026-09-19):** los 10 pasos hechos — alarma que ya no se reinicia, ráfaga como máquina de
+estados persistida, disparadores reales con umbral de 3 h, `chrome.power` con tope de 25 min (el
+permiso ya está en el manifest), el registro de cada ráfaga en el backend (`Rafaga`,
+`/api/extension/rafaga`, purga a 90 días), y que la persona se entere: número en el ícono, línea en
+el popup y tarjeta del Inicio ("Última puesta al día: hoy 09:14"), y el botón "Ponerme al día ahora"
+(solo Premium, en el popup y en el panel), y la prueba de 5 postulaciones automáticas del plan
+gratis (una ráfaga de inmediato al activar la postulación, el contador en el popup y el panel, el corte
+en medio al llegar a 5, "Ver las 5" en el historial y el correo de fin de prueba) y que lo aprobado en
+"Por decidir" vaya primero en cada ráfaga y cuente en su resumen (se envía en todos los planes, no solo en
+Premium), y el recordatorio por correo cuando lleva 48 h sin ponerse al día (solo Premium, un correo cada
+72 h como máximo, con baja en un clic y sin iniciar sesión), y los textos: la landing, Premium, Ajustes, términos
+y privacidad ya no prometen "cada dos horas" ni "postula sola" sin condiciones. Falta subir la versión 2.13.0
+de la extensión con los textos de la ficha (listos en §5 del doc) y verificar a mano lo que necesita un Chrome real.
 
 ### 1. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 
@@ -107,20 +172,30 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 | Tarea | Estado | Bloquea a |
 |---|---|---|
 | Revisión legal de privacidad y términos | ⏸ Con el abogado | Chrome Web Store |
-| Definir la política de devolución (`§7.2` de Términos, hoy en borrador) | ⏸ Con el abogado | Chrome Web Store |
-| Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ⚠️ **Verificar** | Recuperación de contraseña real |
-| Cuenta de comercio Flow aprobada + `FLOW_SANDBOX=false` | ⚠️ Verificar | Cobrar de verdad |
-| Plan de Flow con el `urlCallback` del dominio propio | ⚠️ Verificar | Renovaciones |
-| Ficha y envío a la Chrome Web Store | Pendiente | — |
+| Definir la política de devolución (`§7.2` de Términos, hoy en borrador), **ahora para pases** | ⏸ Con el abogado | Cobrar de verdad |
+| **Inicio de actividades en el SII** y cómo se emiten las boletas | ⚠️ Lo hace Roberto | Cobrar de verdad: desde 2025 toda pasarela lo exige |
+| Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ✅ Resuelto en `323f2a4` | Recuperación de contraseña real |
+| Cuenta de comercio Flow aprobada + `FLOW_SANDBOX=false` | ⚠️ Verificar — como **persona natural**, solo pagos únicos | Cobrar de verdad |
+| Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | 🔨 Pendiente | Cobrar de verdad: la suscripción actual no funciona sin empresa |
+| ~~Plan de Flow con el `urlCallback` del dominio propio~~ | Ya no aplica: sin suscripción no hay plan en Flow | — |
+| Ficha y envío a la Chrome Web Store | ✅ Publicada | — |
+| Versión 2.13.0 de la extensión (ráfagas y permiso `power`) y textos nuevos de la ficha ([`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) §5) | 🔨 Falta subirla y pegar los textos | Que la landing y la tienda digan lo mismo |
 
-> **Ojo con Resend:** mientras el `from` sea el dominio de prueba, los correos de recuperación de
-> contraseña **solo llegan a la propia cuenta** y fallan en silencio para todos los demás.
+> **Plazo legal real:** la **Ley 21.719** (protección de datos personales) entra en vigencia a
+> fines de 2026 y es bastante más exigente que la 19.628 — ver `preguntas-abogado.md` §B. Es la
+> única fecha límite dura detectada en toda la documentación; conviene que el abogado la tenga
+> presente al responder, no solo las preguntas bloqueantes de la Chrome Web Store.
+
+> **Resend:** confirmar en el panel de Vercel que `RESEND_FROM_EMAIL` esté seteado en producción
+> con el dominio verificado (`323f2a4` lo resolvió en el código: `lib/correo.ts` ya falla
+> ruidosamente si falta la variable, en vez de mandar correos que nadie recibe). No hay forma de
+> comprobar esto desde el repo — es un valor de entorno en Vercel.
 
 ---
 
 ## Principios que se repiten
 
-Cinco ideas que atraviesan todos los documentos. Si hay que decidir algo que no está escrito,
+Seis ideas que atraviesan todos los documentos. Si hay que decidir algo que no está escrito,
 decidir con esto:
 
 1. **Compilar vs. ejecutar.** Lo caro y con IA corre una vez, cuando la persona cambia algo. Lo
@@ -140,3 +215,8 @@ decidir con esto:
 5. **Nunca descartar en silencio.** Toda decisión trae su razón, con los valores adentro, y la
    razón se muestra donde la persona está mirando. Una oferta que desaparece sin explicación es
    el peor modo de falla del producto. *(§6, y `visibilidad-y-etapa2.md` §A y §C.)*
+
+6. **Nunca actuar sin saber.** Sin perfil no se postula; una lista vacía significa "no sé qué
+   buscas", no "acepto todo". Lo que la persona tiene que declarar (objetivo, ubicación) se le
+   pregunta, no se infiere del CV. Un límite se revisa antes de enviar, no después.
+   *(`revision-2026-09-16.md` §0.)*

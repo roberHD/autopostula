@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function TerminosPage() {
   return (
-    <LegalPage titulo="Términos y condiciones" actualizado="4 de septiembre de 2026">
+    <LegalPage titulo="Términos y condiciones" actualizado="19 de septiembre de 2026">
       <p>
         Estos términos regulan el uso de AutoPostula: el sitio web, el panel de usuario y la
         extensión de Chrome. Al crear una cuenta o instalar la extensión, aceptas lo que sigue.
@@ -28,6 +28,7 @@ export default function TerminosPage() {
         AutoPostula es una herramienta que automatiza la postulación a ofertas de empleo en
         portales de trabajo chilenos. A partir de tu CV y tus filtros, busca ofertas, completa los
         formularios de postulación con ayuda de inteligencia artificial y los envía en tu nombre.
+        Si lo prefieres, puede limitarse a revisar y clasificar ofertas sin postular a ninguna.
       </p>
       <p>
         AutoPostula <strong>no es una agencia de empleo, ni una bolsa de trabajo, ni un
@@ -38,6 +39,11 @@ export default function TerminosPage() {
       <h2>3. Tu cuenta</h2>
       <ul>
         <li>Debes ser mayor de 18 años y entregar información veraz.</li>
+        <li>
+          Debes confirmar tu correo electrónico antes de conectar la extensión o contratar un plan
+          de pago. Si entras con Google y Google ya confirmó tu correo, no hace falta hacerlo de
+          nuevo.
+        </li>
         <li>
           Eres responsable de mantener la confidencialidad de tu contraseña y de toda la actividad
           que ocurra bajo tu cuenta.
@@ -51,7 +57,7 @@ export default function TerminosPage() {
         <p>
           <strong>
             AutoPostula no tiene relación, afiliación, patrocinio ni convenio alguno con
-            Computrabajo, Laborum ni ningún otro portal de empleo.
+            Computrabajo, Laborum, Trabajando.com ni ningún otro portal de empleo.
           </strong>{" "}
           Los nombres y marcas de esos portales pertenecen a sus respectivos titulares y se
           mencionan solo para identificar dónde opera la herramienta.
@@ -99,6 +105,10 @@ export default function TerminosPage() {
           de que se envíe. Te recomendamos usarlo, sobre todo al principio.
         </li>
         <li>
+          Puedes activar el <strong>modo solo observar</strong> para ver qué ofertas elegiría la
+          herramienta sin que postule a ninguna.
+        </li>
+        <li>
           Cuando una oferta no calza claramente con tu perfil, AutoPostula{" "}
           <strong>no postula por su cuenta</strong>: la deja esperando tu decisión y solo postula
           si tú la apruebas. Esas postulaciones se envían por instrucción expresa tuya.
@@ -115,53 +125,59 @@ export default function TerminosPage() {
         Existe un plan gratuito con límites mensuales de postulaciones, de portales conectados
         simultáneamente y de uso de la IA. Los límites vigentes se muestran en tu cuenta.
       </p>
-
-      <h3>6.2 Plan de pago</h3>
       <p>
-        El plan Premium tiene un valor de <strong>$3.990 CLP mensuales</strong>, impuestos
-        incluidos, y se cobra mediante <strong>suscripción de renovación automática</strong>.
+        Incluye además una <strong>prueba única de 5 postulaciones automáticas</strong>: las
+        primeras cinco postulaciones que la extensión envía por sí sola, sin que entres a ningún
+        portal, y que cuentan dentro de tu límite mensual. Fuera de esa prueba, en el plan gratuito
+        las búsquedas las inicias tú: entras a un portal y la extensión completa y envía los
+        formularios ahí mismo.
+      </p>
+
+      <h3>6.2 Plan de pago: pases de 30 y de 90 días</h3>
+      <p>
+        El plan Premium se contrata con un <strong>pase de pago único</strong>:{" "}
+        <strong>$3.990 CLP por 30 días</strong> o <strong>$9.990 CLP por 90 días</strong>,
+        impuestos incluidos. El pase <strong>no se renueva automáticamente</strong>: pagas una vez
+        y el Premium dura los días que compraste.
       </p>
       <ul>
         <li>Los pagos se procesan a través de Flow, pasarela de pagos chilena.</li>
         <li>
-          AutoPostula no recibe ni almacena los datos de tu tarjeta; los administra directamente
-          Flow.
+          AutoPostula no recibe ni almacena los datos de tu tarjeta ni de tu cuenta bancaria; los
+          administra directamente Flow.
         </li>
         <li>
-          La suscripción se renueva automáticamente cada mes hasta que la canceles, con cargo al
-          medio de pago que registraste.
+          Si compras un pase teniendo otro vigente, el nuevo comienza cuando termina el anterior:
+          no pierdes días por renovar antes.
         </li>
         <li>
-          Si un cobro falla, podemos suspender el acceso a las funciones de pago hasta
-          regularizarlo.
+          Antes de que tu pase termine te avisamos por correo (5 días y 1 día antes). Al vencer,
+          tu cuenta vuelve al plan gratuito; no se hace ningún cobro adicional.
+        </li>
+        <li>
+          Los límites de postulaciones del plan se cuentan por mes calendario, no por los días del
+          pase.
         </li>
       </ul>
 
       <h3>6.3 Cambios de precio</h3>
       <p>
-        Podemos modificar el precio del plan. Si eso ocurre, te avisaremos con al menos 30 días de
-        anticipación y el nuevo valor solo se aplicará en el período siguiente. Si no estás de
-        acuerdo, puedes cancelar antes de que entre en vigencia.
+        Podemos modificar el precio de los pases. Un cambio de precio no afecta a los pases que ya
+        compraste: solo se aplica a las compras posteriores.
       </p>
 
-      <h2>7. Cancelación</h2>
+      <h2>7. Vencimiento y devoluciones</h2>
       <p>
-        Puedes cancelar tu suscripción cuando quieras desde tu cuenta, en la sección Premium. La
-        cancelación opera <strong>al final del período ya pagado</strong>: conservas el acceso
-        Premium hasta esa fecha y no se realizan cobros posteriores.
+        Como el pase no se renueva solo, no hay nada que cancelar: el pase dura los días que
+        compraste y después termina por sí mismo. No hay penalizaciones ni plazos mínimos de
+        permanencia. Al terminar, tu cuenta vuelve automáticamente al plan gratuito, sin que
+        pierdas tu historial ni tu perfil.
       </p>
       <p>
-        No hay penalizaciones ni plazos mínimos de permanencia. Al terminar el período, tu cuenta
-        vuelve automáticamente al plan gratuito, sin que pierdas tu historial ni tu perfil.
+        Lo anterior no limita el derecho a retracto ni los demás derechos que te reconoce la Ley N°
+        19.496 sobre protección de los derechos de los consumidores, en los casos en que
+        correspondan.
       </p>
-      <div className="nota">
-        <p>
-          <strong>[REVISAR CON ABOGADO]</strong> — El derecho a retracto del artículo 3° bis de la
-          Ley N° 19.496 sobre protección de los derechos de los consumidores puede aplicar a esta
-          contratación. Define y declara aquí expresamente tu política de retracto y reembolsos
-          antes de publicar.
-        </p>
-      </div>
 
       <h2>8. Uso aceptable</h2>
       <p>No puedes usar AutoPostula para:</p>

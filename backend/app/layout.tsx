@@ -26,11 +26,11 @@ export const metadata: Metadata = {
     template: "%s · AutoPostula",
   },
   description:
-    "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo y Laborum con tus palabras. Postula 80 veces al mes escribiendo una sola.",
+    "AutoPostula lee tu CV, aprende cómo escribes y responde los formularios de Computrabajo, Laborum y Trabajando.com con tus palabras. Postula 80 veces al mes escribiendo una sola.",
   openGraph: {
     title: "AutoPostula",
     description:
-      "Postula 80 veces al mes. Escribe una sola. Autorrelleno con IA para Computrabajo y Laborum.",
+      "Postula 80 veces al mes. Escribe una sola. Autorrelleno con IA para Computrabajo, Laborum y Trabajando.com.",
     locale: "es_CL",
     type: "website",
   },

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 
 /**
  * "Perfil dinámico" = poder seguir conversando con la IA de estilo después de
@@ -13,10 +14,7 @@ export async function usuarioTienePerfilDinamico(userId: string) {
   });
   if (user?.rol === "ADMIN") return true;
 
-  const subscripcion = await prisma.subscription.findFirst({
-    where: { userId, estado: "ACTIVA" },
-    include: { plan: true },
-  });
+  const subscripcion = await obtenerSubscripcionVigente(userId);
 
   return subscripcion?.plan.perfilDinamico ?? false;
 }
@@ -32,10 +30,7 @@ export async function usuarioTieneAnaliticaAvanzada(userId: string) {
   });
   if (user?.rol === "ADMIN") return true;
 
-  const subscripcion = await prisma.subscription.findFirst({
-    where: { userId, estado: "ACTIVA" },
-    include: { plan: true },
-  });
+  const subscripcion = await obtenerSubscripcionVigente(userId);
 
   return subscripcion?.plan.nivelAnaliticas === "AVANZADO";
 }

@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAvisos } from "@/components/Avisos";
+import type { ModoAutomatico, MotivoInactivo } from "@/lib/estado-automatico";
 
 type Estado = {
   activa: boolean;
-  motivo: "sin-plan" | "pausada" | "sin-cupo" | "sin-portales" | null;
+  motivo: MotivoInactivo | null;
   disponibleEnPlan: boolean;
+  // premium | prueba | manual (docs/rafagas-y-ponerse-al-dia.md §4.1).
+  modo: ModoAutomatico;
   pausadaPorTi: boolean;
   portalesActivos: number;
   cupo: { usadas: number | null; limite: number | null; restantes: number | null };
@@ -36,9 +39,11 @@ function haceCuanto(iso: string): string {
 }
 
 const EXPLICACION: Record<string, { t: string; d: string; ir?: { href: string; txt: string } }> = {
-  "sin-plan": {
-    t: "Postulación automática no incluida",
-    d: "Con tu plan actual postulas tú desde la extensión.",
+  // Reemplaza al antiguo "sin-plan": una cuenta gratis ya no está "sin"
+  // postulación automática desde el principio, la tiene y se le acaba (§4.1).
+  "prueba-terminada": {
+    t: "Prueba automática terminada",
+    d: "Ahora postulas tú, entrando a Computrabajo, Laborum o Trabajando.",
     ir: { href: "/dashboard/premium", txt: "Ver Premium" },
   },
   pausada: {
@@ -52,7 +57,7 @@ const EXPLICACION: Record<string, { t: string; d: string; ir?: { href: string; t
   },
   "sin-portales": {
     t: "Sin portales conectados",
-    d: "Conecta Computrabajo o Laborum para que empiece.",
+    d: "Conecta Computrabajo, Laborum o Trabajando.com para que empiece.",
     ir: { href: "/dashboard/portales", txt: "Conectar" },
   },
 };
@@ -130,9 +135,11 @@ export default function BarraMaquina() {
   const { usadas, limite } = e.cupo;
   const pct = limite && usadas != null ? Math.min(100, Math.round((usadas / limite) * 100)) : 0;
   const aviso = e.motivo ? EXPLICACION[e.motivo] : null;
-  // El interruptor solo tiene sentido si el plan lo permite: si no, lo que
-  // falta es el plan, no el botón.
-  const puedeAlternar = e.disponibleEnPlan;
+  // El interruptor solo tiene sentido si hay algo automático que pausar: el plan
+  // Premium, o la prueba de una cuenta gratis mientras dura (una acción que corre
+  // sola tiene que poder pararse, aunque no sea del plan). Con la prueba gastada,
+  // lo que falta es el plan, no el botón.
+  const puedeAlternar = e.modo !== "manual";
 
   return (
     <div className="ap-maquina" data-activa={e.activa ? "1" : undefined}>

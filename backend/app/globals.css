@@ -1,73 +1,86 @@
 /* ═══════════════════════════════════════════════════════════════════
    AutoPostula — sistema de diseño
    ───────────────────────────────────────────────────────────────────
-   Un solo vocabulario de tokens para las tres zonas de la app: las
-   páginas públicas (landing, login, registro), el onboarding y el
-   dashboard. Los nombres son los que el dashboard ya usaba
-   (--bg, --bg-elevated, --text, --accent...) para no tener que tocar
-   cada página; lo que cambia son los valores y los tokens nuevos
-   (--marker, --ok/--err, --inv-*).
+   Un solo vocabulario de tokens para las tres zonas: páginas públicas,
+   onboarding y dashboard.
 
-   La identidad: papel bond, tinta índigo y un destacador citrón.
-   El citrón es el único acento fuerte y se gasta en un solo lugar
-   por pantalla — es el gesto de marcar un aviso.
+   FUERA EL VIOLETA. El morado #5A2FD6 era la firma visual de página
+   hecha con IA — está en Linear, en Vercel y en las mil que los copian.
+   Heredarlo era parecerse al montón, justo lo contrario del encargo.
+
+   No se reemplazó por otro color de moda. La paleta pasó a MONOCROMA con
+   una sola nota ácida, y esa nota sale del material del producto: negro
+   de tóner y destacador fluorescente son los colores de una imprenta, y
+   lo que hace AutoPostula es papeleo.
+
+   La clave del cambio: --accent dejó de ser un tono y pasó a ser el PAR
+   DE CONTRASTE del tema. Así los ~90 lugares que lo usaban (botones,
+   estados activos, focos, gráficos) se volvieron monocromos de una sola
+   vez, sin editar cada archivo.
+
+   El oscuro es ahora el tema por defecto: el sitio público y el
+   dashboard arrancan en tinta. El claro queda para el interruptor del
+   dashboard y para el onboarding.
    ═══════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── Superficies ── */
-  --bg:             #F2F3EE;
-  --bg-elevated:    #FFFFFF;
-  --bg-elevated-2:  #FAFAF6;
-  --border:         #DFE0D8;
-  --border-strong:  #C9CABF;
+  /* ── Superficies: negro de tóner, gris frío, sin sesgo violeta ── */
+  --bg:             #16181A;
+  --bg-elevated:    #1D2023;
+  --bg-elevated-2:  #26292D;
+  --border:         #2E3236;
+  --border-strong:  #3C4145;
 
   /* ── Texto ── */
-  --text:           #1B1A2E;
-  --text-muted:     #6B6A7D;
+  --text:           #E9EBEA;
+  --text-muted:     #8E9599;
 
-  /* ── Acento ── */
-  --accent:          #5A2FD6;
-  --accent-soft:     #EEE9FD;
-  --accent-contrast: #FFFFFF;
+  /* ── "Acento" = el par de contraste, no un tono ── */
+  --accent:          #E9EBEA;
+  --accent-contrast: #16181A;
+  --accent-soft:     #26292D;
 
-  /* ── Destacador ── */
+  /* ── La única nota de color de todo el producto ── */
   --marker:      #D6F24B;
-  --marker-deep: #B9D62E;
-  --on-marker:   #1B1A2E;
+  --marker-deep: #A8C023;
+  --on-marker:   #16181A;
 
-  /* ── Bloque invertido (cierre de la landing, volver arriba) ── */
-  --inv-bg:    #1B1A2E;
-  --inv-fg:    #F2F3EE;
-  --inv-muted: #9A98AE;
+  /* Los enlaces necesitan distinguirse sin un tono corporativo: sobre
+     tinta el citrón se lee perfecto (13.5:1). En claro va subrayado. */
+  --enlace:      #D6F24B;
+
+  /* ── Bloque invertido ── */
+  --inv-bg:    #E9EBEA;
+  --inv-fg:    #16181A;
+  --inv-muted: #5D6468;
 
   /* ── Semánticos: separados del acento a propósito ── */
-  --ok:        #17784F;
-  --ok-soft:   #E2F3EA;
-  --warn:      #9A5B00;
-  --warn-soft: #FBF0DC;
-  --err:       #B3283C;
-  --err-soft:  #FBE9EC;
+  --ok:        #6FD59B;
+  --ok-soft:   #172A22;
+  --warn:      #E0AC5A;
+  --warn-soft: #2C2416;
+  --err:       #E8798C;
+  --err-soft:  #2E1B20;
 
-  /* ── Estados de una postulación ── */
-  --status-enviado:    #6B6A7D;
-  --status-visto:      #5A2FD6;
-  --status-en-proceso: #9A5B00;
-  --status-finalista:  #17784F;
-  --status-finalizado: #1F7A75;
-  --status-rechazado:  #B3283C;
+  /* ── Estados de una postulación: escala de grises que avanza hacia
+        la luz, y color solo donde hay un desenlace ── */
+  --status-enviado:    #8E9599;
+  --status-visto:      #C7CBCC;
+  --status-en-proceso: #E0AC5A;
+  --status-finalista:  #6FD59B;
+  --status-finalizado: #7FC8C2;
+  --status-rechazado:  #E8798C;
 
-  /* ── Gráficos ── */
-  --chart-1: #5A2FD6;
-  --chart-2: #8B63E8;
-  --chart-3: #1F9E96;
-  --chart-4: #8FA800;
-  --chart-5: #C77800;
+  /* ── Gráficos: rampa de grises, y el citrón para la serie que importa ── */
+  --chart-1: #E9EBEA;
+  --chart-2: #8E9599;
+  --chart-3: #7FC8C2;
+  --chart-4: #D6F24B;
+  --chart-5: #E0AC5A;
 
-  /* ── Sombras: el papel se levanta, no flota ── */
-  --shadow-sheet: 0 1px 0 var(--border), 0 18px 40px -24px rgba(27, 26, 46, 0.28);
-  --shadow-lift:  0 12px 30px -18px rgba(27, 26, 46, 0.45);
+  --shadow-sheet: 0 1px 0 var(--border), 0 20px 44px -28px rgba(0, 0, 0, 0.8);
+  --shadow-lift:  0 14px 34px -20px rgba(0, 0, 0, 0.85);
 
-  /* ── Tipografía ── */
   --ff-display: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
   --ff-body:    var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
@@ -75,60 +88,56 @@
   --ease:   cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
-/* El dashboard arranca en oscuro y tiene su propio interruptor; el
-   atributo lo pone ThemeToggle sobre .ap-shell. Las páginas públicas
-   y el onboarding se quedan en el :root de arriba.
+/* El claro: interruptor del dashboard y onboarding. Mismo sistema, misma
+   ausencia de color: papel, tinta y el mismo destacador. */
+[data-theme="light"],
+.ap-shell[data-theme="light"] {
+  --bg:             #F4F5F3;
+  --bg-elevated:    #FFFFFF;
+  --bg-elevated-2:  #FAFAF9;
+  --border:         #DFE1DE;
+  --border-strong:  #C6C9C5;
 
-   El segundo selector es el que hace que el dashboard salga oscuro de
-   entrada: antes de que ThemeToggle monte y estampe el atributo no hay
-   data-theme, y sin esto se vería un parpadeo claro en cada carga. */
-[data-theme="dark"],
-.ap-shell:not([data-theme="light"]) {
-  --bg:             #14131C;
-  --bg-elevated:    #1D1C29;
-  --bg-elevated-2:  #232232;
-  --border:         #302E42;
-  --border-strong:  #443F5E;
+  --text:           #16181A;
+  --text-muted:     #5D6468;
 
-  --text:           #ECECF3;
-  --text-muted:     #9998AC;
-
-  --accent:          #A98BFF;
-  --accent-soft:     #2A2247;
-  /* Sobre lavanda clara el texto va oscuro: en el tema anterior era casi
-     blanco y los botones primarios quedaban ilegibles. */
-  --accent-contrast: #17122B;
+  --accent:          #16181A;
+  --accent-contrast: #F4F5F3;
+  --accent-soft:     #EDEEEB;
 
   --marker:      #D6F24B;
-  --marker-deep: #A6C221;
-  --on-marker:   #17122B;
+  --marker-deep: #A8C023;
+  --on-marker:   #16181A;
 
-  --inv-bg:    #232232;
-  --inv-fg:    #ECECF3;
-  --inv-muted: #9998AC;
+  /* Citrón sobre papel no se lee: en claro el enlace es tinta subrayada. */
+  --enlace:      #16181A;
 
-  --ok:        #5BD59B;
-  --ok-soft:   #16342A;
-  --warn:      #E5A94A;
-  --warn-soft: #33260F;
-  --err:       #FF8A9B;
-  --err-soft:  #3A1A22;
+  --inv-bg:    #16181A;
+  --inv-fg:    #E9EBEA;
+  --inv-muted: #8E9599;
 
-  --status-enviado:    #9998AC;
-  --status-visto:      #A98BFF;
-  --status-en-proceso: #E5A94A;
-  --status-finalista:  #5BD59B;
-  --status-finalizado: #6FD8D0;
-  --status-rechazado:  #FF8A9B;
+  --ok:        #17784F;
+  --ok-soft:   #E4F1E9;
+  --warn:      #8A5200;
+  --warn-soft: #F7EFDF;
+  --err:       #B3283C;
+  --err-soft:  #FAEAEC;
 
-  --chart-1: #A98BFF;
-  --chart-2: #C9A6FF;
-  --chart-3: #6FD8D0;
-  --chart-4: #D6F24B;
-  --chart-5: #F2A65A;
+  --status-enviado:    #8E9599;
+  --status-visto:      #2E3236;
+  --status-en-proceso: #8A5200;
+  --status-finalista:  #17784F;
+  --status-finalizado: #1F7A75;
+  --status-rechazado:  #B3283C;
 
-  --shadow-sheet: 0 1px 0 var(--border), 0 18px 40px -24px rgba(0, 0, 0, 0.7);
-  --shadow-lift:  0 12px 30px -18px rgba(0, 0, 0, 0.8);
+  --chart-1: #16181A;
+  --chart-2: #5D6468;
+  --chart-3: #1F7A75;
+  --chart-4: #8FA800;
+  --chart-5: #8A5200;
+
+  --shadow-sheet: 0 1px 0 var(--border), 0 18px 40px -26px rgba(22, 24, 26, 0.26);
+  --shadow-lift:  0 12px 30px -18px rgba(22, 24, 26, 0.4);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -162,9 +171,11 @@ h3 { font-variation-settings: "wdth" 104; letter-spacing: -0.012em; }
 
 p { margin: 0; }
 
-/* El foco tiene que verse siempre — se navega mucho con teclado acá. */
+/* El foco va en citrón y no en --accent: ahora el acento es el mismo par
+   de contraste del texto, así que un anillo de ese color no se distinguía
+   del contenido y dejaba de avisar dónde estás parado. */
 :focus-visible {
-  outline: 2.5px solid var(--accent);
+  outline: 2.5px solid var(--marker);
   outline-offset: 3px;
   border-radius: 3px;
 }
@@ -217,14 +228,11 @@ p { margin: 0; }
 .ap-button {
   background: var(--accent);
   color: var(--accent-contrast);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset,
-              0 8px 20px -12px var(--accent);
 }
 .ap-btn--primary:hover:not(:disabled),
 .ap-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset,
-              0 16px 28px -14px var(--accent);
+  filter: brightness(1.08);
 }
 
 /* ── Fantasma ── */
@@ -246,11 +254,10 @@ p { margin: 0; }
   background: var(--marker);
   color: var(--on-marker);
   border-color: var(--marker-deep);
-  box-shadow: 0 8px 20px -14px var(--marker-deep);
 }
 .ap-btn--mark:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 16px 26px -16px var(--marker-deep);
+  filter: brightness(1.06);
 }
 
 .ap-btn--sm,
@@ -293,15 +300,12 @@ p { margin: 0; }
 .ap-swipe--bloque {
   color: var(--on-marker);
   background-position: 0 50%;
-  background-size: 0% 1.02em;
+  background-size: 100% 1.02em;
   padding-inline: 0.12em;
   border-radius: 3px;
 }
-.ap-swipe--bloque.ap-swipe--auto { animation-name: ap-swipe-bloque; }
-.is-in .ap-swipe--bloque,
-.ap-swipe--bloque.is-in { background-size: 100% 1.02em; }
-
-@keyframes ap-swipe-bloque { to { background-size: 100% 1.02em; } }
+/* Sin animación a propósito: ver el comentario de arriba. */
+.ap-swipe--bloque.ap-swipe--auto { animation: none; }
 
 /* Marca sobre un dato suelto dentro de un párrafo. Mismo mecanismo que
    .ap-swipe, por la misma razón: estos datos casi siempre se cortan en
@@ -332,7 +336,8 @@ p { margin: 0; }
   width: 30px; height: 30px;
   flex: none;
   border-radius: 8px;
-  background: var(--accent);
+  background: var(--bg-elevated-2);
+  border: 1.5px solid var(--border-strong);
   display: grid;
   place-items: center;
 }
@@ -646,9 +651,15 @@ p { margin: 0; }
 
 /* ── Panel de tinta ── */
 .ap-acceso__panel {
+  /* Tokens propios: esta superficie es de tinta siempre, en los dos temas.
+     Es la mitad seria de la pantalla y no debe darse vuelta sola. */
+  --panel-fondo: #16181A;
+  --panel-texto: #E9EBEA;
+  --panel-tenue: #8E9599;
+
   flex: 1;
-  background: var(--inv-bg);
-  color: var(--inv-fg);
+  background: var(--panel-fondo);
+  color: var(--panel-texto);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -670,7 +681,7 @@ p { margin: 0; }
   margin-top: 18px;
   font-size: 15px;
   line-height: 1.6;
-  color: var(--inv-muted);
+  color: var(--panel-tenue);
   max-width: 40ch;
 }
 
@@ -678,7 +689,7 @@ p { margin: 0; }
 .ap-acceso__hecho { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.5; }
 .ap-acceso__hecho svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--marker); }
 
-.ap-acceso__nota { font-size: 12px; color: var(--inv-muted); }
+.ap-acceso__nota { font-size: 12px; color: var(--panel-tenue); }
 
 /* El panel es contexto, no contenido: si no cabe, se va. */
 @media (max-width: 900px) { .ap-acceso__panel { display: none; } }
@@ -702,3 +713,20 @@ p { margin: 0; }
   padding: 32px;
   box-shadow: var(--shadow-sheet);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ENLACES DE TEXTO
+   Con --accent vuelto monocromo, un enlace coloreado con el acento
+   quedaba idéntico al texto de al lado. Token propio: citrón sobre
+   tinta (13.5:1), tinta subrayada sobre papel.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ap-enlace {
+  color: var(--enlace);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--enlace) 45%, transparent);
+  transition: text-decoration-color 0.18s ease;
+}
+.ap-enlace:hover { text-decoration-color: var(--enlace); }

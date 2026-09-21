@@ -49,3 +49,48 @@ window.addEventListener('autopostula:conectar', (e) => {
     }
   });
 });
+
+// docs/revision-2026-09-16.md §2.9: un "Sí" en "Por decidir" avisa acá para
+// que la extensión postule lo aprobado ahora, sin esperar a una búsqueda
+// automática (que el plan gratis no tiene). El evento no lleva ninguna oferta:
+// la extensión pide sus aprobadas al backend con su token, así que esta página
+// no puede hacerle abrir una dirección cualquiera.
+window.addEventListener('autopostula:aprobar', () => {
+  chrome.runtime.sendMessage({ type: 'APROBAR_PENDIENTES' }, (respuesta) => {
+    const detail = chrome.runtime.lastError || !respuesta
+      ? { ok: false, motivo: 'extension_no_responde' }
+      : respuesta;
+    window.dispatchEvent(new CustomEvent('autopostula:aprobar-resultado', { detail }));
+  });
+});
+
+// docs/rafagas-y-ponerse-al-dia.md §3.6: el botón "Ponerme al día ahora" del
+// panel viaja igual que "conectar" -- evento del DOM de esta misma página (no
+// postMessage de cualquier origen), y la respuesta vuelve como otro evento.
+// La extensión decide si se puede (plan, pausa, cupo, si ya está corriendo...)
+// y devuelve { ok: true, estimadoMs } o { ok: false, motivo }; acá solo se
+// transporta, para que el panel muestre el motivo en vez de quedarse mudo.
+window.addEventListener('autopostula:ponerse-al-dia', () => {
+  chrome.runtime.sendMessage({ type: 'PONERSE_AL_DIA' }, (respuesta) => {
+    // lastError: la extensión se recargó o actualizó con la pestaña abierta y
+    // este script quedó huérfano -- recargar la página lo arregla.
+    const detail = chrome.runtime.lastError || !respuesta
+      ? { ok: false, motivo: 'extension_no_responde' }
+      : respuesta;
+    window.dispatchEvent(new CustomEvent('autopostula:ponerse-al-dia-resultado', { detail }));
+  });
+});
+
+// docs/rafagas-y-ponerse-al-dia.md §4.1: la persona acaba de activar la
+// postulación desde el panel ("Activar postulación"): se corre una ráfaga de
+// inmediato. Mismo transporte que "ponerme al día": el evento no lleva nada, la
+// extensión pregunta al servidor si corresponde (plan o prueba por gastar, sin
+// pausa, con cupo y portales) y responde { ok: true } o { ok: false, motivo }.
+window.addEventListener('autopostula:activacion', () => {
+  chrome.runtime.sendMessage({ type: 'ACTIVACION_POSTULACION' }, (respuesta) => {
+    const detail = chrome.runtime.lastError || !respuesta
+      ? { ok: false, motivo: 'extension_no_responde' }
+      : respuesta;
+    window.dispatchEvent(new CustomEvent('autopostula:activacion-resultado', { detail }));
+  });
+});

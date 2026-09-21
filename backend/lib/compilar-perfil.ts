@@ -2,8 +2,32 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { construirMensajesCV } from "@/lib/ai-messages";
+import { LISTA_LIMPIEZA_CL } from "@/scripts/limpieza/cl";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+type UbicacionDeclarada = { regiones?: string[]; comunas?: string[]; todaLaRegion?: boolean; aceptaRemoto?: boolean };
+
+// docs/revision-2026-09-16.md §2.1: la ubicación se declara (opciones
+// cerradas, ver /api/regiones-comunas), no se infiere del CV con IA -- en la
+// cuenta de prueba, la IA había armado ["maipu","pudahuel","santiago"] para
+// alguien que pidió "Maipú, Cerrillos o Estación Central" y quería EVITAR
+// Pudahuel (su trabajo anterior). Si declaró "toda la región", se expande a
+// las comunas reales de esa región usando la misma lista que ya usa el
+// parser de títulos (scripts/limpieza/cl.ts) -- una sola fuente para las 346
+// comunas, no una copia aparte que se pueda desincronizar.
+function expandirUbicacionDeclarada(decl: UbicacionDeclarada): { comunas: string[]; aceptaRemoto: boolean } {
+  const regiones = Array.isArray(decl.regiones) ? decl.regiones : [];
+  const comunas = new Set(
+    (Array.isArray(decl.comunas) ? decl.comunas : []).map((c) => c.toLowerCase().trim()).filter(Boolean)
+  );
+  if (decl.todaLaRegion && regiones.length) {
+    for (const t of LISTA_LIMPIEZA_CL) {
+      if (t.tipo === "comuna" && regiones.includes(t.region)) comunas.add(t.termino);
+    }
+  }
+  return { comunas: [...comunas], aceptaRemoto: !!decl.aceptaRemoto };
+}
 
 // El Perfil de Búsqueda compilado (docs/rediseno-filtrado-ofertas.md §5) --
 // reemplaza a /api/ai/sugerir-filtros y a las columnas planas de
@@ -44,7 +68,16 @@ async function marcarDesactualizadoSiForzado(userId: string, forzar: boolean | u
     .catch((e) => console.error("No se pudo marcar el perfil como desactualizado:", e));
 }
 
-export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }): Promise<ResultadoCompilarPerfil> {
+// sinMarcarDesactualizado: recompilación "de refresco" (ej. tras la
+// conversación del onboarding, §2.6) -- salta el límite de 24h como `forzar`,
+// pero si falla NO marca el perfil como desactualizado: no hubo ninguna
+// declaración nueva que el perfil actual contradiga (a diferencia de un
+// cambio de objetivo), así que dejar todo en banda gris por eso sería peor.
+export async function compilarPerfil(
+  userId: string,
+  opts?: { forzar?: boolean; sinMarcarDesactualizado?: boolean }
+): Promise<ResultadoCompilarPerfil> {
+  const marcarSiFalla = !!opts?.forzar && !opts?.sinMarcarDesactualizado;
   const [cv, styleProfile, prefsActuales, decisiones, objetivos] = await Promise.all([
     prisma.cvProfile.findUnique({ where: { userId } }),
     prisma.styleProfile.findFirst({ where: { userId }, orderBy: { creadoEn: "desc" } }),
@@ -54,7 +87,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
   ]);
 
   if (!cv?.textoExtraido) {
-    await marcarDesactualizadoSiForzado(userId, opts?.forzar);
+    await marcarDesactualizadoSiForzado(userId, marcarSiFalla);
     return { ok: false, status: 400, error: "Primero sube tu CV para poder compilar tu perfil de búsqueda" };
   }
 
@@ -73,7 +106,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
 
   const uso = await checkAndLogAiUsage(userId, "compilar_perfil");
   if (!uso.permitido) {
-    await marcarDesactualizadoSiForzado(userId, opts?.forzar);
+    await marcarDesactualizadoSiForzado(userId, marcarSiFalla);
     return { ok: false, status: 403, error: `Alcanzaste el límite de llamadas de IA de tu plan este mes (${uso.limite}).` };
   }
 
@@ -152,7 +185,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
 
   try {
     const respuesta = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-haiku-4-5",
       max_tokens: 1200,
       messages,
     });
@@ -166,15 +199,22 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
     const compilado = JSON.parse(texto);
 
     const nuevaVersion = (prefsActuales?.versionPerfil ?? 0) + 1;
+    // Si la persona ya declaró su ubicación (§2.1), esa manda -- lo que la IA
+    // haya devuelto para ubicacion.* en este mismo llamado se descarta. Sin
+    // declaración todavía (cuentas que no pasaron por el onboarding nuevo),
+    // se mantiene el comportamiento viejo para no dejarlas sin nada.
+    const ubicacionDeclarada = prefsActuales?.ubicacionDeclarada as UbicacionDeclarada | null;
     const perfilCompilado = {
       version: nuevaVersion,
       roles: Array.isArray(compilado.roles) ? compilado.roles : [],
       vetos: Array.isArray(compilado.vetos) ? compilado.vetos : [],
       senales: Array.isArray(compilado.senales) ? compilado.senales : [],
-      ubicacion: {
-        comunas: Array.isArray(compilado.ubicacion?.comunas) ? compilado.ubicacion.comunas : [],
-        aceptaRemoto: !!compilado.ubicacion?.aceptaRemoto,
-      },
+      ubicacion: ubicacionDeclarada
+        ? expandirUbicacionDeclarada(ubicacionDeclarada)
+        : {
+            comunas: Array.isArray(compilado.ubicacion?.comunas) ? compilado.ubicacion.comunas : [],
+            aceptaRemoto: !!compilado.ubicacion?.aceptaRemoto,
+          },
       jornada: compilado.jornada || "cualquiera",
       modalidad: compilado.modalidad || "cualquiera",
       // No son decisión de la IA -- son parámetros de sistema, ver §6.
@@ -191,7 +231,7 @@ export async function compilarPerfil(userId: string, opts?: { forzar?: boolean }
     return { ok: true, perfilCompilado };
   } catch (err) {
     console.error("Error compilando perfil:", err);
-    await marcarDesactualizadoSiForzado(userId, opts?.forzar);
+    await marcarDesactualizadoSiForzado(userId, marcarSiFalla);
     return { ok: false, status: 500, error: "No se pudo compilar el perfil — revisa la terminal del servidor" };
   }
 }
