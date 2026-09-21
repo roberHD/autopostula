@@ -36,6 +36,7 @@ export async function GET() {
       select: {
         id: true,
         estadoActual: true,
+        origenEstado: true,
         enviadaEn: true,
         jobOffer: { select: { relevanciaAi: true, titulo: true, empresa: true } },
         platformAccount: { select: { platform: { select: { nombre: true } } } },
@@ -101,12 +102,41 @@ export async function GET() {
     ),
   ];
 
-  // La tasa se sigue calculando, pero solo sobre lo que algun portal puede
-  // reportar, y viaja junto a su denominador: quien la muestre tiene que decir
-  // sobre cuantas la calculo (criterio de aceptacion 7).
-  const tasaRespuesta = conSeguimiento.length
-    ? Math.round((conSeguimiento.filter((a) => a.estadoActual !== "ENVIADO").length / conSeguimiento.length) * 100)
+  // §7: la tasa se calcula solo sobre las postulaciones de las que se sabe
+  // algo de verdad -- un portal que reporta, o la persona que ya respondio.
+  // Nunca sobre el total, que incluye las que nadie miro nunca. Viaja junto a
+  // su denominador: quien la muestre tiene que decir sobre cuantas la calculo
+  // (criterio de aceptacion 7).
+  const conInfoReal = enviadasDeVerdad.filter(
+    (a) => portalSigueEstado(a.platformAccount.platform.nombre) || a.origenEstado === "USUARIO"
+  );
+  const tasaRespuesta = conInfoReal.length
+    ? Math.round((conInfoReal.filter((a) => a.estadoActual !== "ENVIADO").length / conInfoReal.length) * 100)
     : 0;
+
+  // §7 -- el desglose honesto. Es una particion: cada postulacion cae en
+  // exactamente un grupo y la suma da el total, para que nadie tenga que
+  // adivinar que pasa con las que faltan.
+  const entrevistas = enviadasDeVerdad.filter((a) => a.estadoActual === "ENTREVISTA").length;
+  const conMovimientoSinEntrevistas = enviadasDeVerdad.filter(
+    (a) => a.estadoActual !== "ENVIADO" && a.estadoActual !== "ENTREVISTA"
+  ).length;
+  // Quietas en ENVIADO. La diferencia entre las dos filas siguientes es si se
+  // sabe que no paso nada, o si simplemente no hay forma de saberlo:
+  const quietas = enviadasDeVerdad.filter((a) => a.estadoActual === "ENVIADO");
+  //   - el portal las sigue y dice que no hubo novedad
+  const sinNovedad = quietas.filter((a) => portalSigueEstado(a.platformAccount.platform.nombre)).length;
+  //   - nadie las puede mirar: solo la persona puede contar que paso (§6)
+  const esperandoQueCuentes = quietas.length - sinNovedad;
+  const incompletas = total - enviadasDeVerdad.length;
+
+  const desglose = [
+    { etiqueta: "Sin novedad", cantidad: sinNovedad, nota: "el portal dice que no ha pasado nada" },
+    { etiqueta: "Esperando que nos cuentes", cantidad: esperandoQueCuentes, nota: "nadie nos avisa: solo tú puedes saberlo", accionable: true },
+    { etiqueta: "Con movimiento", cantidad: conMovimientoSinEntrevistas, nota: "alguien las miró o avanzaron" },
+    { etiqueta: "Entrevistas", cantidad: entrevistas, nota: "lo que de verdad importa" },
+    { etiqueta: "Quedaron a medias", cantidad: incompletas, nota: "no llegaron a la empresa" },
+  ].filter((f) => f.cantidad > 0);
 
   const matches = todas.map((a) => a.jobOffer.relevanciaAi).filter((v): v is number => v != null);
   const matchPromedio = matches.length
@@ -175,7 +205,8 @@ export async function GET() {
       portalesConSeguimiento: PORTALES_CON_SEGUIMIENTO,
     },
     tasaRespuesta,
-    tasaSobre: conSeguimiento.length,
+    tasaSobre: conInfoReal.length,
+    desglose,
     entrevistasEsteMes,
     matchPromedio,
     actividad,

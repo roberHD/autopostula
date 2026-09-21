@@ -31,6 +31,7 @@ type Resumen = {
   tasaRespuesta: number;
   tasaSobre: number;
   conMovimiento: number;
+  desglose: { etiqueta: string; cantidad: number; nota: string; accionable?: boolean }[];
   cobertura: {
     conSeguimiento: number;
     sinSeguimiento: number;
@@ -416,6 +417,29 @@ export default function InicioPage() {
           <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
             Dónde se te quedan las postulaciones
           </p>
+
+          {/* docs/estado-real-de-postulaciones.md §7: el desglose honesto. Dice
+              sobre qué se sabe y sobre qué no, en vez de dar un porcentaje que
+              mezcla las dos cosas. La fila accionable es la que la persona
+              puede mover, y por eso lleva el enlace. */}
+          {datos.desglose.length > 0 && (
+            <ul className="ap-desglose">
+              {datos.desglose.map((f) => (
+                <li key={f.etiqueta} className={"ap-desglose__fila" + (f.accionable ? " ap-desglose__fila--accion" : "")}>
+                  <span className="ap-desglose__n ap-tnum">{f.cantidad}</span>
+                  <span className="ap-desglose__txt">
+                    <b>{f.etiqueta}</b>
+                    <i>{f.nota}</i>
+                  </span>
+                  {f.accionable && (
+                    <Link href="/dashboard/seguimiento" className="ap-desglose__cta">
+                      Contarles
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* docs/estado-real-de-postulaciones.md §4: el embudo se arma con lo
               que reportan los portales, y dos de los tres no reportan nada. Sin
