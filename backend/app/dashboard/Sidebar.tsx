@@ -5,18 +5,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  LayoutDashboard,
-  FileText,
-  UserRound,
-  MessageSquare,
-  Globe,
-  Sparkles,
-  Settings,
-  Menu,
-  X,
-  Filter,
   Crown,
+  FileText,
+  Filter,
+  Globe,
+  HelpCircle,
   Inbox,
+  LayoutDashboard,
+  Menu,
+  MessageSquare,
+  Settings,
+  Sparkles,
+  UserRound,
+  X,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { Marca } from "@/components/Marca";
@@ -27,6 +28,7 @@ const GRUPOS: { titulo?: string; items: { href: string; label: string; Icon: any
       { href: "/dashboard", label: "Resumen", Icon: LayoutDashboard },
       { href: "/dashboard/historial", label: "Postulaciones", Icon: FileText },
       { href: "/dashboard/por-decidir", label: "Por decidir", Icon: Inbox },
+      { href: "/dashboard/seguimiento", label: "¿Supiste algo?", Icon: HelpCircle },
     ],
   },
   {
@@ -61,11 +63,18 @@ export default function Sidebar({ userName }: { userName: string }) {
   const pathname = usePathname();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [pendientesBandaGris, setPendientesBandaGris] = useState(0);
+  const [pendientesSeguimiento, setPendientesSeguimiento] = useState(0);
 
   useEffect(() => {
     fetch("/api/banda-gris")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setPendientesBandaGris(data?.pendientes?.length ?? 0))
+      .catch(() => {});
+
+    // docs/estado-real-de-postulaciones.md §6.2: badge cuando hay pendientes.
+    fetch("/api/seguimiento")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setPendientesSeguimiento(data?.pendientes?.length ?? 0))
       .catch(() => {});
   }, [pathname]);
 
@@ -124,6 +133,7 @@ export default function Sidebar({ userName }: { userName: string }) {
             {grupo.items.map(({ href, label, Icon }) => {
               const activo = estaActivo(href, pathname);
               const esPorDecidir = href === "/dashboard/por-decidir";
+              const esSeguimiento = href === "/dashboard/seguimiento";
               return (
                 <Link
                   key={href}
@@ -134,6 +144,9 @@ export default function Sidebar({ userName }: { userName: string }) {
                   {label}
                   {esPorDecidir && pendientesBandaGris > 0 && (
                     <span className="ap-nav-badge ap-tnum">{pendientesBandaGris}</span>
+                  )}
+                  {esSeguimiento && pendientesSeguimiento > 0 && (
+                    <span className="ap-nav-badge ap-tnum">{pendientesSeguimiento}</span>
                   )}
                 </Link>
               );
