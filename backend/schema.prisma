@@ -44,6 +44,18 @@ enum EstadoPago {
   REEMBOLSADO
 }
 
+// De donde salio Application.estadoActual (docs/estado-real-de-postulaciones.md
+// §6.4). Existe para poder aplicar la regla de precedencia del §6.5: un escaneo
+// de portal nunca puede pisar lo que reporto la persona.
+enum OrigenEstado {
+  // Lo detecto escanearMisPostulaciones leyendo "Mis postulaciones".
+  PORTAL
+  // Lo reporto la persona. Es la fuente de verdad (§3).
+  USUARIO
+  // Valor con el que nace la postulacion al crearse.
+  SISTEMA
+}
+
 enum OrigenOferta {
   MANUAL
   AUTOMATICO
@@ -53,6 +65,12 @@ enum EstadoPostulacion {
   ENVIADO
   VISTO
   EN_PROCESO
+  // docs/estado-real-de-postulaciones.md §6.3. El enum se habia armado con el
+  // vocabulario de Computrabajo y le faltaba justo el estado que mas importa:
+  // una entrevista no tenia donde guardarse. FINALISTA significa otra cosa
+  // (etapa final del proceso), y por eso el contador mostraba cero teniendo
+  // cuatro entrevistas coordinadas por correo.
+  ENTREVISTA
   FINALISTA
   FINALIZADO
   RECHAZADO
@@ -582,6 +600,16 @@ model Application {
   // el historial: la prueba se demuestra con resultados concretos, no con un
   // mensaje. Máximo 5 filas por cuenta.
   esDePrueba          Boolean           @default(false) @map("es_de_prueba")
+  // docs/estado-real-de-postulaciones.md §6.4. De donde salio estadoActual. Un
+  // escaneo de portal NUNCA pisa un estado con origen USUARIO: si la persona
+  // dijo "tengo entrevista", que Computrabajo siga diciendo "postulado" no lo
+  // revierte. Las filas viejas quedan en SISTEMA, que el portal si puede pisar.
+  origenEstado        OrigenEstado      @default(SISTEMA) @map("origen_estado")
+  // Para no preguntarle dos veces seguidas por la misma postulacion (§6.1):
+  // nada antes de los 5 dias, nada dos veces en 7, y se deja de preguntar
+  // tras 3 intentos sin respuesta.
+  ultimaConsulta      DateTime?         @map("ultima_consulta")
+  vecesConsultada     Int               @default(0) @map("veces_consultada")
 
   user             User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobOffer         JobOffer                   @relation(fields: [jobOfferId], references: [id])

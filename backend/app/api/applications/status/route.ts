@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { decidirCambioEstado } from "@/lib/estado-postulacion";
 
 async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -12,7 +13,7 @@ async function getUserFromToken(request: Request) {
 // ENVIADO solo tiene sentido como "el portal confirma que sí llegó" para una
 // postulación que AutoPostula dejó INCOMPLETA (ver más abajo); para cualquier
 // otra es el estado con el que ya nació y no cambia nada.
-const ESTADOS_VALIDOS = ["ENVIADO", "VISTO", "EN_PROCESO", "FINALISTA", "FINALIZADO", "RECHAZADO"];
+const ESTADOS_VALIDOS = ["ENVIADO", "VISTO", "EN_PROCESO", "ENTREVISTA", "FINALISTA", "FINALIZADO", "RECHAZADO"];
 
 export async function PATCH(request: Request) {
   try {
@@ -65,30 +66,40 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Si el estado no cambió, no duplicamos el historial
-    if (application.estadoActual === estado) {
-      return NextResponse.json({ id: application.id, sinCambios: true });
-    }
+    // Este endpoint es SIEMPRE el camino del portal: lo llama la extensión con
+    // el token de la cuenta, desde escanearMisPostulaciones(). Lo que reporte
+    // la persona va a entrar por otra ruta con origen USUARIO.
+    //
+    // La decisión vive en lib/estado-postulacion.ts para que las dos rutas no
+    // puedan divergir (docs/estado-real-de-postulaciones.md §6.5). Cubre lo que
+    // antes estaba suelto acá: que solo INCOMPLETA pueda pasar a ENVIADO, y
+    // ahora además que el portal nunca pise lo que reportó la persona ni haga
+    // retroceder una postulación que ya avanzó.
+    const decision = decidirCambioEstado({
+      actual: application.estadoActual,
+      origenActual: application.origenEstado,
+      nuevo: estado,
+      origen: "PORTAL",
+    });
 
-    // docs/revision-2026-09-16.md §8.2/§8.3: "Postulado" en "Mis postulaciones"
-    // del portal es la evidencia que faltaba -- si AutoPostula la había dejado
-    // INCOMPLETA (no vio la confirmación) pero el portal la muestra, sí llegó.
-    // Solo INCOMPLETA puede pasar a ENVIADO: nunca se retrocede una postulación
-    // que ya avanzó (VISTO, EN_PROCESO...) porque el portal diga "Postulado".
-    if (estado === "ENVIADO" && application.estadoActual !== "INCOMPLETA") {
-      return NextResponse.json({ id: application.id, sinCambios: true });
+    if (!decision.aplica) {
+      return NextResponse.json({ id: application.id, sinCambios: true, motivo: decision.motivo });
     }
 
     await prisma.application.update({
       where: { id: application.id },
-      data: { estadoActual: estado as any, ...(estado === "ENVIADO" ? { notaAtencion: null } : {}) },
+      data: {
+        estadoActual: estado as any,
+        origenEstado: "PORTAL",
+        ...(estado === "ENVIADO" ? { notaAtencion: null } : {}),
+      },
     });
 
     await prisma.applicationStatusHistory.create({
       data: { applicationId: application.id, estado: estado as any },
     });
 
-    return NextResponse.json({ id: application.id, sinCambios: false });
+    return NextResponse.json({ id: application.id, sinCambios: false, motivo: decision.motivo });
   } catch (err) {
     console.error("Error en /api/applications/status:", err);
     return NextResponse.json(
