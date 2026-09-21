@@ -2403,3 +2403,43 @@
   .ap-redactor__mic--activo,
   .ap-dictando__punto { animation: none; }
 }
+
+/* ── Selector de comunas: abrir y cerrar ─────────────────
+   La lista se desplegaba siempre y no habia como cerrarla. */
+.ap-comunas__toggle {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.ap-comunas__toggle:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+/* Segundo cierre, abajo de la lista: cuando esta scrolleada, la X de arriba
+   queda fuera de vista y hay que volver a subir para cerrarla. */
+.ap-comunas__listo {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.ap-comunas__listo:hover { border-color: var(--text-muted); }
