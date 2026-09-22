@@ -41,6 +41,12 @@ function extraerTextoAviso() {
 // 100% remoto): por eso se identifica sueldo/contrato/jornada por su ícono
 // exacto y todo lo que sobra (el único que queda) es la modalidad, en vez de
 // enumerar cada variante posible de ese ícono.
+//
+// Sin uso desde 2026-09-22: era para la Etapa 2 del escaneo (ver el comentario
+// junto a candidatosGris en escanear()), que se sacó porque abría cada aviso
+// gris de corrido y parecía un modo de solo observar andando solo. Se deja acá
+// -- los selectores siguen verificados y sirven si se vuelve a leer el detalle
+// de un aviso (por ejemplo, al abrirlo desde "Por decidir").
 function extraerFacetasAviso() {
   const panel = document.querySelector('.box_detail,[data-offers-grid-box-detail]');
   if (!panel) return {};
@@ -692,9 +698,15 @@ async function escanear() {
   // de cada descarte, para poder mostrar cuál fue la más frecuente al final.
   const conteos = { postular: 0, gris: 0, descartar: 0 };
   const razonesDescartadas = [];
-  // Candidatas a banda gris de la Etapa 1 (solo tarjeta) -- no se reportan
-  // todavía: primero pasan por la Etapa 2 (§B), que abre el aviso y puede
-  // resolverlas con más datos antes de mandarlas a la cola de decisión.
+  // Candidatas a banda gris de la Etapa 1 (solo tarjeta) -- se reportan tal
+  // cual a "Por decidir" (ver más abajo). Antes acá mismo se abría cada una
+  // (Etapa 2, §B) para repuntuarla con más datos antes de decidir; en la
+  // práctica, cuando la mayoría del listado caía en gris (típico: ubicación
+  // no reconocida), eso se veía como abrir 15-20 avisos de corrido en unos
+  // segundos ANTES de que arrancara el postulado real -- confundía con un modo
+  // de solo observar que no era. Se saca por eso (2026-09-22): la persona
+  // decide con los datos de la tarjeta, y si quiere más detalle abre la
+  // oferta ella misma desde "Por decidir".
   const candidatosGris = [];
   tarjetas.forEach((t, idx) => {
     const id = getId(t, idx);
@@ -736,49 +748,16 @@ async function escanear() {
   reportarTitulosVistos(titulosVistos, 'Computrabajo');
   AP.reportarAvistamientos(avistamientos, 'Computrabajo');
 
-  // Etapa 2 (§B): antes de mandar cada gris a la cola de decisión, se abre el
-  // aviso (facetas + cuerpo real, no solo la tarjeta) y se vuelve a puntuar --
-  // "resuelve → postular/descartar, sigue dudosa → banda gris, ahora con
-  // datos". Solo las grises: las de postular/descartar ya tenían certeza
-  // suficiente con la tarjeta sola, así que abrirlas ahí sería gasto sin
-  // beneficio (el costo neto son solo las grises que terminan rechazadas,
-  // justo donde la información vale más -- ver §B "Costo").
+  // Las grises de la Etapa 1 van directo a "Por decidir" con lo que ya se leyó
+  // de la tarjeta -- sin abrir cada aviso primero (ver el comentario en la
+  // declaración de candidatosGris, más arriba, sobre por qué se sacó).
   for (const cand of candidatosGris) {
-    if (!AP.activo) break;
-    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', 'trabajando');
-    const btn = await activar(cand.t);
-    let resultadoFinal = null;
-    let detalleAviso = null;
-    if (btn) {
-      detalleAviso = extraerFacetasAviso();
-      // §2.3: la ubicación del aviso (más completa/confiable que la de la
-      // tarjeta) manda cuando existe; la de la tarjeta queda solo de
-      // respaldo si el panel no la trajo por algún motivo.
-      const camposCompletos = {
-        titulo: cand.titulo, empresa: cand.empresa,
-        cuerpo: extraerTextoAviso(), ubicacion: detalleAviso.ubicacion || extraerUbicacion(cand.t),
-      };
-      resultadoFinal = AP.evaluarOferta(camposCompletos);
-    }
-    // Si el panel no cargó, se degrada con lo que ya se tenía de la Etapa 1
-    // (§H criterio 4: "una oferta gris sin Etapa 2 se sigue viendo bien").
-    const resultado = resultadoFinal || cand.resultado;
-
-    if (resultadoFinal && resultadoFinal.banda === 'postular') {
-      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo, empresa: cand.empresa});
-    } else if (resultadoFinal && resultadoFinal.banda === 'descartar') {
-      conteos.descartar++;
-      const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
-      razonesDescartadas.push(razon);
-      addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:AP.formatearRazonCorta(razon)});
-    } else {
-      conteos.gris++;
-      addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:'En banda gris — revisar en el dashboard'});
-      AP.reportarBandaGris({
-        titulo: cand.titulo, url: cand.url, plataforma: 'Computrabajo', empresa: cand.empresa,
-        scoreLocal: resultado.score, razones: resultado.razones, detalleAviso,
-      });
-    }
+    conteos.gris++;
+    addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:'En banda gris — revisar en el dashboard'});
+    AP.reportarBandaGris({
+      titulo: cand.titulo, url: cand.url, plataforma: 'Computrabajo', empresa: cand.empresa,
+      scoreLocal: cand.resultado.score, razones: cand.resultado.razones, detalleAviso: null,
+    });
   }
 
   // Filtro inteligente con IA (legacy): descarta ofertas que no calzan con el cargo que
