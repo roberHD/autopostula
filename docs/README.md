@@ -1,11 +1,18 @@
 # Documentos de diseño de AutoPostula
 
-> Índice y estado del trabajo. **Actualizado: 2026-09-19.**
+> Índice y estado del trabajo. **Actualizado: 2026-09-22.**
 > Si vas a implementar algo, empieza por acá: dice qué está hecho, qué falta y en qué orden.
 
-> 🔴 **Antes que cualquier otra cosa: [`revision-2026-09-16.md`](revision-2026-09-16.md).** Una cuenta
-> nueva postula al 100% de las ofertas que ve (55 de 55 en la prueba), y varias cosas marcadas abajo
-> como implementadas no funcionan en producción. Su §6 dice en qué orden arreglarlo.
+> ⏳ **Lo que queda de [`revision-2026-09-16.md`](revision-2026-09-16.md) no es código.** Sus 25
+> hallazgos están implementados (verificado el 22-09 contra el código, sección por sección). Faltan
+> dos cosas que no se pueden cerrar desde el editor:
+>
+> 1. **Importar el catálogo de ocupaciones en la base de producción** (`scripts/importar-catalogo.ts`).
+>    El §2.4 ya no lee un JSON gitignored sino `TituloCanonico` con `origen=CATALOGO_OFICIAL`, pero si
+>    esas filas no están en Vercel, el autocompletado de "¿Qué buscas?" sigue vacío y los objetivos se
+>    guardan sin CIUO.
+> 2. **Repetir el Apéndice A con la versión publicada en la tienda** — es el criterio de aceptación
+>    de la revisión completa (§7), y se hace a mano con la extensión instalada.
 
 ---
 
@@ -13,15 +20,15 @@
 
 | Documento | De qué trata | Estado |
 |---|---|---|
-| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ⚠️ Implementado, **apagado por defecto para cuentas nuevas** — revisión §1.4 |
-| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ⚠️ Implementado, **autocompletado caído en producción** — revisión §2.4 |
-| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ⚠️ Parcial — **`detalleAviso` no se guarda** — revisión §2.3 |
+| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ✅ **Implementado y encendido** — `usarScorerLocal` pasó a `@default(true)` (revisión §1.4) |
+| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ⚠️ Implementado — el autocompletado ya lee de `TituloCanonico` en vez de un JSON gitignored (revisión §2.4). **Falta importar el catálogo en la base de producción** o sigue vacío |
+| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ✅ **Implementado** — `detalleAviso` se valida y se guarda (revisión §2.3) |
 | [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 Pendiente — §3 (capturar la corrección) ya está |
 | [`modo-solo-observar.md`](modo-solo-observar.md) | Escanear y cosechar sin postular. Destraba la recolección de corpus y es el modo "pruébalo antes de dejarlo actuar" para usuarios nuevos | ✅ **Implementado** |
 | [`verificacion-de-correo.md`](verificacion-de-correo.md) | Verificar el correo antes de dejar que la cuenta actúe (token de la extensión, checkout), no antes de dejarla mirar | ✅ **Implementado** |
-| [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 En curso — §4 hecho (el dashboard ya no muestra la tasa sobre postulaciones que ningún portal puede mover, y declara su cobertura). Lo de §8.2 de la revisión ya se arregló: Computrabajo sí sincroniza, así que vuelven a ser **2 de 3** |
-| [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente — verificado el 16-09: la parte A no está |
-| [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | 🔴 **Prioridad 1** |
+| [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | ⚠️ **5 de 7 pasos** — hechos 1, 2, 3, 4 y 7: métrica honesta con cobertura declarada, estado `ENTREVISTA`, la regla de que el portal nunca pisa lo que reportó la persona, y la pantalla «¿Supiste algo?». Faltan los pasos 5 y 6 (escaneo de estado en Laborum y Trabajando), que **necesitan selectores verificados contra el sitio real** |
+| [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | ⚠️ Parcial — la parte A está (el onboarding móvil ya no choca contra el paso de la extensión, §3.2/§3.3); falta el resto |
+| [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | ✅ Implementada — los 25 hallazgos, verificados el 22-09 contra el código. Falta importar el catálogo en producción (§2.4) y repetir el Apéndice A con la versión de la tienda (§7) |
 | [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | ✅ Programada — los 10 pasos hechos; falta publicar la extensión y verificar a mano |
 | [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 💡 Propuesta — va después de la revisión del 16-09 |
 | [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | 🔨 Pendiente — decidido el 19-09 |
