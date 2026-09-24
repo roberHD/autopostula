@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import PestanasEntrenar from "../PestanasEntrenar";
+import RefinamientosEstilo from "@/components/RefinamientosEstilo";
 
 const OPCIONES_TONO = [
   { valor: "formal", titulo: "Formal", desc: "Serio y protocolar" },
@@ -33,30 +34,32 @@ export default function EntrenarIAPage() {
   const [respuestas, setRespuestas] = useState<Respuesta[]>([]);
   const [instruccionesBloqueadas, setInstruccionesBloqueadas] = useState(false);
 
-  useEffect(() => {
-    async function cargar() {
-      try {
-        const res = await fetch("/api/style/entrenamiento");
-        const data = await res.json();
-        if (!res.ok) {
-          setMensaje(data.error ?? `Error ${res.status}`);
-          return;
-        }
-        setTono(data.tono);
-        setLongitudRespuesta(data.longitudRespuesta);
-        setInstrucciones(data.instrucciones);
-        setUsarPerfil(data.usarPerfil);
-        setEvitarRepetidas(data.evitarRepetidas);
-        setInstruccionesBloqueadas(data.instruccionesBloqueadas ?? false);
-      } catch (err) {
-        console.error("Error cargando entrenamiento:", err);
-        setMensaje("No se pudo cargar — revisa la consola");
-      } finally {
-        setCargando(false);
+  // Sale del useEffect para poder volver a leerlo cuando un refinamiento
+  // (docs/banco-de-preguntas.md §6) ajusta el perfil: el largo y las
+  // instrucciones del formulario tienen que reflejar el cambio al instante.
+  const cargar = useCallback(async () => {
+    try {
+      const res = await fetch("/api/style/entrenamiento");
+      const data = await res.json();
+      if (!res.ok) {
+        setMensaje(data.error ?? `Error ${res.status}`);
+        return;
       }
+      setTono(data.tono);
+      setLongitudRespuesta(data.longitudRespuesta);
+      setInstrucciones(data.instrucciones);
+      setUsarPerfil(data.usarPerfil);
+      setEvitarRepetidas(data.evitarRepetidas);
+      setInstruccionesBloqueadas(data.instruccionesBloqueadas ?? false);
+    } catch (err) {
+      console.error("Error cargando entrenamiento:", err);
+      setMensaje("No se pudo cargar — revisa la consola");
+    } finally {
+      setCargando(false);
     }
-    cargar();
   }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
 
   async function guardar() {
     setGuardando(true);
@@ -117,6 +120,11 @@ export default function EntrenarIAPage() {
       </div>
 
       <PestanasEntrenar />
+
+      {/* docs/banco-de-preguntas.md §6: va arriba del formulario a propósito.
+          Es lo que la IA aprendió mirando las correcciones reales de la
+          persona, y pesa más que los controles que hay que ajustar a mano. */}
+      <RefinamientosEstilo onAjustado={cargar} />
 
       {mensaje && (
         <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>
