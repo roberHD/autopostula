@@ -2,7 +2,7 @@
 // piezas de lógica pura (sin chrome.*) que se pueden probar fuera del
 // contexto real de la extensión:
 //   1. AP.mensajeEscaneo con soloObservar (core.js) -- carga el archivo real.
-//   2. actualizarModoObservar (popup.js) -- se extrae la función del archivo
+//   2. El semáforo del popup (popup.js) -- se extrae renderEstado del archivo
 //      real (no se reescribe a mano) y se corre contra un DOM falso mínimo.
 // No está conectado a CI, es para correr a mano: node verificar-modo-observar.js
 const fs = require('fs');
@@ -92,44 +92,74 @@ function cargarCoreJs() {
   check('DO_APPLY con soloObservar=false sí llama a AP.aplicarDirecto', intentoLlamarAplicarDirecto);
 }
 
-// ── 2. actualizarModoObservar (popup.js real, extraída del archivo) ────────
+// ── 2. El semáforo del popup (popup.js real, extraído del archivo) ─────────
+// docs/estrategia-y-rediseno.md §6: el popup dejó de tener interruptores
+// propios. Lo que antes probaba actualizarModoObservar -- "la persona nunca
+// puede quedar en duda sobre si la extensión está postulando o no" -- ahora lo
+// tiene que cumplir el semáforo, que dibuja lo que dice la cuenta.
 {
   const src = fs.readFileSync(path.join(__dirname, 'popup.js'), 'utf8');
-  const start = src.indexOf('function actualizarModoObservar');
-  if (start === -1) throw new Error('No se encontró actualizarModoObservar en popup.js -- ¿se renombró?');
-  const end = src.indexOf('\n}', start) + 2;
-  const fnSrc = src.slice(start, end);
 
-  // DOM falso mínimo: solo lo que la función necesita (getElementById de sus
-  // 3 ids, con classList.toggle y textContent reales sobre un objeto plano).
+  const desdeTextos = src.indexOf('const TEXTO_MODO = {');
+  // Hasta el bloque de DOM: incluye TEXTO_MODO, TEXTO_MODO_PRUEBA y TEXTO_SIN_CUENTA.
+  const hastaTextos = src.indexOf('// ── DOM');
+  const desdeFn = src.indexOf('function renderEstado()');
+  const hastaFn = src.indexOf('\n}', desdeFn) + 2;
+  if (desdeTextos === -1 || desdeFn === -1) {
+    throw new Error('No se encontró TEXTO_MODO o renderEstado en popup.js -- ¿se renombraron?');
+  }
+
   function crearElemento() {
-    const clases = new Set();
-    return {
-      textContent: '',
-      classList: {
-        toggle(clase, on) { if (on) clases.add(clase); else clases.delete(clase); },
-        contains(clase) { return clases.has(clase); },
-      },
-    };
+    return { textContent: '', className: '', disabled: false };
   }
   const elementos = {
-    'opcion-revision': crearElemento(),
-    'revision-hint': crearElemento(),
-    'observar-hint': crearElemento(),
+    estadoLuz: crearElemento(),
+    estadoTitulo: crearElemento(),
+    estadoDetalle: crearElemento(),
+    pausarBtn: crearElemento(),
+    pulse: crearElemento(),
+    pulseLabel: crearElemento(),
   };
-  const ctx = { document: { getElementById: (id) => elementos[id] || null } };
+  const ctx = Object.assign({}, elementos, { tokenActual: null, estadoActual: null });
   vm.createContext(ctx);
-  vm.runInContext(fnSrc, ctx, { filename: 'popup.js (actualizarModoObservar extraída)' });
+  vm.runInContext(
+    src.slice(desdeTextos, hastaTextos) +
+      src.slice(desdeFn, hastaFn),
+    ctx,
+    { filename: 'popup.js (semáforo extraído)' },
+  );
 
-  ctx.actualizarModoObservar(true);
-  check('activo=true: atenúa la fila de "revisar antes de enviar"', elementos['opcion-revision'].classList.contains('opcion-atenuada'));
-  check('activo=true: el hint de revisión explica que no aplica', elementos['revision-hint'].textContent.includes('No aplica'));
-  check('activo=true: el hint de observar dice que está activo', elementos['observar-hint'].textContent.includes('Activo'));
+  // Sin cuenta conectada no se promete nada: no hay estado que mostrar.
+  ctx.renderEstado();
+  check('sin cuenta conectada: dice "Sin conectar" y no deja pausar', elementos.estadoTitulo.textContent === 'Sin conectar' && elementos.pausarBtn.disabled === true);
 
-  ctx.actualizarModoObservar(false);
-  check('activo=false: ya no atenúa la fila de revisión', !elementos['opcion-revision'].classList.contains('opcion-atenuada'));
-  check('activo=false: el hint de revisión vuelve al texto original', elementos['revision-hint'].textContent === 'Muestra las respuestas y pide confirmación');
-  check('activo=false: el hint de observar vuelve al texto original', elementos['observar-hint'].textContent === 'Escanea y puntúa, pero no postula ni gasta cupo');
+  ctx.tokenActual = 'tok';
+  ctx.estadoActual = { modo: 'postulando', pausada: false, soloObservar: false, porModoPrueba: false };
+  ctx.renderEstado();
+  check('postulando: la luz y el título lo dicen, y el botón ofrece pausar', elementos.estadoLuz.className.includes('postulando') && elementos.estadoTitulo.textContent === 'Postulando por ti' && elementos.pausarBtn.textContent === 'Pausar');
+
+  ctx.estadoActual = { modo: 'observando', pausada: false, soloObservar: true, porModoPrueba: false };
+  ctx.renderEstado();
+  check('solo observar: el título dice que solo mira', elementos.estadoTitulo.textContent === 'Solo mirando' && elementos.estadoLuz.className.includes('observando'));
+  check('solo observar: el detalle deja claro que no envía ninguna', elementos.estadoDetalle.textContent.includes('no envía ninguna'));
+  check('solo observar: el pulso del encabezado no dice "activo"', !elementos.pulse.className.includes('active'));
+
+  // §1.2 de docs/revision-2026-09-16.md: si lo que la frena es el modo prueba,
+  // hay que decirlo -- si no, parece algo que la persona eligió y no encuentra
+  // dónde apagarlo.
+  ctx.estadoActual = { modo: 'observando', pausada: false, soloObservar: false, porModoPrueba: true };
+  ctx.renderEstado();
+  check('modo prueba: explica por qué solo mira, en vez de dejarlo en misterio', elementos.estadoDetalle.textContent.includes('modo prueba'));
+
+  ctx.estadoActual = { modo: 'pausada', pausada: true, soloObservar: false, porModoPrueba: false };
+  ctx.renderEstado();
+  check('en pausa: lo dice y el botón pasa a "Reanudar"', elementos.estadoTitulo.textContent === 'En pausa' && elementos.pausarBtn.textContent === 'Reanudar');
+  check('en pausa: aclara que tampoco hace nada al entrar a un portal', elementos.estadoDetalle.textContent.includes('ni siquiera cuando entras a un portal'));
+
+  // Los interruptores viejos no pueden volver por la puerta de atrás: si
+  // alguien los reintroduce en el popup, vuelven las dos verdades distintas.
+  check('el popup ya no tiene interruptores propios de observar/revisión', !src.includes('toggle-observar') && !src.includes('toggle-revision'));
+  check('pausar y reanudar pasan por la cuenta (CAMBIAR_ESTADO), no por storage local', src.includes("type: 'CAMBIAR_ESTADO'"));
 }
 
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));

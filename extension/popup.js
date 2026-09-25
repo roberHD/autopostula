@@ -7,68 +7,65 @@
 // Cuando se compre el dominio propio, actualizar ambos archivos junto con background.js.
 const BACKEND_URL = 'https://autopostula.cl';
 
+// ── Qué es este popup ──────────────────────────────────────────
+// docs/estrategia-y-rediseno.md §6. Antes era un formulario: filtros, datos
+// para la IA, tres interruptores y un botón de guardar, todo guardado en ESTE
+// navegador. La misma persona podía ver "Activo" acá y "Pausada" en el panel,
+// y ninguna de las dos pantallas mentía: miraban cosas distintas.
+//
+// Ahora el popup no decide nada por su cuenta. Dice en qué está la máquina
+// (postulando, solo mirando, en pausa), qué lleva hecho hoy y qué falta de tu
+// parte. Lo único que se cambia acá —pausar y reanudar— se guarda en la
+// cuenta, así que el panel muestra lo mismo. El resto se edita en la web.
+
 // ── Estado ─────────────────────────────────────────────────────
-// Modalidad y jornada mostradas acá SIEMPRE salen del perfil compilado
-// (scorerRemoto.perfilCompilado) -- docs/revision-2026-09-16.md §1.4 sacó
-// los campos viejos (SearchPreferences.modalidad/jornada, que solo usaba el
-// filtro viejo) de la página de Filtros, así que ya no hay nada editable que
-// leer ahí. Sin perfil compilado todavía, se muestra "Cualquiera".
-let filtrosBusquedaRemoto = { modalidad: 'cualquiera', jornada: 'cualquiera' };
-// Scorer local (docs/rediseno-filtrado-ofertas.md §6) -- apagado por defecto
-// hasta que el propio backend diga que hay perfil compilado Y el flag activo.
-let scorerRemoto = { usarScorerLocal: false, perfilCompilado: null, versionPerfil: 0 };
-let infoItems = [];   // [{id, texto}] — datos libres del candidato para que la IA los use como contexto
+let tokenActual = null;
+let estadoActual = null;   // { modo, pausada, soloObservar, revisarAntes, ... }
+let resumen = null;        // lo que devuelve /api/extension/resumen
 
-// Perfil traído automáticamente desde la cuenta web (vía token) — reemplaza
-// al formulario que antes había que llenar a mano acá en el popup.
-// Forma: {nombre, email, tel, comuna, cargo, renta, disp, bio} — mismos
-// nombres cortos que ya esperan content.js y los prompts del backend.
-let perfilRemoto = null;
-let cvTextoCache = '';
-// Red de seguridad por cuenta (docs/revision-2026-09-16.md §1.2) -- true por
-// defecto para no bloquear a alguien que abre el popup sin conexión o con un
-// backend viejo que todavía no manda este campo; solo se pone en false
-// cuando /api/extension/perfil lo dice explícito.
-let postulacionHabilitadaRemoto = true;
-
-const DEFAULTS = {
-  info: []
+// Las mismas palabras que el panel (backend/lib/estado-extension.ts). Se
+// copian porque la extensión no comparte build con el backend:
+// verificar-estado-extension.js compara los dos archivos y falla si se separan.
+const TEXTO_MODO = {
+  postulando: {
+    titulo: 'Postulando por ti',
+    detalle: 'Revisa las ofertas nuevas de tus portales y envía las que calzan.',
+  },
+  observando: {
+    titulo: 'Solo mirando',
+    detalle: 'Revisa y puntúa las ofertas, pero no envía ninguna.',
+  },
+  pausada: {
+    titulo: 'En pausa',
+    detalle: 'No revisa ni envía nada, ni siquiera cuando entras a un portal.',
+  },
 };
+const TEXTO_MODO_PRUEBA =
+  'Tu cuenta está en modo prueba: mira y puntúa, pero no envía. Actívala cuando veas que acierta.';
+const TEXTO_SIN_CUENTA = 'Conecta tu cuenta para que empiece a trabajar por ti.';
 
 // ── DOM ────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
-const headerSub     = $('header-sub');
-const toggleMain    = $('toggle-main');
-const toggleHint    = $('toggle-hint');
-const pulse         = $('pulse');
-const pulseLabel    = $('pulse-label');
-const statTotal     = $('stat-total');
-const statHoy       = $('stat-hoy');
-const statOk        = $('stat-ok');
-const filtroModalidadBadge = $('filtro-modalidad-badge');
-const filtroJornadaBadge   = $('filtro-jornada-badge');
-const filtrosEditarLink    = $('filtros-editar-link');
-const infoListEl    = $('info-list');
-const infoInput     = $('info-input');
-const infoBtn       = $('info-btn');
-const perfilCardEl  = $('perfil-card');
-const perfilRefreshBtn = $('perfil-refresh-btn');
-const perfilEditarLink = $('perfil-editar-link');
-const saveBtn       = $('save-btn');
-const openCtBtn     = $('open-ct-btn');
-const toastEl       = $('toast');
+const headerSub       = $('header-sub');
+const pulse           = $('pulse');
+const pulseLabel      = $('pulse-label');
+const estadoLuz       = $('estado-luz');
+const estadoTitulo    = $('estado-titulo');
+const estadoDetalle   = $('estado-detalle');
+const statEnviadas    = $('stat-enviadas');
+const statDescartadas = $('stat-descartadas');
+const statDisponibles = $('stat-disponibles');
+const decidirRow      = $('decidir-row');
+const portalesSec     = $('portales-sec');
+const portalesLista   = $('portales-lista');
+const cuentaSec       = $('cuenta-sec');
+const pausarBtn       = $('pausar-btn');
+const toastEl         = $('toast');
 
-perfilEditarLink.href = BACKEND_URL + '/dashboard/perfil';
-filtrosEditarLink.href = BACKEND_URL + '/dashboard/filtros';
-
-const ETIQUETAS_MODALIDAD = { cualquiera: 'Cualquiera', remoto: 'Remoto', hibrido: 'Híbrido', presencial: 'Presencial' };
-const ETIQUETAS_JORNADA = { cualquiera: 'Cualquiera', full_time: 'Full time', part_time: 'Part time' };
-
-function renderFiltrosBusqueda() {
-  filtroModalidadBadge.textContent = ETIQUETAS_MODALIDAD[filtrosBusquedaRemoto.modalidad] || 'Cualquiera';
-  filtroJornadaBadge.textContent = ETIQUETAS_JORNADA[filtrosBusquedaRemoto.jornada] || 'Cualquiera';
-}
+$('portales-link').href = BACKEND_URL + '/dashboard/portales';
+$('nota-link').href = BACKEND_URL + '/dashboard';
+decidirRow.href = BACKEND_URL + '/dashboard/por-decidir';
 
 // ── Utilidades ─────────────────────────────────────────────────
 function toast(msg, duration = 2200) {
@@ -78,117 +75,173 @@ function toast(msg, duration = 2200) {
   toast._t = setTimeout(() => toastEl.classList.remove('show'), duration);
 }
 
-function uid() { return Date.now() + Math.random().toString(36).slice(2,6); }
-
-// ── Información adicional ───────────────────────────────────────
-function renderInfo() {
-  if (!infoItems.length) {
-    infoListEl.innerHTML = '<div class="info-empty">Sin datos adicionales — agrega hechos sobre ti para que la IA los use al responder.</div>';
+// ── El semáforo ────────────────────────────────────────────────
+function renderEstado() {
+  if (!tokenActual) {
+    estadoLuz.className = 'luz';
+    estadoTitulo.textContent = 'Sin conectar';
+    estadoDetalle.textContent = TEXTO_SIN_CUENTA;
+    pausarBtn.disabled = true;
     return;
   }
-  infoListEl.innerHTML = '';
-  infoItems.forEach((item) => {
-    const div = document.createElement('div');
-    div.className = 'info-item';
-    div.innerHTML = `
-      <span class="info-item-text">${item.texto}</span>
-      <button class="tag-x info-del" data-id="${item.id}" title="Eliminar">×</button>
-    `;
-    infoListEl.appendChild(div);
+  if (!estadoActual) {
+    estadoLuz.className = 'luz';
+    estadoTitulo.textContent = 'Cargando…';
+    estadoDetalle.textContent = 'Consultando tu cuenta.';
+    pausarBtn.disabled = true;
+    return;
+  }
+  const t = TEXTO_MODO[estadoActual.modo] || TEXTO_MODO.pausada;
+  estadoLuz.className = 'luz ' + estadoActual.modo;
+  estadoTitulo.textContent = t.titulo;
+  // Cuando la frena el modo prueba se dice por qué: si no, "solo mirando"
+  // parece algo que la persona eligió y no encuentra dónde apagar.
+  estadoDetalle.textContent = estadoActual.porModoPrueba ? TEXTO_MODO_PRUEBA : t.detalle;
+  pausarBtn.disabled = false;
+  pausarBtn.textContent = estadoActual.pausada ? 'Reanudar' : 'Pausar';
+  // El pulso del encabezado dice lo mismo en chico.
+  const postulando = estadoActual.modo === 'postulando';
+  pulse.className = 'pulse' + (postulando ? ' active' : '');
+  pulseLabel.className = 'pulse-label' + (postulando ? ' active' : '');
+  pulseLabel.textContent = estadoActual.modo === 'pausada' ? 'En pausa' : t.titulo;
+}
+
+// ── Cifras, por decidir y portales ─────────────────────────────
+function renderResumen() {
+  if (!resumen) return;
+  if (resumen.nombre) headerSub.textContent = resumen.nombre;
+
+  const c = resumen.cifras || {};
+  statEnviadas.textContent = c.enviadasHoy ?? 0;
+  statDescartadas.textContent = c.descartadasHoy ?? 0;
+  // null = plan sin tope (una cuenta admin): un número inventado mentiría.
+  statDisponibles.textContent = c.disponibles === null || c.disponibles === undefined ? '∞' : c.disponibles;
+
+  const d = resumen.porDecidir || {};
+  const hayQueDecidir = (d.total || 0) > 0;
+  decidirRow.classList.toggle('hidden', !hayQueDecidir);
+  if (hayQueDecidir) {
+    $('decidir-titulo').textContent =
+      d.total === 1 ? '1 oferta por decidir' : d.total + ' ofertas por decidir';
+    const sub = $('decidir-sub');
+    sub.textContent = d.vencenManana ? d.vencenManana + ' vencen mañana' : '';
+    sub.classList.toggle('hidden', !d.vencenManana);
+  }
+
+  renderPortales();
+}
+
+// Sesión en cada portal. El servidor sabe cuáles conectó la persona; si ese
+// portal estuvo abierto en alguna pestaña, la extensión ya reportó si había
+// sesión iniciada (core.js → background.js, SESION_PORTAL). Sin ese dato no se
+// inventa nada: el portal se muestra sin veredicto.
+function renderPortales(sesiones) {
+  const portales = (resumen && resumen.portales) || [];
+  portalesSec.classList.toggle('hidden', !portales.length);
+  if (!portales.length) return;
+  const s = sesiones || renderPortales._sesiones || {};
+  renderPortales._sesiones = s;
+  portalesLista.innerHTML = '';
+  portales.forEach((p) => {
+    const fila = document.createElement('div');
+    fila.className = 'portal-fila';
+    const sesion = s[p.nombre];
+    let clase = '';
+    let texto = 'Sin revisar';
+    if (!p.conectado) { clase = 'falta'; texto = 'Sin conectar'; }
+    else if (sesion && sesion.hay === true) { clase = 'ok'; texto = 'Activa'; }
+    else if (sesion && sesion.hay === false) { clase = 'falta'; texto = 'Inicia sesión ahí'; }
+    fila.innerHTML =
+      '<span class="portal-nombre"></span>' +
+      '<span class="portal-estado ' + clase + '"><span class="dot"></span><span class="txt"></span></span>';
+    fila.querySelector('.portal-nombre').textContent = p.nombre;
+    fila.querySelector('.txt').textContent = texto;
+    portalesLista.appendChild(fila);
   });
 }
 
-document.addEventListener('click', e => {
-  const del = e.target.closest('.info-del');
-  if (!del) return;
-  infoItems = infoItems.filter(it => it.id != del.dataset.id);
-  renderInfo();
-});
-
-function addInfoItem() {
-  const texto = infoInput.value.trim();
-  if (!texto) { infoInput.focus(); return; }
-  infoItems.push({ id: uid(), texto });
-  infoInput.value = '';
-  renderInfo();
-  toast('✓ Dato agregado');
+// Lo que se muestra si no hay red: lo último que la cuenta dejó guardado en
+// este navegador. Mismo criterio que AP.soloObservarEfectivo en core.js.
+function estadoDesdeConfig(config) {
+  if (!config) return null;
+  const pausada = config.active === false;
+  const soloObservar = !!config.soloObservar;
+  const enPrueba = config.postulacionHabilitada === false;
+  return {
+    modo: pausada ? 'pausada' : soloObservar || enPrueba ? 'observando' : 'postulando',
+    pausada,
+    soloObservar,
+    revisarAntes: !!config.modoRevision,
+    postulacionHabilitada: !enPrueba,
+    porModoPrueba: enPrueba && !soloObservar && !pausada,
+  };
 }
 
-infoBtn.addEventListener('click', addInfoItem);
-infoInput.addEventListener('keydown', e => { if (e.key === 'Enter') addInfoItem(); });
-
-// ── Perfil (solo lectura, viene de la cuenta web) ────────────────
-function renderPerfilCard() {
-  const hayDatos = perfilRemoto && (perfilRemoto.nombre || perfilRemoto.comuna || perfilRemoto.cargo);
-  if (!hayDatos) {
-    perfilCardEl.innerHTML = tokenActual
-      ? '<span class="vacio">Todavía no hay datos — completa tu perfil en la web y presiona "Actualizar".</span>'
-      : '<span class="vacio">Conecta tu cuenta más abajo para traer tu perfil automáticamente.</span>';
-    return;
-  }
-  const linea2 = [perfilRemoto.cargo, perfilRemoto.comuna].filter(Boolean).join(' · ');
-  perfilCardEl.innerHTML =
-    '<div><b>' + (perfilRemoto.nombre || 'Sin nombre en tu perfil') + '</b></div>' +
-    (linea2 ? '<div>' + linea2 + '</div>' : '') +
-    '<div style="margin-top:4px;font-size:11px;">CV: ' +
-      (cvTextoCache ? '✅ cargado' : '<span class="vacio">sin subir todavía</span>') +
-    '</div>';
-}
-
-async function cargarPerfilRemoto(mostrarToast) {
-  const { autopostulaToken } = await new Promise(r => chrome.storage.sync.get('autopostulaToken', r));
-  if (!autopostulaToken) {
-    if (mostrarToast) toast('⚠ Todavía no está conectada tu cuenta web');
-    return;
-  }
+async function cargarResumen(mostrarToast) {
+  if (!tokenActual) { renderEstado(); return; }
   try {
-    const res = await fetch(BACKEND_URL + '/api/extension/perfil', {
-      headers: { 'Authorization': 'Bearer ' + autopostulaToken }
+    const res = await fetch(BACKEND_URL + '/api/extension/resumen', {
+      headers: { 'Authorization': 'Bearer ' + tokenActual },
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-
-    perfilRemoto = {
-      nombre: data.nombre || '',
-      email:  data.email || '',
-      tel:    data.telefono || '',
-      comuna: data.comuna || '',
-      cargo:  data.cargoObjetivo || '',
-      renta:  data.expectativaRenta || '',
-      disp:   data.disponibilidad || '',
-      bio:    data.resumenProfesional || '',
-    };
-    cvTextoCache = data.textoExtraido || '';
-    if (cvTextoCache) chrome.storage.local.set({ cvTexto: cvTextoCache });
-    else chrome.storage.local.remove('cvTexto');
-
-    if (data.scorer) {
-      scorerRemoto = data.scorer;
-      const compilado = scorerRemoto.perfilCompilado;
-      filtrosBusquedaRemoto = {
-        modalidad: compilado?.modalidad || 'cualquiera',
-        jornada: compilado?.jornada || 'cualquiera',
-      };
-      renderFiltrosBusqueda();
-    }
-    postulacionHabilitadaRemoto = data.postulacionHabilitada !== false;
-
-    renderPerfilCard();
-    renderModoPrueba();
-    guardarConfigLocal(); // persiste el perfil y los filtros recién traídos para que content.js los use ya mismo
-    if (mostrarToast) toast('✓ Perfil actualizado desde la web');
+    resumen = await res.json();
+    estadoActual = resumen.estado || null;
+    renderEstado();
+    renderResumen();
+    if (mostrarToast) toast('✓ Actualizado');
   } catch (e) {
-    // Sin conexión o backend caído: seguimos con lo último guardado localmente,
-    // no rompemos el flujo de postulación por esto.
-    if (mostrarToast) toast('⚠ No se pudo actualizar — usando los últimos datos guardados');
+    // Sin conexión, o un backend viejo que todavía no tiene /resumen: se
+    // muestra lo último guardado en vez de dejar el popup en "Cargando…".
+    const { config } = await chrome.storage.local.get('config');
+    if (!estadoActual) {
+      estadoActual = estadoDesdeConfig(config);
+      renderEstado();
+    }
+    if (mostrarToast) toast('⚠ No se pudo actualizar — revisa tu conexión');
   }
 }
 
-perfilRefreshBtn.addEventListener('click', () => cargarPerfilRemoto(true));
+// ── Pausar / reanudar ──────────────────────────────────────────
+// El cambio se guarda en la cuenta (background.js → /api/extension/estado):
+// pausar acá también pausa lo que muestra el panel, y al revés.
+pausarBtn.addEventListener('click', () => {
+  if (!estadoActual) return;
+  const pausada = !estadoActual.pausada;
+  pausarBtn.disabled = true;
+  chrome.runtime.sendMessage({ type: 'CAMBIAR_ESTADO', cambio: { pausada } }, (r) => {
+    if (chrome.runtime.lastError || !r || !r.ok) {
+      pausarBtn.disabled = false;
+      toast('⚠ No se pudo guardar — revisa tu conexión');
+      return;
+    }
+    estadoActual = r.estado;
+    renderEstado();
+    toast(pausada ? '⏸ En pausa' : '▶ Reanudada');
+  });
+});
+
+// ── Abrir el panel ─────────────────────────────────────────────
+$('panel-btn').addEventListener('click', () => {
+  chrome.tabs.create({ url: BACKEND_URL + '/dashboard' });
+});
+
+// ── Escanear la página abierta ─────────────────────────────────
+$('scan-now-btn').addEventListener('click', () => {
+  if (estadoActual && estadoActual.pausada) {
+    toast('Está en pausa — reanúdala primero');
+    return;
+  }
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs[0]) return;
+    // Se avisa por chrome.runtime (canal privado de la extensión) y no con un
+    // CustomEvent de DOM: un evento de DOM lo puede disparar cualquier script
+    // de la propia página (un aviso comprometido, un XSS del portal).
+    chrome.tabs.sendMessage(tabs[0].id, { type: 'FORCE_SCAN' }, () => {});
+    toast('🔍 Escaneando…');
+  });
+});
 
 // ── Token de la cuenta web ────────────────────────────────────
-let tokenActual = null;
-
 const apTokenInput      = $('ap-token');
 const apTokenEye        = $('ap-token-eye');
 const apTokenSaveBtn    = $('ap-token-save');
@@ -202,14 +255,10 @@ function actualizarEstadoToken(hayToken) {
   apTokenStatusText.textContent = hayToken
     ? 'Conectada — tus postulaciones se guardan en la web'
     : 'Sin conectar — conéctala desde el onboarding de la web';
+  // Con la cuenta conectada esto ya no es algo que haya que mirar: la sección
+  // se pliega y el popup queda solo con lo que importa.
+  cuentaSec.classList.toggle('hidden', hayToken);
 }
-
-chrome.storage.sync.get('autopostulaToken', (d) => {
-  tokenActual = d.autopostulaToken || null;
-  actualizarEstadoToken(!!tokenActual);
-  if (tokenActual) cargarPerfilRemoto(false);
-  else renderPerfilCard();
-});
 
 apTokenMostrarManualBtn.addEventListener('click', () => {
   apTokenManualBox.classList.toggle('hidden');
@@ -225,192 +274,36 @@ apTokenSaveBtn.addEventListener('click', () => {
     tokenActual = valor || null;
     actualizarEstadoToken(!!tokenActual);
     if (tokenActual) {
-      cargarPerfilRemoto(true);
+      cargarResumen(true);
       apTokenManualBox.classList.add('hidden');
       apTokenInput.value = '';
     }
   });
 });
 
-// Si bridge.js conecta el token mientras el popup está abierto (poco frecuente,
-// pero puede pasar si el usuario tiene la pestaña de onboarding y el popup a
-// la vez), reflejarlo sin que el usuario tenga que cerrar y volver a abrir.
+// Si bridge.js conecta el token mientras el popup está abierto (pasa si la
+// persona tiene la pestaña de onboarding y el popup a la vez), se refleja sin
+// tener que cerrar y volver a abrir.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && changes.autopostulaToken) {
     tokenActual = changes.autopostulaToken.newValue || null;
     actualizarEstadoToken(!!tokenActual);
-    if (tokenActual) cargarPerfilRemoto(false);
+    if (tokenActual) cargarResumen(false);
   }
+  // La sesión en cada portal la reporta el content script cuando la persona
+  // entra a uno; background.js la guarda acá.
+  if (area === 'local' && changes.sesionesPortales) renderPortales(changes.sesionesPortales.newValue || {});
 });
 
-// ── Toggle ON/OFF ──────────────────────────────────────────────
-toggleMain.addEventListener('change', () => {
-  const active = toggleMain.checked;
-  setActiveUI(active);
-  chrome.storage.local.set({ active });
-  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-    // Antes solo miraba computrabajo.cl -- el toggle maestro no avisaba al
-    // content script si la pestaña activa era de Laborum (y ahora Trabajando),
-    // así que activar/desactivar desde ahí no surtía efecto hasta el próximo
-    // load. Portales conocidos (ver extension/manifest.json content_scripts).
-    if (/computrabajo\.(cl|com)|laborum\.cl|trabajando\.cl/.test(tabs[0]?.url || '')) {
-      chrome.tabs.sendMessage(tabs[0].id, { type: 'TOGGLE', active }).catch(() => {});
-    }
-  });
-});
-
-function setActiveUI(active) {
-  if (active) {
-    pulse.className = 'pulse active';
-    pulseLabel.className = 'pulse-label active';
-    pulseLabel.textContent = 'Activo';
-    toggleHint.textContent = 'Escaneando ofertas…';
-  } else {
-    pulse.className = 'pulse';
-    pulseLabel.className = 'pulse-label';
-    pulseLabel.textContent = 'Inactivo';
-    toggleHint.textContent = 'Activa para comenzar a postular';
-  }
-}
-
-// ── Stats (a partir del log guardado — ya no se muestra la lista completa) ──
-function actualizarStats(entries) {
-  if (!entries?.length) {
-    statTotal.textContent = 0; statHoy.textContent = 0; statOk.textContent = 0;
-    return;
-  }
-  const today = new Date().toDateString();
-  let hoy = 0, ok = 0;
-  entries.forEach(e => {
-    if (new Date(e.ts).toDateString() === today) hoy++;
-    if (e.status === 'ok') ok++;
-  });
-  statTotal.textContent = entries.length;
-  statHoy.textContent = hoy;
-  statOk.textContent = ok;
-}
-
-// ── Guardar ────────────────────────────────────────────────────
-function construirConfig(activeOverride) {
-  return {
-    active: activeOverride ?? toggleMain.checked,
-    filtrosBusqueda: filtrosBusquedaRemoto,
-    scorer: scorerRemoto,
-    info: infoItems,
-    modoRevision: document.getElementById('toggle-revision')?.checked || false,
-    soloObservar: document.getElementById('toggle-observar')?.checked || false,
-    postulacionHabilitada: postulacionHabilitadaRemoto,
-    perfil: perfilRemoto || {},
-  };
-}
-
-// docs/revision-2026-09-16.md §1.2: cuenta en modo prueba -- el toggle de
-// "solo observar" se ve marcado y bloqueado. El freno real vive en la cuenta
-// (AP.soloObservarEfectivo, en el content script, ya lo exige igual aunque
-// alguien lograra destildarlo); esto es solo para que el popup no mienta
-// mostrando un switch editable que no cambiaría nada.
-function renderModoPrueba() {
-  const toggleObservar = document.getElementById('toggle-observar');
-  const observarHint = document.getElementById('observar-hint');
-  if (!toggleObservar) return;
-  toggleObservar.disabled = !postulacionHabilitadaRemoto;
-  if (!postulacionHabilitadaRemoto) {
-    toggleObservar.checked = true;
-    actualizarModoObservar(true);
-    if (observarHint) observarHint.textContent = 'Tu cuenta está en modo prueba — actívala desde el panel';
-  }
-}
-
-// docs/modo-solo-observar.md §3.4/§4.4: mientras el modo esté puesto, "revisar
-// antes de enviar" se atenúa (no hay nada que revisar si no se envía nada) y
-// el hint de observar deja explícito que está mandando por sobre revisión.
-function actualizarModoObservar(activo) {
-  const opcionRevision = document.getElementById('opcion-revision');
-  const revisionHint = document.getElementById('revision-hint');
-  const observarHint = document.getElementById('observar-hint');
-  if (opcionRevision) opcionRevision.classList.toggle('opcion-atenuada', activo);
-  if (revisionHint) revisionHint.textContent = activo
-    ? 'No aplica mientras "solo observar" esté activo'
-    : 'Muestra las respuestas y pide confirmación';
-  if (observarHint) observarHint.textContent = activo
-    ? 'Activo — no se va a enviar ninguna postulación'
-    : 'Escanea y puntúa, pero no postula ni gasta cupo';
-}
-function guardarConfigLocal() {
-  chrome.storage.local.set({ config: construirConfig() });
-}
-
-// Persiste la config y avisa a TODAS las pestañas abiertas de cualquier portal
-// soportado -- antes solo cubría Computrabajo, así que Laborum (y ahora
-// Trabajando) se quedaban con la config vieja hasta el próximo load de esa
-// pestaña.
-function guardarYAvisar(mostrarToast) {
-  const config = construirConfig();
-  chrome.storage.local.set({ config }, () => {
-    chrome.tabs.query({
-      url: [
-        '*://*.computrabajo.com/*', '*://*.computrabajo.cl/*',
-        '*://*.laborum.cl/*', '*://*.trabajando.cl/*',
-      ],
-    }, tabs => {
-      tabs.forEach(t => chrome.tabs.sendMessage(t.id, { type: 'CONFIG_UPDATED', config }).catch(() => {}));
-    });
-    if (mostrarToast) toast('✓ Cambios guardados');
-  });
-}
-
-// Bug real (2026-09-14): estos tres switches solo actualizaban el DOM (el
-// hint de texto) -- la config real quedaba sin guardar y sin avisarle a las
-// pestañas abiertas hasta que alguien apretaba "Guardar cambios" más abajo.
-// El toggle maestro "Activo" sí aplica al instante, así que quien apagaba
-// "Solo observar" acá y no se acordaba de guardar, seguía viendo el
-// comportamiento de antes -- exactamente como si el toggle nunca hubiera
-// funcionado. Ahora los tres guardan y avisan de inmediato, igual que el
-// toggle maestro.
-document.getElementById('toggle-observar')?.addEventListener('change', (e) => {
-  actualizarModoObservar(e.target.checked);
-  guardarYAvisar(false);
-});
-document.getElementById('toggle-revision')?.addEventListener('change', () => guardarYAvisar(false));
-
-saveBtn.addEventListener('click', () => guardarYAvisar(true));
-
-// ── Abrir CT ───────────────────────────────────────────────────
-openCtBtn.addEventListener('click', () => {
-  chrome.tabs.create({ url: 'https://cl.computrabajo.com/trabajo-de-vendedor-jornada-part-time' });
-});
-
-// ── Escanear ahora (inyección directa siempre) ─────────────────
-document.getElementById('scan-now-btn')?.addEventListener('click', () => {
-  chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-    if (!tabs[0]) return;
-    const tabId = tabs[0].id;
-
-    const config = construirConfig(true);
-    await new Promise(r => chrome.storage.local.set({ config, active: true }, r));
-
-    // Se avisa por chrome.runtime (canal privado de la extensión) en vez de un
-    // CustomEvent de DOM — un evento de DOM lo puede disparar cualquier script
-    // de la propia página (un aviso comprometido, un XSS del portal), lo que
-    // dejaba activar el escaneo/postulación real sin que la persona lo pidiera.
-    chrome.tabs.sendMessage(tabId, { type: 'FORCE_SCAN' }, () => {});
-    toast('🔍 Escaneando...');
-  });
-});
-
-// ── Escuchar actualizaciones del content script ────────────────
+// ── Escuchar al content script ─────────────────────────────────
 chrome.runtime.onMessage.addListener(msg => {
-  if (msg.type === 'LOG_UPDATED') actualizarStats(msg.log);
-  if (msg.type === 'STATUS') {
-    if (msg.status === 'working') {
-      pulse.className = 'pulse working';
-      pulseLabel.className = 'pulse-label working';
-      pulseLabel.textContent = 'Postulando…';
-    } else if (msg.status === 'active') {
-      pulse.className = 'pulse active';
-      pulseLabel.className = 'pulse-label active';
-      pulseLabel.textContent = 'Activo';
-    }
+  // Postuló algo con el popup abierto: las cifras salen de la cuenta, así que
+  // se vuelven a pedir en vez de sumar de a uno acá.
+  if (msg.type === 'LOG_UPDATED') cargarResumen(false);
+  if (msg.type === 'STATUS' && msg.status === 'working') {
+    pulse.className = 'pulse working';
+    pulseLabel.className = 'pulse-label working';
+    pulseLabel.textContent = 'Postulando…';
   }
 });
 
@@ -665,51 +558,24 @@ chrome.storage.onChanged.addListener((changes, area) => {
 document.getElementById('ponerse-btn')?.addEventListener('click', apretarPonerse);
 
 function loadState() {
-  chrome.storage.local.get(['config', 'active', 'log', 'cvTexto', 'rafaga'], data => {
+  chrome.storage.local.get(['config', 'rafaga', 'sesionesPortales'], data => {
     renderRafaga(data.rafaga);
     limpiarInsigniaRafaga();
     cargarEstadoPonerse();
-    const cfg = data.config || {};
-
-    filtrosBusquedaRemoto = cfg.filtrosBusqueda || { modalidad: 'cualquiera', jornada: 'cualquiera' };
-    scorerRemoto = cfg.scorer || { usarScorerLocal: false, perfilCompilado: null, versionPerfil: 0 };
-
-    if (cfg.info) {
-      infoItems = cfg.info;
-    } else if (cfg.qa && cfg.qa.length) {
-      // Migración desde el formato antiguo de "preguntas y respuestas"
-      infoItems = cfg.qa.filter(q => !q.isAI && q.answer).map(q => ({ id: uid(), texto: q.question + ': ' + q.answer }));
-    } else {
-      infoItems = DEFAULTS.info;
+    // Lo guardado se dibuja de inmediato y cargarResumen() lo corrige apenas
+    // conteste el servidor: abrir el popup no debería mostrar un vacío.
+    estadoActual = estadoDesdeConfig(data.config);
+    if (data.config && data.config.perfil && data.config.perfil.nombre) {
+      headerSub.textContent = data.config.perfil.nombre;
     }
+    renderPortales._sesiones = data.sesionesPortales || {};
+    renderEstado();
 
-    // Perfil cacheado localmente (de la última vez que se trajo desde la web) —
-    // se muestra de inmediato mientras cargarPerfilRemoto() intenta refrescarlo.
-    if (cfg.perfil && (cfg.perfil.nombre || cfg.perfil.comuna || cfg.perfil.cargo)) {
-      perfilRemoto = cfg.perfil;
-    }
-    cvTextoCache = data.cvTexto || '';
-    if (cfg.perfil?.nombre) headerSub.textContent = cfg.perfil.nombre;
-
-    const toggleRevision = document.getElementById('toggle-revision');
-    const toggleObservar = document.getElementById('toggle-observar');
-    if (toggleRevision) toggleRevision.checked = cfg.modoRevision || false;
-    if (toggleObservar) toggleObservar.checked = cfg.soloObservar || false;
-    actualizarModoObservar(cfg.soloObservar || false);
-    // Cacheado localmente -- cargarPerfilRemoto() lo refresca abajo apenas
-    // resuelva el fetch. Sin esto, abrir el popup mostraba el switch como
-    // editable por un instante aunque la cuenta estuviera en modo prueba.
-    postulacionHabilitadaRemoto = cfg.postulacionHabilitada !== false;
-    renderModoPrueba();
-
-    const active = data.active ?? cfg.active ?? false;
-    toggleMain.checked = active;
-    setActiveUI(active);
-
-    renderFiltrosBusqueda();
-    renderInfo();
-    renderPerfilCard();
-    actualizarStats(data.log || []);
+    chrome.storage.sync.get('autopostulaToken', (d) => {
+      tokenActual = d.autopostulaToken || null;
+      actualizarEstadoToken(!!tokenActual);
+      cargarResumen(false);
+    });
   });
 }
 

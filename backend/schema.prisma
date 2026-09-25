@@ -177,6 +177,23 @@ model User {
   // ninguno más.
   recordatorioRafagaEn DateTime? @map("recordatorio_rafaga_en")
   recordatoriosActivos Boolean   @default(true) @map("recordatorios_activos")
+  // ── Cómo trabaja la extensión (docs/estrategia-y-rediseno.md §6) ──
+  // Antes vivían en chrome.storage de cada navegador: el popup tenía sus
+  // propios controles (activo, solo observar, revisar antes de enviar) que no
+  // sabían nada de los dos de la cuenta (pausa de la búsqueda automática, red
+  // de seguridad de modo prueba), así que la misma persona veía un estado en
+  // el popup y otro en el panel. Ahora manda la cuenta y el popup la refleja.
+  //
+  // null = todavía no lo dijo acá: la extensión sube UNA vez lo que tenía
+  // guardado local (POST /api/extension/estado con `migrar`) y desde entonces
+  // manda el servidor. Sin ese null no habría cómo distinguir "lo apagó" de
+  // "nunca lo tocó", y la migración pisaría lo que la persona decidió.
+  soloObservar         Boolean? @map("solo_observar")
+  revisarAntesDeEnviar Boolean? @map("revisar_antes_de_enviar")
+  // Hechos sueltos que la persona quiere que la IA use al responder
+  // formularios ("tengo licencia B", "puedo empezar en dos semanas"). Vivían
+  // en el popup, donde se perdían al cambiar de computador. Forma: [{id, texto}].
+  infoAdicional        Json?    @map("info_adicional")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]

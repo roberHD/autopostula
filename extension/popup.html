@@ -157,62 +157,6 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .prueba-links a { font-size: 11.5px; font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .prueba-links a:hover { text-decoration-thickness: 2px; }
 
-/* ── Solo observar (docs/modo-solo-observar.md §3.4) ────────────────────
-   Va pegado al toggle master, con su propio fondo, para que sea imposible
-   no verlo -- "la persona nunca puede quedar en duda sobre si la extensión
-   está postulando o no". */
-.observar-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px;
-  background: var(--surface-2);
-  /* El filo dice "esta fila es distinta" sin inventar un color. */
-  border-left: 3px solid var(--border-2);
-  border-bottom: 1px solid var(--border);
-}
-.observar-left .label {
-  font-size: 12.5px; font-weight: 700; color: var(--text-1);
-  display: flex; align-items: center; gap: 5px;
-}
-.observar-left .hint { font-size: 10.5px; color: var(--text-2); margin-top: 1px; }
-.observar-row .toggle input:checked ~ .toggle-track { background: var(--text-1); }
-/* §4.4: observar le gana a "revisar antes de enviar" -- no hay nada que
-   revisar si no se envía nada, así que ese toggle se ve pero no importa. */
-.opcion-atenuada { opacity: .45; }
-.opcion-atenuada .toggle { pointer-events: none; }
-
-/* ── Toggle master ───────────────────────────────────────── */
-.master-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-.master-left .label { font-size: 13px; font-weight: 600; }
-.master-left .hint  { font-size: 11px; color: var(--text-3); }
-.toggle {
-  position: relative; width: 42px; height: 23px; flex-shrink: 0;
-}
-.toggle input { display: none; }
-.toggle-track {
-  position: absolute; inset: 0;
-  background: var(--border);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: background .2s;
-}
-.toggle-thumb {
-  position: absolute;
-  width: 17px; height: 17px;
-  top: 3px; left: 3px;
-  background: #fff;
-  border-radius: 50%;
-  transition: transform .2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,.2);
-  pointer-events: none;
-}
-.toggle input:checked ~ .toggle-track { background: var(--accent); }
-.toggle input:checked ~ .toggle-thumb { transform: translateX(19px); }
-
 /* ── Stats strip ─────────────────────────────────────────── */
 .stats {
   display: grid; grid-template-columns: repeat(3, 1fr);
@@ -254,23 +198,6 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 }
 .section-action:hover { text-decoration: underline; }
 
-/* ── Tags ────────────────────────────────────────────────── */
-.tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; min-height: 10px; }
-.tag {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 8px; border-radius: 20px;
-  font-size: 11px; font-weight: 500;
-  cursor: default;
-}
-.tag.inc, .tag.loc { background: var(--accent-s); color: var(--accent); border: 1px solid #DDD1FB; }
-/* Excluir se lee de un vistazo: tachado, como en los filtros de la web. */
-.tag.exc { text-decoration: line-through; text-decoration-color: var(--danger); }
-.tag.exc { background: var(--danger-s); color: var(--danger); border: 1px dashed var(--danger); }
-.tag-x {
-  background: none; border: none; cursor: pointer;
-  color: inherit; opacity: .5; font-size: 12px; padding: 0; line-height: 1;
-}
-.tag-x:hover { opacity: 1; }
 
 .input-row { display: flex; gap: 6px; }
 .field {
@@ -307,39 +234,6 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .btn-danger-ghost { background: var(--danger-s); color: var(--danger); border: 1px solid #FECACA; }
 .btn-danger-ghost:hover { background: #FEE2E2; }
 
-/* ── Chips jornada ───────────────────────────────────────── */
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip {
-  padding: 5px 11px;
-  border-radius: 20px;
-  font-size: 11px; font-weight: 500;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-2);
-  cursor: pointer;
-  transition: all .15s;
-  user-select: none;
-}
-.chip.selected { background: var(--accent-s); color: var(--accent); border-color: #DDD1FB; }
-
-/* ── Información adicional ────────────────────────────────── */
-.info-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.info-item {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
-  padding: 8px 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.info-item-text {
-  font-size: 11px; color: var(--text-1);
-  flex: 1; line-height: 1.4;
-}
-.info-empty {
-  font-size: 11px; color: var(--text-3);
-  padding: 4px 0; font-style: italic;
-}
-
 /* ── Estado con punto de color (perfil / cuenta web) ──────── */
 .status-row { display: flex; gap: 6px; align-items: center; }
 .status-input-wrap { flex: 1; position: relative; }
@@ -357,20 +251,6 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .status-line .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; }
 .status-line .dot.ok  { background: var(--success); }
 .status-line .dot.err { background: var(--danger); }
-
-/* ── Tarjeta de perfil (solo lectura, viene de la web) ────── */
-.perfil-card {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  font-size: 12px;
-  color: var(--text-2);
-  line-height: 1.6;
-  margin-bottom: 8px;
-}
-.perfil-card b { color: var(--text-1); }
-.perfil-card .vacio { color: var(--text-3); font-style: italic; }
 
 /* ── Footer ───────────────────────────────────────────────── */
 .footer {
@@ -397,6 +277,63 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 /* ── Divider helper ──────────────────────────────────────── */
 .spacer { height: 6px; background: var(--bg); }
 .hidden { display: none !important; }
+
+/* ── Semáforo: en qué está la máquina (docs/estrategia-y-rediseno.md §6) ──
+   Lo primero del popup, y lo único que de verdad importa al abrirlo: si está
+   postulando, si solo mira o si está en pausa. Antes había que deducirlo de
+   tres interruptores que ni siquiera coincidían con lo que decía el panel. */
+.estado-row {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 13px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.luz {
+  width: 10px; height: 10px; border-radius: 50%;
+  margin-top: 4px; flex-shrink: 0;
+  background: var(--border-2);
+}
+.luz.postulando { background: var(--success); box-shadow: 0 0 0 3px var(--success-s); }
+.luz.observando { background: var(--warn);    box-shadow: 0 0 0 3px var(--warn-s); }
+.luz.pausada    { background: var(--text-3);  box-shadow: 0 0 0 3px var(--accent-s); }
+.estado-titulo  { font-size: 13.5px; font-weight: 700; letter-spacing: -.2px; }
+.estado-detalle { font-size: 11.5px; color: var(--text-2); margin-top: 2px; line-height: 1.45; }
+
+/* ── Fila que lleva al panel (por decidir, portal sin sesión) ── */
+.fila-link {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 11px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  text-decoration: none; color: inherit; cursor: pointer;
+}
+.fila-link:hover { background: var(--surface-2); }
+.fila-titulo { font-size: 12.5px; font-weight: 700; }
+.fila-sub    { font-size: 11px; color: var(--text-2); margin-top: 1px; }
+.fila-link .chevron { color: var(--text-3); font-size: 15px; line-height: 1; flex-shrink: 0; }
+
+/* ── Sesión en los portales ── */
+.portal-fila {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+}
+.portal-fila:first-child { border-top: none; }
+.portal-nombre { font-size: 12px; font-weight: 600; }
+.portal-estado { font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
+.portal-estado .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-2); }
+.portal-estado.ok .dot   { background: var(--success); }
+.portal-estado.ok        { color: var(--success); }
+.portal-estado.falta .dot { background: var(--danger); }
+.portal-estado a { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── Nota al pie: dónde se cambian las cosas ── */
+.nota {
+  padding: 9px 16px 12px;
+  font-size: 10.5px; color: var(--text-3); line-height: 1.45;
+  text-align: center;
+}
+.nota a { color: var(--text-2); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -406,11 +343,20 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   <div class="header-logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></div>
   <div class="header-info">
     <div class="header-title">AutoPostula</div>
-    <div class="header-sub" id="header-sub">Automatización para Computrabajo, Laborum y Trabajando</div>
+    <div class="header-sub" id="header-sub">Computrabajo, Laborum y Trabajando</div>
   </div>
   <div class="pulse-wrap">
     <div class="pulse" id="pulse"></div>
     <span class="pulse-label" id="pulse-label">Inactivo</span>
+  </div>
+</div>
+
+<!-- EN QUÉ ESTÁ: postulando / solo mirando / en pausa -->
+<div class="estado-row">
+  <span class="luz" id="estado-luz" aria-hidden="true"></span>
+  <div>
+    <div class="estado-titulo" id="estado-titulo">Cargando…</div>
+    <div class="estado-detalle" id="estado-detalle">Consultando tu cuenta.</div>
   </div>
 </div>
 
@@ -419,6 +365,31 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   <div class="rafaga-titulo" id="rafaga-titulo"></div>
   <div class="rafaga-detalle hidden" id="rafaga-detalle"></div>
 </div>
+
+<!-- CIFRAS (de la cuenta, no de este navegador) -->
+<div class="stats">
+  <div class="stat">
+    <div class="stat-n accent" id="stat-enviadas">—</div>
+    <div class="stat-label">enviadas hoy</div>
+  </div>
+  <div class="stat">
+    <div class="stat-n" id="stat-descartadas">—</div>
+    <div class="stat-label">descartadas</div>
+  </div>
+  <div class="stat">
+    <div class="stat-n success" id="stat-disponibles">—</div>
+    <div class="stat-label">disponibles</div>
+  </div>
+</div>
+
+<!-- POR DECIDIR -->
+<a class="fila-link hidden" id="decidir-row" target="_blank" rel="noreferrer">
+  <div>
+    <div class="fila-titulo" id="decidir-titulo"></div>
+    <div class="fila-sub hidden" id="decidir-sub"></div>
+  </div>
+  <span class="chevron" aria-hidden="true">›</span>
+</a>
 
 <!-- PONERME AL DÍA AHORA (solo Premium) -->
 <div class="ponerse-row hidden" id="ponerse-row">
@@ -436,132 +407,20 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   </div>
 </div>
 
-<!-- MASTER TOGGLE -->
-<div class="master-row">
-  <div class="master-left">
-    <div class="label">Postulación automática</div>
-    <div class="hint" id="toggle-hint">Activa para comenzar a postular</div>
-  </div>
-  <label class="toggle">
-    <input type="checkbox" id="toggle-main">
-    <div class="toggle-track"></div>
-    <div class="toggle-thumb"></div>
-  </label>
-</div>
-
-<!-- SOLO OBSERVAR -->
-<div class="observar-row">
-  <div class="observar-left">
-    <div class="label">👁 Solo observar</div>
-    <div class="hint" id="observar-hint">Escanea y puntúa, pero no postula ni gasta cupo</div>
-  </div>
-  <label class="toggle">
-    <input type="checkbox" id="toggle-observar">
-    <div class="toggle-track"></div>
-    <div class="toggle-thumb"></div>
-  </label>
-</div>
-
-<!-- STATS -->
-<div class="stats">
-  <div class="stat">
-    <div class="stat-n accent" id="stat-total">0</div>
-    <div class="stat-label">Postuladas</div>
-  </div>
-  <div class="stat">
-    <div class="stat-n" id="stat-hoy">0</div>
-    <div class="stat-label">Hoy</div>
-  </div>
-  <div class="stat">
-    <div class="stat-n success" id="stat-ok">0</div>
-    <div class="stat-label">Exitosas</div>
-  </div>
-</div>
-
-<div class="spacer"></div>
-
-<!-- FILTROS DE BÚSQUEDA (solo lectura -- se editan en la web) -->
-<div class="section">
+<!-- SESIÓN EN LOS PORTALES -->
+<div class="section hidden" id="portales-sec">
   <div class="section-head">
-    <span class="section-title">Filtros de búsqueda</span>
-    <a href="#" class="section-action" id="filtros-editar-link" target="_blank">Editar en la web ↗</a>
+    <div class="section-title">Sesión en los portales</div>
+    <a class="section-action" id="portales-link" target="_blank" rel="noreferrer">Conectar ↗</a>
   </div>
-  <p style="font-size:10.5px;color:var(--text-3);margin-bottom:10px;line-height:1.5;">
-    Se administran desde el dashboard para que también los use la búsqueda automática — acá solo se muestran.
-  </p>
-  <div style="display:flex;gap:20px;margin-top:6px;">
-    <div>
-      <p class="section-title" style="font-size:10px;margin-bottom:4px;">Modalidad</p>
-      <span class="tag inc" id="filtro-modalidad-badge">Cualquiera</span>
-    </div>
-    <div>
-      <p class="section-title" style="font-size:10px;margin-bottom:4px;">Jornada</p>
-      <span class="tag inc" id="filtro-jornada-badge">Cualquiera</span>
-    </div>
-  </div>
+  <div id="portales-lista"></div>
 </div>
 
-<div class="spacer"></div>
-
-<!-- PERFIL (solo lectura — se trae automáticamente desde tu cuenta web) -->
-<div class="section">
+<!-- CUENTA WEB (solo hace falta si todavía no está conectada) -->
+<div class="section" id="cuenta-sec">
   <div class="section-head">
-    <span class="section-title">Tu perfil</span>
-    <button class="section-action" id="perfil-refresh-btn">Actualizar</button>
+    <div class="section-title">Tu cuenta</div>
   </div>
-  <div class="perfil-card" id="perfil-card">
-    <span class="vacio">Conecta tu cuenta más abajo para traer tu perfil automáticamente.</span>
-  </div>
-  <p style="font-size:10.5px;color:var(--text-3);">
-    Tu perfil y tu CV se administran en la web — acá solo se usan para postular.
-    <a href="#" id="perfil-editar-link" target="_blank" style="color:var(--accent);font-weight:600;text-decoration:none;">Editar en la web ↗</a>
-  </p>
-</div>
-
-<div class="spacer"></div>
-
-<!-- INFORMACIÓN ADICIONAL -->
-<div class="section">
-  <div class="section-head">
-    <span class="section-title">Información adicional para la IA</span>
-  </div>
-  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;">
-    Agrega datos sobre ti — no respuestas fijas. La IA usa esto junto a tu perfil y CV para responder cualquier pregunta del formulario en el momento.
-    Ej: "No tengo vehículo propio", "Curso de manipulación de alimentos vigente", "Disponible para viajar: no".
-  </p>
-  <div class="info-list" id="info-list"></div>
-  <div class="input-row">
-    <input class="field" id="info-input" placeholder="ej: Tengo experiencia usando caja registradora">
-    <button class="btn btn-primary" id="info-btn">+ Agregar</button>
-  </div>
-</div>
-
-<div class="spacer"></div>
-
-<!-- OPCIONES IA -->
-<div class="section">
-  <div class="section-head">
-    <span class="section-title">Opciones de IA</span>
-  </div>
-  <div style="display:flex;flex-direction:column;gap:8px;">
-    <label id="opcion-revision" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
-      <div>
-        <div style="font-size:12px;font-weight:600;color:var(--text-1);">Revisar antes de enviar</div>
-        <div style="font-size:10px;color:var(--text-3);" id="revision-hint">Muestra las respuestas y pide confirmación</div>
-      </div>
-      <label class="toggle"><input type="checkbox" id="toggle-revision"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
-    </label>
-  </div>
-</div>
-
-<!-- CUENTA WEB DE AUTOPOSTULA -->
-<div class="section">
-  <div class="section-head">
-    <span class="section-title">Cuenta web de AutoPostula</span>
-  </div>
-  <p style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.5;" id="ap-token-desc">
-    Se conecta sola desde el onboarding de la web — normalmente no tienes que hacer nada acá.
-  </p>
   <div class="status-line" id="ap-token-status" style="margin-bottom:8px;">
     <div class="dot" id="ap-token-dot"></div>
     <span id="ap-token-status-text">Sin configurar</span>
@@ -578,17 +437,20 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   </div>
 </div>
 
-<div class="spacer"></div>
-
-<!-- FOOTER -->
+<!-- ACCIONES -->
 <div class="footer">
-  <button class="btn btn-primary" id="save-btn">Guardar</button>
-  <button class="btn btn-ghost" id="scan-now-btn" title="Forzar escaneo ahora"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex:none"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg> Escanear</button>
-  <button class="btn btn-ghost" id="open-ct-btn" title="Abrir Computrabajo en una pestaña nueva">Abrir portal</button>
+  <button class="btn btn-primary" id="pausar-btn" type="button">Pausar</button>
+  <button class="btn btn-ghost" id="scan-now-btn" type="button" title="Escanear la página que tienes abierta">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex:none"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg> Escanear
+  </button>
+  <button class="btn btn-ghost" id="panel-btn" type="button">Abrir panel</button>
+</div>
+<div class="nota">
+  Tu perfil, lo que buscas y cómo trabaja la extensión se cambian en
+  <a href="#" id="nota-link" target="_blank" rel="noreferrer">autopostula.cl</a>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<script src="popup.js"></script>
 </body>
 </html>

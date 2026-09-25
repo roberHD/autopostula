@@ -2664,3 +2664,18 @@
 .ap-copiable__caja { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-elevated-2); }
 .ap-copiable__caja p { font-size: 13.5px; flex: 1; line-height: 1.5; white-space: pre-wrap; }
 .ap-copiable__caja button { flex: none; }
+
+/* ── Datos sueltos para responder formularios ── */
+.ap-datos-ia { list-style: none; margin-top: 12px; display: grid; gap: 7px; }
+.ap-datos-ia li {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--bg-elevated-2);
+}
+.ap-datos-ia li span { flex: 1; font-size: 13px; line-height: 1.5; }
+.ap-datos-ia li button {
+  flex: none; border: none; background: transparent; cursor: pointer;
+  color: var(--text-muted); padding: 2px; border-radius: 6px; line-height: 0;
+}
+.ap-datos-ia li button:hover:not(:disabled) { color: var(--status-rechazado); background: var(--bg-elevated); }
+.ap-datos-ia li button:disabled { opacity: 0.5; cursor: default; }

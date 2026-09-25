@@ -482,10 +482,140 @@ const URL_BUSQUEDA_POR_PORTAL = {
   },
 };
 
+// ── Un solo estado, el de la cuenta (docs/estrategia-y-rediseno.md §6) ──
+//
+// Hasta esta versión, "activo", "solo observar" y "revisar antes de enviar"
+// vivían solo en el chrome.storage de este navegador. Al pasar a la cuenta hay
+// que subir una vez lo que la persona ya tenía puesto acá: si no, alguien que
+// dejó su extensión en "solo observar" se la encontraría postulando sola
+// después de actualizar. Se hace una sola vez por navegador, y el servidor
+// solo llena lo que la cuenta todavía no tiene dicho -- dos computadores con
+// configuraciones distintas no se pisan, gana el primero que sube.
+const CLAVE_MIGRACION_ESTADO = 'estadoMigradoV1';
+
+async function migrarEstadoLocalAlServidor(token) {
+  const guardado = await chrome.storage.local.get([CLAVE_MIGRACION_ESTADO, 'config', 'active']);
+  if (guardado[CLAVE_MIGRACION_ESTADO]) return;
+  const cfg = guardado.config || {};
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/estado', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        migrar: {
+          // Solo cuenta el apagado explícito: que este navegador diga "activo"
+          // no puede reanudar lo que la persona pausó desde el panel.
+          pausada: guardado.active === false,
+          soloObservar: !!cfg.soloObservar,
+          revisarAntes: !!cfg.modoRevision,
+          info: Array.isArray(cfg.info) ? cfg.info : [],
+        },
+      }),
+    });
+    // Un 404 (backend viejo) también cierra la migración: no hay a dónde
+    // subirlo y reintentarlo en cada ráfaga solo gasta red.
+    if (res.ok || res.status === 404) await chrome.storage.local.set({ [CLAVE_MIGRACION_ESTADO]: true });
+  } catch (e) {
+    // Sin conexión: se reintenta la próxima vez que se sincronice el perfil.
+    console.warn('[AP] No se pudo subir el estado guardado en este navegador:', e);
+  }
+}
+
+// Cambia el estado en la cuenta (lo usa el popup: pausar, reanudar, solo
+// observar). Devuelve el estado nuevo, o null si no se pudo.
+async function cambiarEstadoBackend(cambio) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return null;
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/estado', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify(cambio),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.estado) await aplicarEstadoLocal(data.estado);
+    return data.estado || null;
+  } catch (e) {
+    console.warn('[AP] No se pudo cambiar el estado en la cuenta:', e);
+    return null;
+  }
+}
+
+// Arregla una respuesta desde el panel de revisión (más corta / más formal /
+// más cercana). El content script no puede llamar al backend con el token: lo
+// guarda el service worker.
+async function reescribirRespuestaBackend(datos) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return { error: 'Conecta tu cuenta para usar esto' };
+  try {
+    const res = await fetch(BACKEND_URL + '/api/ai/reescribir-respuesta', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify(datos || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data.error || 'No se pudo arreglar ahora' };
+    return { texto: data.texto };
+  } catch (e) {
+    return { error: 'Sin conexión: puedes editarla tú' };
+  }
+}
+
+// Guarda en la cuenta un dato que la IA dijo que faltaba (§6): la próxima vez
+// ya lo tiene y no vuelve a dejar la respuesta a medias.
+async function guardarDatoBackend(texto) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return { ok: false };
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/estado', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agregarInfo: texto }),
+    });
+    if (!res.ok) return { ok: false };
+    const data = await res.json().catch(() => ({}));
+    // Que quede también en la config local: el próximo formulario de esta
+    // misma sesión ya responde con el dato, sin esperar la próxima sincronización.
+    if (Array.isArray(data.infoAdicional)) {
+      const { config } = await chrome.storage.local.get('config');
+      await chrome.storage.local.set({ config: { ...(config || {}), info: data.infoAdicional } });
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false };
+  }
+}
+
+// Deja la config local igual a lo que dice la cuenta y avisa a las pestañas de
+// los portales que estén abiertas, para que el cambio se note sin recargar.
+async function aplicarEstadoLocal(estado) {
+  const { config } = await chrome.storage.local.get('config');
+  const nueva = {
+    ...(config || {}),
+    active: !estado.pausada,
+    soloObservar: !!estado.soloObservar,
+    modoRevision: !!estado.revisarAntes,
+    postulacionHabilitada: estado.postulacionHabilitada !== false,
+  };
+  await chrome.storage.local.set({ config: nueva, active: !estado.pausada });
+  const tabs = await chrome.tabs.query({
+    url: [
+      '*://*.computrabajo.com/*', '*://*.computrabajo.cl/*',
+      '*://*.laborum.cl/*', '*://*.trabajando.cl/*',
+    ],
+  });
+  tabs.forEach((t) => chrome.tabs.sendMessage(t.id, { type: 'CONFIG_UPDATED', config: nueva }).catch(() => {}));
+}
+
 // Trae los filtros de búsqueda (palabras, modalidad, jornada) del dashboard y
 // los guarda en la config local, para que la búsqueda automática los use aunque
 // el popup nunca se haya abierto para refrescarlos.
 async function actualizarFiltrosDesdeBackend(token) {
+  // Antes de leer el estado de la cuenta, subir una sola vez lo que este
+  // navegador tenía guardado (§6): si no, lo que la persona puso en el popup
+  // se perdería en silencio en la primera sincronización.
+  await migrarEstadoLocalAlServidor(token);
   try {
     const res = await fetch(BACKEND_URL + '/api/extension/perfil', {
       headers: { 'Authorization': 'Bearer ' + token }
@@ -526,8 +656,23 @@ async function actualizarFiltrosDesdeBackend(token) {
         // `!== false`, como en el popup: un backend viejo que no lo manda no
         // debe dejar a nadie en modo prueba.
         postulacionHabilitada: data.postulacionHabilitada !== false,
+        // docs/estrategia-y-rediseno.md §6: el estado manda desde la cuenta.
+        // Hasta acá, "solo observar" y "revisar antes de enviar" vivían en el
+        // chrome.storage de este navegador y nadie más los conocía: la misma
+        // persona veía una cosa en el popup y otra en el panel. Un backend que
+        // todavía no manda `estado` deja lo que ya había guardado.
+        ...(data.estado ? {
+          soloObservar: !!data.estado.soloObservar,
+          modoRevision: !!data.estado.revisarAntes,
+          active: !data.estado.pausada,
+        } : {}),
+        ...(Array.isArray(data.infoAdicional) ? { info: data.infoAdicional } : {}),
       }
     });
+    // `active` vive suelto además de dentro de config (así lo lee core.js al
+    // arrancar y el popup al abrirse): pausar desde el panel tiene que apagar
+    // la extensión aunque nadie abra el popup.
+    if (data.estado) await chrome.storage.local.set({ active: !data.estado.pausada });
     // Se devuelve directo (no solo se guarda en storage) para que
     // escanearAutomatico lo pueda pasar de una al builder de URL sin tener que
     // releer el storage que se acaba de escribir acá mismo. bandaGrisAprobadas
@@ -1396,6 +1541,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'REPORTAR_BANDA_GRIS') {
     reportarBandaGrisBackend(msg.oferta).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'REESCRIBIR_RESPUESTA') {
+    reescribirRespuestaBackend(msg.datos).then(sendResponse);
+    return true;
+  }
+  if (msg.type === 'GUARDAR_DATO') {
+    guardarDatoBackend(msg.texto).then(sendResponse);
+    return true;
+  }
+  if (msg.type === 'SESION_PORTAL') {
+    // Lo reporta core.js al cargar una página de portal (§6). Se guarda tal
+    // cual, con la fecha: el popup muestra "Activa" o "Inicia sesión ahí" sin
+    // tener que abrir el portal para averiguarlo.
+    chrome.storage.local.get('sesionesPortales').then(({ sesionesPortales }) => {
+      const sesiones = sesionesPortales || {};
+      sesiones[msg.portal] = { hay: !!msg.hay, en: Date.now() };
+      return chrome.storage.local.set({ sesionesPortales: sesiones });
+    }).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg.type === 'CAMBIAR_ESTADO') {
+    // El popup ya no guarda interruptores propios (§6): pide el cambio, el
+    // servidor manda y acá se refleja en la config local y en las pestañas.
+    cambiarEstadoBackend(msg.cambio || {}).then((estado) => sendResponse({ ok: !!estado, estado }));
     return true;
   }
   if (msg.type === 'REPORTAR_DESCARTES') {

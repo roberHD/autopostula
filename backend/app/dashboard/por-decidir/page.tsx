@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Building2, TriangleAlert, Star } from "lucide-react";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import { formatearRazon, esRazonPositiva } from "@/lib/formatear-razon";
+import type { EstadoExtension } from "@/lib/estado-extension";
 
 // Facetas leídas en la Etapa 2 (docs/visibilidad-y-etapa2.md §B/§E) -- todos
 // opcionales, una fila sin Etapa 2 (o de antes del cambio) simplemente no
@@ -165,8 +166,17 @@ export default function PorDecidirPage() {
     }
   }
 
+  // docs/estrategia-y-rediseno.md §6: ahora el panel SÍ sabe en qué está la
+  // extensión, así que el aviso deja de salir siempre "por las dudas" y sale
+  // solo cuando de verdad tu "sí" va a quedar esperando.
+  const [estadoExt, setEstadoExt] = useState<EstadoExtension | null>(null);
+
   useEffect(() => {
     cargar();
+    fetch("/api/account/opciones-extension")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.estado && setEstadoExt(d.estado))
+      .catch(() => {});
   }, []);
 
   async function decidir(item: ItemSwipe, veredicto: "SI" | "NO") {
@@ -201,13 +211,18 @@ export default function PorDecidirPage() {
         <p className="ap-page-sub">
           Ofertas que calzan a medias. Tu sí o tu no también le enseña a tu perfil.
         </p>
-        {/* docs/modo-solo-observar.md §4.3: si la extensión tiene "solo observar"
-            activado, un "sí" acá queda pendiente hasta que se desactive -- no
-            hay forma de saber desde el dashboard si está prendido, así que se
-            avisa siempre en vez de dejarlo como una sorpresa silenciosa. */}
-        <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>
-          Si tienes "Solo observar" activado en la extensión, un "sí" acá queda pendiente hasta que lo desactives.
-        </p>
+        {/* docs/modo-solo-observar.md §4.3: un "sí" acá queda esperando si la
+            extensión no está postulando. Antes se avisaba siempre, porque el
+            panel no tenía cómo saberlo; ahora lee el estado de la cuenta y solo
+            lo dice cuando es cierto (§6 del rediseño). */}
+        {estadoExt && estadoExt.modo !== "postulando" && (
+          <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>
+            {estadoExt.modo === "pausada"
+              ? "La extensión está en pausa: lo que aceptes acá queda guardado y se envía cuando la reanudes."
+              : "Ahora la extensión solo mira: lo que aceptes acá queda guardado y se envía cuando la dejes postular."}{" "}
+            <a href="/dashboard/ajustes" style={{ color: "var(--accent)" }}>Cambiarlo en Ajustes</a>
+          </p>
+        )}
       </div>
 
       {mensaje && <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>{mensaje}</p>}

@@ -747,7 +747,7 @@ bloque(async () => {
   // ── El HTML trae los elementos que el JS busca ──
   const html = fs.readFileSync(path.join(__dirname, 'popup.html'), 'utf8');
   check('popup.html trae la fila de la puesta al día con sus tres ids', ['rafaga-row', 'rafaga-titulo', 'rafaga-detalle'].every(id => html.includes('id="' + id + '"')));
-  check('la fila va arriba: antes del toggle maestro', html.indexOf('id="rafaga-row"') < html.indexOf('class="master-row"'));
+  check('la fila va arriba: antes de los botones del pie', html.indexOf('id="rafaga-row"') < html.indexOf('class="footer"'));
   check('la fila arranca oculta (no parpadea vacía al abrir)', /class="rafaga-row hidden"/.test(html));
   check('popup.js pide las ráfagas a storage al cargar y limpia el número', /chrome\.storage\.local\.get\(\[[^\]]*'rafaga'[^\]]*\]/.test(fuente) && fuente.includes('limpiarInsigniaRafaga();\n'));
 });
@@ -1122,7 +1122,7 @@ bloque(async () => {
   const html = fs.readFileSync(path.join(__dirname, 'popup.html'), 'utf8');
   check('popup.html trae la fila del botón con sus ids', ['ponerse-row', 'ponerse-btn', 'ponerse-hint'].every(id => html.includes('id="' + id + '"')));
   check('la fila del botón arranca oculta (una cuenta gratis nunca la ve parpadear)', /class="ponerse-row hidden"/.test(html));
-  check('va arriba: después de la línea de la última puesta al día y antes del toggle maestro', html.indexOf('id="rafaga-row"') < html.indexOf('id="ponerse-row"') && html.indexOf('id="ponerse-row"') < html.indexOf('class="master-row"'));
+  check('va arriba: después de la línea de la última puesta al día y antes de los botones del pie', html.indexOf('id="rafaga-row"') < html.indexOf('id="ponerse-row"') && html.indexOf('id="ponerse-row"') < html.indexOf('class="footer"'));
   check('popup.js conecta el clic del botón y pide el estado al abrir', fuente.includes("getElementById('ponerse-btn')?.addEventListener('click', apretarPonerse)") && /loadState[\s\S]{0,900}cargarEstadoPonerse\(\)/.test(fuente));
 });
 
@@ -1511,7 +1511,7 @@ bloque(async () => {
   const html = fs.readFileSync(path.join(__dirname, 'popup.html'), 'utf8');
   check('popup.html trae la fila de la prueba con todos sus ids', ['prueba-row', 'prueba-titulo', 'prueba-detalle', 'prueba-links', 'prueba-ver', 'prueba-premium'].every(id => html.includes('id="' + id + '"')));
   check('arranca oculta (una cuenta Premium nunca la ve parpadear)', /class="prueba-row hidden"/.test(html) && /class="prueba-links hidden"/.test(html));
-  check('va después del botón y antes del toggle maestro', html.indexOf('id="ponerse-row"') < html.indexOf('id="prueba-row"') && html.indexOf('id="prueba-row"') < html.indexOf('class="master-row"'));
+  check('va después del botón y antes de los botones del pie', html.indexOf('id="ponerse-row"') < html.indexOf('id="prueba-row"') && html.indexOf('id="prueba-row"') < html.indexOf('class="footer"'));
   check('los enlaces abren en pestaña nueva (target="_blank"), como los demás del popup', /id="prueba-ver"\s+target="_blank"/.test(html) && /id="prueba-premium"\s+target="_blank"/.test(html));
 });
 

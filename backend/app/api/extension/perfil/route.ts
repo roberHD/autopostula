@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { objetivosPermitenDirectivo } from "@/lib/nivel-cargo";
+import { estadoExtension } from "@/lib/estado-extension";
 
 // Mismo patrón de auth por token que /api/ai/analizar-oferta y compañía —
 // esta ruta la usa la extensión (Authorization: Bearer <apiToken>), nunca
@@ -69,6 +70,12 @@ export async function GET(request: Request) {
     perfilDesactualizado: !!filtros?.perfilDesactualizado,
   };
 
+  // Un solo estado para la extensión (docs/estrategia-y-rediseno.md §6): el
+  // popup ya no decide nada por su cuenta, dibuja esto. `postulacionHabilitada`
+  // se deja arriba, suelto, porque las extensiones instaladas hoy lo leen así.
+  const estado = estadoExtension(user);
+  const infoAdicional = Array.isArray(user.infoAdicional) ? user.infoAdicional : [];
+
   if (!perfil) {
     return NextResponse.json({
       nombre: null, email: null, telefono: null, comuna: null,
@@ -77,6 +84,8 @@ export async function GET(request: Request) {
       filtrosBusqueda,
       scorer,
       bandaGrisAprobadas,
+      estado,
+      infoAdicional,
       postulacionHabilitada: user.postulacionHabilitada,
     });
   }
@@ -94,6 +103,8 @@ export async function GET(request: Request) {
     filtrosBusqueda,
     scorer,
     bandaGrisAprobadas,
+    estado,
+    infoAdicional,
     postulacionHabilitada: user.postulacionHabilitada,
   });
 }

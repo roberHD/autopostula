@@ -1032,10 +1032,27 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
       }
 
       const max = (r.el && r.el.maxLength && r.el.maxLength > 0 && r.el.maxLength < 10000) ? r.el.maxLength : 500;
+      // Arreglos de un clic (docs/estrategia-y-rediseno.md §6): lo que la
+      // gente hace de verdad cuando una respuesta no le gusta es acortarla o
+      // cambiarle el tono. Antes la única salida era borrarla y escribirla a
+      // mano dentro del portal -- justo lo que vino a evitar el producto.
+      const arreglos = r.datoFaltante
+        // Si falta un dato, no hay nada que pulir: hay que decirlo una vez y
+        // guardarlo, para no volver a encontrarse con la misma pregunta.
+        ? '<div class="arreglos">' +
+            '<button class="chip guardar ap-rev-guardar" data-idx="' + idx + '">Guardar esto en mi perfil</button>' +
+          '</div>'
+        : '<div class="arreglos">' +
+            '<button class="chip ap-rev-ajuste" data-idx="' + idx + '" data-ajuste="corta">Más corta</button>' +
+            '<button class="chip ap-rev-ajuste" data-idx="' + idx + '" data-ajuste="formal">Más formal</button>' +
+            '<button class="chip ap-rev-ajuste" data-idx="' + idx + '" data-ajuste="cercana">Más cercana</button>' +
+            '<button class="chip falso ap-rev-falso" data-idx="' + idx + '">Esto no es cierto</button>' +
+          '</div>';
       return '<div class="item" data-idx="' + idx + '" data-tipo="texto">' + cabecera +
         '<textarea class="ap-rev-textarea" data-idx="' + idx + '" maxlength="' + max + '" rows="3">' +
           esc(r.respuesta || '') + '</textarea>' +
         '<p class="cuenta ap-rev-counter" data-idx="' + idx + '">' + (r.respuesta || '').length + ' / ' + max + '</p>' +
+        arreglos +
       '</div>';
     }).join('');
 
@@ -1081,6 +1098,13 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
         'background:#FAFAF9;border:1px solid #DFE1DE;border-radius:8px;resize:vertical}' +
       'textarea:focus,select:focus{outline:none;border-color:#D6F24B;box-shadow:0 0 0 3px #26292D}' +
       '.cuenta{margin:4px 0 0;font-size:10.5px;color:#5D6468;text-align:right;font-variant-numeric:tabular-nums}' +
+      '.arreglos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}' +
+      '.chip{font:inherit;font-size:11.5px;font-weight:600;color:#3F4448;background:#FAFAF9;' +
+        'border:1px solid #DFE1DE;border-radius:20px;padding:5px 11px;cursor:pointer}' +
+      '.chip:hover:not(:disabled){border-color:#16181A;color:#16181A}' +
+      '.chip:disabled{opacity:.5;cursor:default}' +
+      '.chip.falso{margin-left:auto;color:#B3283C;border-color:#F0D5D9}' +
+      '.chip.guardar{color:#17784F;border-color:#CCE3D8}' +
       '.vacio{color:#5D6468;font-size:12.5px;text-align:center;padding:20px}' +
 
       '.pie{display:flex;align-items:center;gap:10px;padding:14px 20px;background:#fff;border-top:1px solid #DFE1DE}' +
@@ -1174,6 +1198,93 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
       ta.addEventListener('input', () => {
         const c = raiz.querySelector('.ap-rev-counter[data-idx="' + ta.dataset.idx + '"]');
         if (c) c.textContent = ta.value.length + ' / ' + ta.maxLength;
+      });
+    });
+
+    // -- Arreglos de un clic --
+    // Cada uno cambia el textarea en el momento; lo que se envía sale de
+    // aplicarEdiciones() más abajo, así que no hay dos verdades.
+    function textareaDe(idx) {
+      return raiz.querySelector('.ap-rev-textarea[data-idx="' + idx + '"]');
+    }
+    function contarDe(idx) {
+      const ta = textareaDe(idx);
+      const c = raiz.querySelector('.ap-rev-counter[data-idx="' + idx + '"]');
+      if (ta && c) c.textContent = ta.value.length + ' / ' + ta.maxLength;
+    }
+    function estadoDe(idx, tono, texto) {
+      const item = raiz.querySelector('.item[data-idx="' + idx + '"]');
+      const linea = item && item.querySelector('.estado');
+      if (!linea) return;
+      linea.dataset.tono = tono;
+      linea.innerHTML = '<i></i>' + texto;
+    }
+
+    raiz.querySelectorAll('.ap-rev-ajuste').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = +btn.dataset.idx;
+        const ta = textareaDe(idx);
+        if (!ta || !ta.value.trim()) return;
+        const hermanos = raiz.querySelectorAll('.item[data-idx="' + idx + '"] .chip');
+        hermanos.forEach(b => { b.disabled = true; });
+        const original = btn.textContent;
+        btn.textContent = 'Arreglando…';
+        chrome.runtime.sendMessage({
+          type: 'REESCRIBIR_RESPUESTA',
+          datos: {
+            pregunta: (respuestasLog[idx] && respuestasLog[idx].pregunta) || '',
+            respuesta: ta.value,
+            ajuste: btn.dataset.ajuste,
+            maxLargo: ta.maxLength,
+          },
+        }, (r) => {
+          hermanos.forEach(b => { b.disabled = false; });
+          btn.textContent = original;
+          if (chrome.runtime.lastError || !r || !r.texto) {
+            // Si la IA no pudo (cupo, red), se dice y se deja el texto que
+            // había: perder lo escrito sería peor que no arreglarlo.
+            estadoDe(idx, 'aviso', (r && r.error) ? esc(r.error) : 'No se pudo arreglar ahora: puedes editarla tú');
+            return;
+          }
+          ta.value = r.texto;
+          contarDe(idx);
+          estadoDe(idx, 'bueno', 'La arreglaste con IA: revísala antes de enviar');
+        });
+      });
+    });
+
+    // "Esto no es cierto": no se arregla sola, se borra y queda a la vista que
+    // hay que escribirla. Nada se envía con un dato que la persona desmintió.
+    raiz.querySelectorAll('.ap-rev-falso').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = +btn.dataset.idx;
+        const ta = textareaDe(idx);
+        if (!ta) return;
+        ta.value = '';
+        contarDe(idx);
+        estadoDe(idx, 'malo', 'La borraste: escríbela tú antes de enviar');
+        ta.focus();
+      });
+    });
+
+    // "Guardar esto en mi perfil": el dato que faltaba se guarda en la cuenta
+    // (§6), así la próxima vez la IA ya lo tiene y no vuelve a preguntar.
+    raiz.querySelectorAll('.ap-rev-guardar').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = +btn.dataset.idx;
+        const ta = textareaDe(idx);
+        const texto = ta && ta.value.trim();
+        if (!texto) { estadoDe(idx, 'aviso', 'Escribe primero la respuesta y después guárdala'); return; }
+        btn.disabled = true;
+        chrome.runtime.sendMessage({ type: 'GUARDAR_DATO', texto: texto }, (r) => {
+          if (chrome.runtime.lastError || !r || !r.ok) {
+            btn.disabled = false;
+            estadoDe(idx, 'aviso', 'No se pudo guardar en tu perfil: la respuesta se envía igual');
+            return;
+          }
+          btn.textContent = 'Guardado en tu perfil';
+          estadoDe(idx, 'bueno', 'Queda en tu perfil: no te lo vamos a volver a preguntar');
+        });
       });
     });
 
@@ -1328,6 +1439,45 @@ new MutationObserver(function () {
   }
 }).observe(document.documentElement, { childList: true, subtree: true });
 
+// ── ¿Hay sesión iniciada en este portal? (docs/estrategia-y-rediseno.md §6) ──
+//
+// El popup muestra una línea por portal conectado. La cuenta sabe cuáles
+// conectó la persona, pero no si la sesión de ESE navegador sigue viva -- y
+// una sesión caída es la causa más común de "no postuló nada y no dijo por
+// qué". Acá se mira lo único que no existe sin sesión: un enlace para
+// cerrarla. Si no aparece ninguno de los dos indicios no se inventa un
+// veredicto: se manda null y el popup dice "Sin revisar".
+const PORTAL_POR_HOST = [
+  [/computrabajo\.(cl|com)$/i, 'Computrabajo'],
+  [/laborum\.cl$/i, 'Laborum'],
+  [/trabajando\.cl$/i, 'Trabajando'],
+];
+const SEL_CON_SESION = 'a[href*="logout" i], a[href*="cerrar-sesion" i], a[href*="cerrarsesion" i], a[href*="signout" i], form[action*="logout" i]';
+const SEL_SIN_SESION = 'a[href*="/login" i], a[href*="iniciar-sesion" i], a[href*="iniciarsesion" i], a[href*="signin" i]';
+
+AP.portalDelHost = function (host) {
+  const par = PORTAL_POR_HOST.find(([re]) => re.test(host));
+  return par ? par[1] : null;
+};
+
+// true = hay sesión, false = no hay, null = no se pudo saber en esta página.
+AP.mirarSesion = function (doc) {
+  const d = doc || document;
+  if (d.querySelector(SEL_CON_SESION)) return true;
+  if (d.querySelector(SEL_SIN_SESION)) return false;
+  return null;
+};
+
+AP.reportarSesion = function () {
+  const portal = AP.portalDelHost(location.hostname);
+  if (!portal) return;
+  const hay = AP.mirarSesion();
+  if (hay === null) return; // esta página no dice nada: no se pisa lo anterior
+  try {
+    chrome.runtime.sendMessage({ type: 'SESION_PORTAL', portal: portal, hay: hay });
+  } catch (e) { /* el service worker se está reiniciando: se reporta la próxima */ }
+};
+
 // ── Init compartido ───────────────────────────────────────────────
 // Carga cfg/active/log/token y avisa al adaptador (AP.onInit) para que
 // decida qué hacer según la URL en la que esté parado (cada portal tiene
@@ -1341,6 +1491,7 @@ try {
     chrome.storage.sync.get('autopostulaToken', function (d) {
       AP.iaDisponible = !!d.autopostulaToken;
       console.log('[AP] core listo — config:', !!AP.cfg, 'activo:', AP.activo, 'IA (token):', AP.iaDisponible);
+      AP.reportarSesion();
       if (AP.onInit) AP.onInit();
     });
   });
