@@ -5,10 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  LayoutDashboard,
+  House,
   FileText,
   UserRound,
-  MessageSquare,
   Globe,
   Sparkles,
   Settings,
@@ -24,17 +23,17 @@ import { Marca } from "@/components/Marca";
 const GRUPOS: { titulo?: string; items: { href: string; label: string; Icon: any }[] }[] = [
   {
     items: [
-      { href: "/dashboard", label: "Resumen", Icon: LayoutDashboard },
-      { href: "/dashboard/historial", label: "Postulaciones", Icon: FileText },
+      // "Hoy" y no "Resumen": la página parte por lo que hay que hacer hoy.
+      { href: "/dashboard", label: "Hoy", Icon: House },
       { href: "/dashboard/por-decidir", label: "Por decidir", Icon: Inbox },
+      { href: "/dashboard/historial", label: "Postulaciones", Icon: FileText },
     ],
   },
   {
     titulo: "Tu perfil",
     items: [
       { href: "/dashboard/perfil", label: "Perfil", Icon: UserRound },
-      { href: "/dashboard/perfil/conversacion", label: "Conversación IA", Icon: MessageSquare },
-      { href: "/dashboard/perfil/entrenar", label: "Entrenar IA", Icon: Sparkles },
+      { href: "/dashboard/perfil/conversacion", label: "Entrenar IA", Icon: Sparkles },
     ],
   },
   {
@@ -42,18 +41,20 @@ const GRUPOS: { titulo?: string; items: { href: string; label: string; Icon: any
     items: [
       { href: "/dashboard/portales", label: "Portales", Icon: Globe },
       { href: "/dashboard/filtros", label: "Filtros de búsqueda", Icon: Filter },
-      { href: "/dashboard/premium", label: "Premium", Icon: Crown },
+      // "Tu plan" y no "Premium": la cuenta gratis también tiene uno, y acá
+      // se ve cuánto queda del mes.
+      { href: "/dashboard/premium", label: "Tu plan", Icon: Crown },
       { href: "/dashboard/ajustes", label: "Ajustes", Icon: Settings },
     ],
   },
 ];
 
-// Entrenar IA agrupa dos pantallas (Calibración y Ajuste fino) que se
-// cambian con pestañas adentro — las dos marcan el mismo item del menú.
-const RUTAS_ENTRENAR = ["/dashboard/perfil/entrenar", "/dashboard/perfil/calibracion"];
+// Entrenar IA agrupa tres pantallas (Conversación, Calibración y Ajuste fino)
+// que se cambian con pestañas adentro — las tres marcan el mismo item del menú.
+const RUTAS_ENTRENAR = ["/dashboard/perfil/conversacion", "/dashboard/perfil/entrenar", "/dashboard/perfil/calibracion"];
 
 function estaActivo(href: string, pathname: string) {
-  if (href === "/dashboard/perfil/entrenar") return RUTAS_ENTRENAR.includes(pathname);
+  if (href === "/dashboard/perfil/conversacion") return RUTAS_ENTRENAR.includes(pathname);
   return pathname === href;
 }
 

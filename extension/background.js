@@ -1219,6 +1219,31 @@ async function reportarAvistamientosBackend(avistamientos, plataforma) {
   }
 }
 
+// ── Reportar descartes con su razón (docs/estrategia-y-rediseno.md §5.2) ──
+// Best-effort, mismo criterio que los avistamientos: si falla, el escaneo
+// sigue igual; solo se pierde el detalle de esa pasada en el panel.
+async function reportarDescartesBackend(descartes, plataforma) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return;
+
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/descartes', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + autopostulaToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ plataforma: plataforma || 'Computrabajo', descartes: descartes })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('[AP] Backend rechazó descartes:', data.error || res.status);
+    }
+  } catch (e) {
+    console.warn('[AP] Error de red reportando descartes:', e);
+  }
+}
+
 // ── Reportar oferta en banda gris (scorer local, §6) ─────────────────────
 // A diferencia de reportarTitulosVistosBackend (best-effort), acá sí importa
 // que llegue: es lo que arma la cola de decisión del usuario (§8). Si falla,
@@ -1371,6 +1396,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'REPORTAR_BANDA_GRIS') {
     reportarBandaGrisBackend(msg.oferta).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'REPORTAR_DESCARTES') {
+    reportarDescartesBackend(msg.descartes, msg.plataforma).then(() => sendResponse({ ok: true }));
     return true;
   }
   if (msg.type === 'REPORTAR_AVISTAMIENTOS') {

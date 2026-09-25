@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { COLOR_ESTADO, PASO_ESTADO } from "@/lib/estado-postulacion";
 
 type Detalle = {
   id: string;
@@ -20,26 +21,6 @@ type Detalle = {
     fueEditada: boolean;
     tema: string | null;
   }[];
-};
-
-const ETIQUETA_ESTADO: Record<string, string> = {
-  ENVIADO: "Enviada",
-  VISTO: "Vista",
-  EN_PROCESO: "En proceso",
-  FINALISTA: "Finalista",
-  FINALIZADO: "Finalizada",
-  RECHAZADO: "Rechazada",
-  INCOMPLETA: "Necesita tu atención",
-};
-
-const COLOR_ESTADO: Record<string, string> = {
-  ENVIADO: "var(--status-enviado)",
-  VISTO: "var(--status-visto)",
-  EN_PROCESO: "var(--status-en-proceso)",
-  FINALISTA: "var(--status-finalista)",
-  FINALIZADO: "var(--status-finalizado)",
-  RECHAZADO: "var(--status-rechazado)",
-  INCOMPLETA: "var(--warn)",
 };
 
 export default function DetalleAplicacionPage() {
@@ -80,7 +61,7 @@ export default function DetalleAplicacionPage() {
       <div className="ap-page-header">
         <p style={{ marginBottom: 6 }}>
           <a href="/dashboard/historial" style={{ color: "var(--text-muted)", fontSize: 12.5 }}>
-            ← Volver al historial
+            ← Volver a Postulaciones
           </a>
         </p>
         <h1 className="ap-page-title">{detalle.titulo}</h1>
@@ -110,7 +91,7 @@ export default function DetalleAplicacionPage() {
           }}
         >
           <p style={{ fontSize: 13, fontWeight: 700, color: "var(--warn)", marginBottom: 4 }}>
-            Necesita tu atención: esta postulación no llegó a la empresa
+            No se envió: esta postulación no llegó a la empresa
           </p>
           <p style={{ fontSize: 13, color: "var(--text)", marginBottom: 4 }}>
             {detalle.notaAtencion ?? "No se pudo completar automáticamente."}
@@ -141,7 +122,7 @@ export default function DetalleAplicacionPage() {
                 style={{ background: COLOR_ESTADO[h.estado] ?? "var(--text-muted)", width: 8, height: 8 }}
               />
               <span style={{ fontSize: 13, color: COLOR_ESTADO[h.estado] ?? "var(--text)" }}>
-                {ETIQUETA_ESTADO[h.estado] ?? h.estado}
+                {PASO_ESTADO[h.estado] ?? h.estado}
               </span>
               <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                 {new Date(h.cambiadoEn).toLocaleString("es-CL")}

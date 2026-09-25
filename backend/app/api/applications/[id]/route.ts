@@ -35,11 +35,14 @@ export async function GET(
     portal: application.jobOffer.platform.nombre,
     url: application.jobOffer.url,
     estadoActual: application.estadoActual,
+    contadoPorTi: application.origenEstado === "USUARIO",
     notaAtencion: application.notaAtencion,
     enviadaEn: application.enviadaEn,
     historial: application.statusHistory.map((h) => ({
       estado: h.estado,
       cambiadoEn: h.cambiadoEn,
+      // Quién dijo este paso: la historia lo cuenta ("· tú", "· el portal").
+      origen: h.origen,
     })),
     respuestas: application.answers.map((a) => ({
       pregunta: a.pregunta,

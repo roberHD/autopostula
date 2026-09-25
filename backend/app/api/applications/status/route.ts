@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { portalPuedeCambiar, type Origen } from "@/lib/estado-real";
 
 async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -65,27 +66,27 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Si el estado no cambió, no duplicamos el historial
-    if (application.estadoActual === estado) {
-      return NextResponse.json({ id: application.id, sinCambios: true });
-    }
-
-    // docs/revision-2026-09-16.md §8.2/§8.3: "Postulado" en "Mis postulaciones"
-    // del portal es la evidencia que faltaba -- si AutoPostula la había dejado
-    // INCOMPLETA (no vio la confirmación) pero el portal la muestra, sí llegó.
-    // Solo INCOMPLETA puede pasar a ENVIADO: nunca se retrocede una postulación
-    // que ya avanzó (VISTO, EN_PROCESO...) porque el portal diga "Postulado".
-    if (estado === "ENVIADO" && application.estadoActual !== "INCOMPLETA") {
+    // docs/estado-real-de-postulaciones.md §6.5: el portal solo sube de rango,
+    // nunca baja, y nunca pisa lo que contó la persona ("tuve entrevista" no se
+    // revierte porque el portal siga diciendo "postulado"). La única excepción
+    // hacia abajo es INCOMPLETA → ENVIADO (§8.2/§8.3 de la revisión): "Postulado"
+    // en el portal es la evidencia de que sí llegó. Todo eso vive en
+    // lib/estado-real.ts, verificado por scripts/verificar-estado-real.ts.
+    if (!portalPuedeCambiar(application.estadoActual, application.origenEstado as Origen, estado)) {
       return NextResponse.json({ id: application.id, sinCambios: true });
     }
 
     await prisma.application.update({
       where: { id: application.id },
-      data: { estadoActual: estado as any, ...(estado === "ENVIADO" ? { notaAtencion: null } : {}) },
+      data: {
+        estadoActual: estado as any,
+        origenEstado: "PORTAL",
+        ...(estado === "ENVIADO" ? { notaAtencion: null } : {}),
+      },
     });
 
     await prisma.applicationStatusHistory.create({
-      data: { applicationId: application.id, estado: estado as any },
+      data: { applicationId: application.id, estado: estado as any, origen: "PORTAL" },
     });
 
     return NextResponse.json({ id: application.id, sinCambios: false });

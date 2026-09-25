@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Sparkles, PartyPopper, TriangleAlert, Clock } from "lucide-react";
+import { Check, Sparkles, PartyPopper, TriangleAlert, Clock, ShieldCheck } from "lucide-react";
 import { PASES, formatoPesos, type IdPase } from "@/lib/pases";
 
 type Fila = { texto: string; free: string | boolean; premium: string | boolean };
@@ -27,6 +27,87 @@ function Celda({ valor, destacar }: { valor: string | boolean; destacar?: boolea
     );
   }
   return <span style={{ fontWeight: 600, color: destacar ? "var(--chart-3)" : undefined }}>{valor}</span>;
+}
+
+function TablaPlanes({ esPremium }: { esPremium: boolean }) {
+  const tuya = { background: "color-mix(in srgb, var(--accent) 5%, transparent)" };
+  return (
+    <div className="ap-card ap-table-scroll" style={{ maxWidth: 760, margin: "0 auto" }}>
+      <table className="ap-table" style={{ minWidth: 460 }}>
+        <thead>
+          <tr>
+            <th>Función</th>
+            <th style={{ textAlign: "center", width: 120, ...(esPremium ? {} : tuya) }}>{esPremium ? "Free" : "Free (tu plan)"}</th>
+            <th style={{ textAlign: "center", width: 150, whiteSpace: "nowrap", ...(esPremium ? tuya : {}) }}>
+              {esPremium ? "Premium (tu plan)" : "Premium"}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {FILAS.map((fila) => (
+            <tr key={fila.texto}>
+              <td>{fila.texto}</td>
+              <td style={{ textAlign: "center", ...(esPremium ? {} : tuya) }}>
+                <Celda valor={fila.free} />
+              </td>
+              <td style={{ textAlign: "center", ...(esPremium ? tuya : {}) }}>
+                <Celda valor={fila.premium} destacar />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type Cupo = { usadas: number | null; limite: number | null; restantes: number | null };
+
+/**
+ * Cuánto te queda este mes y hasta cuándo dura tu Premium, juntos arriba
+ * (docs/estrategia-y-rediseno.md §5.2). Los dos datos ya existían, pero uno
+ * vivía en la barra de arriba y el otro en el aviso de vencimiento.
+ */
+function TuMes({ cupo, premiumHasta, acciones }: { cupo: Cupo | null; premiumHasta: string | null; acciones?: React.ReactNode }) {
+  if (!cupo || cupo.limite === null || cupo.restantes === null) return null;
+  const usadas = cupo.usadas ?? cupo.limite - cupo.restantes;
+  const pct = Math.min(100, Math.round((usadas / cupo.limite) * 100));
+  const hoy = new Date();
+  const renueva = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleDateString("es-CL", { day: "numeric", month: "long" });
+
+  return (
+    <div className="ap-card ap-mes ap-animate-in">
+      <div>
+        <p className="ap-mes__n">{cupo.restantes}</p>
+        <p className="ap-mes__l">{cupo.restantes === 1 ? "postulación te queda" : "postulaciones te quedan"}</p>
+      </div>
+      <div>
+        <div className="ap-mes__barra" role="img" aria-label={`${usadas} de ${cupo.limite} usadas`}>
+          <i style={{ width: `${pct}%` }} data-lleno={pct >= 100 ? "1" : undefined} />
+        </div>
+        <div className="ap-mes__filas">
+          <div>
+            <b>{usadas} de {cupo.limite} usadas</b>
+            <span>Se renuevan el {renueva}</span>
+          </div>
+          <div>
+            {premiumHasta ? (
+              <>
+                <b>Premium hasta el {fechaLarga(premiumHasta)}</b>
+                <span>No se renueva solo: pagas cuando lo necesitas</span>
+              </>
+            ) : (
+              <>
+                <b>Plan gratis</b>
+                <span>Con Premium son 80 al mes y se pone al día sola</span>
+              </>
+            )}
+          </div>
+        </div>
+        {acciones}
+      </div>
+    </div>
+  );
 }
 
 function fechaLarga(iso: string): string {
@@ -79,6 +160,14 @@ export default function PremiumPage() {
   const [planNombre, setPlanNombre] = useState<string | null>(null);
   const [premiumHasta, setPremiumHasta] = useState<string | null>(null);
   const [resultadoPago, setResultadoPago] = useState<string | null>(null);
+  const [cupo, setCupo] = useState<Cupo | null>(null);
+
+  useEffect(() => {
+    fetch("/api/dashboard/estado")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((e) => e?.cupo && setCupo(e.cupo))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function cargar() {
@@ -109,59 +198,63 @@ export default function PremiumPage() {
   }
 
   if (esPremium) {
+    // Los días se suman a los que quedan: con 30 más, el Premium dura hasta acá.
+    const con30 = premiumHasta ? new Date(new Date(premiumHasta).getTime() + 30 * 86_400_000).toISOString() : null;
     return (
-      <>
+      <div className="ap-glow-bg">
         <div className="ap-page-header">
-          <h1 className="ap-page-title">Premium</h1>
-          <p className="ap-page-sub">
-            {premiumHasta ? `Tu Premium vence el ${fechaLarga(premiumHasta)}.` : "Ya tienes todo lo que AutoPostula ofrece."}
-          </p>
+          <h1 className="ap-page-title">Tu plan</h1>
+          <p className="ap-page-sub">Cuánto te queda este mes y cómo seguir.</p>
         </div>
         <AvisoDePago resultado={resultadoPago} hasta={premiumHasta} />
-        <div
-          className="ap-section ap-animate-in"
-          style={{ textAlign: "center", padding: "48px 24px", marginBottom: 0 }}
-        >
-          <div
-            style={{
-              width: 56, height: 56, borderRadius: "50%", margin: "0 auto 16px",
-              background: "var(--accent)", color: "var(--accent-contrast)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <PartyPopper size={26} />
+        <TuMes
+          cupo={cupo}
+          premiumHasta={premiumHasta}
+          acciones={
+            <>
+              <div className="ap-mes__acc">
+                <button className="ap-button" onClick={() => elegirPase("pase_30")}>
+                  Extender Premium 30 días · ${formatoPesos(PASES.pase_30.monto)}
+                </button>
+                <button className="ap-button-ghost" onClick={() => elegirPase("pase_90")}>
+                  Extender 90 días · ${formatoPesos(PASES.pase_90.monto)}
+                </button>
+              </div>
+              {con30 && (
+                <p className="ap-mes__nota">
+                  Los días se suman a los que te quedan: con 30 más, tu Premium dura hasta el {fechaLarga(con30)}.
+                </p>
+              )}
+            </>
+          }
+        />
+        {!cupo && (
+          <div className="ap-section ap-animate-in" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <PartyPopper size={20} />
+            <p style={{ fontSize: 13.5 }}>
+              Ya eres {planNombre ?? "Premium"}
+              {premiumHasta ? `, hasta el ${fechaLarga(premiumHasta)}` : ""}.
+            </p>
           </div>
-          <h2 style={{ fontSize: 17, fontWeight: 600, marginBottom: 6 }}>
-            Ya eres {planNombre ?? "Premium"}
-          </h2>
-          <p style={{ fontSize: 13.5, color: "var(--text-muted)", maxWidth: 420, margin: "0 auto 18px" }}>
-            80 postulaciones al mes, se pone al día sola al abrir tu computador, calibración completa y todo lo demás ya
-            está activo en tu cuenta. No se renueva solo: al vencer vuelves al plan gratuito, sin perder
-            tu historial ni tu perfil.
-          </p>
-          {premiumHasta && (
-            <p style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 14 }}>Premium hasta el {fechaLarga(premiumHasta)}</p>
-          )}
-          <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
-            Renovar suma los días nuevos a los que te quedan:
-          </p>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-            <button className="ap-button" onClick={() => elegirPase("pase_30")}>
-              Renovar 30 días · ${formatoPesos(PASES.pase_30.monto)}
-            </button>
-            <button className="ap-button-ghost" onClick={() => elegirPase("pase_90")}>
-              Renovar 90 días · ${formatoPesos(PASES.pase_90.monto)}
-            </button>
-          </div>
-        </div>
-      </>
+        )}
+        <p className="ap-regla-linea">
+          <ShieldCheck />
+          Una postulación que no llegó al portal no te descuenta. Revisar ofertas, descartar y Por decidir no gastan nada.
+        </p>
+        <TablaPlanes esPremium />
+      </div>
     );
   }
 
   return (
     <div className="ap-glow-bg">
+      <div className="ap-page-header">
+        <h1 className="ap-page-title">Tu plan</h1>
+        <p className="ap-page-sub">Cuánto te queda este mes y cómo seguir.</p>
+      </div>
       <AvisoDePago resultado={resultadoPago} hasta={premiumHasta} />
-      <div className="ap-page-header" style={{ textAlign: "center" }}>
+      <TuMes cupo={cupo} premiumHasta={null} />
+      <div className="ap-page-header" style={{ textAlign: "center", marginTop: 28 }}>
         <div
           style={{
             display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12,
@@ -172,7 +265,7 @@ export default function PremiumPage() {
         >
           <Sparkles size={13} /> AutoPostula Premium
         </div>
-        <h1 className="ap-page-title" style={{ fontSize: 26 }}>Postula más rápido, sin límites de siempre</h1>
+        <h2 className="ap-page-title" style={{ fontSize: 26 }}>Postula más rápido, sin límites de siempre</h2>
         <p className="ap-page-sub" style={{ maxWidth: 480, margin: "0 auto" }}>
           Deja que AutoPostula se ponga al día sola cada vez que abres tu computador, mientras tú te enfocas en las entrevistas.
         </p>
@@ -245,31 +338,7 @@ export default function PremiumPage() {
         </div>
       </div>
 
-      {/* Tabla comparativa */}
-      <div className="ap-card ap-table-scroll" style={{ maxWidth: 760, margin: "0 auto" }}>
-        <table className="ap-table" style={{ minWidth: 460 }}>
-          <thead>
-            <tr>
-              <th>Función</th>
-              <th style={{ textAlign: "center", width: 110 }}>Free</th>
-              <th style={{ textAlign: "center", width: 110 }}>Premium</th>
-            </tr>
-          </thead>
-          <tbody>
-            {FILAS.map((fila) => (
-              <tr key={fila.texto}>
-                <td>{fila.texto}</td>
-                <td style={{ textAlign: "center" }}>
-                  <Celda valor={fila.free} />
-                </td>
-                <td style={{ textAlign: "center" }}>
-                  <Celda valor={fila.premium} destacar />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <TablaPlanes esPremium={false} />
     </div>
   );
 }

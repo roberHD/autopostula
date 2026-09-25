@@ -46,3 +46,17 @@ export async function purgarRafagas(): Promise<number> {
   const { count } = await prisma.rafaga.deleteMany({ where: { inicio: { lt: limite } } });
   return count;
 }
+
+// Retención de descartes (docs/estrategia-y-rediseno.md §5.2): qué ofertas
+// dejó fuera el motor y por qué. Sirven para "Lo último que hizo" y para la
+// cifra del mes, no para siempre. Mismo plazo que los avistamientos; si se
+// cambia acá, revisar lo que diga la política de privacidad.
+export const DIAS_RETENCION_DESCARTES = 90;
+
+export async function purgarDescartes(): Promise<number> {
+  const limite = new Date();
+  limite.setDate(limite.getDate() - DIAS_RETENCION_DESCARTES);
+
+  const { count } = await prisma.descarte.deleteMany({ where: { vistoEn: { lt: limite } } });
+  return count;
+}

@@ -53,6 +53,10 @@ enum EstadoPostulacion {
   ENVIADO
   VISTO
   EN_PROCESO
+  // docs/estado-real-de-postulaciones.md §6.3: la entrevista es lo que más
+  // importa y hasta ahora no tenía dónde guardarse. Casi siempre la cuenta
+  // la persona: ningún portal la ve (llega por correo, llamada o WhatsApp).
+  ENTREVISTA
   FINALISTA
   FINALIZADO
   RECHAZADO
@@ -187,6 +191,7 @@ model User {
   decisionesOferta  DecisionOferta[]
   objetivosLaborales ObjetivoLaboral[]
   rafagas           Rafaga[]
+  descartes         Descarte[]
 
   @@map("users")
 }
@@ -582,6 +587,14 @@ model Application {
   // el historial: la prueba se demuestra con resultados concretos, no con un
   // mensaje. Máximo 5 filas por cuenta.
   esDePrueba          Boolean           @default(false) @map("es_de_prueba")
+  // docs/estado-real-de-postulaciones.md §6.4-§6.5: un escaneo del portal
+  // NUNCA pisa un estado que contó la persona -- si dijo "tuve entrevista",
+  // que el portal siga diciendo "postulado" no lo revierte.
+  origenEstado        OrigenEstado      @default(PORTAL) @map("origen_estado")
+  // Para no preguntar "¿supiste algo?" dos veces seguidas por lo mismo (§6.1):
+  // se cuenta cada "Nada todavía", y a las 3 se deja de preguntar.
+  ultimaConsulta      DateTime?         @map("ultima_consulta")
+  vecesConsultada     Int               @default(0) @map("veces_consultada")
 
   user             User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobOffer         JobOffer                   @relation(fields: [jobOfferId], references: [id])
@@ -594,11 +607,21 @@ model Application {
   @@map("applications")
 }
 
+// De dónde salió un estado (docs/estado-real-de-postulaciones.md §6.4).
+enum OrigenEstado {
+  PORTAL  // lo informó el portal (escaneo de "Mis postulaciones")
+  USUARIO // lo contó la persona ("¿Supiste algo?")
+  SISTEMA // al crear la postulación
+}
+
 model ApplicationStatusHistory {
   id             String            @id @default(uuid())
   applicationId  String            @map("application_id")
   estado         EstadoPostulacion
   cambiadoEn     DateTime          @default(now()) @map("cambiado_en")
+  // Quién dijo este paso, para contarlo en la historia ("· tú", "· el portal").
+  // null en las filas de antes de que existiera.
+  origen         OrigenEstado?
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
@@ -630,6 +653,34 @@ model AiUsageLog {
 //
 // Son datos de uso, no del contenido de nada: se purgan a los 90 días junto
 // con los avistamientos (lib/purgar-avistamientos.ts).
+// Ofertas que el motor dejó fuera, con su razón (docs/estrategia-y-rediseno.md
+// §5.2). Antes la razón se calculaba, se usaba y se botaba: la persona veía
+// "14 descartadas" sin saber cuáles ni por qué, y no podía corregir nada.
+// Una fila por oferta y persona (la misma oferta vista en otro escaneo no se
+// duplica). Se purga a los 90 días junto con los avistamientos.
+model Descarte {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  plataforma  String
+  externalId  String    @map("external_id")
+  titulo      String
+  empresa     String?
+  url         String?
+  // La razón principal, tal como la dio el scorer (objeto estructurado, ver
+  // lib/formatear-razon.ts) -- o un string si vino del filtro viejo.
+  razon       Json?
+  vistoEn     DateTime  @default(now()) @map("visto_en")
+  // "No era así": la persona dijo que sí le servía. Se crea además una
+  // decisión SI para que la extensión la postule y el perfil aprenda.
+  corregidoEn DateTime? @map("corregido_en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, plataforma, externalId])
+  @@index([userId, vistoEn])
+  @@map("descartes")
+}
+
 model Rafaga {
   id          String    @id @default(uuid())
   userId      String    @map("user_id")

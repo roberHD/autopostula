@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { usuarioTieneAnaliticaAvanzada } from "@/lib/plan-beneficios";
+import { fraseEstado } from "@/lib/estado-postulacion";
 
 // Escapa comillas y envuelve en comillas solo si el valor las necesita (tiene
 // coma, comilla o salto de línea) -- así un título o empresa con coma no
@@ -41,7 +42,7 @@ export async function GET() {
       celda(a.jobOffer.titulo),
       celda(a.jobOffer.empresa ?? ""),
       celda(a.jobOffer.platform.nombre),
-      celda(a.estadoActual),
+      celda(fraseEstado(a.estadoActual)),
       celda(a.enviadaEn.toISOString().slice(0, 10)),
       celda(a.jobOffer.relevanciaAi != null ? String(Math.round(a.jobOffer.relevanciaAi)) : ""),
     ].join(",")

@@ -37,6 +37,8 @@ export async function GET() {
       enviadaEn: a.enviadaEn,
       // Una de las 5 de la prueba automática -- lo usa "Ver las 5" (§4.1).
       esDePrueba: a.esDePrueba,
+      // Si el estado lo contó la persona, la lista lo dice ("lo contaste tú").
+      contadoPorTi: a.origenEstado === "USUARIO",
     })),
     analiticaAvanzada,
   });
@@ -142,12 +144,13 @@ export async function POST(request: Request) {
         cvProfileId: cv.id,
         styleProfileId: styleProfileId ?? null,
         estadoActual: estadoInicial,
+        origenEstado: "SISTEMA",
         notaAtencion: incompleta ? (nota || "No se pudo completar automáticamente") : null,
       },
     });
 
     await prisma.applicationStatusHistory.create({
-      data: { applicationId: application.id, estado: estadoInicial },
+      data: { applicationId: application.id, estado: estadoInicial, origen: "SISTEMA" },
     });
 
     // §8.6: si esta postulación viene de una aprobación de banda gris, se

@@ -600,6 +600,9 @@ async function escanear() {
   // de cada descarte, para poder mostrar cuál fue la más frecuente al final.
   const conteos = { postular: 0, gris: 0, descartar: 0 };
   const razonesDescartadas = [];
+  // Cada descarte con su razón va al panel (docs/estrategia-y-rediseno.md
+  // §5.2): "Lo último que hizo" dice cuál y por qué, y se puede corregir.
+  const descartes = [];
   // Candidatas a banda gris de la Etapa 1 (solo tarjeta) -- no se reportan
   // todavía: primero pasan por la Etapa 2 (§B) si no hay nada más urgente
   // que hacer en esta pasada (ver el final de la función).
@@ -618,6 +621,7 @@ async function escanear() {
         conteos.descartar++;
         const razon = (r.razones && r.razones[0]) || 'No calza con tus filtros';
         razonesDescartadas.push(razon);
+        descartes.push({ externalId: r.id, titulo: r.titulo, empresa: r.empresa || null, url: r.url, razon });
         addLog({ ts: Date.now(), status: 'skip', title: r.titulo, url: r.url, uid: r.id, reason: AP.formatearRazonCorta(razon) });
       } else {
         conteos.gris++;
@@ -655,6 +659,7 @@ async function escanear() {
       conteos.descartar++;
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
+      descartes.push({ externalId: id, titulo, empresa, url: a.href, razon });
       AP.vistos.add(id);
       addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: AP.formatearRazonCorta(razon) });
     }
@@ -668,6 +673,7 @@ async function escanear() {
   pendientes = await AP.quitarDuplicados('Laborum', pendientes, (p, razon) => {
     conteos.descartar++;
     razonesDescartadas.push(razon);
+    descartes.push({ externalId: p.id, titulo: p.titulo, empresa: p.empresa, url: p.url, razon });
     AP.vistos.add(p.id);
     addLog({ ts: Date.now(), status: 'skip', title: p.titulo, url: p.url, uid: p.id, reason: AP.formatearRazonCorta(razon) });
   });
@@ -678,6 +684,7 @@ async function escanear() {
   if (soloObservar) conteos.observado = pendientes.length;
   else conteos.postular = pendientes.length;
   {
+    AP.reportarDescartes(descartes, 'Laborum');
     const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
     msg(resumen.texto, resumen.estado);
   }

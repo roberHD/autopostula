@@ -75,6 +75,47 @@ function textoDeAprobacion(r: ResultadoAprobar | null): string {
   }
 }
 
+/**
+ * Las razones como el intercambio que se le pide decidir: lo que calza a un
+ * lado, lo que no al otro. Las filas viejas guardaron strings sin saber si
+ * eran a favor o en contra; esas van aparte, sin ubicarlas en ninguna columna.
+ */
+function RazonesEnDos({ razones }: { razones: unknown[] }) {
+  const aFavor = razones.filter((r) => esRazonPositiva(r) === true);
+  const enContra = razones.filter((r) => esRazonPositiva(r) === false);
+  const sinClasificar = razones.filter((r) => esRazonPositiva(r) === null);
+
+  return (
+    <>
+      {(aFavor.length > 0 || enContra.length > 0) && (
+        <div className="ap-razones-dos">
+          {aFavor.length > 0 && (
+            <div>
+              <h3>Calza contigo</h3>
+              <ul className="ap-razones">
+                {aFavor.map((r, i) => <li key={i} className="positiva">{formatearRazon(r)}</li>)}
+              </ul>
+            </div>
+          )}
+          {enContra.length > 0 && (
+            <div>
+              <h3>Pero</h3>
+              <ul className="ap-razones">
+                {enContra.map((r, i) => <li key={i} className="negativa">{formatearRazon(r)}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+      {sinClasificar.length > 0 && (
+        <ul className="ap-razones">
+          {sinClasificar.map((r, i) => <li key={i}>{formatearRazon(r)}</li>)}
+        </ul>
+      )}
+    </>
+  );
+}
+
 export default function PorDecidirPage() {
   const [pendientes, setPendientes] = useState<DecisionGris[] | null>(null);
   const [expiradasSinRevisar, setExpiradasSinRevisar] = useState(0);
@@ -158,7 +199,7 @@ export default function PorDecidirPage() {
       <div className="ap-page-header">
         <h1 className="ap-page-title">Por decidir</h1>
         <p className="ap-page-sub">
-          Ofertas que no pudimos ubicar con confianza — tu sí o no ayuda a que tu perfil aprenda.
+          Ofertas que calzan a medias. Tu sí o tu no también le enseña a tu perfil.
         </p>
         {/* docs/modo-solo-observar.md §4.3: si la extensión tiene "solo observar"
             activado, un "sí" acá queda pendiente hasta que se desactive -- no
@@ -265,18 +306,15 @@ export default function PorDecidirPage() {
 
                   {!!detalle?.extracto && <p className="ap-extracto">{detalle.extracto}</p>}
 
-                  {razones.length > 0 && (
-                    <ul className="ap-razones">
-                      {razones.map((r, i) => {
-                        const positiva = esRazonPositiva(r);
-                        const clase = positiva === true ? "positiva" : positiva === false ? "negativa" : undefined;
-                        return <li key={i} className={clase}>{formatearRazon(r)}</li>;
-                      })}
-                    </ul>
-                  )}
+                  {razones.length > 0 && <RazonesEnDos razones={razones} />}
                 </div>
               );
             }}
+            pie={
+              <p className="ap-decidir-cuando">
+                Si dices que sí, se envía <b>en cuanto tu computador tenga Chrome abierto con la extensión</b>.
+              </p>
+            }
           />
         )}
       </div>

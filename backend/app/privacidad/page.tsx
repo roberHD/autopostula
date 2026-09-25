@@ -129,6 +129,12 @@ export default function PrivacidadPage() {
           Ese diccionario contiene solo nombres de cargos publicados por las empresas en avisos
           públicos, nunca información de usuarios.
         </li>
+        <li>
+          <strong>Contarte qué dejó fuera y por qué.</strong> De las ofertas que AutoPostula descarta
+          por ti guardamos el cargo, la empresa, el enlace y la razón (por ejemplo, &ldquo;queda
+          fuera de tus comunas&rdquo;), para mostrártelas en tu panel y que puedas corregir un
+          descarte. Si lo corriges, AutoPostula postula a esa oferta y lo usa para afinar tu perfil.
+        </li>
       </ul>
       <div className="nota">
         <p>
@@ -493,6 +499,10 @@ export default function PrivacidadPage() {
         <li>
           <strong>El registro de cada puesta al día automática</strong> (ver 2.4) se elimina a los{" "}
           <strong>90 días</strong>.
+        </li>
+        <li>
+          <strong>Las ofertas que AutoPostula descartó por ti</strong>, con su razón (ver 2.5), se
+          eliminan a los <strong>90 días</strong>.
         </li>
         <li>
           <strong>Las ofertas que quedan esperando tu decisión</strong> vencen a los 7 días si no

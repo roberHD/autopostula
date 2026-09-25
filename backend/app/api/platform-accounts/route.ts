@@ -41,7 +41,7 @@ export async function GET() {
       // Solo las que la empresa realmente vio. INCOMPLETA queda fuera: esa
       // ni siquiera se terminó de enviar.
       vistas: c.applications.filter((a) =>
-        ["VISTO", "EN_PROCESO", "FINALISTA", "FINALIZADO", "RECHAZADO"].includes(a.estadoActual),
+        ["VISTO", "EN_PROCESO", "ENTREVISTA", "FINALISTA", "FINALIZADO", "RECHAZADO"].includes(a.estadoActual),
       ).length,
       finalistas: c.applications.filter(
         (a) => a.estadoActual === "FINALISTA" || a.estadoActual === "FINALIZADO",

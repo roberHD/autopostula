@@ -328,6 +328,18 @@ AP.reportarAvistamientos = function (avistamientos, plataforma) {
   }
 };
 
+// ── Reportar descartes con su razón (docs/estrategia-y-rediseno.md §5.2) ──
+// Fire-and-forget como los avistamientos: el panel muestra cuáles dejó fuera
+// y por qué, y la persona puede corregir un descarte ("No era así").
+AP.reportarDescartes = function (descartes, plataforma) {
+  if (!descartes || !descartes.length) return;
+  try {
+    chrome.runtime.sendMessage({ type: 'REPORTAR_DESCARTES', descartes: descartes, plataforma: plataforma });
+  } catch (e) {
+    console.warn('[AP] No se pudo avisar al background (descartes):', e);
+  }
+};
+
 // ── Reportar oferta en banda gris al backend (scorer local, §6) ──────────
 AP.reportarBandaGris = function (oferta) {
   try {

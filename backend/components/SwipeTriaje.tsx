@@ -16,6 +16,7 @@ export function SwipeTriaje({
   onTerminar,
   pregunta = (titulo: string) => `¿Postularías a un trabajo de "${titulo}"?`,
   renderDetalle,
+  pie,
 }: {
   items: ItemSwipe[];
   onDecidir: (item: ItemSwipe, veredicto: "SI" | "NO") => void | Promise<void>;
@@ -25,6 +26,9 @@ export function SwipeTriaje({
   // mostrar empresa, por qué cayó ahí, y un link a la oferta real; el triaje
   // de onboarding no lo necesita y lo deja sin usar.
   renderDetalle?: (item: ItemSwipe) => React.ReactNode;
+  // Una línea bajo los botones mientras quedan ofertas (en "Por decidir":
+  // cuándo se envía si dices que sí). Al terminar no se muestra.
+  pie?: React.ReactNode;
 }) {
   const [indice, setIndice] = useState(0);
   const [enviando, setEnviando] = useState(false);
@@ -123,6 +127,7 @@ export function SwipeTriaje({
           <Check size={16} /> Sí
         </button>
       </div>
+      {pie}
     </div>
   );
 }
