@@ -4,7 +4,8 @@ import { flow, FLOW_PAGADA, FLOW_RECHAZADA, FLOW_ANULADA, type EstadoPagoFlow } 
 import { PASES, esIdPase } from "@/lib/pases";
 import { asegurarPlanesBase } from "@/lib/plans";
 import { finDelUltimoPase } from "@/lib/plan-vigente";
-import { enviarComprobantePase } from "@/lib/correo";
+import { enviarComprobantePase, enviarComprobanteExtra } from "@/lib/correo";
+import { PAQUETES, esIdPaquete, anotarExtra, saldoExtras } from "@/lib/extras";
 
 // docs/pase-prepagado.md §5.2: acredita un pago de Flow. Lo llaman las DOS
 // puertas por las que Flow avisa -- la confirmación (servidor a servidor) y el
@@ -21,7 +22,10 @@ export type ResultadoPago =
   // catálogo, cuenta borrada, pase desconocido). Queda en el log; nunca se
   // acredita un pase por un pago que no cuadra.
   | { estado: "ERROR"; motivo: string }
-  | { estado: "DESCONOCIDO" };
+  | { estado: "DESCONOCIDO" }
+  // Un paquete de postulaciones extra (docs/estrategia-y-rediseno.md §7): no
+  // hay pase ni vigencia, solo saldo.
+  | { estado: "PAGADO"; nuevo: boolean; extras: number };
 
 async function planPremium() {
   const existente = await prisma.plan.findFirst({ where: { tipo: "PREMIUM" } });
@@ -62,6 +66,10 @@ export async function acreditarPago(payment: Payment, estadoFlow: EstadoPagoFlow
   }
 
   if (status !== FLOW_PAGADA) return { estado: "PENDIENTE" };
+
+  // §7: los paquetes de postulaciones extra se acreditan por su lado -- no
+  // crean pase ni tocan la vigencia de Premium, solo suman saldo.
+  if (esIdPaquete(payment.pase)) return acreditarPaquete(payment, estadoFlow);
 
   if (payment.estado === "PAGADO") return pagado(payment, false);
 
@@ -165,4 +173,68 @@ export async function acreditarPago(payment: Payment, estadoFlow: EstadoPagoFlow
 async function pagado(payment: Payment, nuevo: boolean): Promise<ResultadoPago> {
   const venceEn = payment.userId ? await finDelUltimoPase(payment.userId) : null;
   return { estado: "PAGADO", nuevo, venceEn };
+}
+
+/**
+ * Acredita un paquete de postulaciones extra (§7). Más simple que un pase: no
+ * hay vigencia que apilar ni plan que activar, así que no necesita transacción
+ * -- la clave única del movimiento ("compra:<paymentId>") es la que garantiza
+ * que dos avisos del mismo pago den un solo paquete.
+ */
+async function acreditarPaquete(payment: Payment, estadoFlow: EstadoPagoFlow): Promise<ResultadoPago> {
+  if (!esIdPaquete(payment.pase)) return { estado: "ERROR", motivo: "paquete_desconocido" };
+  const catalogo = PAQUETES[payment.pase];
+
+  if (Number(estadoFlow.amount) !== catalogo.monto || estadoFlow.currency !== "CLP") {
+    console.error(
+      "[pagos] El monto de Flow no coincide con el catálogo de paquetes; no se acredita:",
+      payment.commerceOrder,
+      { flow: `${estadoFlow.amount} ${estadoFlow.currency}`, catalogo: `${catalogo.monto} CLP` },
+    );
+    return { estado: "ERROR", motivo: "monto_no_coincide" };
+  }
+  if (!payment.userId) {
+    console.error("[pagos] Paquete pagado por una cuenta que ya no existe; hay que resolverlo a mano:", payment.commerceOrder);
+    await prisma.payment.updateMany({
+      where: { id: payment.id, estado: "PENDIENTE" },
+      data: { estado: "PAGADO", flowOrder: String(estadoFlow.flowOrder) },
+    });
+    return { estado: "ERROR", motivo: "cuenta_inexistente" };
+  }
+
+  const userId = payment.userId;
+  await prisma.payment.updateMany({
+    where: { id: payment.id, estado: { not: "PAGADO" } },
+    data: { estado: "PAGADO", flowOrder: String(estadoFlow.flowOrder) },
+  });
+
+  const nuevo = await anotarExtra({
+    userId,
+    cantidad: catalogo.postulaciones,
+    motivo: "COMPRA",
+    clave: `compra:${payment.id}`,
+    detalle: catalogo.nombre,
+  });
+
+  const saldo = await saldoExtras(userId);
+
+  if (nuevo) {
+    // El comprobante es un correo: si falla, el saldo ya está acreditado.
+    try {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+      if (user) {
+        await enviarComprobanteExtra(user.email, {
+          paquete: catalogo.nombre,
+          postulaciones: catalogo.postulaciones,
+          monto: catalogo.monto,
+          saldo,
+          flowOrder: String(estadoFlow.flowOrder),
+        });
+      }
+    } catch (err) {
+      console.error("[pagos] El paquete quedó acreditado pero no se pudo enviar el comprobante:", payment.commerceOrder, err);
+    }
+  }
+
+  return { estado: "PAGADO", nuevo, extras: saldo };
 }

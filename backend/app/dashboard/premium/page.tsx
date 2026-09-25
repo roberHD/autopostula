@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Sparkles, PartyPopper, TriangleAlert, Clock, ShieldCheck } from "lucide-react";
 import { PASES, formatoPesos, type IdPase } from "@/lib/pases";
+import Extras from "./Extras";
 
 type Fila = { texto: string; free: string | boolean; premium: string | boolean };
 
@@ -61,7 +62,15 @@ function TablaPlanes({ esPremium }: { esPremium: boolean }) {
   );
 }
 
-type Cupo = { usadas: number | null; limite: number | null; restantes: number | null };
+type Cupo = {
+  usadas: number | null;
+  limite: number | null;
+  restantes: number | null;
+  // §7: lo que queda del plan este mes y las extra (compradas o ganadas), por
+  // separado -- juntas serían un número que nadie puede explicarse.
+  delMes?: number | null;
+  extras?: number;
+};
 
 /**
  * Cuánto te queda este mes y hasta cuándo dura tu Premium, juntos arriba
@@ -70,7 +79,9 @@ type Cupo = { usadas: number | null; limite: number | null; restantes: number | 
  */
 function TuMes({ cupo, premiumHasta, acciones }: { cupo: Cupo | null; premiumHasta: string | null; acciones?: React.ReactNode }) {
   if (!cupo || cupo.limite === null || cupo.restantes === null) return null;
-  const usadas = cupo.usadas ?? cupo.limite - cupo.restantes;
+  const delMes = cupo.delMes ?? cupo.restantes;
+  const extras = cupo.extras ?? 0;
+  const usadas = cupo.usadas ?? cupo.limite - delMes;
   const pct = Math.min(100, Math.round((usadas / cupo.limite) * 100));
   const hoy = new Date();
   const renueva = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleDateString("es-CL", { day: "numeric", month: "long" });
@@ -78,8 +89,13 @@ function TuMes({ cupo, premiumHasta, acciones }: { cupo: Cupo | null; premiumHas
   return (
     <div className="ap-card ap-mes ap-animate-in">
       <div>
-        <p className="ap-mes__n">{cupo.restantes}</p>
-        <p className="ap-mes__l">{cupo.restantes === 1 ? "postulación te queda" : "postulaciones te quedan"}</p>
+        <p className="ap-mes__n">{delMes}</p>
+        <p className="ap-mes__l">{delMes === 1 ? "postulación te queda" : "postulaciones te quedan"}</p>
+        {extras > 0 && (
+          <p className="ap-mes__l" style={{ marginTop: 4 }}>
+            + {extras} extra {extras === 1 ? "guardada" : "guardadas"}, que no vencen
+          </p>
+        )}
       </div>
       <div>
         <div className="ap-mes__barra" role="img" aria-label={`${usadas} de ${cupo.limite} usadas`}>
@@ -241,6 +257,7 @@ export default function PremiumPage() {
           <ShieldCheck />
           Una postulación que no llegó al portal no te descuenta. Revisar ofertas, descartar y Por decidir no gastan nada.
         </p>
+        <Extras />
         <TablaPlanes esPremium />
       </div>
     );
@@ -338,6 +355,7 @@ export default function PremiumPage() {
         </div>
       </div>
 
+      <Extras />
       <TablaPlanes esPremium={false} />
     </div>
   );

@@ -177,6 +177,13 @@ model User {
   // ninguno más.
   recordatorioRafagaEn DateTime? @map("recordatorio_rafaga_en")
   recordatoriosActivos Boolean   @default(true) @map("recordatorios_activos")
+  // ── Invitaciones (docs/estrategia-y-rediseno.md §7) ──
+  // El código propio para invitar (se arma la primera vez que se pide) y quién
+  // te invitó a ti. El premio se da cuando el invitado verifica su correo: sin
+  // eso, una persona se regala postulaciones sola creando cuentas vacías.
+  codigoInvitacion String? @unique @map("codigo_invitacion")
+  invitadoPorId    String? @map("invitado_por_id")
+
   // ── Cómo trabaja la extensión (docs/estrategia-y-rediseno.md §6) ──
   // Antes vivían en chrome.storage de cada navegador: el popup tenía sus
   // propios controles (activo, solo observar, revisar antes de enviar) que no
@@ -209,6 +216,9 @@ model User {
   objetivosLaborales ObjetivoLaboral[]
   rafagas           Rafaga[]
   descartes         Descarte[]
+  extras            PostulacionExtra[]
+  invitadoPor       User?   @relation("Invitaciones", fields: [invitadoPorId], references: [id], onDelete: SetNull)
+  invitados         User[]  @relation("Invitaciones")
 
   @@map("users")
 }
@@ -768,4 +778,39 @@ model StyleRefinement {
   styleProfile StyleProfile @relation(fields: [styleProfileId], references: [id], onDelete: Cascade)
 
   @@map("style_refinements")
+}
+
+// ─────────────────────────────────────────
+// Postulaciones extra (docs/estrategia-y-rediseno.md §7)
+// ─────────────────────────────────────────
+// Un libro mayor, no un contador: cada movimiento queda escrito con su motivo
+// y el saldo es la suma. Así se puede responder "¿por qué tengo 43?" -- que es
+// la pregunta que llega a soporte -- en vez de mirar un número sin historia.
+enum MotivoExtra {
+  COMPRA
+  PREMIO_INVITACION
+  PREMIO_PERFIL
+  USO
+  AJUSTE
+}
+
+model PostulacionExtra {
+  id       String      @id @default(uuid())
+  userId   String      @map("user_id")
+  // Positivo suma (compra, premio), negativo resta (una postulación enviada
+  // cuando ya no quedaba cupo del mes).
+  cantidad Int
+  motivo   MotivoExtra
+  // Lo que hace idempotente a todo esto: "compra:<paymentId>",
+  // "invitacion:<userId del invitado>", "perfil:<userId>", "uso:<applicationId>".
+  // Dos avisos del mismo pago, o dos veces el mismo premio, chocan acá en vez
+  // de duplicar el saldo.
+  clave    String      @unique
+  detalle  String?
+  creadoEn DateTime    @default(now()) @map("creado_en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, creadoEn])
+  @@map("postulaciones_extra")
 }

@@ -61,8 +61,11 @@ export async function GET() {
 
   const motivo = motivoInactivo({ modo, pausadaPorTi, cupoPermitido: cupo.permitido, portalesActivos });
 
+  // Lo usado del mes sale de lo que queda DEL MES, no del total: desde que
+  // existen las postulaciones extra (docs/estrategia-y-rediseno.md §7) el total
+  // puede ser mayor que el límite del plan, y esta resta daba negativo.
   const usadas =
-    cupo.limite === null ? null : Math.max(0, cupo.limite - (cupo.restantes ?? 0));
+    cupo.limite === null ? null : Math.max(0, cupo.limite - (cupo.delMes ?? cupo.restantes ?? 0));
 
   return NextResponse.json({
     activa,
@@ -74,7 +77,7 @@ export async function GET() {
     pruebaTotal: PRUEBA_TOTAL,
     pausadaPorTi,
     portalesActivos,
-    cupo: { usadas, limite: cupo.limite, restantes: cupo.restantes },
+    cupo: { usadas, limite: cupo.limite, restantes: cupo.restantes, delMes: cupo.delMes, extras: cupo.extras },
     // Cuándo se puso al día por última vez (hora del servidor) y qué encontró
     // -- lo lee la tarjeta del Inicio. `resumen` es null si la fila ya se purgó
     // (a los 90 días) pero la fecha sigue en el usuario.

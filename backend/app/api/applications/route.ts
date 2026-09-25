@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
+import { gastarExtra } from "@/lib/extras";
 import { usuarioTieneAnaliticaAvanzada } from "@/lib/plan-beneficios";
 import { limpiarTitulo } from "@/lib/text";
 import { obtenerModoAutomatico, consumirPrueba } from "@/lib/prueba-automatica";
@@ -183,6 +184,21 @@ export async function POST(request: Request) {
             fueEditada: typeof r.fueEditada === "boolean" ? r.fueEditada : false,
           })),
       });
+    }
+
+    // docs/estrategia-y-rediseno.md §7: si el cupo del mes ya estaba en cero,
+    // esta postulación salió de las extra (compradas o ganadas) y se descuenta
+    // una. Va después de crear la postulación, con su id: la clave del
+    // movimiento es esa, así que reintentar el mismo POST no cobra dos veces.
+    // Una INCOMPLETA no llegó a la empresa (§8.3), así que no gasta nada.
+    if (!incompleta && estadoPostulaciones.delMes === 0) {
+      try {
+        await gastarExtra(user.id, application.id);
+      } catch (err) {
+        // La postulación ya salió al portal: no se deshace porque el descuento
+        // falle. Queda en el log para revisarlo.
+        console.error("[extras] No se pudo descontar la postulación extra:", application.id, err);
+      }
     }
 
     // §4.1: una postulación ENVIADA desde una ráfaga, en una cuenta gratis que

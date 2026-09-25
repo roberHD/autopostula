@@ -132,6 +132,30 @@ export function armarComprobantePase(datos: { pase: string; monto: number; desde
   };
 }
 
+// El mismo comprobante, para un paquete de postulaciones extra
+// (docs/estrategia-y-rediseno.md §7). Tampoco es una boleta, por lo mismo.
+export function armarComprobanteExtra(datos: { paquete: string; postulaciones: number; monto: number; saldo: number; flowOrder: string }) {
+  return {
+    subject: `Recibimos tu pago: ${datos.postulaciones} postulaciones extra`,
+    html: `
+      <div style="${ESTILO_MARCO}">
+        <h2 style="color: #111827;">Recibimos tu pago</h2>
+        <p style="color: #4B5563; line-height: 1.6;">Ya están en tu cuenta.</p>
+        <table style="width: 100%; border-collapse: collapse; color: #111827; font-size: 14px;">
+          <tr><td style="padding: 6px 0; color: #6B7280;">Paquete</td><td style="text-align: right;">${datos.paquete}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6B7280;">Monto</td><td style="text-align: right;">$${datos.monto.toLocaleString("es-CL")} CLP</td></tr>
+          <tr><td style="padding: 6px 0; color: #6B7280;">Saldo ahora</td><td style="text-align: right;">${datos.saldo} postulaciones extra</td></tr>
+          <tr><td style="padding: 6px 0; color: #6B7280;">Orden de Flow</td><td style="text-align: right;">${datos.flowOrder}</td></tr>
+        </table>
+        <p style="color: #4B5563; line-height: 1.6; margin-top: 18px;">
+          No vencen y no se renuevan solas: se usan cuando se te acaben las de tu plan en el mes.
+        </p>
+        <p style="color: #9CA3AF; font-size: 12px;">Este correo es un comprobante de tu pago, no una boleta.</p>
+      </div>
+    `,
+  };
+}
+
 // Resend NO lanza cuando rechaza un envío (dominio sin verificar, clave mala):
 // devuelve { error }. Estos correos marcan "ya se mandó" en la base (los avisos
 // de vencimiento) o son un comprobante de dinero, así que un rechazo silencioso
@@ -143,6 +167,11 @@ async function enviarOFallar(email: string, subject: string, html: string, heade
 
 export async function enviarComprobantePase(email: string, datos: { pase: string; monto: number; desde: Date; hasta: Date; flowOrder: string }) {
   const { subject, html } = armarComprobantePase(datos);
+  await enviarOFallar(email, subject, html);
+}
+
+export async function enviarComprobanteExtra(email: string, datos: { paquete: string; postulaciones: number; monto: number; saldo: number; flowOrder: string }) {
+  const { subject, html } = armarComprobanteExtra(datos);
   await enviarOFallar(email, subject, html);
 }
 

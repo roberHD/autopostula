@@ -4,6 +4,7 @@ import { flow } from "@/lib/flow";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { getBaseUrl } from "@/lib/base-url";
 import { PASES, esIdPase } from "@/lib/pases";
+import { PAQUETES, esIdPaquete } from "@/lib/extras";
 
 // docs/pase-prepagado.md §5.1: inicia el pago de un pase de 30 o 90 días con el
 // pago único de Flow (payment/create). Ya no hay suscripción, cliente ni
@@ -16,9 +17,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  const { pase } = await request.json().catch(() => ({}));
-  if (!esIdPase(pase)) {
-    return NextResponse.json({ error: "Elige un pase de 30 o de 90 días" }, { status: 400 });
+  // docs/estrategia-y-rediseno.md §7: por la misma puerta se compran los pases
+  // de Premium y los paquetes de postulaciones extra. Son pagos únicos de Flow
+  // en los dos casos; lo que cambia es qué se acredita después (lib/pagos.ts).
+  const { pase, paquete } = await request.json().catch(() => ({}));
+  const compra = esIdPase(pase) ? pase : esIdPaquete(paquete) ? paquete : null;
+  if (!compra) {
+    return NextResponse.json({ error: "Elige un pase de Premium o un paquete de postulaciones" }, { status: 400 });
   }
 
   const user = await prisma.user.findUnique({
@@ -33,13 +38,15 @@ export async function POST(request: Request) {
   // existe -- el comprobante y los avisos de vencimiento van por correo.
   if (!user.emailVerificado) {
     return NextResponse.json(
-      { error: "Verifica tu correo para contratar Premium", requiereVerificacion: true },
+      { error: "Verifica tu correo antes de pagar", requiereVerificacion: true },
       { status: 403 }
     );
   }
 
   // El monto sale del catálogo del servidor, nunca del cliente.
-  const catalogo = PASES[pase];
+  const catalogo = esIdPase(compra)
+    ? { nombre: PASES[compra].nombre, monto: PASES[compra].monto, dias: PASES[compra].dias }
+    : { nombre: PAQUETES[compra].nombre, monto: PAQUETES[compra].monto, dias: 0 };
 
   // El pago se crea ANTES de ir a Flow, en PENDIENTE: es lo que después
   // identifica al pago cuando Flow avisa (commerceOrder), en vez del correo del
@@ -47,7 +54,7 @@ export async function POST(request: Request) {
   const pago = await prisma.payment.create({
     data: {
       userId,
-      pase,
+      pase: compra,
       dias: catalogo.dias,
       monto: catalogo.monto,
       commerceOrder: `ap_${crypto.randomUUID()}`,

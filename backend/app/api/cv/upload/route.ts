@@ -3,6 +3,7 @@ import "@/lib/pdf-polyfills";
 import { PDFParse } from "pdf-parse";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
+import { premiarPerfilCompleto } from "@/lib/extras";
 
 export async function POST(request: Request) {
   let parser: PDFParse | null = null;
@@ -46,6 +47,12 @@ export async function POST(request: Request) {
         textoExtraido,
       },
     });
+
+    // docs/estrategia-y-rediseno.md §7: el premio por dejar el perfil listo se
+    // revisa en los tres puntos donde puede quedar completo (CV, objetivo,
+    // portal). Es idempotente: se paga una sola vez, sin importar cuál fue el
+    // último paso. Best-effort -- si falla, no arruina la acción principal.
+    await premiarPerfilCompleto(userId).catch((err) => console.error("[extras] premio de perfil:", err));
 
     return NextResponse.json({
       id: cvProfile.id,

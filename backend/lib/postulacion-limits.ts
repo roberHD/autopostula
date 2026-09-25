@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
+import { saldoExtras } from "@/lib/extras";
 
 /**
  * Cuántas postulaciones lleva el usuario este mes y cuántas le quedan según su
@@ -13,7 +14,7 @@ export async function obtenerEstadoPostulaciones(userId: string) {
   });
 
   if (user?.rol === "ADMIN") {
-    return { permitido: true, restantes: null as number | null, limite: null as number | null };
+    return { permitido: true, restantes: null as number | null, limite: null as number | null, delMes: null as number | null, extras: 0 };
   }
 
   const subscripcion = await obtenerSubscripcionVigente(userId);
@@ -21,7 +22,7 @@ export async function obtenerEstadoPostulaciones(userId: string) {
   const limite = subscripcion?.plan.limitePostulacionesMes ?? 20;
 
   if (limite === null) {
-    return { permitido: true, restantes: null, limite: null };
+    return { permitido: true, restantes: null, limite: null, delMes: null, extras: 0 };
   }
 
   const inicioMes = new Date();
@@ -36,9 +37,19 @@ export async function obtenerEstadoPostulaciones(userId: string) {
     where: { userId, enviadaEn: { gte: inicioMes }, estadoActual: { not: "INCOMPLETA" } },
   });
 
+  // docs/estrategia-y-rediseno.md §7: las postulaciones extra (compradas o
+  // ganadas) se gastan DESPUÉS de las del plan. Primero se usa lo que ya venía
+  // incluido; al revés sería cobrar dos veces lo mismo.
+  const delMes = Math.max(0, limite - usadas);
+  const extras = await saldoExtras(userId);
+
   return {
-    permitido: usadas < limite,
-    restantes: Math.max(0, limite - usadas),
+    permitido: delMes + extras > 0,
+    restantes: delMes + extras,
     limite,
+    // Separadas para poder decir "12 del mes + 20 extra" en vez de un 32 que no
+    // explica de dónde sale.
+    delMes,
+    extras,
   };
 }

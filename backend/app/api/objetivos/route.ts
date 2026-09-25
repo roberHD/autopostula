@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { compilarPerfil } from "@/lib/compilar-perfil";
+import { premiarPerfilCompleto } from "@/lib/extras";
 
 // docs/objetivo-laboral.md §6: endpoint propio para el objetivo laboral,
 // separado de /api/perfil (que mezcla datos de contacto y no dispara nada).
@@ -97,6 +98,11 @@ export async function PUT(request: Request) {
     prisma.objetivoLaboral.createMany({ data: datos }),
     prisma.user.update({ where: { id: userId }, data: { objetivoConfirmado: true } }),
   ]);
+
+  // docs/estrategia-y-rediseno.md §7: con el objetivo confirmado puede que el
+  // perfil recién haya quedado listo. Es idempotente (se paga una sola vez) y
+  // best-effort: si falla, el objetivo queda guardado igual.
+  await premiarPerfilCompleto(userId).catch((err) => console.error("[extras] premio de perfil:", err));
 
   // datos ya viene ordenado por peso desc -- el primero es el principal.
   const principalNuevo = datos[0];

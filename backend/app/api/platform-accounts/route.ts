@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { asegurarPlataformasBase } from "@/lib/platforms";
 import { asegurarPlanesBase } from "@/lib/plans";
+import { premiarPerfilCompleto } from "@/lib/extras";
 
 export async function GET() {
   const session = await auth();
@@ -102,6 +103,12 @@ export async function POST(request: Request) {
     update: { activa: true },
     create: { userId, platformId, activa: true },
   });
+
+  // docs/estrategia-y-rediseno.md §7: el premio por dejar el perfil listo se
+  // revisa en los tres puntos donde puede quedar completo (CV, objetivo,
+  // portal). Es idempotente: se paga una sola vez, sin importar cuál fue el
+  // último paso. Best-effort -- si falla, no arruina la acción principal.
+  await premiarPerfilCompleto(userId).catch((err) => console.error("[extras] premio de perfil:", err));
 
   return NextResponse.json(cuenta);
 }

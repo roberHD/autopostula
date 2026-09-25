@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -14,7 +14,16 @@ export default function RegistroPage() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // docs/estrategia-y-rediseno.md §7: quién te invitó viaja en el enlace
+  // (?ref=). Se lee del navegador y no con useSearchParams para no obligar a
+  // envolver la página en un Suspense por un dato que ni se muestra.
+  const [ref, setRef] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    const codigo = new URLSearchParams(window.location.search).get("ref");
+    if (codigo) setRef(codigo);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +34,7 @@ export default function RegistroPage() {
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre, email, password }),
+        body: JSON.stringify({ nombre, email, password, ref }),
       });
 
       if (!res.ok) {
