@@ -1,11 +1,17 @@
 # Documentos de diseño de AutoPostula
 
-> Índice y estado del trabajo. **Actualizado: 2026-09-19.**
+> Índice y estado del trabajo. **Actualizado: 2026-09-24.**
 > Si vas a implementar algo, empieza por acá: dice qué está hecho, qué falta y en qué orden.
 
-> 🔴 **Antes que cualquier otra cosa: [`revision-2026-09-16.md`](revision-2026-09-16.md).** Una cuenta
-> nueva postula al 100% de las ofertas que ve (55 de 55 en la prueba), y varias cosas marcadas abajo
-> como implementadas no funcionan en producción. Su §6 dice en qué orden arreglarlo.
+> 🔴 **Antes que cualquier otra cosa: [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) §2.**
+> `main` y `rama-roberto` llevan una semana avanzando por separado: hay dos implementaciones
+> distintas de "¿supiste algo?", dos archivos con el mismo nombre y significados distintos, y una
+> migración que **rompe el próximo deploy** porque vuelve a crear un enum que ya existe en
+> producción. Nada nuevo hasta que las dos líneas sean una.
+
+> ✅ Lo que encontró la revisión del 16-09 está corregido y verificado en producción: una cuenta
+> nueva ya no postula al 100% de lo que ve, los límites se revisan antes de enviar y el motor
+> nuevo viene encendido de fábrica.
 
 ---
 
@@ -13,18 +19,19 @@
 
 | Documento | De qué trata | Estado |
 |---|---|---|
-| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ⚠️ Implementado, **apagado por defecto para cuentas nuevas** — revisión §1.4 |
-| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ⚠️ Implementado, **autocompletado caído en producción** — revisión §2.4 |
-| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ⚠️ Parcial — **`detalleAviso` no se guarda** — revisión §2.3 |
-| [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 Pendiente — §3 (capturar la corrección) ya está |
+| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ✅ Implementado y **encendido para todas las cuentas** desde `20260916000001` |
+| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ✅ Implementado; el catálogo volvió a responder (`/api/catalogo`) |
+| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ✅ Completo — `detalleAviso` se guarda desde `2026-09-17` |
+| [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 **2 de 8** — hechos §3 (capturar la corrección) y §6 (aprender de los patrones). El que paga es §5, bloqueado por la semilla de preguntas |
 | [`modo-solo-observar.md`](modo-solo-observar.md) | Escanear y cosechar sin postular. Destraba la recolección de corpus y es el modo "pruébalo antes de dejarlo actuar" para usuarios nuevos | ✅ **Implementado** |
 | [`verificacion-de-correo.md`](verificacion-de-correo.md) | Verificar el correo antes de dejar que la cuenta actúe (token de la extensión, checkout), no antes de dejarla mirar | ✅ **Implementado** |
-| [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Pendiente — ⚠️ verificado el 16-09: **son los 3 portales**, Computrabajo tampoco sincroniza (revisión §8.2) |
+| [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Casi — `ENTREVISTA`, `origen_estado` y "¿supiste algo?" están hechos **dos veces**, una en cada rama: ver `creditos-y-pagina-nueva.md` §2.3 |
 | [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente — verificado el 16-09: la parte A no está |
-| [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | 🔴 **Prioridad 1** |
-| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | ✅ Programada — los 10 pasos hechos; falta publicar la extensión y verificar a mano |
-| [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 💡 Propuesta — va después de la revisión del 16-09 |
-| [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | 🔨 Pendiente — decidido el 19-09 |
+| [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | ✅ Fase 1 cerrada y verificada en producción el 19-09 |
+| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | ✅ Hecho — falta que la Chrome Web Store apruebe la 2.13 (en revisión) |
+| [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 🔨 En ejecución — 3 de 13 (landing, Hoy, estado único de la extensión). Los créditos de su §3 pasaron a `creditos-y-pagina-nueva.md` |
+| [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) | Los créditos van sí o sí: el motor ya existe como `postulaciones_extra`. Reglas, devolución cuando la postulación no llegó, precios, y la fase nueva de la página (landing, precios, preguntas frecuentes, chequeo de CV público, medición). Incluye el plan para juntar las dos ramas | 🔴 **Prioridad 1** — decidido el 24-09 |
+| [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | ✅ Implementado el 19-09. **Flow ya aprobó la cuenta**; falta el SII y `FLOW_SANDBOX=false` |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -123,36 +130,25 @@ El rediseño llevó el costo de IA de **~US$3,40 a ~US$0,58 por usuario premium 
 
 ## Lo que sigue
 
-### 0. Revisión del 16-09 — [`revision-2026-09-16.md`](revision-2026-09-16.md)
+### 0. Juntar las dos líneas del repo — [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) §2
 
-Va antes que todo lo demás. Los pasos 1 a 4 de su §6 (sin perfil no se postula, cuentas nuevas en
-modo prueba, límites antes de enviar, motor nuevo para todos) salen juntos en la misma versión de la
-extensión, **antes de cualquier publicidad**.
+Va antes que cualquier otra cosa, y no por prolijidad: la migración
+`20260922120001_estado_real_y_descartes` vuelve a crear el enum `OrigenEstado` que `main` ya aplicó
+en producción, así que el próximo deploy de esa rama se cae con la base a medio migrar. El §2.3 de
+ese documento decide archivo por archivo cuál de las dos versiones queda.
 
-### 0b. Ráfagas — [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md)
+### 1. Créditos y la página nueva — [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md)
 
-Justo después de la Fase 1. Sus pasos 1 y 2 (la alarma que se reinicia y la ráfaga como máquina de
-estados) son bugs latentes de la búsqueda automática actual, no solo una función nueva. El permiso
-`power` obliga a publicar otra versión en la tienda: conviene que salga en la misma que la Fase 1.
+Los créditos están decididos y el motor ya existe con otro nombre (`postulaciones_extra`): libro
+mayor, paquetes, premios, compra por Flow y comprobante. Falta la devolución cuando la postulación
+no llegó (§3.3), verificar 10 postulaciones reales antes de abrir la venta (§3.6) y la fase nueva
+de la página: landing desplegada, precios en una URL propia, preguntas frecuentes, chequeo de CV
+público y alguna forma de medir (§4, §5). Su §6 tiene el orden completo.
 
-**Avance (2026-09-19):** los 10 pasos hechos — alarma que ya no se reinicia, ráfaga como máquina de
-estados persistida, disparadores reales con umbral de 3 h, `chrome.power` con tope de 25 min (el
-permiso ya está en el manifest), el registro de cada ráfaga en el backend (`Rafaga`,
-`/api/extension/rafaga`, purga a 90 días), y que la persona se entere: número en el ícono, línea en
-el popup y tarjeta del Inicio ("Última puesta al día: hoy 09:14"), y el botón "Ponerme al día ahora"
-(solo Premium, en el popup y en el panel), y la prueba de 5 postulaciones automáticas del plan
-gratis (una ráfaga de inmediato al activar la postulación, el contador en el popup y el panel, el corte
-en medio al llegar a 5, "Ver las 5" en el historial y el correo de fin de prueba) y que lo aprobado en
-"Por decidir" vaya primero en cada ráfaga y cuente en su resumen (se envía en todos los planes, no solo en
-Premium), y el recordatorio por correo cuando lleva 48 h sin ponerse al día (solo Premium, un correo cada
-72 h como máximo, con baja en un clic y sin iniciar sesión), y los textos: la landing, Premium, Ajustes, términos
-y privacidad ya no prometen "cada dos horas" ni "postula sola" sin condiciones. Falta subir la versión 2.13.0
-de la extensión con los textos de la ficha (listos en §5 del doc) y verificar a mano lo que necesita un Chrome real.
+### 2. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 
-### 1. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
-
-El paso 1 (§3, capturar `respuestaIa`/`fueEditada` de verdad) ya está — era chico y urgente,
-se hizo fuera de orden. Queda el resto, en orden:
+Dos de ocho. Lo que paga todo es el paso 6 (pre-respuestas), y la que lo destraba es la semilla del
+paso 3, que se escribe a mano.
 
 | # | Tarea | § | Depende de |
 |---|---|---|---|
@@ -162,34 +158,32 @@ se hizo fuera de orden. Queda el resto, en orden:
 | 4 | Clasificador de preguntas contra la semilla, con `ninguna` | §4.2 | 2, 3 |
 | 5 | `PreguntaCanonica` + `RespuestaGuardada` en el esquema | §10 | 3 |
 | 6 | Pantalla de pre-respuestas + reuso en el flujo de postulación | §5 | 4, 5 — **el pago de todo** |
-| 7 | Detección de patrones → `StyleRefinement` | §6 | 1 |
+| ~~7~~ | ~~Detección de patrones → `StyleRefinement`~~ | §6 | ✅ Hecho (`046bc8a`) |
 | 8 | Chequeo de coherencia | §7 | 5 |
 
-### 2. Lanzamiento
+### 3. Lanzamiento
 
 Fuera de los documentos de diseño, esto es lo que falta para publicar.
 
 | Tarea | Estado | Bloquea a |
 |---|---|---|
 | Revisión legal de privacidad y términos | ⏸ Con el abogado | Chrome Web Store |
-| Definir la política de devolución (`§7.2` de Términos, hoy en borrador), **ahora para pases** | ⏸ Con el abogado | Cobrar de verdad |
+| Definir la política de devolución (`§7.2` de Términos), **para pases y ahora también créditos** | ⏸ Con el abogado | Cobrar de verdad |
 | **Inicio de actividades en el SII** y cómo se emiten las boletas | ⚠️ Lo hace Roberto | Cobrar de verdad: desde 2025 toda pasarela lo exige |
-| Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ✅ Resuelto en `323f2a4` | Recuperación de contraseña real |
-| Cuenta de comercio Flow aprobada + `FLOW_SANDBOX=false` | ⚠️ Verificar — como **persona natural**, solo pagos únicos | Cobrar de verdad |
-| Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | 🔨 Pendiente | Cobrar de verdad: la suscripción actual no funciona sin empresa |
-| ~~Plan de Flow con el `urlCallback` del dominio propio~~ | Ya no aplica: sin suscripción no hay plan en Flow | — |
+| Cuenta de comercio Flow | ✅ **Aprobada** (24-09) | — |
+| `FLOW_SANDBOX=false` en producción | 🔨 Después del SII | Cobrar de verdad |
+| Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ✅ Resuelto en `323f2a4`; verificado en Vercel el 19-09 | Recuperación de contraseña real |
+| `CRON_SECRET` en producción | ✅ Puesto el 19-09 — las tres rutas responden 401 y el purgado a 90 días corre | Cumplir la promesa de borrado de la política |
+| Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | ✅ Programado; falta el SII | Cobrar de verdad |
+| Créditos ([`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md)) | 🔨 Motor listo; falta devolución, verificación y boleta | Cobrar por unidad |
 | Ficha y envío a la Chrome Web Store | ✅ Publicada | — |
-| Versión 2.13.0 de la extensión (ráfagas y permiso `power`) y textos nuevos de la ficha ([`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) §5) | 🔨 Falta subirla y pegar los textos | Que la landing y la tienda digan lo mismo |
+| Versión 2.13.0 de la extensión (ráfagas y permiso `power`) | 🔨 **En revisión** en la tienda; en el repo ya hay una 2.14 sin publicar | Que la landing y la tienda digan lo mismo |
+| Analítica del sitio | ❌ No existe | Saber si algo de esto sirve |
 
 > **Plazo legal real:** la **Ley 21.719** (protección de datos personales) entra en vigencia a
 > fines de 2026 y es bastante más exigente que la 19.628 — ver `preguntas-abogado.md` §B. Es la
 > única fecha límite dura detectada en toda la documentación; conviene que el abogado la tenga
 > presente al responder, no solo las preguntas bloqueantes de la Chrome Web Store.
-
-> **Resend:** confirmar en el panel de Vercel que `RESEND_FROM_EMAIL` esté seteado en producción
-> con el dominio verificado (`323f2a4` lo resolvió en el código: `lib/correo.ts` ya falla
-> ruidosamente si falta la variable, en vez de mandar correos que nadie recibe). No hay forma de
-> comprobar esto desde el repo — es un valor de entorno en Vercel.
 
 ---
 

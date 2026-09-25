@@ -9,6 +9,11 @@
 > de 30 y 90 días vía Flow, sin renovación automática** (ver §E y `pase-prepagado.md`). Operado
 > por persona natural.
 
+> ⚠️ **Cambio del 2026-09-24:** además de los pases, se decidió vender **créditos**: paquetes de
+> pago único (20 por $1.990, 50 por $3.990) donde **1 crédito = 1 postulación que llegó a la
+> empresa**, que **no vencen** y que también se regalan como premio por invitar a alguien. Las
+> preguntas están en §A3 y §E6. Ver `creditos-y-pagina-nueva.md`.
+
 > ⚠️ **Cambio del 2026-09-19:** los Términos publicados todavía describen una suscripción mensual
 > con renovación automática. Se van a reescribir para pases (`pase-prepagado.md` §8). Conviene que
 > el abogado revise §6 y §7 de los Términos **pensando en pases**, no en la suscripción.
@@ -42,6 +47,26 @@ con un pase vigente suma días al final. El servicio empieza a prestarse apenas 
 - ¿Hay obligación de **avisar antes del vencimiento**? El diseño avisa por correo 5 días antes, 1 día
   antes y al vencer.
 - ¿Qué redacción exacta conviene para todo lo anterior?
+
+### A3. Créditos prepagados
+
+**Cómo funciona:** paquetes de pago único —20 créditos por $1.990, 50 por $3.990—. Un crédito se
+descuenta solo cuando se envía una postulación y **solo después** de agotar el cupo del mes que ya
+venía con el plan. Si la postulación no llegó a la empresa, no se cobra; y si se cobró y después se
+supo que no llegó, se devuelve el crédito (no el dinero). **Los créditos no tienen vencimiento.**
+También se entregan gratis como premio: +10 por cada persona invitada que verifica su correo y +5,
+una sola vez, por dejar el perfil completo.
+
+- ¿Aplica el **art. 3° bis de la Ley 19.496** a un paquete de créditos? Si la persona ya gastó 3 de
+  20, ¿la devolución es a prorrata, total, o se entiende que ejerció el servicio?
+- **No vencen.** ¿Compromete eso a algo a futuro? Si más adelante se quisiera poner vencimiento,
+  ¿se puede aplicar solo a los créditos nuevos?
+- **Cuenta borrada con saldo.** Si alguien borra su cuenta con 40 créditos comprados sin usar,
+  ¿hay que devolver dinero, o basta con advertirlo de forma clara antes de borrar?
+- **Premios por invitación.** Entregar créditos con valor de mercado sin cobrarlos: ¿es una
+  promoción que necesita bases? ¿Tiene algún efecto tributario?
+- ¿Cómo debe quedar redactado en los Términos que **un crédito se consume solo si la postulación
+  llegó**, sin que eso se lea como una garantía de resultado (no se promete respuesta ni empleo)?
 
 ### A2. Cláusula de limitación de responsabilidad
 
@@ -163,8 +188,8 @@ Este es el riesgo estructural del producto y conviene entenderlo bien.
    por internet un servicio digital por suscripción o por pase? ¿Qué régimen tributario conviene?
    ¿Qué obligaciones mensuales y anuales trae (declaraciones, libros)?
 
-2. **Boleta.** Con inicio de actividades, ¿hay que emitir una boleta electrónica por **cada pase**
-   vendido a persona natural? ¿Sirve el sistema gratuito del SII venta por venta, o conviene un
+2. **Boleta.** Con inicio de actividades, ¿hay que emitir una boleta electrónica por **cada pase
+   o paquete de créditos** vendido a persona natural? ¿Sirve el sistema gratuito del SII venta por venta, o conviene un
    proveedor que se integre por API? ¿Flow emite algún documento que lo reemplace?
 
 3. **IVA.** Los precios ($3.990 y $9.990) se publican "impuestos incluidos". ¿Corresponde IVA a
@@ -181,6 +206,11 @@ Este es el riesgo estructural del producto y conviene entenderlo bien.
 
 5. **Renovación automática futura.** Cuando exista la SpA y se vuelva a cobrar con renovación
    automática, ¿qué exige la Ley 19.496 (consentimiento, avisos previos al cobro, cancelación)?
+
+6. **Créditos: cuándo nace el hecho gravado.** Un paquete de créditos se paga hoy y se consume de a
+   poco, quizás meses después, y puede no consumirse nunca. ¿El ingreso se reconoce al momento del
+   pago o a medida que se usan? ¿Cambia algo que **no tengan vencimiento**? ¿Y los créditos que se
+   regalan como premio (§A3), que tienen precio de lista pero no generan pago?
 
 ---
 
