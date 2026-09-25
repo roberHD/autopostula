@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       },
     });
 
-    // docs/estrategia-y-rediseno.md §7: el premio por dejar el perfil listo se
+    // docs/creditos-y-pagina-nueva.md §3: el premio por dejar el perfil listo se
     // revisa en los tres puntos donde puede quedar completo (CV, objetivo,
     // portal). Es idempotente: se paga una sola vez, sin importar cuál fue el
     // último paso. Best-effort -- si falla, no arruina la acción principal.

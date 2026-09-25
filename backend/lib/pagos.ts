@@ -23,7 +23,7 @@ export type ResultadoPago =
   // acredita un pase por un pago que no cuadra.
   | { estado: "ERROR"; motivo: string }
   | { estado: "DESCONOCIDO" }
-  // Un paquete de postulaciones extra (docs/estrategia-y-rediseno.md §7): no
+  // Un paquete de postulaciones extra (docs/creditos-y-pagina-nueva.md §3): no
   // hay pase ni vigencia, solo saldo.
   | { estado: "PAGADO"; nuevo: boolean; extras: number };
 

@@ -62,7 +62,7 @@ export async function GET() {
   const motivo = motivoInactivo({ modo, pausadaPorTi, cupoPermitido: cupo.permitido, portalesActivos });
 
   // Lo usado del mes sale de lo que queda DEL MES, no del total: desde que
-  // existen las postulaciones extra (docs/estrategia-y-rediseno.md §7) el total
+  // existen las postulaciones extra (docs/creditos-y-pagina-nueva.md §3) el total
   // puede ser mayor que el límite del plan, y esta resta daba negativo.
   const usadas =
     cupo.limite === null ? null : Math.max(0, cupo.limite - (cupo.delMes ?? cupo.restantes ?? 0));

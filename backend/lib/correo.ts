@@ -133,7 +133,7 @@ export function armarComprobantePase(datos: { pase: string; monto: number; desde
 }
 
 // El mismo comprobante, para un paquete de postulaciones extra
-// (docs/estrategia-y-rediseno.md §7). Tampoco es una boleta, por lo mismo.
+// (docs/creditos-y-pagina-nueva.md §3). Tampoco es una boleta, por lo mismo.
 export function armarComprobanteExtra(datos: { paquete: string; postulaciones: number; monto: number; saldo: number; flowOrder: string }) {
   return {
     subject: `Recibimos tu pago: ${datos.postulaciones} postulaciones extra`,

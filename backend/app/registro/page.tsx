@@ -14,7 +14,7 @@ export default function RegistroPage() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
-  // docs/estrategia-y-rediseno.md §7: quién te invitó viaja en el enlace
+  // docs/creditos-y-pagina-nueva.md §3: quién te invitó viaja en el enlace
   // (?ref=). Se lee del navegador y no con useSearchParams para no obligar a
   // envolver la página en un Suspense por un dato que ni se muestra.
   const [ref, setRef] = useState<string | null>(null);

@@ -20,7 +20,7 @@ type Datos = {
 const fecha = (iso: string) => new Date(iso).toLocaleDateString("es-CL", { day: "numeric", month: "short" });
 
 /**
- * Postulaciones extra y premios (docs/estrategia-y-rediseno.md §7).
+ * Postulaciones extra y premios (docs/creditos-y-pagina-nueva.md §3).
  *
  * Se usan DESPUÉS de las del plan, no vencen y se pueden ganar invitando o
  * dejando el perfil listo. Eso último es lo que se dice arriba de todo: quien

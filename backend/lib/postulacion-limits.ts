@@ -37,7 +37,7 @@ export async function obtenerEstadoPostulaciones(userId: string) {
     where: { userId, enviadaEn: { gte: inicioMes }, estadoActual: { not: "INCOMPLETA" } },
   });
 
-  // docs/estrategia-y-rediseno.md §7: las postulaciones extra (compradas o
+  // docs/creditos-y-pagina-nueva.md §3: las postulaciones extra (compradas o
   // ganadas) se gastan DESPUÉS de las del plan. Primero se usa lo que ya venía
   // incluido; al revés sería cobrar dos veces lo mismo.
   const delMes = Math.max(0, limite - usadas);

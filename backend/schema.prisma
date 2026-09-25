@@ -177,7 +177,7 @@ model User {
   // ninguno más.
   recordatorioRafagaEn DateTime? @map("recordatorio_rafaga_en")
   recordatoriosActivos Boolean   @default(true) @map("recordatorios_activos")
-  // ── Invitaciones (docs/estrategia-y-rediseno.md §7) ──
+  // ── Invitaciones (docs/creditos-y-pagina-nueva.md §3) ──
   // El código propio para invitar (se arma la primera vez que se pide) y quién
   // te invitó a ti. El premio se da cuando el invitado verifica su correo: sin
   // eso, una persona se regala postulaciones sola creando cuentas vacías.
@@ -781,7 +781,7 @@ model StyleRefinement {
 }
 
 // ─────────────────────────────────────────
-// Postulaciones extra (docs/estrategia-y-rediseno.md §7)
+// Postulaciones extra (docs/creditos-y-pagina-nueva.md §3)
 // ─────────────────────────────────────────
 // Un libro mayor, no un contador: cada movimiento queda escrito con su motivo
 // y el saldo es la suma. Así se puede responder "¿por qué tengo 43?" -- que es

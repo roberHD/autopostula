@@ -99,7 +99,7 @@ export async function PUT(request: Request) {
     prisma.user.update({ where: { id: userId }, data: { objetivoConfirmado: true } }),
   ]);
 
-  // docs/estrategia-y-rediseno.md §7: con el objetivo confirmado puede que el
+  // docs/creditos-y-pagina-nueva.md §3: con el objetivo confirmado puede que el
   // perfil recién haya quedado listo. Es idempotente (se paga una sola vez) y
   // best-effort: si falla, el objetivo queda guardado igual.
   await premiarPerfilCompleto(userId).catch((err) => console.error("[extras] premio de perfil:", err));

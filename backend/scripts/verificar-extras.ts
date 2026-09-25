@@ -1,5 +1,5 @@
 // Verificación de las postulaciones extra y los premios
-// (docs/estrategia-y-rediseno.md §7). Esto toca plata, así que se prueba
+// (docs/creditos-y-pagina-nueva.md §3). Esto toca plata, así que se prueba
 // contra la base de verdad, con cuentas de mentira que se borran al final:
 //   npx tsx scripts/verificar-extras.ts
 //

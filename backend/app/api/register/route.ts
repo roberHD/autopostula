@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // docs/estrategia-y-rediseno.md §7: quién te invitó. El premio no se paga
+  // docs/creditos-y-pagina-nueva.md §3: quién te invitó. El premio no se paga
   // acá -- se paga cuando esta cuenta verifica su correo, para que nadie se
   // regale postulaciones creando cuentas con direcciones inventadas.
   const invitadoPor = typeof ref === "string" && ref.trim()

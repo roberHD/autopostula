@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     data: { emailVerificado: new Date(), verifyToken: null, verifyTokenExpiry: null },
   });
 
-  // docs/estrategia-y-rediseno.md §7: recién ahora la cuenta es de una persona
+  // docs/creditos-y-pagina-nueva.md §3: recién ahora la cuenta es de una persona
   // con un correo real, así que recién ahora se paga el premio a quien la
   // invitó. Best-effort: si falla, la verificación vale igual.
   try {

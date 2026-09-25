@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
 /**
- * Postulaciones extra (docs/estrategia-y-rediseno.md §7).
+ * Postulaciones extra (docs/creditos-y-pagina-nueva.md §3).
  *
  * Se compran en paquetes o se ganan (invitando a alguien, dejando el perfil
  * listo) y se gastan DESPUÉS del cupo del mes: primero se usa lo que ya venía

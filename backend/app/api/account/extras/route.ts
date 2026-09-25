@@ -5,7 +5,7 @@ import { PAQUETES, PREMIOS, saldoExtras, obtenerCodigoInvitacion, premiarPerfilC
 import { getBaseUrl } from "@/lib/base-url";
 
 /**
- * Postulaciones extra y premios (docs/estrategia-y-rediseno.md §7).
+ * Postulaciones extra y premios (docs/creditos-y-pagina-nueva.md §3).
  *
  * Lo que necesita la sección "Postulaciones extra" de Tu plan: cuántas te
  * quedan, de dónde salieron, los paquetes que puedes comprar y tu enlace para

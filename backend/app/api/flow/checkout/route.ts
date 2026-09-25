@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  // docs/estrategia-y-rediseno.md §7: por la misma puerta se compran los pases
+  // docs/creditos-y-pagina-nueva.md §3: por la misma puerta se compran los pases
   // de Premium y los paquetes de postulaciones extra. Son pagos únicos de Flow
   // en los dos casos; lo que cambia es qué se acredita después (lib/pagos.ts).
   const { pase, paquete } = await request.json().catch(() => ({}));

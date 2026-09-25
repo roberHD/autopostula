@@ -186,7 +186,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // docs/estrategia-y-rediseno.md §7: si el cupo del mes ya estaba en cero,
+    // docs/creditos-y-pagina-nueva.md §3: si el cupo del mes ya estaba en cero,
     // esta postulación salió de las extra (compradas o ganadas) y se descuenta
     // una. Va después de crear la postulación, con su id: la clave del
     // movimiento es esa, así que reintentar el mismo POST no cobra dos veces.
