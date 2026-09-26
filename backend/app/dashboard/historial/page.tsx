@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Inbox, SearchX, Download, Lock } from "lucide-react";
-import { GRUPOS_ESTADO, colorEstado, fraseEstado } from "@/lib/estado-postulacion";
+import { GRUPOS_ESTADO, colorEstado, fraseEstado } from "@/lib/palabras-estado";
 import Cajon from "./Cajon";
 import SupisteAlgo from "./SupisteAlgo";
 

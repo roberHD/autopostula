@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAvisos } from "@/components/Avisos";
-import { OPCIONES_PERSONA, fraseEstado } from "@/lib/estado-postulacion";
+import { OPCIONES_PERSONA, fraseEstado } from "@/lib/palabras-estado";
 
 type Pendiente = { id: string; titulo: string; empresa: string | null; portal: string; enviadaEn: string };
 

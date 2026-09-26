@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { COLOR_ESTADO, PASO_ESTADO } from "@/lib/estado-postulacion";
+import { COLOR_ESTADO, PASO_ESTADO } from "@/lib/palabras-estado";
 
 type Detalle = {
   id: string;

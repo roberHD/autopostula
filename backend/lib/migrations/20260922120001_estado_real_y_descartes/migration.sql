@@ -2,17 +2,15 @@
 -- que un escaneo del portal nunca pise lo que contó la persona, y cuántas veces
 -- se le preguntó "¿supiste algo?".
 -- docs/estrategia-y-rediseno.md §5.2: las ofertas descartadas, con su razón.
-
--- CreateEnum
-CREATE TYPE "OrigenEstado" AS ENUM ('PORTAL', 'USUARIO', 'SISTEMA');
+--
+-- docs/creditos-y-pagina-nueva.md §2.2: el tipo "OrigenEstado" y las 3 columnas
+-- de "applications" NO van acá -- ya los creó 20260921120000_entrevista_y_origen_estado,
+-- que llegó antes a producción por otra rama. Repetirlos hace fallar el deploy
+-- con 42710/42701 ("ya existe"). Esta migración solo agrega lo que de verdad es
+-- nuevo: la columna "origen" en application_status_history y la tabla descartes.
 
 -- AlterTable
 ALTER TABLE "application_status_history" ADD COLUMN     "origen" "OrigenEstado";
-
--- AlterTable
-ALTER TABLE "applications" ADD COLUMN     "origen_estado" "OrigenEstado" NOT NULL DEFAULT 'PORTAL',
-ADD COLUMN     "ultima_consulta" TIMESTAMP(3),
-ADD COLUMN     "veces_consultada" INTEGER NOT NULL DEFAULT 0;
 
 -- CreateTable
 CREATE TABLE "descartes" (

@@ -13,7 +13,7 @@ async function getUserFromToken(request: Request) {
 // ENVIADO solo tiene sentido como "el portal confirma que sí llegó" para una
 // postulación que AutoPostula dejó INCOMPLETA (ver más abajo); para cualquier
 // otra es el estado con el que ya nació y no cambia nada.
-const ESTADOS_VALIDOS = ["ENVIADO", "VISTO", "EN_PROCESO", "FINALISTA", "FINALIZADO", "RECHAZADO"];
+const ESTADOS_VALIDOS = ["ENVIADO", "VISTO", "EN_PROCESO", "ENTREVISTA", "FINALISTA", "FINALIZADO", "RECHAZADO"];
 
 export async function PATCH(request: Request) {
   try {
@@ -66,6 +66,10 @@ export async function PATCH(request: Request) {
       );
     }
 
+    // Este endpoint es SIEMPRE el camino del portal: lo llama la extensión con
+    // el token de la cuenta, desde escanearMisPostulaciones(). Lo que reporte
+    // la persona entra por /api/applications/[id]/reporte con origen USUARIO.
+    //
     // docs/estado-real-de-postulaciones.md §6.5: el portal solo sube de rango,
     // nunca baja, y nunca pisa lo que contó la persona ("tuve entrevista" no se
     // revierte porque el portal siga diciendo "postulado"). La única excepción

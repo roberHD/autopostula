@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, ChevronDown, Check } from "lucide-react";
 
 // docs/revision-2026-09-16.md §2.1: la ubicación se declara con opciones
 // cerradas (región + comuna, de /api/regiones-comunas), nunca texto libre --
@@ -34,6 +34,10 @@ export default function UbicacionPicker({
   const [comunas, setComunas] = useState<Comuna[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busquedaComuna, setBusquedaComuna] = useState("");
+  // La lista arrancaba siempre desplegada y no habia forma de cerrarla: 170px
+  // de comunas empujando el resto del paso, incluido el boton de continuar.
+  const [listaAbierta, setListaAbierta] = useState(false);
+  const cajaComunasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/regiones-comunas")
@@ -45,6 +49,29 @@ export default function UbicacionPicker({
       .catch(() => {})
       .finally(() => setCargando(false));
   }, []);
+
+  // Cerrar con Escape y al hacer clic fuera: es lo que ya espera cualquiera
+  // de un desplegable, mas alla del boton explicito.
+  useEffect(() => {
+    if (!listaAbierta) return;
+
+    function alTeclear(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setListaAbierta(false);
+      }
+    }
+    function alClicar(e: MouseEvent) {
+      if (!cajaComunasRef.current?.contains(e.target as Node)) setListaAbierta(false);
+    }
+
+    document.addEventListener("keydown", alTeclear, true);
+    document.addEventListener("mousedown", alClicar);
+    return () => {
+      document.removeEventListener("keydown", alTeclear, true);
+      document.removeEventListener("mousedown", alClicar);
+    };
+  }, [listaAbierta]);
 
   function alternarRegion(codigo: string) {
     const yaEsta = valor.regiones.includes(codigo);
@@ -136,22 +163,42 @@ export default function UbicacionPicker({
                   ))}
                 </div>
               )}
-              <input
-                className="ap-input"
-                placeholder="Buscar comuna…"
-                value={busquedaComuna}
-                onChange={(e) => setBusquedaComuna(e.target.value)}
-                style={{ marginBottom: 8 }}
-              />
-              <div
-                style={{
-                  maxHeight: 170,
-                  overflowY: "auto",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius)",
-                  padding: 4,
-                }}
-              >
+              <div ref={cajaComunasRef} style={{ position: "relative" }}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    className="ap-input"
+                    placeholder="Buscar comuna…"
+                    value={busquedaComuna}
+                    onChange={(e) => {
+                      setBusquedaComuna(e.target.value);
+                      setListaAbierta(true); // escribir siempre muestra los resultados
+                    }}
+                    onFocus={() => setListaAbierta(true)}
+                  />
+                  <button
+                    type="button"
+                    className="ap-comunas__toggle"
+                    onClick={() => setListaAbierta((a) => !a)}
+                    aria-expanded={listaAbierta}
+                    aria-label={listaAbierta ? "Cerrar la lista de comunas" : "Ver la lista de comunas"}
+                    title={listaAbierta ? "Cerrar" : "Ver comunas"}
+                  >
+                    {listaAbierta ? <X size={15} /> : <ChevronDown size={15} />}
+                  </button>
+                </div>
+
+                {listaAbierta && (
+                <div
+                  style={{
+                    maxHeight: 170,
+                    overflowY: "auto",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius)",
+                    padding: 4,
+                    marginTop: 8,
+                    background: "var(--bg-elevated)",
+                  }}
+                >
                 {comunasFiltradas.slice(0, 80).map((c) => {
                   const elegida = valor.comunas.some((v) => v.toLowerCase() === c.nombre.toLowerCase());
                   return (
@@ -171,12 +218,25 @@ export default function UbicacionPicker({
                         fontWeight: elegida ? 700 : undefined,
                       }}
                     >
+                      {elegida && <Check size={12} style={{ marginRight: 5, verticalAlign: "-1px" }} />}
                       {c.nombre}
                     </button>
                   );
                 })}
                 {comunasFiltradas.length === 0 && (
                   <p style={{ fontSize: 12, color: "var(--text-muted)", padding: 7 }}>Sin resultados</p>
+                )}
+                </div>
+                )}
+
+                {listaAbierta && (
+                  <button
+                    type="button"
+                    className="ap-comunas__listo"
+                    onClick={() => setListaAbierta(false)}
+                  >
+                    Listo{valor.comunas.length > 0 ? ` — ${valor.comunas.length} elegida${valor.comunas.length > 1 ? "s" : ""}` : ""}
+                  </button>
                 )}
               </div>
             </div>

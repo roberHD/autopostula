@@ -5,17 +5,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  House,
-  FileText,
-  UserRound,
-  Globe,
-  Sparkles,
-  Settings,
-  Menu,
-  X,
-  Filter,
   Crown,
+  FileText,
+  Filter,
+  Globe,
+  House,
   Inbox,
+  Menu,
+  Settings,
+  Sparkles,
+  UserRound,
+  X,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { Marca } from "@/components/Marca";

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { portalSigueEstado, PORTALES_CON_SEGUIMIENTO } from "@/lib/platforms";
 import { limpiarTitulo } from "@/lib/text";
 import { formatearRazon, esRazonPositiva } from "@/lib/formatear-razon";
 import { filtroSinNoticias } from "@/lib/estado-real";
@@ -76,6 +77,7 @@ export async function GET() {
       where: { userId },
       select: {
         estadoActual: true,
+        origenEstado: true,
         enviadaEn: true,
         platformAccount: { select: { platform: { select: { nombre: true } } } },
       },
@@ -137,6 +139,75 @@ export async function GET() {
   const noEnviadas = todas.filter((a) => a.estadoActual === "INCOMPLETA").length;
   const ultimaNoEnviada = recientes.find((a) => a.estadoActual === "INCOMPLETA") ?? null;
   const vencenManana = porDecidir.filter((d) => d.venceEn && d.venceEn <= manana).length;
+
+  // ── Sobre qué se sabe y sobre qué no (docs/estado-real-de-postulaciones.md §4 y §7) ──
+  const total = todas.length;
+  // §3.1 (docs/revision-2026-09-16.md): INCOMPLETA no es "una empresa
+  // respondió" -- es una postulación que se quedó a medias y nunca llegó.
+  // Antes el filtro era "distinto de ENVIADO", que las contaba: 7 INCOMPLETA
+  // de 46 daban un "15% de respuesta" que en realidad eran cero respuestas
+  // (0 vistas, 0 en proceso, 0 finalistas en el mismo panel). Tampoco cuentan
+  // en el denominador: no son postulaciones que una empresa haya podido
+  // responder.
+  const enviadasDeVerdad = todas.filter((a) => a.estadoActual !== "INCOMPLETA");
+  const conRespuesta = enviadasDeVerdad.filter((a) => a.estadoActual !== "ENVIADO").length;
+
+  // docs/estado-real-de-postulaciones.md §4. La tasa de respuesta se calculaba
+  // sobre TODAS las postulaciones, pero solo Computrabajo sincroniza estado:
+  // lo de Laborum y Trabajando queda en ENVIADO para siempre. Meterlas en el
+  // denominador garantiza un porcentaje bajo aunque a la persona le esté yendo
+  // bien -- el caso que origino esto fue "16% y 0 finalistas" con cuatro
+  // entrevistas coordinadas por correo.
+  //
+  // Un numero equivocado es peor que ninguno, asi que el porcentaje deja de
+  // ser la metrica destacada. En su lugar va algo accionable (cuantas se
+  // movieron) y la cobertura, para que se vea sobre que se sabe y sobre que no.
+  const conSeguimiento = enviadasDeVerdad.filter((a) => portalSigueEstado(a.platformAccount.platform.nombre));
+  const sinSeguimiento = enviadasDeVerdad.length - conSeguimiento.length;
+
+  const portalesSinSeguimiento = [
+    ...new Set(
+      enviadasDeVerdad
+        .map((a) => a.platformAccount.platform.nombre)
+        .filter((n) => !portalSigueEstado(n))
+    ),
+  ];
+
+  // §7: la tasa se calcula solo sobre las postulaciones de las que se sabe
+  // algo de verdad -- un portal que reporta, o la persona que ya respondio.
+  // Nunca sobre el total, que incluye las que nadie miro nunca. Viaja junto a
+  // su denominador: quien la muestre tiene que decir sobre cuantas la calculo
+  // (criterio de aceptacion 7).
+  const conInfoReal = enviadasDeVerdad.filter(
+    (a) => portalSigueEstado(a.platformAccount.platform.nombre) || a.origenEstado === "USUARIO"
+  );
+  const tasaRespuesta = conInfoReal.length
+    ? Math.round((conInfoReal.filter((a) => a.estadoActual !== "ENVIADO").length / conInfoReal.length) * 100)
+    : 0;
+
+  // §7 -- el desglose honesto. Es una particion: cada postulacion cae en
+  // exactamente un grupo y la suma da el total, para que nadie tenga que
+  // adivinar que pasa con las que faltan.
+  const entrevistas = enviadasDeVerdad.filter((a) => a.estadoActual === "ENTREVISTA").length;
+  const conMovimientoSinEntrevistas = enviadasDeVerdad.filter(
+    (a) => a.estadoActual !== "ENVIADO" && a.estadoActual !== "ENTREVISTA"
+  ).length;
+  // Quietas en ENVIADO. La diferencia entre las dos filas siguientes es si se
+  // sabe que no paso nada, o si simplemente no hay forma de saberlo:
+  const quietas = enviadasDeVerdad.filter((a) => a.estadoActual === "ENVIADO");
+  //   - el portal las sigue y dice que no hubo novedad
+  const sinNovedad = quietas.filter((a) => portalSigueEstado(a.platformAccount.platform.nombre)).length;
+  //   - nadie las puede mirar: solo la persona puede contar que paso (§6)
+  const esperandoQueCuentes = quietas.length - sinNovedad;
+  const incompletas = total - enviadasDeVerdad.length;
+
+  const desglose = [
+    { etiqueta: "Sin novedad", cantidad: sinNovedad, nota: "el portal dice que no ha pasado nada" },
+    { etiqueta: "Esperando que nos cuentes", cantidad: esperandoQueCuentes, nota: "nadie nos avisa: solo tú puedes saberlo", accionable: true },
+    { etiqueta: "Con movimiento", cantidad: conMovimientoSinEntrevistas, nota: "alguien las miró o avanzaron" },
+    { etiqueta: "Entrevistas", cantidad: entrevistas, nota: "lo que de verdad importa" },
+    { etiqueta: "Quedaron a medias", cantidad: incompletas, nota: "no llegaron a la empresa" },
+  ].filter((f) => f.cantidad > 0);
 
   // ── Cifras del mes ────────────────────────────────────────────────
   const enviadasMes = todas.filter((a) => a.enviadaEn >= inicioMes && a.estadoActual !== "INCOMPLETA").length;
@@ -250,6 +321,17 @@ export async function GET() {
     },
     hechos: hechos.slice(0, 6),
     busqueda,
+    // docs/creditos-y-pagina-nueva.md §2.3: el desglose honesto de main sobre
+    // qué se sabe y qué no (docs/estado-real-de-postulaciones.md §4 y §7).
+    cobertura: {
+      conSeguimiento: conSeguimiento.length,
+      sinSeguimiento,
+      portalesSinSeguimiento,
+      portalesConSeguimiento: PORTALES_CON_SEGUIMIENTO,
+    },
+    tasaRespuesta,
+    tasaSobre: conInfoReal.length,
+    desglose,
     perfilEntrenado: styleProfile?.confianzaPorcentaje ?? 0,
     portales: cuentas.map((c) => ({ nombre: c.platform.nombre, activa: c.activa })),
     actividad,

@@ -37,10 +37,22 @@ export async function GET() {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  const comunas = LISTA_LIMPIEZA_CL.filter((t) => t.tipo === "comuna").map((t: any) => ({
-    nombre: tituloCaso(t.termino),
-    region: t.region,
-  }));
+  // LISTA_LIMPIEZA_CL trae cada comuna dos veces, con tilde y sin ella
+  // ("conchalí" y "conchali"): eso es correcto para el parser de títulos, que
+  // tiene que reconocer las dos formas como las escribe la gente. Pero en un
+  // selector visible se ven como dos comunas distintas -- son 83 pares sobre
+  // 437 entradas. Se deja una sola por comuna, prefiriendo la acentuada.
+  const porComuna = new Map<string, { nombre: string; region: string }>();
+  for (const t of LISTA_LIMPIEZA_CL.filter((x) => x.tipo === "comuna") as any[]) {
+    const clave = `${t.region}|${t.termino.normalize("NFD").replace(/[̀-ͯ]/g, "")}`;
+    const yaEsta = porComuna.get(clave);
+    // La variante con tilde cambia al quitarle los diacríticos; la otra no.
+    const tieneTilde = t.termino.normalize("NFD").replace(/[̀-ͯ]/g, "") !== t.termino;
+    if (!yaEsta || tieneTilde) {
+      porComuna.set(clave, { nombre: tituloCaso(t.termino), region: t.region });
+    }
+  }
+  const comunas = [...porComuna.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 
   const regiones = Object.entries(NOMBRE_REGION).map(([codigo, nombre]) => ({ codigo, nombre }));
 

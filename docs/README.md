@@ -1,17 +1,23 @@
 # Documentos de diseño de AutoPostula
 
-> Índice y estado del trabajo. **Actualizado: 2026-09-24.**
+> Índice y estado del trabajo. **Actualizado: 2026-09-26.**
 > Si vas a implementar algo, empieza por acá: dice qué está hecho, qué falta y en qué orden.
 
-> 🔴 **Antes que cualquier otra cosa: [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) §2.**
-> `main` y `rama-roberto` llevan una semana avanzando por separado: hay dos implementaciones
-> distintas de "¿supiste algo?", dos archivos con el mismo nombre y significados distintos, y una
-> migración que **rompe el próximo deploy** porque vuelve a crear un enum que ya existe en
-> producción. Nada nuevo hasta que las dos líneas sean una.
+> ✅ **`main` y `rama-roberto` ya son una sola línea** ([`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md)
+> §2): las dos implementaciones de "¿supiste algo?" se unificaron en una (vive en Postulaciones,
+> `lib/estado-real.ts` + `lib/palabras-estado.ts`), y la migración que repetía un enum ya aplicado en
+> producción quedó corregida antes de tocar el deploy.
 
-> ✅ Lo que encontró la revisión del 16-09 está corregido y verificado en producción: una cuenta
-> nueva ya no postula al 100% de lo que ve, los límites se revisan antes de enviar y el motor
-> nuevo viene encendido de fábrica.
+> ⏳ **Lo que queda de [`revision-2026-09-16.md`](revision-2026-09-16.md) no es código.** Sus 25
+> hallazgos están implementados (verificado el 22-09 contra el código, sección por sección). Faltan
+> dos cosas que no se pueden cerrar desde el editor:
+>
+> 1. **Importar el catálogo de ocupaciones en la base de producción** (`scripts/importar-catalogo.ts`).
+>    El §2.4 ya no lee un JSON gitignored sino `TituloCanonico` con `origen=CATALOGO_OFICIAL`, pero si
+>    esas filas no están en Vercel, el autocompletado de "¿Qué buscas?" sigue vacío y los objetivos se
+>    guardan sin CIUO.
+> 2. **Repetir el Apéndice A con la versión publicada en la tienda** — es el criterio de aceptación
+>    de la revisión completa (§7), y se hace a mano con la extensión instalada.
 
 ---
 
@@ -19,19 +25,19 @@
 
 | Documento | De qué trata | Estado |
 |---|---|---|
-| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ✅ Implementado y **encendido para todas las cuentas** desde `20260916000001` |
-| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ✅ Implementado; el catálogo volvió a responder (`/api/catalogo`) |
-| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ✅ Completo — `detalleAviso` se guarda desde `2026-09-17` |
-| [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | 🔨 **2 de 8** — hechos §3 (capturar la corrección) y §6 (aprender de los patrones). El que paga es §5, bloqueado por la semilla de preguntas |
+| [`rediseno-filtrado-ofertas.md`](rediseno-filtrado-ofertas.md) | El rediseño completo del filtrado: perfil compilado, scorer local, catálogo CIUO, triaje, banda gris | ✅ **Implementado y encendido** — `usarScorerLocal` pasó a `@default(true)` (revisión §1.4) |
+| [`objetivo-laboral.md`](objetivo-laboral.md) | El objetivo deja de inferirse del CV y pasa a declararlo la persona | ⚠️ Implementado — el autocompletado ya lee de `TituloCanonico` en vez de un JSON gitignored (revisión §2.4). **Falta importar el catálogo en la base de producción** o sigue vacío |
+| [`visibilidad-y-etapa2.md`](visibilidad-y-etapa2.md) | Ver por qué se filtra, leer el aviso de las grises, enriquecer la tarjeta de decisión | ✅ **Implementado** — `detalleAviso` se valida y se guarda (revisión §2.3) |
+| [`banco-de-preguntas.md`](banco-de-preguntas.md) | Las preguntas de los formularios como activo: pre-respuestas del usuario, aprender de sus correcciones, coherencia entre postulaciones | ⚠️ **Pasos 1 y 7** — capturar `respuestaIa`/`fueEditada` (§3) y aprender de las correcciones (§6): `StyleRefinement` quedó cableado y el ajuste fino pregunta cuando detecta un patrón. Faltan el 2 (normalizar preguntas), el 5 (`PreguntaCanonica`/`RespuestaGuardada`), el 6 (pre-respuestas) y el 8 (coherencia). El **paso 3, la semilla de ~20 preguntas, lo escribe Roberto** y bloquea al 4 |
 | [`modo-solo-observar.md`](modo-solo-observar.md) | Escanear y cosechar sin postular. Destraba la recolección de corpus y es el modo "pruébalo antes de dejarlo actuar" para usuarios nuevos | ✅ **Implementado** |
 | [`verificacion-de-correo.md`](verificacion-de-correo.md) | Verificar el correo antes de dejar que la cuenta actúe (token de la extensión, checkout), no antes de dejarla mirar | ✅ **Implementado** |
-| [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | 🔨 Casi — `ENTREVISTA`, `origen_estado` y "¿supiste algo?" están hechos **dos veces**, una en cada rama: ver `creditos-y-pagina-nueva.md` §2.3 |
-| [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | 🔨 Pendiente — verificado el 16-09: la parte A no está |
-| [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | ✅ Fase 1 cerrada y verificada en producción el 19-09 |
-| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | ✅ Hecho — falta que la Chrome Web Store apruebe la 2.13 (en revisión) |
+| [`estado-real-de-postulaciones.md`](estado-real-de-postulaciones.md) | Las métricas del dashboard están mal: 2 de 3 portales no rastrean estado y lo importante pasa por correo. La persona como fuente de verdad | ⚠️ **5 de 7 pasos** — hechos 1, 2, 3, 4 y 7: métrica honesta con cobertura declarada, estado `ENTREVISTA`, la regla de que el portal nunca pisa lo que reportó la persona, y la pantalla «¿Supiste algo?» (ya unificada, `creditos-y-pagina-nueva.md` §2.3). Faltan los pasos 5 y 6 (escaneo de estado en Laborum y Trabajando), que **necesitan selectores verificados contra el sitio real** |
+| [`celular-y-escritorio.md`](celular-y-escritorio.md) | La extensión no corre en teléfonos y el 98,9% del tráfico llega por ahí: que el registro móvil no choque contra un muro, código de enlace, y qué puede hacer el celular solo | ⚠️ Parcial — la parte A está (el onboarding móvil ya no choca contra el paso de la extensión, §3.2/§3.3); falta el resto |
+| [`revision-2026-09-16.md`](revision-2026-09-16.md) | Prueba integral: sitio, panel, cuenta nueva de punta a punta y extensión en los 3 portales. Postula a todo sin perfil, ubicación inferida y mal leída, límites que se revisan después de enviar, panel que no cuadra | ✅ Implementada — los 25 hallazgos, verificados el 22-09 contra el código. Falta importar el catálogo en producción (§2.4) y repetir el Apéndice A con la versión de la tienda (§7) |
+| [`rafagas-y-ponerse-al-dia.md`](rafagas-y-ponerse-al-dia.md) | La búsqueda automática exige el computador prendido todo el día y un notebook se suspende. Pasa a ráfagas: se pone al día sola al abrir Chrome o despertar, sin suspenderse a la mitad. Incluye 2 bugs latentes de la alarma actual y por qué se descartó la nube | ✅ Hecho — los 10 pasos hechos; falta que la Chrome Web Store apruebe la 2.13 (en revisión) |
 | [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 🔨 En ejecución — 3 de 13 (landing, Hoy, estado único de la extensión). Los créditos de su §3 pasaron a `creditos-y-pagina-nueva.md` |
-| [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) | Los créditos van sí o sí: el motor ya existe como `postulaciones_extra`. Reglas, devolución cuando la postulación no llegó, precios, y la fase nueva de la página (landing, precios, preguntas frecuentes, chequeo de CV público, medición). Incluye el plan para juntar las dos ramas | 🔴 **Prioridad 1** — decidido el 24-09 |
-| [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | ✅ Implementado el 19-09. **Flow ya aprobó la cuenta**; falta el SII y `FLOW_SANDBOX=false` |
+| [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) | Los créditos van sí o sí: el motor ya existe como `postulaciones_extra`. Reglas, devolución cuando la postulación no llegó, precios, y la fase nueva de la página (landing, precios, preguntas frecuentes, chequeo de CV público, medición). Incluye el plan para juntar las dos ramas | 🔴 **Prioridad 1** — decidido el 24-09. El **paso 0** (juntar las ramas) ya está hecho; quedan los pasos 1 a 9 |
+| [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | ✅ **Implementado** — los 7 pasos programables del §9, verificados el 24-09: `obtenerPlanVigente`, esquema, checkout/confirmación/retorno, `acreditarPago` idempotente, ruta de cancelar retirada, cron de avisos y comprobante por correo. Falta el **paso 0** (inicio de actividades y boletas), que es de Roberto con el contador y bloquea cobrar de verdad, no programar |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |

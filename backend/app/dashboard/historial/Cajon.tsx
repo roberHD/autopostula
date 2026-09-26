@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ExternalLink, X } from "lucide-react";
 import { SkelFilas } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
-import { colorEstado, fraseEstado, OPCIONES_PERSONA, PASO_ESTADO, QUIEN_LO_DIJO } from "@/lib/estado-postulacion";
+import { colorEstado, fraseEstado, OPCIONES_PERSONA, PASO_ESTADO, QUIEN_LO_DIJO } from "@/lib/palabras-estado";
 
 type Detalle = {
   id: string;

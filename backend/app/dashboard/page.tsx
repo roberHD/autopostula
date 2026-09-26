@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { Ban, Check, CircleCheck, Globe, Inbox, Sparkles, Target, TriangleAlert } from "lucide-react";
+import { Ban, Check, CircleCheck, Globe, Inbox, Info, Sparkles, Target, TriangleAlert } from "lucide-react";
 import { SkelStats, SkelGrafico, SkelFilas } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
 import {
@@ -49,6 +49,15 @@ type Resumen = {
     jornada: string | null;
     modalidad: string | null;
     renta: string | null;
+  };
+  // docs/creditos-y-pagina-nueva.md §2.3: el desglose honesto de main sobre
+  // qué se sabe y qué no (docs/estado-real-de-postulaciones.md §4 y §7).
+  desglose: { etiqueta: string; cantidad: number; nota: string; accionable?: boolean }[];
+  cobertura: {
+    conSeguimiento: number;
+    sinSeguimiento: number;
+    portalesSinSeguimiento: string[];
+    portalesConSeguimiento: readonly string[];
   };
   perfilEntrenado: number;
   portales: { nombre: string; activa: boolean }[];
@@ -429,6 +438,46 @@ export default function HoyPage() {
           </p>
         </div>
       </div>
+
+      {/* Sobre qué se sabe y sobre qué no (docs/estado-real-de-postulaciones.md
+          §4 y §7): reemplaza al porcentaje de respuesta, que mezclaba postulaciones
+          reales con las que ningún portal reporta. Solo se muestra si hay algo que decir. */}
+      {(datos.desglose.length > 0 || datos.cobertura.sinSeguimiento > 0) && (
+        <div className="ap-card ap-animate-in" style={{ padding: 20 }}>
+          <p className="ap-bloque-t">Sobre qué se sabe</p>
+          {datos.desglose.length > 0 && (
+            <ul className="ap-desglose">
+              {datos.desglose.map((f) => (
+                <li key={f.etiqueta} className={"ap-desglose__fila" + (f.accionable ? " ap-desglose__fila--accion" : "")}>
+                  <span className="ap-desglose__n ap-tnum">{f.cantidad}</span>
+                  <span className="ap-desglose__txt">
+                    <b>{f.etiqueta}</b>
+                    <i>{f.nota}</i>
+                  </span>
+                  {f.accionable && (
+                    <Link href="/dashboard/historial" className="ap-desglose__cta">
+                      Contarles
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {datos.cobertura.sinSeguimiento > 0 && (
+            <p className="ap-cobertura">
+              <Info size={13} />
+              <span>
+                Esto sale de lo que reportan los portales.{" "}
+                <b>{datos.cobertura.portalesSinSeguimiento.join(" y ")}</b>{" "}
+                {datos.cobertura.portalesSinSeguimiento.length > 1 ? "no avisan" : "no avisa"} cuando algo
+                cambia, así que {datos.cobertura.sinSeguimiento} de tus {datos.cobertura.sinSeguimiento + datos.cobertura.conSeguimiento}{" "}
+                postulaciones se quedan en «Enviada» aunque hayan avanzado. Lo que te escriban por
+                correo o teléfono tampoco se ve acá.
+              </span>
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Lo último que hizo · lo que buscas · tus portales */}
       <div className="ap-fila-2 ap-split--parejo" style={{ marginBottom: 0 }}>

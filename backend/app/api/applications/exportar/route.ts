@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { usuarioTieneAnaliticaAvanzada } from "@/lib/plan-beneficios";
-import { fraseEstado } from "@/lib/estado-postulacion";
+import { fraseEstado } from "@/lib/palabras-estado";
 
 // Escapa comillas y envuelve en comillas solo si el valor las necesita (tiene
 // coma, comilla o salto de línea) -- así un título o empresa con coma no

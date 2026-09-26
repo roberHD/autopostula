@@ -42,6 +42,8 @@ type Reconocedor = {
   onresult: ((e: EventoResultado) => void) | null;
   onerror: ((e: { error: string }) => void) | null;
   onend: (() => void) | null;
+  onspeechstart: (() => void) | null;
+  onaudiostart: (() => void) | null;
 };
 
 function getConstructor(): (new () => Reconocedor) | null {
@@ -115,6 +117,11 @@ export function usarDictado(
     baseRef.current = previo ? previo.replace(/\s+$/, "") + " " : "";
     finalRef.current = "";
 
+    // Rastro en consola para poder ver, si algo falla, hasta que punto llego:
+    // abrio el audio, oyo voz, pero no transcribio.
+    rec.onaudiostart = () => console.debug("[dictado] capturando audio");
+    rec.onspeechstart = () => console.debug("[dictado] voz detectada");
+
     rec.onresult = (e) => {
       let parcial = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -128,14 +135,18 @@ export function usarDictado(
 
     rec.onerror = (e) => {
       setEscuchando(false);
-      if (e.error === "no-speech" || e.error === "aborted") return;
+      // "aborted" es lo que pasa al apretar detener: no es una falla.
+      if (e.error === "aborted") return;
       const mensajes: Record<string, string> = {
         "not-allowed": "Tienes que darle permiso al micrófono desde el candado de la barra de direcciones.",
-        "service-not-allowed": "El navegador bloqueó el micrófono para este sitio.",
-        "audio-capture": "No encontramos un micrófono conectado.",
-        network: "El dictado necesita conexión a internet.",
+        "service-not-allowed": "El navegador bloqueó el reconocimiento de voz para este sitio.",
+        "audio-capture": "No encontramos un micrófono conectado. Revisa el dispositivo de entrada de tu sistema.",
+        network: "El dictado no pudo conectarse al servicio de voz. Revisa tu internet, VPN o firewall.",
+        // Antes esto se descartaba en silencio, y el botón se apagaba solo sin
+        // que la persona supiera por qué no aparecía texto.
+        "no-speech": "No te escuchamos. Revisa que el micrófono que usa el navegador sea el correcto.",
       };
-      onErrorRef.current?.(mensajes[e.error] ?? "No pudimos escucharte — vuelve a intentar.");
+      onErrorRef.current?.(mensajes[e.error] ?? `No pudimos escucharte (${e.error}).`);
     };
 
     // El motor se corta solo tras un silencio largo; hay que reflejarlo en la
