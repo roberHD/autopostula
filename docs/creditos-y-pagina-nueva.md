@@ -48,8 +48,11 @@ el nombre (§4.5) y la boleta (§8).
 
 ### 1.2 Lo que cambió afuera
 
-- **Flow está aprobado.** Queda el inicio de actividades en el SII y poner `FLOW_SANDBOX=false`.
-  Hasta ese día no entra un peso, por muy terminado que esté el código.
+- **Flow está aprobado y el inicio de actividades está hecho** (28-09-2026, folio 17252490):
+  primera categoría, **afecto a IVA**, segmento micro empresa, con los giros `631200` (portales web)
+  y `631100` (procesamiento de datos y hospedaje). Queda poner `FLOW_SANDBOX=false`, elegir el
+  régimen tributario, habilitarse para emitir boletas electrónicas y sacar la patente municipal.
+  Que sea afecto a IVA confirma los números de §3.5: de un pase de $3.990, $637 son IVA.
 - **`CRON_SECRET` quedó configurado el 19-09.** Los tres crons responden 401 y el purgado a 90
   días corre todos los días a las 7:00 UTC. Era una promesa publicada que no se estaba cumpliendo.
 - **La extensión 2.13 está en revisión** en la Chrome Web Store, con la justificación del permiso
@@ -302,7 +305,7 @@ Dos cosas, las dos chicas:
 | **1** | Desplegar la landing nueva + precios + preguntas frecuentes | §4.1, §4.2 | 0 |
 | **2** | Verificar 10 postulaciones reales contra los portales | §3.6 | 0 |
 | **3** | Devolución del crédito y movimientos visibles | §3.3, §4.4 | 0 |
-| 4 | Inicio de actividades SII + `FLOW_SANDBOX=false` + boleta | §8 | Lo hace Roberto |
+| 4 | ~~Inicio de actividades SII~~ ✅ · régimen tributario, boleta electrónica y `FLOW_SANDBOX=false` | §8 | Lo hace Roberto |
 | 5 | Abrir la venta de paquetes | §3 | 2, 3, 4 |
 | 6 | Analítica y pantalla de admin | §5 | 1 |
 | 7 | Chequeo de CV público | §4.3 | 1 |

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { objetivosPermitenDirectivo } from "@/lib/nivel-cargo";
 import { estadoExtension } from "@/lib/estado-extension";
+import { AMPLITUD_POR_DEFECTO, esAmplitud, rolesPorAmplitud } from "@/lib/amplitud";
+import { requisitosDelCandidato } from "@/lib/requisitos-cv";
 
 // Mismo patrón de auth por token que /api/ai/analizar-oferta y compañía —
 // esta ruta la usa la extensión (Authorization: Bearer <apiToken>), nunca
@@ -56,10 +58,39 @@ export async function GET(request: Request) {
   // Scorer local (docs/rediseno-filtrado-ofertas.md §6) -- detrás de un flag
   // que empieza apagado para todos (§13). Sin perfilCompilado no hay nada que
   // puntuar, así que usarScorerLocal nunca se activa solo sin uno.
+  // docs/amplitud-de-busqueda.md §4 y §5: la amplitud se resuelve acá, en cada
+  // consulta, por la misma razón que nivelDirectivo (§2.7) -- es una consulta
+  // determinista al catálogo CIUO, no una llamada de IA. Así cambiar el
+  // selector en el panel se refleja de inmediato, sin recompilar el perfil y
+  // sin gastarle a la persona una llamada de su cupo mensual.
+  const amplitud = esAmplitud(filtros?.amplitud) ? filtros.amplitud : AMPLITUD_POR_DEFECTO;
+  const compilado = (filtros?.perfilCompilado as Record<string, unknown> | null) || null;
+  const rolesDeclarados: { canonico?: string; sinonimos?: string[] }[] = Array.isArray(compilado?.roles)
+    ? (compilado!.roles as { canonico?: string; sinonimos?: string[] }[])
+    : [];
+  const rolesExtra = compilado
+    ? await rolesPorAmplitud(
+        objetivos,
+        amplitud,
+        rolesDeclarados
+          .flatMap((r) => [r?.canonico, ...(Array.isArray(r?.sinonimos) ? r.sinonimos : [])])
+          .filter((t): t is string => !!t)
+      )
+    : [];
+
   const scorer = {
-    usarScorerLocal: !!(filtros?.usarScorerLocal && filtros?.perfilCompilado),
-    perfilCompilado: filtros?.perfilCompilado
-      ? { ...(filtros.perfilCompilado as object), nivelDirectivo: objetivosPermitenDirectivo(objetivos) }
+    usarScorerLocal: !!(filtros?.usarScorerLocal && compilado),
+    perfilCompilado: compilado
+      ? {
+          ...compilado,
+          nivelDirectivo: objetivosPermitenDirectivo(objetivos),
+          amplitud,
+          modo: amplitud === "abierto" ? "abierto" : "objetivo",
+          roles: [...rolesDeclarados, ...rolesExtra],
+          // §5: lo que el CV acredita. Solo lo usa el modo abierto, pero viaja
+          // siempre: es barato y evita una consulta aparte del scorer.
+          tiene: requisitosDelCandidato(perfil || {}),
+        }
       : null,
     versionPerfil: filtros?.versionPerfil ?? 0,
     // Revisión externa 2026-09-05: si una recompilación forzada por cambio

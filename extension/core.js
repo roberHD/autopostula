@@ -457,6 +457,54 @@ const AP_KEYWORDS_JORNADA = {
   part_time: ['part time', 'media jornada', 'jornada parcial', 'medio tiempo'],
 };
 
+// ── Modo "cualquier trabajo" (docs/amplitud-de-busqueda.md §5) ──
+// Sin rol que filtre, el puntaje partiría en 0 y todo se descartaría. La base
+// la da haber pasado vetos, ubicación, jornada y requisitos; un rol que igual
+// calce suma por encima de ella.
+const AP_BASE_ABIERTO = 60;
+
+// Lo que un aviso EXIGE. Es lo único que reemplaza al rol como protección en
+// modo abierto: sin esto, la persona quema su cupo del mes en avisos donde no
+// la iban a llamar. Los patrones son estrechos a propósito -- la duda no
+// descarta, y un requisito que no se reconoce simplemente no se aplica.
+const AP_REQUISITOS = [
+  {
+    clave: 'titulo',
+    patrones: [
+      /\btitulo (profesional|universitario|tecnico de nivel superior)\b/,
+      /\bprofesional titulad[oa]\b/,
+      /\bcarrera (profesional|universitaria)\b/,
+    ],
+  },
+  {
+    clave: 'licencia',
+    patrones: [
+      /\blicencia(?: de conducir)?(?: clase)? a\s*-?\s*[1-5]\b/,
+      /\blicencia(?: de conducir)?(?: clase)? d\b/,
+    ],
+  },
+  { clave: 'ingles', patrones: [/\bingles (avanzado|intermedio|fluido)\b/, /\bbilingue\b/] },
+];
+
+// Devuelve la clave del requisito excluyente que el aviso pide y la persona no
+// acredita, o null. `tiene` viene del backend (lib/requisitos-cv.ts); si no
+// viene -- perfil viejo, o CV sin texto -- no se descarta nada.
+function apRequisitoFaltante(texto, tiene) {
+  if (!tiene) return null;
+  for (const requisito of AP_REQUISITOS) {
+    if (!requisito.patrones.some((rx) => rx.test(texto))) continue;
+    if (requisito.clave === 'titulo' && tiene.titulo) continue;
+    if (requisito.clave === 'ingles' && tiene.ingles) continue;
+    if (requisito.clave === 'licencia') {
+      const clases = tiene.licencias || [];
+      // Pide una licencia profesional (A o D): basta con acreditar alguna.
+      if (clases.some((c) => c === 'd' || String(c).startsWith('a'))) continue;
+    }
+    return requisito.clave;
+  }
+  return null;
+}
+
 // ── Filtro de palabras clave / exclusión / ubicación / modalidad / jornada ──
 // Portal-agnóstico a propósito: cada adaptador extrae su propio texto y
 // ubicación (la estructura del DOM cambia por sitio) y le pasa strings
@@ -543,13 +591,22 @@ function apPatronPalabra(palabra) {
 // este ruido de género, opcional, entre cada par de palabras.
 const AP_RUIDO_GENERO = '(?:\\s*[/(][ao]s?\\)?)?';
 
+// docs/amplitud-de-busqueda.md §2.3: los avisos chilenos meten preposiciones
+// cortas entre las palabras de un cargo ("vendedor DE retail", "asesor DE
+// ventas") -- un patrón de varias palabras exigía que fueran las únicas,
+// pegadas, y "vendedor retail" nunca calzaba con "Vendedor de Retail". Se
+// permiten hasta 2 palabras cortas (<=4 letras: de, en, para...) de enlace
+// entre cada par, no palabras arbitrarias -- así "vendedor retail" calza con
+// "vendedor de retail" pero no con "vendedor de repuestos para retail".
+const AP_ENLACE_CORTO = '(?:\\s+\\w{1,4}){0,2}';
+
 // Frase completa con límites de palabra, nunca subcadena (§6, mismo bug que
 // tenía coincideFiltros con "aseo"/"paseo"). El texto de entrada ya debe venir
 // normalizado con AP.n antes de construir/usar este patrón.
 function apConstruirPatron(patronNormalizado) {
   const palabras = patronNormalizado.split(/\s+/).filter(Boolean).map(apPatronPalabra);
   if (!palabras.length) return null;
-  return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + '\\s+') + '\\b');
+  return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + AP_ENLACE_CORTO + '\\s+') + '\\b');
 }
 
 // ── Comuna conocida de una oferta (docs/revision-2026-09-16.md §2.1, punto 4) ──
@@ -614,6 +671,9 @@ AP.puntuarOferta = function (campos, perfil) {
   }
 
   perfil = perfil || {};
+  // docs/amplitud-de-busqueda.md §5: en modo "cualquier trabajo" el eje deja de
+  // ser el rol y pasa a ser las condiciones (comuna, jornada, vetos, requisitos).
+  const modoAbierto = perfil.modo === 'abierto';
 
   // 1. Vetos -- si matchea en título o empresa, corta acá con la misma
   // certeza de siempre. Si matchea SOLO en el cuerpo, no corta -- queda
@@ -639,6 +699,16 @@ AP.puntuarOferta = function (campos, perfil) {
     }
     penalizacionVetoCuerpo = 60;
     vetoCuerpo = { patron: veto.patron, razon: veto.razon || ('posible: ' + veto.patron) };
+  }
+
+  // 1a. Requisitos excluyentes (docs/amplitud-de-busqueda.md §5). Solo en modo
+  // abierto: en los otros modos el rol ya hace de filtro, y aplicarlo siempre
+  // le escondería a la persona ofertas de SU rubro por una mención suelta.
+  if (modoAbierto) {
+    const faltante = apRequisitoFaltante(titulo + ' ' + empresa + ' ' + cuerpo, perfil.tiene);
+    if (faltante) {
+      return { score: 0, banda: 'descartar', razones: [{ tipo: 'requisito', que: faltante }] };
+    }
   }
 
   // 1b. Nivel del cargo (docs/revision-2026-09-16.md §2.7). El rol "ventas"
@@ -687,8 +757,14 @@ AP.puntuarOferta = function (campos, perfil) {
     }
   }
   score = Math.min(100, score);
+  // §5: la base del modo abierto se aplica acá, después de los roles -- un rol
+  // que igual calza (la persona declaró algo y además se abrió a todo) suma por
+  // encima, no se pierde.
+  if (modoAbierto) score = Math.max(score, AP_BASE_ABIERTO);
   if (mejorRol) {
     razones.push({ tipo: 'rol', rol: mejorRol.rol, termino: mejorRol.termino, campo: mejorRol.campo });
+  } else if (modoAbierto) {
+    razones.push({ tipo: 'modo_abierto' });
   } else if (roles.length) {
     razones.push({ tipo: 'sin_rol' });
   }
@@ -732,11 +808,38 @@ AP.puntuarOferta = function (campos, perfil) {
     }
   }
 
-  // 4. Señales -- ajustes graduales, no descartan.
+  // 3b. Jornada (docs/amplitud-de-busqueda.md §6). Existía en
+  // SearchPreferences.jornada y compilar-perfil.ts lo guardaba en el perfil
+  // compilado, pero el scorer nunca lo leía: alguien que declaró "solo part
+  // time" igual recibía avisos de jornada completa. AP_KEYWORDS_JORNADA (con
+  // el que trabajaba el filtro viejo) dice qué términos delatan cada jornada.
+  //   aviso dice la jornada CONTRARIA a la declarada -> DESCARTAR
+  //   aviso no dice ninguna de las dos                -> gris ("no sé" no es "no calza")
+  //   aviso confirma la jornada declarada, o "cualquiera" -> sin penalización
+  let jornadaIncierta = null;
+  const jornadaDeclarada = perfil.jornada;
+  if (jornadaDeclarada === 'full_time' || jornadaDeclarada === 'part_time') {
+    const textoCompleto = titulo + ' ' + empresa + ' ' + cuerpo;
+    const contraria = jornadaDeclarada === 'full_time' ? 'part_time' : 'full_time';
+    const diceContraria = AP_KEYWORDS_JORNADA[contraria].some((k) => textoCompleto.includes(AP.n(k)));
+    if (diceContraria) {
+      return { score: 0, banda: 'descartar', razones: [{ tipo: 'jornada', declarada: jornadaDeclarada }] };
+    }
+    const diceDeclarada = AP_KEYWORDS_JORNADA[jornadaDeclarada].some((k) => textoCompleto.includes(AP.n(k)));
+    if (!diceDeclarada) jornadaIncierta = { tipo: 'jornada_desconocida', declarada: jornadaDeclarada };
+  }
+
+  // 4. Señales -- ajustes graduales, no descartan. docs/amplitud-de-busqueda.md
+  // §2.1: ahora que cada patron es un término suelto (antes nunca calzaba),
+  // un +25 que aparece en el cuerpo pesa igual que uno en el título -- con el
+  // mismo multiplicador por campo que los roles (§6 del scorer) para que un
+  // calce débil (cuerpo) empuje menos que uno fuerte (título).
   const senales = perfil.senales || [];
   for (const senal of senales) {
-    if (buscar(senal.patron).coincide) {
-      const delta = senal.delta || 0;
+    const resultado = buscar(senal.patron);
+    if (resultado.coincide) {
+      const multiplicadorCampo = resultado.enTitulo ? 1 : resultado.enEmpresa ? 0.35 : 0.3;
+      const delta = Math.round((senal.delta || 0) * multiplicadorCampo);
       score += delta;
       razones.push({ tipo: 'senal', patron: senal.patron, delta: delta });
     }
@@ -753,6 +856,11 @@ AP.puntuarOferta = function (campos, perfil) {
 
   if (nivelIncierto && banda !== 'descartar') {
     razones.unshift(nivelIncierto);
+    banda = 'gris';
+  }
+
+  if (jornadaIncierta && banda !== 'descartar') {
+    razones.unshift(jornadaIncierta);
     banda = 'gris';
   }
 

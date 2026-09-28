@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { esAmplitud } from "@/lib/amplitud";
 
 async function getOrCreatePreferencias(userId: string) {
   const existente = await prisma.searchPreferences.findUnique({ where: { userId } });
@@ -23,7 +24,8 @@ export async function PUT(request: Request) {
   if (!userId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const body = await request.json();
-  const { palabrasIncluir, palabrasExcluir, modalidad, jornada, usarScorerLocal, ubicacionDeclarada } = body || {};
+  const { palabrasIncluir, palabrasExcluir, modalidad, jornada, usarScorerLocal, ubicacionDeclarada, amplitud } =
+    body || {};
 
   await getOrCreatePreferencias(userId);
 
@@ -40,6 +42,11 @@ export async function PUT(request: Request) {
       // §2.1 (docs/revision-2026-09-16.md): Filtros edita la ubicación
       // declarada con el mismo selector del onboarding.
       ...(ubicacionDeclarada !== undefined ? { ubicacionDeclarada } : {}),
+      // docs/amplitud-de-busqueda.md §4. Se valida contra la lista cerrada:
+      // un valor cualquiera dejaría al scorer sin saber qué hacer. Cambiar la
+      // amplitud NO recompila el perfil -- la expansión es determinista y se
+      // resuelve al servir el perfil a la extensión, sin gastar IA.
+      ...(esAmplitud(amplitud) ? { amplitud } : {}),
     },
   });
 

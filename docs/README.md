@@ -38,6 +38,7 @@
 | [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 🔨 En ejecución — 3 de 13 (landing, Hoy, estado único de la extensión). Los créditos de su §3 pasaron a `creditos-y-pagina-nueva.md` |
 | [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) | Los créditos van sí o sí: el motor ya existe como `postulaciones_extra`. Reglas, devolución cuando la postulación no llegó, precios, y la fase nueva de la página (landing, precios, preguntas frecuentes, chequeo de CV público, medición). Incluye el plan para juntar las dos ramas | 🔴 **Prioridad 1** — decidido el 24-09. El **paso 0** (juntar las ramas) ya está hecho; quedan los pasos 1 a 9 |
 | [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | ✅ **Implementado** — los 7 pasos programables del §9, verificados el 24-09: `obtenerPlanVigente`, esquema, checkout/confirmación/retorno, `acreditarPago` idempotente, ruta de cancelar retirada, cron de avisos y comprobante por correo. Falta el **paso 0** (inicio de actividades y boletas), que es de Roberto con el contador y bloquea cobrar de verdad, no programar |
+| [`amplitud-de-busqueda.md`](amplitud-de-busqueda.md) | Un caso real que calzaba perfecto y quedó en "Por decidir" por patrones que nunca calzaban; más el control de amplitud por CIUO ("vendedor en general") y el modo "cualquier trabajo", donde el eje deja de ser el cargo y pasan a mandar las condiciones | ✅ **Los 8 pasos hechos** (§2, §4, §5, §6). Queda **recompilar los perfiles existentes** (paso 2): gasta una llamada de IA por cuenta, es decisión de Roberto — hasta que se haga, las cuentas de hoy siguen con los patrones viejos |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -136,13 +137,6 @@ El rediseño llevó el costo de IA de **~US$3,40 a ~US$0,58 por usuario premium 
 
 ## Lo que sigue
 
-### 0. Juntar las dos líneas del repo — [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) §2
-
-Va antes que cualquier otra cosa, y no por prolijidad: la migración
-`20260922120001_estado_real_y_descartes` vuelve a crear el enum `OrigenEstado` que `main` ya aplicó
-en producción, así que el próximo deploy de esa rama se cae con la base a medio migrar. El §2.3 de
-ese documento decide archivo por archivo cuál de las dos versiones queda.
-
 ### 1. Créditos y la página nueva — [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md)
 
 Los créditos están decididos y el motor ya existe con otro nombre (`postulaciones_extra`): libro
@@ -150,6 +144,27 @@ mayor, paquetes, premios, compra por Flow y comprobante. Falta la devolución cu
 no llegó (§3.3), verificar 10 postulaciones reales antes de abrir la venta (§3.6) y la fase nueva
 de la página: landing desplegada, precios en una URL propia, preguntas frecuentes, chequeo de CV
 público y alguna forma de medir (§4, §5). Su §6 tiene el orden completo.
+
+### 1b. Señales que nunca calzan — [`amplitud-de-busqueda.md`](amplitud-de-busqueda.md) §2
+
+**Los pasos 1 a 5 (del 8 del §8) ya están.** Los patrones de señales y vetos se normalizan a un
+solo término al compilar (`lib/normalizar-patron.ts`), con una salvedad que el documento no cubría:
+partir por "/" o coma es correcto para una lista plana (`"moda, vestuario, calzado, fashion"`), pero
+un veto como `"retail genérico sin especialidad en moda/vestuario/calzado"` es una FRASE con una
+lista adentro, no una lista — partirla y salvar los fragmentos cortos ("vestuario", "calzado")
+habría creado vetos con el sentido invertido, y la oferta de ejemplo se habría descartado en vez de
+postularse. Por eso la normalización es todo-o-nada: si algún fragmento no sirve como término, se
+descarta la frase entera (y para vetos, se guarda igual la `razon`, visible en Filtros de búsqueda
+como "esto no se está aplicando"). También: sinónimos con una preposición de enlace ("vendedor de
+retail" calza con "vendedor retail"), el multiplicador por campo aplicado a las señales igual que a
+los roles, la jornada por fin leída en el scorer (§6), y `scripts/verificar-patrones.ts` para que no
+vuelva a pasar en silencio. Probado contra el caso real del documento (extension/verificar-scorer.js)
+y con `tsc`/`next build` limpios.
+
+**Pendiente, a propósito:** el **paso 2** (recompilar los perfiles ya existentes) no se hizo solo —
+gasta una llamada de IA por cuenta y **es una decisión de Roberto**, no algo para automatizar en
+silencio. Los pasos 6 a 8 (control de amplitud por CIUO, modo "cualquier trabajo") quedan para
+después, según el orden del documento.
 
 ### 2. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 
@@ -175,12 +190,14 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 |---|---|---|
 | Revisión legal de privacidad y términos | ⏸ Con el abogado | Chrome Web Store |
 | Definir la política de devolución (`§7.2` de Términos), **para pases y ahora también créditos** | ⏸ Con el abogado | Cobrar de verdad |
-| **Inicio de actividades en el SII** y cómo se emiten las boletas | ⚠️ Lo hace Roberto | Cobrar de verdad: desde 2025 toda pasarela lo exige |
+| **Inicio de actividades en el SII** | ✅ **Hecho el 28-09-2026** — folio 17252490, primera categoría, afecto a IVA, micro empresa. Giros `631200` (portales web) y `631100` (procesamiento de datos y hospedaje) | — |
+| Régimen tributario | ✅ **Pro Pyme Transparente (14 D N°8)** con contabilidad simplificada, desde el 28-09-2026 (folio 45061802851) | — |
+| Certificado digital, boleta electrónica y patente municipal | ⚠️ Lo hace Roberto; el certificado digital bloquea la boleta | Cobrar de verdad |
 | Cuenta de comercio Flow | ✅ **Aprobada** (24-09) | — |
-| `FLOW_SANDBOX=false` en producción | 🔨 Después del SII | Cobrar de verdad |
+| `FLOW_SANDBOX=false` en producción | 🔨 Ya se puede: Flow aprobado + SII hecho | Cobrar de verdad |
 | Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ✅ Resuelto en `323f2a4`; verificado en Vercel el 19-09 | Recuperación de contraseña real |
 | `CRON_SECRET` en producción | ✅ Puesto el 19-09 — las tres rutas responden 401 y el purgado a 90 días corre | Cumplir la promesa de borrado de la política |
-| Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | ✅ Programado; falta el SII | Cobrar de verdad |
+| Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | ✅ Programado; falta probarlo contra el sandbox de Flow | Cobrar de verdad |
 | Créditos ([`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md)) | 🔨 Motor listo; falta devolución, verificación y boleta | Cobrar por unidad |
 | Ficha y envío a la Chrome Web Store | ✅ Publicada | — |
 | Versión 2.13.0 de la extensión (ráfagas y permiso `power`) | 🔨 **En revisión** en la tienda; en el repo ya hay una 2.14 sin publicar | Que la landing y la tienda digan lo mismo |
