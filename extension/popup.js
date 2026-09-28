@@ -574,6 +574,13 @@ function loadState() {
     chrome.storage.sync.get('autopostulaToken', (d) => {
       tokenActual = d.autopostulaToken || null;
       actualizarEstadoToken(!!tokenActual);
+      // renderEstado() de la línea de arriba corrió con tokenActual todavía en
+      // null (esto recién contesta después, es async) -- sin repetirlo acá, una
+      // cuenta conectada de verdad se quedaba pegada en "Sin conectar" para
+      // siempre: cargarResumen() no lo corrige si el fetch falla, porque para
+      // ese entonces estadoActual ya no es null (viene del config cacheado) y
+      // su rama de respaldo no vuelve a pintar.
+      renderEstado();
       cargarResumen(false);
     });
   });

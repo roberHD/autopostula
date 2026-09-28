@@ -160,6 +160,32 @@ function cargarCoreJs() {
   // alguien los reintroduce en el popup, vuelven las dos verdades distintas.
   check('el popup ya no tiene interruptores propios de observar/revisión', !src.includes('toggle-observar') && !src.includes('toggle-revision'));
   check('pausar y reanudar pasan por la cuenta (CAMBIAR_ESTADO), no por storage local', src.includes("type: 'CAMBIAR_ESTADO'"));
+
+  // El token llega async (chrome.storage.sync.get) DESPUÉS de que loadState()
+  // ya pintó el semáforo una vez con tokenActual todavía en null -- sin
+  // re-pintar ahí, una cuenta conectada de verdad se quedaba mostrando "Sin
+  // conectar" para siempre (cargarResumen() no lo corrige: para cuando su
+  // fetch falla, estadoActual ya no es null, así que su rama de respaldo no
+  // repinta). Bug real, reportado en vivo el 2026-09-27.
+  {
+    const desdeLoadState = src.indexOf('function loadState() {');
+    const hastaLoadState = src.indexOf('\nloadState();', desdeLoadState);
+    if (desdeLoadState === -1 || hastaLoadState === -1) {
+      throw new Error('No se encontró loadState() en popup.js -- ¿se renombró?');
+    }
+    const cuerpoLoadState = src.slice(desdeLoadState, hastaLoadState);
+    const desdeTokenGet = cuerpoLoadState.indexOf("chrome.storage.sync.get('autopostulaToken'");
+    check('loadState(): existe el callback que lee el token guardado', desdeTokenGet !== -1);
+    const cuerpoCallback = cuerpoLoadState.slice(desdeTokenGet);
+    const posTokenActual = cuerpoCallback.indexOf('tokenActual = ');
+    const posRenderEstado = cuerpoCallback.indexOf('renderEstado()');
+    const posCargarResumen = cuerpoCallback.indexOf('cargarResumen(');
+    check(
+      'loadState(): tras confirmar el token, se vuelve a pintar el semáforo antes de pedir el resumen',
+      posTokenActual !== -1 && posRenderEstado !== -1 && posCargarResumen !== -1 &&
+        posTokenActual < posRenderEstado && posRenderEstado < posCargarResumen
+    );
+  }
 }
 
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));
