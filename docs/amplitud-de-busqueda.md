@@ -128,6 +128,16 @@ Arreglo: permitir hasta **dos palabras cortas** entre los términos de un patró
 (`(?:\s+\w{1,4})?\s+`, algo así), no palabras arbitrarias. Con eso "vendedor retail" calza con
 "vendedor de retail" pero no con "vendedor de repuestos para retail".
 
+> **Verificado el 2026-09-28, ya implementado (`da9245e`) — y con un efecto no previsto.** El enlace
+> quedó como `(?:\s+\w{1,4}){0,2}`, o sea *cualquier* palabra de hasta 4 letras. Eso incluye `o`,
+> `no`, `sin` y `ni`, que **invierten el sentido** de la frase. Probado contra el `core.js` real:
+> un veto de `con experiencia` **descarta** un aviso titulado *"Vendedor con o sin experiencia"*,
+> porque el patrón salta por encima de "o sin". Es el mismo error que §2.1 evitó en la
+> normalización, entrando por otra puerta.
+>
+> Arreglo propuesto: en vez de `\w{1,4}`, una lista corta de conectores —`de`, `del`, `en`, `para`,
+> `la`, `el`, `los`, `las`, `y`, `a`— y nunca `o`, `no`, `sin`, `ni`.
+
 ### 2.4 Que no vuelva a pasar sin que nadie se entere
 
 Un `scripts/verificar-patrones.ts` que recorra los perfiles compilados y falle si algún patrón
