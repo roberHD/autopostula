@@ -12,7 +12,9 @@ export type RazonEstructurada =
   | { tipo: "nivel"; termino: string; certeza?: "desconocida" }
   | { tipo: "duplicado"; fecha: string | null }
   | { tipo: "senal"; patron: string; delta: number }
-  | { tipo: "sin_senales" };
+  | { tipo: "sin_senales" }
+  | { tipo: "jornada"; declarada: "full_time" | "part_time" }
+  | { tipo: "jornada_desconocida"; declarada: "full_time" | "part_time" };
 
 // §D: la tarjeta de "Por decidir" ya no lista las razones como bullets del
 // cálculo, sino como el intercambio que se le pide decidir a la persona
@@ -25,7 +27,7 @@ export function esRazonPositiva(r: unknown): boolean | null {
   const razon = r as RazonEstructurada;
   if (razon.tipo === "rol") return true;
   if (razon.tipo === "senal") return razon.delta >= 0;
-  if (razon.tipo === "sin_rol" || razon.tipo === "veto" || razon.tipo === "ubicacion" || razon.tipo === "nivel" || razon.tipo === "duplicado" || razon.tipo === "sin_senales") return false;
+  if (razon.tipo === "sin_rol" || razon.tipo === "veto" || razon.tipo === "ubicacion" || razon.tipo === "nivel" || razon.tipo === "duplicado" || razon.tipo === "sin_senales" || razon.tipo === "jornada" || razon.tipo === "jornada_desconocida") return false;
   return null;
 }
 
@@ -60,6 +62,15 @@ export function formatearRazon(r: unknown): string {
       return `El aviso dice "${razon.patron}"`;
     case "sin_senales":
       return "El aviso no trae nada claro a favor ni en contra";
+    case "jornada": {
+      const buscada = razon.declarada === "part_time" ? "part time" : "jornada completa";
+      const delAviso = razon.declarada === "part_time" ? "jornada completa" : "part time";
+      return `Es de ${delAviso} y buscas ${buscada}`;
+    }
+    case "jornada_desconocida": {
+      const buscada = razon.declarada === "part_time" ? "part time" : "jornada completa";
+      return `No dice la jornada, y buscas ${buscada}`;
+    }
     default:
       return "Sin razón registrada";
   }

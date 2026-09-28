@@ -315,6 +315,80 @@ const perfil = {
   check('duplicado: usa solo la primera línea del título (Computrabajo mete etiquetas)', k('Vendedor\nPostulado', 'Falabella') === k('Vendedor', 'Falabella'));
 }
 
+// 20. Sinónimos con palabras intermedias (docs/amplitud-de-busqueda.md §2.3):
+// "vendedor retail" tiene que calzar con "Vendedor de Retail" (una
+// preposición corta de enlace), pero no con "vendedor de repuestos para
+// retail" (palabras intermedias que no son de enlace).
+{
+  const perfilRetail = { roles: [{ canonico: 'vendedor retail', sinonimos: [], peso: 1 }], umbralPostular: 65, umbralGris: 45 };
+  const rCalza = AP.puntuarOferta({ titulo: 'Vendedor de Retail vestuario', empresa: '', cuerpo: '', ubicacion: '' }, perfilRetail);
+  const rNoCalza = AP.puntuarOferta({ titulo: 'Vendedor de repuestos para retail', empresa: '', cuerpo: '', ubicacion: '' }, perfilRetail);
+  check('"vendedor retail" calza con "Vendedor de Retail" (una preposición de enlace)', rCalza.banda === 'postular');
+  check('"vendedor retail" NO calza con "vendedor de repuestos para retail" (palabras intermedias de más)', rNoCalza.banda !== 'postular');
+}
+
+// 21. El caso real del documento (§1) de punta a punta -- criterio de
+// aceptación §9.1. La oferta calzaba perfecto y quedaba en "Por decidir"
+// porque las señales nunca calzaban (patrón con comas) y los vetos son los
+// mismos del perfil real, ya normalizados como los guardaría
+// lib/normalizar-patron.ts: el veto "retail genérico sin especialidad en
+// moda/vestuario/calzado" queda con patron=null (era una frase, no una
+// lista -- ver el comentario en normalizar-patron.ts) y NO debe convertirse
+// en un veto sobre "vestuario"/"calzado", que sería exactamente lo contrario
+// de la intención y descartaría esta misma oferta.
+{
+  const perfilVendedora = {
+    roles: [{ canonico: 'vendedor', sinonimos: [], peso: 0.5 }],
+    vetos: [
+      { patron: null, razon: 'no es retail genérico' },
+      { patron: 'full time exclusive', razon: 'no quiere full time' },
+    ],
+    umbralPostular: 65, umbralGris: 45,
+    senales: [
+      { patron: 'vestuario', delta: 25 },
+      { patron: 'part time', delta: 15 },
+    ],
+  };
+  const campos = {
+    titulo: 'Vendedor de Retail vestuario Rotativo Part Time (V, S y D)',
+    empresa: 'Manpower Chile',
+    cuerpo: 'buscamos Vendedores(as) Part Time del rubro retail moda',
+    ubicacion: 'Santiago - San Miguel',
+  };
+  const r = AP.puntuarOferta(campos, perfilVendedora);
+  check('caso real §1: con las señales separadas, la oferta da postular (antes quedaba en gris)', r.banda === 'postular');
+  check('caso real §1: el puntaje es 90 (50 del rol + 25 vestuario + 15 part time, las tres en el título)', r.score === 90);
+}
+
+// 22. Multiplicador de campo en señales (§2.1, "a decidir al implementar"):
+// la misma señal pesa distinto si calza en título, empresa o cuerpo -- igual
+// que los roles, para que un +25 perdido en el cuerpo no empuje tan fuerte
+// como uno en el título.
+{
+  const perfilSenal = { roles: [], senales: [{ patron: 'vestuario', delta: 20 }], umbralPostular: 65, umbralGris: 45 };
+  const rTitulo = AP.puntuarOferta({ titulo: 'Vendedor vestuario', empresa: '', cuerpo: '', ubicacion: '' }, perfilSenal);
+  const rEmpresa = AP.puntuarOferta({ titulo: 'Vendedor', empresa: 'Vestuario SpA', cuerpo: '', ubicacion: '' }, perfilSenal);
+  const rCuerpo = AP.puntuarOferta({ titulo: 'Vendedor', empresa: '', cuerpo: 'Trabajamos con vestuario de temporada', ubicacion: '' }, perfilSenal);
+  check('señal en título suma el delta completo (+20)', rTitulo.razones.find((x) => x.tipo === 'senal').delta === 20);
+  check('señal en empresa suma con el multiplicador 0.35 (+7)', rEmpresa.razones.find((x) => x.tipo === 'senal').delta === 7);
+  check('señal en cuerpo suma con el multiplicador 0.3 (+6)', rCuerpo.razones.find((x) => x.tipo === 'senal').delta === 6);
+}
+
+// 23. Jornada (docs/amplitud-de-busqueda.md §6): SearchPreferences.jornada
+// llegaba hasta el perfil compilado pero el scorer nunca la leía.
+{
+  const perfilPartTime = { roles: [{ canonico: 'vendedor', sinonimos: [], peso: 1 }], jornada: 'part_time', umbralPostular: 65, umbralGris: 45 };
+  const rContraria = AP.puntuarOferta({ titulo: 'Vendedor jornada completa', empresa: '', cuerpo: '', ubicacion: '' }, perfilPartTime);
+  const rDeclarada = AP.puntuarOferta({ titulo: 'Vendedor part time', empresa: '', cuerpo: '', ubicacion: '' }, perfilPartTime);
+  const rSinDecir = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: '', ubicacion: '' }, perfilPartTime);
+  check('jornada contraria a la declarada -> descarta', rContraria.banda === 'descartar' && rContraria.razones[0].tipo === 'jornada');
+  check('jornada que confirma lo declarado -> postula sin penalización', rDeclarada.banda === 'postular');
+  check('el aviso no dice la jornada -> gris, no postula a ciegas', rSinDecir.banda === 'gris' && rSinDecir.razones.some((x) => x.tipo === 'jornada_desconocida'));
+
+  const perfilCualquiera = Object.assign({}, perfilPartTime, { jornada: 'cualquiera' });
+  const rCualquiera = AP.puntuarOferta({ titulo: 'Vendedor jornada completa', empresa: '', cuerpo: '', ubicacion: '' }, perfilCualquiera);
+  check('jornada "cualquiera" no filtra nada (como antes)', rCualquiera.banda === 'postular');
+}
 
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));
 process.exit(fallos === 0 ? 0 : 1);

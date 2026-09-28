@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { construirMensajesCV } from "@/lib/ai-messages";
 import { LISTA_LIMPIEZA_CL } from "@/scripts/limpieza/cl";
+import { normalizarVetos, normalizarSenales } from "@/lib/normalizar-patron";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -160,7 +161,8 @@ export async function compilarPerfil(
       ? "El candidato ya declaró sus objetivos abajo -- básate en ESO para roles[] y sus pesos, no en su CV ni su cargoObjetivo antiguo.\n"
       : "Básate en su cargoObjetivo, su CV, y sobre todo en los cargos a los que dijo que SÍ.\n") +
     "- vetos: cargos o características que el candidato claramente NO acepta -- solo si hay evidencia real (un patrón sistemático en los cargos a los que dijo que NO, no un caso aislado). razon en una frase corta y mostrable (\"no es el rubro que busca\", \"nivel de seniority distinto\"). Deja el array vacío si no hay un patrón claro -- no inventes vetos.\n" +
-    '- senales: ajustes graduales al puntaje (no descartan, solo suman o restan), patron en texto libre y delta entre -40 y 40. Ej: si busca part time, {"patron":"part time","delta":15}. Como mucho 3-4 señales, solo con respaldo real en sus datos.\n' +
+    '- senales: ajustes graduales al puntaje (no descartan, solo suman o restan), delta entre -40 y 40. Ej: si busca part time, {"patron":"part time","delta":15}. Como mucho 3-4 señales, solo con respaldo real en sus datos.\n' +
+    '- IMPORTANTE sobre "patron" (en vetos y senales): es UN solo término, tal como aparece escrito en un aviso chileno (ej: "part time", "vestuario", "call center"), de máximo 3 palabras. NUNCA una lista separada por coma ni una explicación larga -- eso no calza con ningún aviso real. Si hay varias palabras clave, elige la más representativa o créalas como señales separadas.\n' +
     "- ubicacion.comunas: comunas donde el candidato quiere trabajar, en minúsculas y sin tildes (vacío si no hay preferencia clara). aceptaRemoto: true si su perfil sugiere que aceptaría trabajo remoto.\n" +
     '- jornada: "cualquiera", "full_time" o "part_time" según su disponibilidad indicada.\n' +
     '- modalidad: "cualquiera", "remoto", "hibrido" o "presencial" según su perfil.\n\n' +
@@ -207,8 +209,12 @@ export async function compilarPerfil(
     const perfilCompilado = {
       version: nuevaVersion,
       roles: Array.isArray(compilado.roles) ? compilado.roles : [],
-      vetos: Array.isArray(compilado.vetos) ? compilado.vetos : [],
-      senales: Array.isArray(compilado.senales) ? compilado.senales : [],
+      // docs/amplitud-de-busqueda.md §2.1/§2.2: la IA a veces devuelve una
+      // lista o una descripción en vez de un término -- se normaliza acá para
+      // que el scorer (que busca cada patron como una frase exacta) no
+      // dependa de que la IA haya obedecido el prompt.
+      vetos: Array.isArray(compilado.vetos) ? normalizarVetos(compilado.vetos) : [],
+      senales: Array.isArray(compilado.senales) ? normalizarSenales(compilado.senales) : [],
       ubicacion: ubicacionDeclarada
         ? expandirUbicacionDeclarada(ubicacionDeclarada)
         : {

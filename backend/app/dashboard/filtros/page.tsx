@@ -7,7 +7,7 @@ import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/componen
 type PerfilCompilado = {
   version: number;
   roles: { canonico: string; sinonimos: string[]; peso: number }[];
-  vetos: { patron: string; razon: string }[];
+  vetos: { patron: string | null; razon: string }[];
   senales: { patron: string; delta: number }[];
 };
 
@@ -311,9 +311,20 @@ export default function FiltrosPage() {
             {perfilCompilado.vetos.length > 0 && (
               <div>
                 <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Vetos</p>
-                {perfilCompilado.vetos.map((v) => (
-                  <p key={v.patron} style={{ fontSize: 12.5, marginBottom: 3 }}>
-                    <strong>{v.patron}</strong> — {v.razon}
+                {perfilCompilado.vetos.map((v, i) => (
+                  <p key={v.patron ?? `sin-patron-${i}`} style={{ fontSize: 12.5, marginBottom: 3 }}>
+                    {v.patron ? (
+                      <>
+                        <strong>{v.patron}</strong> — {v.razon}
+                      </>
+                    ) : (
+                      // docs/amplitud-de-busqueda.md §2.2: "no quiero full time" no es un
+                      // término que se pueda buscar -- se dice que no se está aplicando,
+                      // en vez de fingir que sí filtra.
+                      <span style={{ color: "var(--text-muted)" }}>
+                        <strong>{v.razon}</strong> — esto no se está aplicando (no es un término buscable)
+                      </span>
+                    )}
                   </p>
                 ))}
               </div>

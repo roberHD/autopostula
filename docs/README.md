@@ -38,7 +38,7 @@
 | [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 🔨 En ejecución — 3 de 13 (landing, Hoy, estado único de la extensión). Los créditos de su §3 pasaron a `creditos-y-pagina-nueva.md` |
 | [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) | Los créditos van sí o sí: el motor ya existe como `postulaciones_extra`. Reglas, devolución cuando la postulación no llegó, precios, y la fase nueva de la página (landing, precios, preguntas frecuentes, chequeo de CV público, medición). Incluye el plan para juntar las dos ramas | 🔴 **Prioridad 1** — decidido el 24-09. El **paso 0** (juntar las ramas) ya está hecho; quedan los pasos 1 a 9 |
 | [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | ✅ **Implementado** — los 7 pasos programables del §9, verificados el 24-09: `obtenerPlanVigente`, esquema, checkout/confirmación/retorno, `acreditarPago` idempotente, ruta de cancelar retirada, cron de avisos y comprobante por correo. Falta el **paso 0** (inicio de actividades y boletas), que es de Roberto con el contador y bloquea cobrar de verdad, no programar |
-| [`amplitud-de-busqueda.md`](amplitud-de-busqueda.md) | Un caso real que calzaba perfecto y quedó en "Por decidir": las señales del perfil compilado guardan listas separadas por coma y **nunca calzan**, y los vetos son descripciones, así que "no quiero full time" no filtra nada. Más el control de amplitud por CIUO ("vendedor en general") y el modo "cualquier trabajo" | 🔴 **Bug primero** — propuesta del 27-09 |
+| [`amplitud-de-busqueda.md`](amplitud-de-busqueda.md) | Un caso real que calzaba perfecto y quedó en "Por decidir": las señales del perfil compilado guardan listas separadas por coma y **nunca calzan**, y los vetos son descripciones, así que "no quiero full time" no filtra nada. Más el control de amplitud por CIUO ("vendedor en general") y el modo "cualquier trabajo" | ⚠️ **El bug ya está — pasos 1 a 5 de 8** (§2.1-§2.4, §6): señales y vetos se normalizan a un término al compilar, con el mismo cuidado de no invertir el sentido de un veto que en realidad es una frase; sinónimos con preposición de enlace ("vendedor de retail"); jornada ya se lee en el scorer; `scripts/verificar-patrones.ts` audita lo ya compilado. Recompilar los perfiles existentes (paso 2) queda pendiente porque gasta cupo de IA — decisión de Roberto. Faltan el control de amplitud por CIUO (6-7) y el modo "cualquier trabajo" (8) |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -137,13 +137,6 @@ El rediseño llevó el costo de IA de **~US$3,40 a ~US$0,58 por usuario premium 
 
 ## Lo que sigue
 
-### 0. Juntar las dos líneas del repo — [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) §2
-
-Va antes que cualquier otra cosa, y no por prolijidad: la migración
-`20260922120001_estado_real_y_descartes` vuelve a crear el enum `OrigenEstado` que `main` ya aplicó
-en producción, así que el próximo deploy de esa rama se cae con la base a medio migrar. El §2.3 de
-ese documento decide archivo por archivo cuál de las dos versiones queda.
-
 ### 1. Créditos y la página nueva — [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md)
 
 Los créditos están decididos y el motor ya existe con otro nombre (`postulaciones_extra`): libro
@@ -154,13 +147,24 @@ público y alguna forma de medir (§4, §5). Su §6 tiene el orden completo.
 
 ### 1b. Señales que nunca calzan — [`amplitud-de-busqueda.md`](amplitud-de-busqueda.md) §2
 
-Va pegado a lo anterior porque es un día de trabajo y probablemente vacía la mitad de "Por
-decidir". Una oferta que calzaba perfecto —*"Vendedor de Retail vestuario Rotativo Part Time"*,
-part time, en la RM— sacó 50 puntos y quedó en gris, cuando con las señales funcionando sacaba 90
-y se postulaba: los patrones se guardan como listas separadas por coma (`"moda, vestuario,
-calzado, fashion"`) y el motor los busca como una frase completa. Los vetos tienen lo mismo, y ahí
-es peor: `"full time exclusive"` no filtra nada, y la persona cree que sí. El §8 de ese documento
-tiene el orden; los pasos 1 a 5 son chicos e independientes.
+**Los pasos 1 a 5 (del 8 del §8) ya están.** Los patrones de señales y vetos se normalizan a un
+solo término al compilar (`lib/normalizar-patron.ts`), con una salvedad que el documento no cubría:
+partir por "/" o coma es correcto para una lista plana (`"moda, vestuario, calzado, fashion"`), pero
+un veto como `"retail genérico sin especialidad en moda/vestuario/calzado"` es una FRASE con una
+lista adentro, no una lista — partirla y salvar los fragmentos cortos ("vestuario", "calzado")
+habría creado vetos con el sentido invertido, y la oferta de ejemplo se habría descartado en vez de
+postularse. Por eso la normalización es todo-o-nada: si algún fragmento no sirve como término, se
+descarta la frase entera (y para vetos, se guarda igual la `razon`, visible en Filtros de búsqueda
+como "esto no se está aplicando"). También: sinónimos con una preposición de enlace ("vendedor de
+retail" calza con "vendedor retail"), el multiplicador por campo aplicado a las señales igual que a
+los roles, la jornada por fin leída en el scorer (§6), y `scripts/verificar-patrones.ts` para que no
+vuelva a pasar en silencio. Probado contra el caso real del documento (extension/verificar-scorer.js)
+y con `tsc`/`next build` limpios.
+
+**Pendiente, a propósito:** el **paso 2** (recompilar los perfiles ya existentes) no se hizo solo —
+gasta una llamada de IA por cuenta y **es una decisión de Roberto**, no algo para automatizar en
+silencio. Los pasos 6 a 8 (control de amplitud por CIUO, modo "cualquier trabajo") quedan para
+después, según el orden del documento.
 
 ### 2. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 
