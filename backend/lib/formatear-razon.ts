@@ -14,7 +14,10 @@ export type RazonEstructurada =
   | { tipo: "senal"; patron: string; delta: number }
   | { tipo: "sin_senales" }
   | { tipo: "jornada"; declarada: "full_time" | "part_time" }
-  | { tipo: "jornada_desconocida"; declarada: "full_time" | "part_time" };
+  | { tipo: "jornada_desconocida"; declarada: "full_time" | "part_time" }
+  // docs/amplitud-de-busqueda.md §5, modo "cualquier trabajo".
+  | { tipo: "requisito"; que: "titulo" | "licencia" | "ingles" }
+  | { tipo: "modo_abierto" };
 
 // §D: la tarjeta de "Por decidir" ya no lista las razones como bullets del
 // cálculo, sino como el intercambio que se le pide decidir a la persona
@@ -27,7 +30,8 @@ export function esRazonPositiva(r: unknown): boolean | null {
   const razon = r as RazonEstructurada;
   if (razon.tipo === "rol") return true;
   if (razon.tipo === "senal") return razon.delta >= 0;
-  if (razon.tipo === "sin_rol" || razon.tipo === "veto" || razon.tipo === "ubicacion" || razon.tipo === "nivel" || razon.tipo === "duplicado" || razon.tipo === "sin_senales" || razon.tipo === "jornada" || razon.tipo === "jornada_desconocida") return false;
+  if (razon.tipo === "sin_rol" || razon.tipo === "veto" || razon.tipo === "ubicacion" || razon.tipo === "nivel" || razon.tipo === "duplicado" || razon.tipo === "sin_senales" || razon.tipo === "jornada" || razon.tipo === "jornada_desconocida" || razon.tipo === "requisito") return false;
+  if (razon.tipo === "modo_abierto") return true;
   return null;
 }
 
@@ -71,6 +75,18 @@ export function formatearRazon(r: unknown): string {
       const buscada = razon.declarada === "part_time" ? "part time" : "jornada completa";
       return `No dice la jornada, y buscas ${buscada}`;
     }
+    // docs/amplitud-de-busqueda.md §5, modo "cualquier trabajo".
+    case "requisito": {
+      const que =
+        razon.que === "titulo"
+          ? "un título que no está en tu CV"
+          : razon.que === "licencia"
+            ? "una licencia de conducir profesional que no está en tu CV"
+            : "inglés, y tu CV no lo menciona";
+      return `Pide ${que}`;
+    }
+    case "modo_abierto":
+      return "Cumple tus condiciones (buscas cualquier trabajo)";
     default:
       return "Sin razón registrada";
   }

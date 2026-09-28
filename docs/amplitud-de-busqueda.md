@@ -276,11 +276,38 @@ de verdad está usando.
 | **3** | Sinónimos con palabras intermedias | §2.3 | Chico, y arregla "Vendedor de Retail" |
 | **4** | Jornada en el scorer nuevo | §6 | Independiente de todo lo demás |
 | **5** | `verificar-patrones.ts` | §2.4 | Cierra la puerta |
-| 6 | Control de amplitud por CIUO | §4 | Necesita 1 y 2 hechos |
-| 7 | Resolver objetivos sin código contra el catálogo | §4.5 | Lo necesita el 6 |
-| 8 | Modo "cualquier trabajo" | §5 | Después de los créditos |
+| ~~6~~ | ~~Control de amplitud por CIUO~~ | §4 | ✅ Hecho |
+| ~~7~~ | ~~Resolver objetivos sin código contra el catálogo~~ | §4.5 | ✅ Hecho |
+| ~~8~~ | ~~Modo "cualquier trabajo"~~ | §5 | ✅ Hecho |
 
 Del 1 al 5 es un día de trabajo y probablemente **vacía la mitad de "Por decidir"** solo.
+
+---
+
+## 8b. Cómo quedó implementado (2026-09-28)
+
+Cuatro decisiones que se tomaron al construirlo y que no estaban escritas acá:
+
+1. **La expansión se resuelve al servir el perfil, no al compilarlo.**
+   `/api/extension/perfil` la calcula en cada consulta, igual que `nivelDirectivo` (§2.7 de la
+   revisión). Es una consulta al catálogo, no IA: así **cambiar el selector no recompila el perfil
+   ni le gasta a la persona una llamada de su cupo mensual**, y el cambio se ve en la siguiente
+   revisión de la extensión.
+2. **"Mi rubro" es el subgrupo principal** (los dos primeros dígitos, `52xx`), no el gran grupo.
+3. **Tope de 24 oficios extra**, ordenados por frecuencia real de `TituloCanonico` -- lo que la
+   extensión ha visto publicado de verdad. Y solo entran nombres de hasta 3 palabras, con la misma
+   regla de `normalizarPatron` (§2.1): "Vendedor de farmacia" sirve como patrón, "Ayudante de
+   ventas en local comercial, tienda y almacén" no calzaría nunca.
+4. **Lo que el CV acredita se deduce sin IA** (`lib/requisitos-cv.ts`): título, licencias de
+   conducir e inglés salen de reglas sobre el texto que ya se extrajo al subir el CV. Es
+   deliberadamente conservador -- ante la duda se responde "lo tiene", porque un falso "no lo
+   tiene" le esconde ofertas a la persona, y eso es peor que postular de más. Si el perfil no trae
+   ese dato (cuentas viejas), el filtro de requisitos no se aplica.
+
+**Verificado:** `extension/verificar-scorer.js` (12 casos nuevos del modo abierto, 0 fallos) y
+`backend/scripts/verificar-amplitud.ts` (lo que el CV acredita, 0 fallos). La expansión contra la
+base quedó **sin verificar en datos reales**: el script la cubre, pero necesita una base con el
+catálogo importado y cuentas con objetivos declarados.
 
 ---
 

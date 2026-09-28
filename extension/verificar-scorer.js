@@ -390,5 +390,46 @@ const perfil = {
   check('jornada "cualquiera" no filtra nada (como antes)', rCualquiera.banda === 'postular');
 }
 
+// ── Modo "cualquier trabajo" (docs/amplitud-de-busqueda.md §5) ──
+{
+  const perfilAbierto = Object.assign({}, perfil, {
+    modo: 'abierto',
+    tiene: { titulo: false, licencias: [], ingles: false },
+    ubicacion: { comunas: [], aceptaRemoto: false },
+  });
+  const perfilCerrado = Object.assign({}, perfil, { ubicacion: { comunas: [], aceptaRemoto: false } });
+
+  const sinRelacion = { titulo: 'Reponedor de supermercado', empresa: 'Lider', cuerpo: 'Turnos rotativos', ubicacion: '' };
+  const rCerrado = AP.puntuarOferta(sinRelacion, perfilCerrado);
+  const rAbierto = AP.puntuarOferta(sinRelacion, perfilAbierto);
+  check('modo objetivo: un oficio sin relacion se descarta (como siempre)', rCerrado.banda === 'descartar');
+  check('modo abierto: ese mismo oficio ya no se descarta', rAbierto.banda !== 'descartar');
+  check('modo abierto: la razon dice que cumple las condiciones', rAbierto.razones.some((x) => x.tipo === 'modo_abierto'));
+
+  const conRol = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: '', ubicacion: '' }, perfilAbierto);
+  check('modo abierto: un rol que igual calza suma por encima de la base', conRol.score > rAbierto.score);
+
+  const vetada = AP.puntuarOferta({ titulo: 'Vendedor con comision pura', empresa: '', cuerpo: '', ubicacion: '' }, perfilAbierto);
+  check('modo abierto: el veto sigue descartando', vetada.banda === 'descartar');
+
+  const pideTitulo = AP.puntuarOferta({ titulo: 'Asistente administrativo', empresa: '', cuerpo: 'Requisito: titulo profesional al dia', ubicacion: '' }, perfilAbierto);
+  check('modo abierto: pide titulo y el CV no lo acredita -> descarta', pideTitulo.banda === 'descartar' && pideTitulo.razones[0].tipo === 'requisito');
+
+  const conTitulo = Object.assign({}, perfilAbierto, { tiene: { titulo: true, licencias: [], ingles: false } });
+  const rConTitulo = AP.puntuarOferta({ titulo: 'Asistente administrativo', empresa: '', cuerpo: 'Requisito: titulo profesional al dia', ubicacion: '' }, conTitulo);
+  check('modo abierto: si el CV acredita el titulo, no se descarta', rConTitulo.banda !== 'descartar');
+
+  const pideLicencia = AP.puntuarOferta({ titulo: 'Repartidor', empresa: '', cuerpo: 'Se requiere licencia clase a-2 al dia', ubicacion: '' }, perfilAbierto);
+  check('modo abierto: pide licencia profesional que no tiene -> descarta', pideLicencia.banda === 'descartar');
+
+  const sinDatosDelCv = Object.assign({}, perfilAbierto, { tiene: undefined });
+  const rSinDatos = AP.puntuarOferta({ titulo: 'Asistente', empresa: '', cuerpo: 'Requisito: titulo profesional al dia', ubicacion: '' }, sinDatosDelCv);
+  check('modo abierto: sin datos del CV no se descarta por requisitos (la duda no descarta)', rSinDatos.banda !== 'descartar');
+
+  const rCerradoConTitulo = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Deseable titulo profesional al dia', ubicacion: '' }, Object.assign({}, perfilCerrado, { tiene: { titulo: false, licencias: [], ingles: false } }));
+  check('modo objetivo: una mencion de titulo no descarta nada', rCerradoConTitulo.banda === 'postular');
+}
+
+
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));
 process.exit(fallos === 0 ? 0 : 1);

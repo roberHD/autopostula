@@ -517,6 +517,14 @@ model SearchPreferences {
   // string[], todaLaRegion: boolean, aceptaRemoto: boolean }. Opciones
   // cerradas (ver /api/regiones-comunas) -- nunca texto libre.
   ubicacionDeclarada Json? @map("ubicacion_declarada")
+  // docs/amplitud-de-busqueda.md §4: qué tan lejos del objetivo declarado
+  // acepta la persona que se busque. "solo" = lo declarado y nada más;
+  // "parecidos" = el mismo grupo CIUO; "rubro" = el subgrupo principal (52xx);
+  // "abierto" = modo "cualquier trabajo", donde el rol deja de ser el eje y
+  // mandan las condiciones (§5). Lo que entra por amplitud entra con peso bajo,
+  // así que cae en "Por decidir", no en postulación automática -- por eso el
+  // default puede ser "parecidos" sin que nadie empiece a postular a más cosas.
+  amplitud        String   @default("parecidos")
   actualizadoEn   DateTime @updatedAt @map("actualizado_en")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

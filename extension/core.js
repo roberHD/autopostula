@@ -457,6 +457,54 @@ const AP_KEYWORDS_JORNADA = {
   part_time: ['part time', 'media jornada', 'jornada parcial', 'medio tiempo'],
 };
 
+// ── Modo "cualquier trabajo" (docs/amplitud-de-busqueda.md §5) ──
+// Sin rol que filtre, el puntaje partiría en 0 y todo se descartaría. La base
+// la da haber pasado vetos, ubicación, jornada y requisitos; un rol que igual
+// calce suma por encima de ella.
+const AP_BASE_ABIERTO = 60;
+
+// Lo que un aviso EXIGE. Es lo único que reemplaza al rol como protección en
+// modo abierto: sin esto, la persona quema su cupo del mes en avisos donde no
+// la iban a llamar. Los patrones son estrechos a propósito -- la duda no
+// descarta, y un requisito que no se reconoce simplemente no se aplica.
+const AP_REQUISITOS = [
+  {
+    clave: 'titulo',
+    patrones: [
+      /\btitulo (profesional|universitario|tecnico de nivel superior)\b/,
+      /\bprofesional titulad[oa]\b/,
+      /\bcarrera (profesional|universitaria)\b/,
+    ],
+  },
+  {
+    clave: 'licencia',
+    patrones: [
+      /\blicencia(?: de conducir)?(?: clase)? a\s*-?\s*[1-5]\b/,
+      /\blicencia(?: de conducir)?(?: clase)? d\b/,
+    ],
+  },
+  { clave: 'ingles', patrones: [/\bingles (avanzado|intermedio|fluido)\b/, /\bbilingue\b/] },
+];
+
+// Devuelve la clave del requisito excluyente que el aviso pide y la persona no
+// acredita, o null. `tiene` viene del backend (lib/requisitos-cv.ts); si no
+// viene -- perfil viejo, o CV sin texto -- no se descarta nada.
+function apRequisitoFaltante(texto, tiene) {
+  if (!tiene) return null;
+  for (const requisito of AP_REQUISITOS) {
+    if (!requisito.patrones.some((rx) => rx.test(texto))) continue;
+    if (requisito.clave === 'titulo' && tiene.titulo) continue;
+    if (requisito.clave === 'ingles' && tiene.ingles) continue;
+    if (requisito.clave === 'licencia') {
+      const clases = tiene.licencias || [];
+      // Pide una licencia profesional (A o D): basta con acreditar alguna.
+      if (clases.some((c) => c === 'd' || String(c).startsWith('a'))) continue;
+    }
+    return requisito.clave;
+  }
+  return null;
+}
+
 // ── Filtro de palabras clave / exclusión / ubicación / modalidad / jornada ──
 // Portal-agnóstico a propósito: cada adaptador extrae su propio texto y
 // ubicación (la estructura del DOM cambia por sitio) y le pasa strings
@@ -623,6 +671,9 @@ AP.puntuarOferta = function (campos, perfil) {
   }
 
   perfil = perfil || {};
+  // docs/amplitud-de-busqueda.md §5: en modo "cualquier trabajo" el eje deja de
+  // ser el rol y pasa a ser las condiciones (comuna, jornada, vetos, requisitos).
+  const modoAbierto = perfil.modo === 'abierto';
 
   // 1. Vetos -- si matchea en título o empresa, corta acá con la misma
   // certeza de siempre. Si matchea SOLO en el cuerpo, no corta -- queda
@@ -648,6 +699,16 @@ AP.puntuarOferta = function (campos, perfil) {
     }
     penalizacionVetoCuerpo = 60;
     vetoCuerpo = { patron: veto.patron, razon: veto.razon || ('posible: ' + veto.patron) };
+  }
+
+  // 1a. Requisitos excluyentes (docs/amplitud-de-busqueda.md §5). Solo en modo
+  // abierto: en los otros modos el rol ya hace de filtro, y aplicarlo siempre
+  // le escondería a la persona ofertas de SU rubro por una mención suelta.
+  if (modoAbierto) {
+    const faltante = apRequisitoFaltante(titulo + ' ' + empresa + ' ' + cuerpo, perfil.tiene);
+    if (faltante) {
+      return { score: 0, banda: 'descartar', razones: [{ tipo: 'requisito', que: faltante }] };
+    }
   }
 
   // 1b. Nivel del cargo (docs/revision-2026-09-16.md §2.7). El rol "ventas"
@@ -696,8 +757,14 @@ AP.puntuarOferta = function (campos, perfil) {
     }
   }
   score = Math.min(100, score);
+  // §5: la base del modo abierto se aplica acá, después de los roles -- un rol
+  // que igual calza (la persona declaró algo y además se abrió a todo) suma por
+  // encima, no se pierde.
+  if (modoAbierto) score = Math.max(score, AP_BASE_ABIERTO);
   if (mejorRol) {
     razones.push({ tipo: 'rol', rol: mejorRol.rol, termino: mejorRol.termino, campo: mejorRol.campo });
+  } else if (modoAbierto) {
+    razones.push({ tipo: 'modo_abierto' });
   } else if (roles.length) {
     razones.push({ tipo: 'sin_rol' });
   }

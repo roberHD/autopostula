@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, FlaskConical, Target, Plus, MapPin } from "lucide-react";
+import { X, FlaskConical, Target, Plus, MapPin, Compass } from "lucide-react";
 import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 
 type PerfilCompilado = {
@@ -12,6 +12,32 @@ type PerfilCompilado = {
 };
 
 type ObjetivoItem = { ciuo: string | null; etiqueta: string; peso: number };
+
+// docs/amplitud-de-busqueda.md §4 y §7. El tipo se repite acá en vez de
+// importarlo de lib/amplitud.ts porque ese módulo toca la base de datos y esta
+// es una página de cliente.
+type Amplitud = "solo" | "parecidos" | "rubro" | "abierto";
+
+const OPCIONES_AMPLITUD: { valor: Amplitud; titulo: string; detalle: string }[] = [
+  { valor: "solo", titulo: "Solo lo que puse arriba", detalle: "Esos cargos y sus sinónimos, nada más." },
+  {
+    valor: "parecidos",
+    titulo: "Eso y trabajos parecidos",
+    detalle:
+      "Suma los oficios del mismo grupo — por ejemplo, si buscas asistente de ventas, también vendedor de farmacia o de local comercial. Aparecen en Por decidir, no se postulan solos.",
+  },
+  {
+    valor: "rubro",
+    titulo: "Cualquier cosa de mi rubro",
+    detalle: "Suma el rubro completo. Vas a ver bastante más en Por decidir, y lo decides tú.",
+  },
+  {
+    valor: "abierto",
+    titulo: "Cualquier trabajo que pueda hacer",
+    detalle:
+      "Deja de mirar el cargo: filtra por comuna, jornada, lo que descartaste, y no postula a lo que pide un título o una licencia que tu CV no tiene.",
+  },
+];
 
 export default function FiltrosPage() {
   const [cargando, setCargando] = useState(true);
@@ -33,6 +59,10 @@ export default function FiltrosPage() {
   // §2.1 (docs/revision-2026-09-16.md): mismo picker que el onboarding, para
   // que corregir la ubicación después sea tan fácil como declararla la
   // primera vez.
+  // docs/amplitud-de-busqueda.md §4: qué tan lejos del objetivo acepta buscar.
+  const [amplitud, setAmplitud] = useState<Amplitud>("parecidos");
+  const [mensajeAmplitud, setMensajeAmplitud] = useState("");
+
   const [ubicacion, setUbicacion] = useState<UbicacionValor>(ubicacionVacia());
   const [guardandoUbicacion, setGuardandoUbicacion] = useState(false);
   const [mensajeUbicacion, setMensajeUbicacion] = useState("");
@@ -54,6 +84,7 @@ export default function FiltrosPage() {
         if (resPrefs.ok) {
           const prefsData = await resPrefs.json();
           if (prefsData?.ubicacionDeclarada) setUbicacion({ ...ubicacionVacia(), ...prefsData.ubicacionDeclarada });
+          if (prefsData?.amplitud) setAmplitud(prefsData.amplitud as Amplitud);
         }
 
         if (resObjetivos.ok) {
@@ -93,6 +124,32 @@ export default function FiltrosPage() {
       setMensajeScorer("No se pudo actualizar tu búsqueda — revisa la consola");
     } finally {
       setCompilando(false);
+    }
+  }
+
+  // §4: cambiar la amplitud NO recompila el perfil -- la expansión es una
+  // consulta al catálogo que se resuelve al servirle el perfil a la extensión.
+  // Por eso se guarda al tocar la opción, sin botón aparte.
+  async function guardarAmplitud(valor: Amplitud) {
+    const anterior = amplitud;
+    setAmplitud(valor);
+    setMensajeAmplitud("");
+    try {
+      const res = await fetch("/api/preferencias-busqueda", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amplitud: valor }),
+      });
+      if (!res.ok) {
+        setAmplitud(anterior);
+        setMensajeAmplitud("No se pudo guardar");
+        return;
+      }
+      setMensajeAmplitud("Guardado. La extensión lo usa desde su próxima revisión.");
+    } catch (err) {
+      console.error("Error guardando amplitud:", err);
+      setAmplitud(anterior);
+      setMensajeAmplitud("No se pudo guardar — revisa la consola");
     }
   }
 
@@ -248,6 +305,63 @@ export default function FiltrosPage() {
           <button className="ap-button" disabled={guardandoObjetivo} onClick={guardarObjetivos}>
             {guardandoObjetivo ? "Guardando..." : "Guardar objetivo"}
           </button>
+        </div>
+      </div>
+
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.06s" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <Compass size={15} />
+          <p className="ap-section-title" style={{ marginBottom: 0 }}>¿Qué tan abierto estás?</p>
+        </div>
+        <p className="ap-section-sub">
+          No todo el mundo busca un cargo exacto. Acá decides si AutoPostula mira solo lo que pusiste
+          arriba, o también lo que se le parece.
+        </p>
+
+        {mensajeAmplitud && (
+          <p style={{ fontSize: 12.5, color: mensajeAmplitud.startsWith("Guardado") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
+            {mensajeAmplitud}
+          </p>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {OPCIONES_AMPLITUD.map((opcion) => {
+            const elegida = amplitud === opcion.valor;
+            return (
+              <label
+                key={opcion.valor}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "flex-start",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  cursor: "pointer",
+                  border: elegida
+                    ? "1px solid color-mix(in oklch, var(--chart-2) 55%, transparent)"
+                    : "1px solid var(--border)",
+                  background: elegida ? "color-mix(in oklch, var(--chart-2) 8%, transparent)" : "transparent",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="amplitud"
+                  checked={elegida}
+                  onChange={() => guardarAmplitud(opcion.valor)}
+                  style={{ marginTop: 3 }}
+                />
+                <span>
+                  <span style={{ fontSize: 13.5, fontWeight: 500 }}>
+                    {opcion.titulo}
+                    {opcion.valor === "parecidos" && (
+                      <span style={{ fontSize: 11.5, fontWeight: 400, opacity: 0.7 }}> · recomendado</span>
+                    )}
+                  </span>
+                  <span style={{ display: "block", fontSize: 12.5, opacity: 0.75, marginTop: 2 }}>{opcion.detalle}</span>
+                </span>
+              </label>
+            );
+          })}
         </div>
       </div>
 
