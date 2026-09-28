@@ -190,12 +190,13 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 |---|---|---|
 | Revisión legal de privacidad y términos | ⏸ Con el abogado | Chrome Web Store |
 | Definir la política de devolución (`§7.2` de Términos), **para pases y ahora también créditos** | ⏸ Con el abogado | Cobrar de verdad |
-| **Inicio de actividades en el SII** y cómo se emiten las boletas | ⚠️ Lo hace Roberto | Cobrar de verdad: desde 2025 toda pasarela lo exige |
+| **Inicio de actividades en el SII** | ✅ **Hecho el 28-09-2026** — folio 17252490, primera categoría, afecto a IVA, micro empresa. Giros `631200` (portales web) y `631100` (procesamiento de datos y hospedaje) | — |
+| Régimen tributario, boleta electrónica y patente municipal | ⚠️ Lo hace Roberto, y tiene plazo | Cobrar de verdad |
 | Cuenta de comercio Flow | ✅ **Aprobada** (24-09) | — |
-| `FLOW_SANDBOX=false` en producción | 🔨 Después del SII | Cobrar de verdad |
+| `FLOW_SANDBOX=false` en producción | 🔨 Ya se puede: Flow aprobado + SII hecho | Cobrar de verdad |
 | Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ✅ Resuelto en `323f2a4`; verificado en Vercel el 19-09 | Recuperación de contraseña real |
 | `CRON_SECRET` en producción | ✅ Puesto el 19-09 — las tres rutas responden 401 y el purgado a 90 días corre | Cumplir la promesa de borrado de la política |
-| Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | ✅ Programado; falta el SII | Cobrar de verdad |
+| Cobro con pases prepagados ([`pase-prepagado.md`](pase-prepagado.md)) | ✅ Programado; falta probarlo contra el sandbox de Flow | Cobrar de verdad |
 | Créditos ([`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md)) | 🔨 Motor listo; falta devolución, verificación y boleta | Cobrar por unidad |
 | Ficha y envío a la Chrome Web Store | ✅ Publicada | — |
 | Versión 2.13.0 de la extensión (ráfagas y permiso `power`) | 🔨 **En revisión** en la tienda; en el repo ya hay una 2.14 sin publicar | Que la landing y la tienda digan lo mismo |
