@@ -38,6 +38,7 @@
 | [`estrategia-y-rediseno.md`](estrategia-y-rediseno.md) | Cómo venderlo frente a la competencia (Postula Fácil da ~200 postulaciones por $3.990), créditos sin suscripción, qué filtra de verdad un "ATS" en Chile y el rediseño pantalla por pantalla, con mockups en el lienzo «Rediseño AutoPostula» | 🔨 En ejecución — 3 de 13 (landing, Hoy, estado único de la extensión). Los créditos de su §3 pasaron a `creditos-y-pagina-nueva.md` |
 | [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) | Los créditos van sí o sí: el motor ya existe como `postulaciones_extra`. Reglas, devolución cuando la postulación no llegó, precios, y la fase nueva de la página (landing, precios, preguntas frecuentes, chequeo de CV público, medición). Incluye el plan para juntar las dos ramas | 🔴 **Prioridad 1** — decidido el 24-09. El **paso 0** (juntar las ramas) ya está hecho; quedan los pasos 1 a 9 |
 | [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | ✅ **Implementado** — los 7 pasos programables del §9, verificados el 24-09: `obtenerPlanVigente`, esquema, checkout/confirmación/retorno, `acreditarPago` idempotente, ruta de cancelar retirada, cron de avisos y comprobante por correo. Falta el **paso 0** (inicio de actividades y boletas), que es de Roberto con el contador y bloquea cobrar de verdad, no programar |
+| [`amplitud-de-busqueda.md`](amplitud-de-busqueda.md) | Un caso real que calzaba perfecto y quedó en "Por decidir": las señales del perfil compilado guardan listas separadas por coma y **nunca calzan**, y los vetos son descripciones, así que "no quiero full time" no filtra nada. Más el control de amplitud por CIUO ("vendedor en general") y el modo "cualquier trabajo" | 🔴 **Bug primero** — propuesta del 27-09 |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
@@ -150,6 +151,16 @@ mayor, paquetes, premios, compra por Flow y comprobante. Falta la devolución cu
 no llegó (§3.3), verificar 10 postulaciones reales antes de abrir la venta (§3.6) y la fase nueva
 de la página: landing desplegada, precios en una URL propia, preguntas frecuentes, chequeo de CV
 público y alguna forma de medir (§4, §5). Su §6 tiene el orden completo.
+
+### 1b. Señales que nunca calzan — [`amplitud-de-busqueda.md`](amplitud-de-busqueda.md) §2
+
+Va pegado a lo anterior porque es un día de trabajo y probablemente vacía la mitad de "Por
+decidir". Una oferta que calzaba perfecto —*"Vendedor de Retail vestuario Rotativo Part Time"*,
+part time, en la RM— sacó 50 puntos y quedó en gris, cuando con las señales funcionando sacaba 90
+y se postulaba: los patrones se guardan como listas separadas por coma (`"moda, vestuario,
+calzado, fashion"`) y el motor los busca como una frase completa. Los vetos tienen lo mismo, y ahí
+es peor: `"full time exclusive"` no filtra nada, y la persona cree que sí. El §8 de ese documento
+tiene el orden; los pasos 1 a 5 son chicos e independientes.
 
 ### 2. Banco de preguntas — [`banco-de-preguntas.md`](banco-de-preguntas.md)
 
