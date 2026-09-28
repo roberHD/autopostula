@@ -68,7 +68,10 @@ function Par({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-export default function PerfilCv() {
+// `alCambiar` avisa cuando cambió el CV o los datos: el chequeo de CV de la
+// misma página se vuelve a pedir. `trasCv` va justo debajo de la fila del CV
+// (ahí la página pone el chequeo: primero el archivo, después qué tan bien se lee).
+export default function PerfilCv({ alCambiar, trasCv }: { alCambiar?: () => void; trasCv?: React.ReactNode } = {}) {
   const { exito, error: avisarError } = useAvisos();
   const [perfil, setPerfil] = useState<Perfil>({});
   const [cargando, setCargando] = useState(true);
@@ -127,6 +130,7 @@ export default function PerfilCv() {
     } finally {
       setSubiendo(false);
       setAnalizando(false);
+      alCambiar?.();
     }
   }
 
@@ -145,6 +149,7 @@ export default function PerfilCv() {
       }
       setPerfil(data);
       setEditando(false);
+      alCambiar?.();
       exito("Perfil guardado", "La IA ya usa estos datos para responder por ti.");
     } catch {
       avisarError("No se pudo guardar", "Revisa tu conexión e intenta de nuevo.");
@@ -250,6 +255,8 @@ export default function PerfilCv() {
           <span className="ap-cv__accion">{perfil.nombreArchivo ? "Reemplazar" : "Elegir archivo"}</span>
         )}
       </div>
+
+      {trasCv}
 
       {editando ? (
         <div className="ap-section ap-animate-in" style={{ marginBottom: 0 }}>

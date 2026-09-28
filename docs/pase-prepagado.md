@@ -5,6 +5,10 @@
 > vigencia por fecha, monto alterado, cron de avisos) — **falta probarlo contra el sandbox de Flow**, que
 > necesita las claves. Pendiente además: regenerar `docs/legal/` (Word y PDF), cambiar la descripción de
 > la Chrome Web Store y todo el punto 0 de §9 (inicio de actividades y boleta).
+>
+> **Actualización 2026-09-24:** Flow **ya aprobó la cuenta de comercio**. Lo único que falta para
+> cobrar de verdad es el inicio de actividades en el SII y poner `FLOW_SANDBOX=false`. Por la misma
+> puerta de pago pasan ahora los paquetes de créditos (`creditos-y-pagina-nueva.md`).
 > **Para:** el chat de producción.
 > **Reemplaza:** la suscripción mensual con Cargo Automático de Flow.
 > **Relacionado:** `revision-2026-09-16.md` §1.3 (límites antes de enviar) y §8.3 (qué cuenta como
@@ -171,7 +175,7 @@ model Subscription {
 > (por ejemplo, al eliminar la cuenta con el cambio `1018b20`, las suscripciones quedan sin dueño
 > pero existen) no puede arrastrar el registro del pago.
 
-No hay pagos reales en producción (Flow sigue sin aprobar), así que no hay datos que migrar.
+No hay pagos reales en producción (Flow aprobó la cuenta el 24-09, pero todavía en sandbox), así que no hay datos que migrar.
 
 **Catálogo de pases en código**, no en la base:
 

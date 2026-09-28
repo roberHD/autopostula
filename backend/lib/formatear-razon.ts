@@ -29,36 +29,38 @@ export function esRazonPositiva(r: unknown): boolean | null {
   return null;
 }
 
+// En palabras de quien busca trabajo, no del cálculo: nada de puntajes
+// ("+2 por…") ni de "roles" o "escaneo". La tarjeta ya separa "Calza contigo"
+// de "Pero", así que cada frase no repite si es a favor o en contra.
 export function formatearRazon(r: unknown): string {
   if (typeof r === "string") return r;
-  if (!r || typeof r !== "object" || !("tipo" in r)) return "sin razón";
+  if (!r || typeof r !== "object" || !("tipo" in r)) return "Sin razón registrada";
   const razon = r as RazonEstructurada;
   switch (razon.tipo) {
     case "rol":
-      return `calza con "${razon.rol}" (${razon.termino})`;
+      // El término es la palabra del aviso que calzó; solo se dice si agrega algo.
+      return razon.termino && razon.termino.toLowerCase() !== razon.rol.toLowerCase()
+        ? `Es de ${razon.rol}, lo que buscas (dice "${razon.termino}")`
+        : `Es de ${razon.rol}, lo que buscas`;
     case "sin_rol":
-      return "no se encontró ninguno de los roles buscados";
+      return "El cargo no se parece a lo que buscas";
     case "veto":
-      return razon.donde === "cuerpo"
-        ? `${razon.razon} (mención en el cuerpo del aviso, no en título/empresa)`
-        : razon.razon;
+      return razon.donde === "cuerpo" ? `${razon.razon} (lo dice el aviso)` : razon.razon;
     case "ubicacion":
-      return razon.ofertaEn
-        ? `${razon.ofertaEn} no está en tus comunas${razon.buscadas?.length ? ` (buscas ${razon.buscadas.join(", ")})` : ""}`
-        : "fuera de las comunas que buscas";
+      return razon.ofertaEn ? `Queda en ${razon.ofertaEn}, fuera de tus comunas` : "Queda fuera de tus comunas";
     case "nivel":
       return razon.certeza === "desconocida"
-        ? `es un cargo de jefatura o dirección ("${razon.termino}") y no está claro si buscas ese nivel`
-        : `es un cargo de jefatura o dirección ("${razon.termino}") y buscas otro nivel`;
+        ? `Es jefatura ("${razon.termino}") y no sabemos si buscas ese nivel`
+        : `Es jefatura ("${razon.termino}") y buscas otro nivel`;
     case "duplicado":
       return razon.fecha
-        ? `ya postulaste a este mismo cargo en esta empresa el ${new Date(razon.fecha).toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit" })}`
-        : "este mismo cargo de esta empresa ya apareció en este escaneo";
+        ? `Ya postulaste a este cargo en esta empresa el ${new Date(razon.fecha).toLocaleDateString("es-CL", { day: "numeric", month: "short" })}`
+        : "Se repite en esta misma búsqueda";
     case "senal":
-      return `${razon.delta >= 0 ? "+" : ""}${razon.delta} por "${razon.patron}"`;
+      return `El aviso dice "${razon.patron}"`;
     case "sin_senales":
-      return "sin señales claras";
+      return "El aviso no trae nada claro a favor ni en contra";
     default:
-      return "sin razón";
+      return "Sin razón registrada";
   }
 }

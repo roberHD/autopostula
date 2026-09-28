@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Building2, TriangleAlert, Star } from "lucide-react";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import { formatearRazon, esRazonPositiva } from "@/lib/formatear-razon";
+import type { EstadoExtension } from "@/lib/estado-extension";
 
 // Facetas leídas en la Etapa 2 (docs/visibilidad-y-etapa2.md §B/§E) -- todos
 // opcionales, una fila sin Etapa 2 (o de antes del cambio) simplemente no
@@ -75,6 +76,47 @@ function textoDeAprobacion(r: ResultadoAprobar | null): string {
   }
 }
 
+/**
+ * Las razones como el intercambio que se le pide decidir: lo que calza a un
+ * lado, lo que no al otro. Las filas viejas guardaron strings sin saber si
+ * eran a favor o en contra; esas van aparte, sin ubicarlas en ninguna columna.
+ */
+function RazonesEnDos({ razones }: { razones: unknown[] }) {
+  const aFavor = razones.filter((r) => esRazonPositiva(r) === true);
+  const enContra = razones.filter((r) => esRazonPositiva(r) === false);
+  const sinClasificar = razones.filter((r) => esRazonPositiva(r) === null);
+
+  return (
+    <>
+      {(aFavor.length > 0 || enContra.length > 0) && (
+        <div className="ap-razones-dos">
+          {aFavor.length > 0 && (
+            <div>
+              <h3>Calza contigo</h3>
+              <ul className="ap-razones">
+                {aFavor.map((r, i) => <li key={i} className="positiva">{formatearRazon(r)}</li>)}
+              </ul>
+            </div>
+          )}
+          {enContra.length > 0 && (
+            <div>
+              <h3>Pero</h3>
+              <ul className="ap-razones">
+                {enContra.map((r, i) => <li key={i} className="negativa">{formatearRazon(r)}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+      {sinClasificar.length > 0 && (
+        <ul className="ap-razones">
+          {sinClasificar.map((r, i) => <li key={i}>{formatearRazon(r)}</li>)}
+        </ul>
+      )}
+    </>
+  );
+}
+
 export default function PorDecidirPage() {
   const [pendientes, setPendientes] = useState<DecisionGris[] | null>(null);
   const [expiradasSinRevisar, setExpiradasSinRevisar] = useState(0);
@@ -124,8 +166,17 @@ export default function PorDecidirPage() {
     }
   }
 
+  // docs/estrategia-y-rediseno.md §6: ahora el panel SÍ sabe en qué está la
+  // extensión, así que el aviso deja de salir siempre "por las dudas" y sale
+  // solo cuando de verdad tu "sí" va a quedar esperando.
+  const [estadoExt, setEstadoExt] = useState<EstadoExtension | null>(null);
+
   useEffect(() => {
     cargar();
+    fetch("/api/account/opciones-extension")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.estado && setEstadoExt(d.estado))
+      .catch(() => {});
   }, []);
 
   async function decidir(item: ItemSwipe, veredicto: "SI" | "NO") {
@@ -158,15 +209,20 @@ export default function PorDecidirPage() {
       <div className="ap-page-header">
         <h1 className="ap-page-title">Por decidir</h1>
         <p className="ap-page-sub">
-          Ofertas que no pudimos ubicar con confianza — tu sí o no ayuda a que tu perfil aprenda.
+          Ofertas que calzan a medias. Tu sí o tu no también le enseña a tu perfil.
         </p>
-        {/* docs/modo-solo-observar.md §4.3: si la extensión tiene "solo observar"
-            activado, un "sí" acá queda pendiente hasta que se desactive -- no
-            hay forma de saber desde el dashboard si está prendido, así que se
-            avisa siempre en vez de dejarlo como una sorpresa silenciosa. */}
-        <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>
-          Si tienes "Solo observar" activado en la extensión, un "sí" acá queda pendiente hasta que lo desactives.
-        </p>
+        {/* docs/modo-solo-observar.md §4.3: un "sí" acá queda esperando si la
+            extensión no está postulando. Antes se avisaba siempre, porque el
+            panel no tenía cómo saberlo; ahora lee el estado de la cuenta y solo
+            lo dice cuando es cierto (§6 del rediseño). */}
+        {estadoExt && estadoExt.modo !== "postulando" && (
+          <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>
+            {estadoExt.modo === "pausada"
+              ? "La extensión está en pausa: lo que aceptes acá queda guardado y se envía cuando la reanudes."
+              : "Ahora la extensión solo mira: lo que aceptes acá queda guardado y se envía cuando la dejes postular."}{" "}
+            <a href="/dashboard/ajustes" style={{ color: "var(--accent)" }}>Cambiarlo en Ajustes</a>
+          </p>
+        )}
       </div>
 
       {mensaje && <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>{mensaje}</p>}
@@ -265,18 +321,15 @@ export default function PorDecidirPage() {
 
                   {!!detalle?.extracto && <p className="ap-extracto">{detalle.extracto}</p>}
 
-                  {razones.length > 0 && (
-                    <ul className="ap-razones">
-                      {razones.map((r, i) => {
-                        const positiva = esRazonPositiva(r);
-                        const clase = positiva === true ? "positiva" : positiva === false ? "negativa" : undefined;
-                        return <li key={i} className={clase}>{formatearRazon(r)}</li>;
-                      })}
-                    </ul>
-                  )}
+                  {razones.length > 0 && <RazonesEnDos razones={razones} />}
                 </div>
               );
             }}
+            pie={
+              <p className="ap-decidir-cuando">
+                Si dices que sí, se envía <b>en cuanto tu computador tenga Chrome abierto con la extensión</b>.
+              </p>
+            }
           />
         )}
       </div>

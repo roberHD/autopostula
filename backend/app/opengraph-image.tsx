@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "AutoPostula — Postula 80 veces al mes. Escribe una sola.";
+export const alt = "AutoPostula — Postula a lo que te sirve. Escribe una sola vez.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -59,12 +59,12 @@ export default function Imagen() {
 
         {/* El titular, con el destacador sobre la línea que remata */}
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontSize: 76, fontWeight: 800, color: "#E9EBEA", letterSpacing: "-2.5px" }}>
-            Postula 80 veces al mes.
+          <span style={{ fontSize: 68, fontWeight: 800, color: "#E9EBEA", letterSpacing: "-2.5px" }}>
+            Postula a lo que te sirve.
           </span>
           <span
             style={{
-              fontSize: 76,
+              fontSize: 68,
               fontWeight: 800,
               color: "#16181A",
               background: "#D6F24B",
@@ -74,7 +74,7 @@ export default function Imagen() {
               alignSelf: "flex-start",
             }}
           >
-            Escribe una sola.
+            Escribe una sola vez.
           </span>
         </div>
 

@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Zap, Lock, Mail, BadgeCheck, TriangleAlert, LogOut, LifeBuoy, ChevronRight } from "lucide-react";
+import { Mail, BadgeCheck, TriangleAlert, LogOut, LifeBuoy, ChevronRight } from "lucide-react";
 import { textoPruebaEnCurso } from "@/lib/texto-rafaga";
 import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
+import ComoTrabaja from "./ComoTrabaja";
 
 export default function AjustesPage() {
   const router = useRouter();
-  const [activa, setActiva] = useState(false);
   // "Hay algo automático que pausar": el plan Premium, o la prueba de una cuenta
   // gratis mientras dura (docs/rafagas-y-ponerse-al-dia.md §4.1). Con la prueba
   // gastada, el ajuste se ofrece como parte de un plan superior.
@@ -21,7 +21,6 @@ export default function AjustesPage() {
   const [premiumHasta, setPremiumHasta] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
   const [mostrarEliminar, setMostrarEliminar] = useState(false);
@@ -34,7 +33,6 @@ export default function AjustesPage() {
       const res = await fetch("/api/account/busqueda-automatica");
       const data = await res.json();
       if (!res.ok) { setMensaje(data.error ?? `Error ${res.status}`); return; }
-      setActiva(data.activa);
       setDisponibleEnPlan(data.modo ? data.modo !== "manual" : data.disponibleEnPlan);
       setPruebaRestantes(data.modo === "prueba" ? data.pruebaRestantes ?? null : null);
       setPlanNombre(data.planNombre);
@@ -52,31 +50,6 @@ export default function AjustesPage() {
   useEffect(() => {
     cargar();
   }, []);
-
-  async function alternar() {
-    if (!disponibleEnPlan || guardando) return;
-    const nuevoValor = !activa;
-    setActiva(nuevoValor); // optimista
-    setGuardando(true);
-    try {
-      const res = await fetch("/api/account/busqueda-automatica", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activa: nuevoValor }),
-      });
-      if (!res.ok) {
-        setActiva(!nuevoValor); // revierte si falló
-        const data = await res.json().catch(() => ({}));
-        setMensaje(data.error ?? "No se pudo guardar el cambio");
-      }
-    } catch (err) {
-      setActiva(!nuevoValor);
-      console.error("Error guardando ajuste:", err);
-      setMensaje("No se pudo guardar el cambio — revisa la consola");
-    } finally {
-      setGuardando(false);
-    }
-  }
 
   async function eliminarCuenta() {
     if (eliminando) return;
@@ -199,68 +172,20 @@ export default function AjustesPage() {
         )}
       </div>
 
-      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.05s" }}>
-        <p className="ap-section-title">Búsqueda automática</p>
-
-        {cargando ? (
-          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Cargando...</p>
-        ) : !disponibleEnPlan ? (
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0" }}>
-            <div
-              style={{
-                width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                background: "var(--bg-elevated-2)", color: "var(--text-muted)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}
-            >
-              <Lock size={15} />
-            </div>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 600 }}>Disponible en un plan superior</p>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.5 }}>
-                Con Premium, AutoPostula se pone al día sola cada vez que abres tu computador, sin que entres a ningún portal. Sin él sigues postulando: entras a Computrabajo, Laborum o Trabajando y la extensión postula por ti.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="ap-toggle-row" style={{ border: "none", padding: "6px 0" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <div
-                style={{
-                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                  background: "color-mix(in oklch, var(--chart-5) 16%, transparent)", color: "var(--chart-5)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}
-              >
-                <Zap size={15} />
-              </div>
-              <div>
-                <p className="ap-toggle-label" style={{ fontWeight: 600 }}>
-                  Postular automáticamente{planNombre ? ` (${planNombre})` : ""}
-                </p>
-                <p className="ap-toggle-desc">
-                  {pruebaRestantes !== null
-                    ? activa
-                      ? `${textoPruebaEnCurso(pruebaRestantes, PRUEBA_TOTAL)}. Se envían solas, sin que entres a ningún portal.`
-                      : "Pausada — la prueba no envía nada hasta que la reanudes."
-                    : activa
-                    ? "Activo — AutoPostula se pone al día sola cada vez que abres tu computador: revisa ofertas nuevas en tus portales conectados y postula por ti."
-                    : "Pausado — solo vas a postular cuando lo hagas tú manualmente."}
-                </p>
-              </div>
-            </div>
-            <button
-              className={"ap-switch " + (activa ? "ap-switch-on" : "ap-switch-off")}
-              onClick={alternar}
-              disabled={guardando}
-              aria-pressed={activa}
-              aria-label="Activar o pausar la búsqueda automática"
-            >
-              <span className="ap-switch-knob" />
-            </button>
-          </div>
-        )}
-      </div>
+      {/* docs/estrategia-y-rediseno.md §6: un solo estado, acá y en el popup.
+          El texto de la pausa cambia con el plan -- lo que se deja de hacer al
+          pausar no es lo mismo en Premium que en una cuenta gratis. */}
+      {!cargando && (
+        <ComoTrabaja
+          textoPausa={
+            pruebaRestantes !== null
+              ? `${textoPruebaEnCurso(pruebaRestantes, PRUEBA_TOTAL)}. Se envían solas, sin que entres a ningún portal.`
+              : disponibleEnPlan
+              ? "Se pone al día sola cada vez que abres tu computador: revisa las ofertas nuevas de tus portales y postula por ti."
+              : "Entras a Computrabajo, Laborum o Trabajando y la extensión postula por ti mientras estás ahí."
+          }
+        />
+      )}
 
       <div
         className="ap-section ap-animate-in"

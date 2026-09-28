@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, Send, Check, MessageSquare, PenLine, Target, Heart, Lock, Mic, Square } from "lucide-react";
 import { quitarMarkdown } from "@/lib/text";
 import { usarDictado } from "@/lib/usar-dictado";
+import PestanasEntrenar from "../PestanasEntrenar";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
 
@@ -168,11 +169,13 @@ export default function ConversacionPage() {
   return (
     <div className="ap-glow-bg">
       <div className="ap-page-header">
-        <h1 className="ap-page-title">Tu estilo profesional</h1>
+        <h1 className="ap-page-title">Entrenar IA</h1>
         <p className="ap-page-sub">
           Conversemos un poco para que la IA aprenda a escribir como tú, no como un formulario genérico.
         </p>
       </div>
+
+      <PestanasEntrenar />
 
       {mensaje && (
         <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>{mensaje}</p>

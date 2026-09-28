@@ -65,11 +65,9 @@ enum EstadoPostulacion {
   ENVIADO
   VISTO
   EN_PROCESO
-  // docs/estado-real-de-postulaciones.md §6.3. El enum se habia armado con el
-  // vocabulario de Computrabajo y le faltaba justo el estado que mas importa:
-  // una entrevista no tenia donde guardarse. FINALISTA significa otra cosa
-  // (etapa final del proceso), y por eso el contador mostraba cero teniendo
-  // cuatro entrevistas coordinadas por correo.
+  // docs/estado-real-de-postulaciones.md §6.3: la entrevista es lo que más
+  // importa y hasta ahora no tenía dónde guardarse. Casi siempre la cuenta
+  // la persona: ningún portal la ve (llega por correo, llamada o WhatsApp).
   ENTREVISTA
   FINALISTA
   FINALIZADO
@@ -191,6 +189,30 @@ model User {
   // ninguno más.
   recordatorioRafagaEn DateTime? @map("recordatorio_rafaga_en")
   recordatoriosActivos Boolean   @default(true) @map("recordatorios_activos")
+  // ── Invitaciones (docs/creditos-y-pagina-nueva.md §3) ──
+  // El código propio para invitar (se arma la primera vez que se pide) y quién
+  // te invitó a ti. El premio se da cuando el invitado verifica su correo: sin
+  // eso, una persona se regala postulaciones sola creando cuentas vacías.
+  codigoInvitacion String? @unique @map("codigo_invitacion")
+  invitadoPorId    String? @map("invitado_por_id")
+
+  // ── Cómo trabaja la extensión (docs/estrategia-y-rediseno.md §6) ──
+  // Antes vivían en chrome.storage de cada navegador: el popup tenía sus
+  // propios controles (activo, solo observar, revisar antes de enviar) que no
+  // sabían nada de los dos de la cuenta (pausa de la búsqueda automática, red
+  // de seguridad de modo prueba), así que la misma persona veía un estado en
+  // el popup y otro en el panel. Ahora manda la cuenta y el popup la refleja.
+  //
+  // null = todavía no lo dijo acá: la extensión sube UNA vez lo que tenía
+  // guardado local (POST /api/extension/estado con `migrar`) y desde entonces
+  // manda el servidor. Sin ese null no habría cómo distinguir "lo apagó" de
+  // "nunca lo tocó", y la migración pisaría lo que la persona decidió.
+  soloObservar         Boolean? @map("solo_observar")
+  revisarAntesDeEnviar Boolean? @map("revisar_antes_de_enviar")
+  // Hechos sueltos que la persona quiere que la IA use al responder
+  // formularios ("tengo licencia B", "puedo empezar en dos semanas"). Vivían
+  // en el popup, donde se perdían al cambiar de computador. Forma: [{id, texto}].
+  infoAdicional        Json?    @map("info_adicional")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
@@ -205,6 +227,10 @@ model User {
   decisionesOferta  DecisionOferta[]
   objetivosLaborales ObjetivoLaboral[]
   rafagas           Rafaga[]
+  descartes         Descarte[]
+  extras            PostulacionExtra[]
+  invitadoPor       User?   @relation("Invitaciones", fields: [invitadoPorId], references: [id], onDelete: SetNull)
+  invitados         User[]  @relation("Invitaciones")
 
   @@map("users")
 }
@@ -600,14 +626,13 @@ model Application {
   // el historial: la prueba se demuestra con resultados concretos, no con un
   // mensaje. Máximo 5 filas por cuenta.
   esDePrueba          Boolean           @default(false) @map("es_de_prueba")
-  // docs/estado-real-de-postulaciones.md §6.4. De donde salio estadoActual. Un
-  // escaneo de portal NUNCA pisa un estado con origen USUARIO: si la persona
-  // dijo "tengo entrevista", que Computrabajo siga diciendo "postulado" no lo
-  // revierte. Las filas viejas quedan en SISTEMA, que el portal si puede pisar.
-  origenEstado        OrigenEstado      @default(SISTEMA) @map("origen_estado")
-  // Para no preguntarle dos veces seguidas por la misma postulacion (§6.1):
-  // nada antes de los 5 dias, nada dos veces en 7, y se deja de preguntar
-  // tras 3 intentos sin respuesta.
+  // docs/estado-real-de-postulaciones.md §6.4-§6.5: un escaneo del portal
+  // NUNCA pisa un estado que contó la persona -- si dijo "tuve entrevista",
+  // que el portal siga diciendo "postulado" no lo revierte. Las filas viejas
+  // quedan en PORTAL, que el portal sí puede pisar (docs/creditos-y-pagina-nueva.md §2.2).
+  origenEstado        OrigenEstado      @default(PORTAL) @map("origen_estado")
+  // Para no preguntar "¿supiste algo?" dos veces seguidas por lo mismo (§6.1):
+  // se cuenta cada "Nada todavía", y a las 3 se deja de preguntar.
   ultimaConsulta      DateTime?         @map("ultima_consulta")
   vecesConsultada     Int               @default(0) @map("veces_consultada")
 
@@ -627,6 +652,9 @@ model ApplicationStatusHistory {
   applicationId  String            @map("application_id")
   estado         EstadoPostulacion
   cambiadoEn     DateTime          @default(now()) @map("cambiado_en")
+  // Quién dijo este paso, para contarlo en la historia ("· tú", "· el portal").
+  // null en las filas de antes de que existiera.
+  origen         OrigenEstado?
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
@@ -658,6 +686,34 @@ model AiUsageLog {
 //
 // Son datos de uso, no del contenido de nada: se purgan a los 90 días junto
 // con los avistamientos (lib/purgar-avistamientos.ts).
+// Ofertas que el motor dejó fuera, con su razón (docs/estrategia-y-rediseno.md
+// §5.2). Antes la razón se calculaba, se usaba y se botaba: la persona veía
+// "14 descartadas" sin saber cuáles ni por qué, y no podía corregir nada.
+// Una fila por oferta y persona (la misma oferta vista en otro escaneo no se
+// duplica). Se purga a los 90 días junto con los avistamientos.
+model Descarte {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  plataforma  String
+  externalId  String    @map("external_id")
+  titulo      String
+  empresa     String?
+  url         String?
+  // La razón principal, tal como la dio el scorer (objeto estructurado, ver
+  // lib/formatear-razon.ts) -- o un string si vino del filtro viejo.
+  razon       Json?
+  vistoEn     DateTime  @default(now()) @map("visto_en")
+  // "No era así": la persona dijo que sí le servía. Se crea además una
+  // decisión SI para que la extensión la postule y el perfil aprenda.
+  corregidoEn DateTime? @map("corregido_en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, plataforma, externalId])
+  @@index([userId, vistoEn])
+  @@map("descartes")
+}
+
 model Rafaga {
   id          String    @id @default(uuid())
   userId      String    @map("user_id")
@@ -728,4 +784,39 @@ model StyleRefinement {
   styleProfile StyleProfile @relation(fields: [styleProfileId], references: [id], onDelete: Cascade)
 
   @@map("style_refinements")
+}
+
+// ─────────────────────────────────────────
+// Postulaciones extra (docs/creditos-y-pagina-nueva.md §3)
+// ─────────────────────────────────────────
+// Un libro mayor, no un contador: cada movimiento queda escrito con su motivo
+// y el saldo es la suma. Así se puede responder "¿por qué tengo 43?" -- que es
+// la pregunta que llega a soporte -- en vez de mirar un número sin historia.
+enum MotivoExtra {
+  COMPRA
+  PREMIO_INVITACION
+  PREMIO_PERFIL
+  USO
+  AJUSTE
+}
+
+model PostulacionExtra {
+  id       String      @id @default(uuid())
+  userId   String      @map("user_id")
+  // Positivo suma (compra, premio), negativo resta (una postulación enviada
+  // cuando ya no quedaba cupo del mes).
+  cantidad Int
+  motivo   MotivoExtra
+  // Lo que hace idempotente a todo esto: "compra:<paymentId>",
+  // "invitacion:<userId del invitado>", "perfil:<userId>", "uso:<applicationId>".
+  // Dos avisos del mismo pago, o dos veces el mismo premio, chocan acá en vez
+  // de duplicar el saldo.
+  clave    String      @unique
+  detalle  String?
+  creadoEn DateTime    @default(now()) @map("creado_en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, creadoEn])
+  @@map("postulaciones_extra")
 }

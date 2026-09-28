@@ -25,9 +25,11 @@ export default function NavLanding() {
         </Link>
 
         <nav className="lp-nav__links">
-          <a className="lp-navlink lp-navlink--anchor" href="#diferencia">La diferencia</a>
+          <a className="lp-navlink lp-navlink--anchor" href="#reglas">Cómo decide</a>
+          <a className="lp-navlink lp-navlink--anchor" href="#perfil">Tu perfil</a>
           <a className="lp-navlink lp-navlink--anchor" href="#pasos">Cómo funciona</a>
           <a className="lp-navlink lp-navlink--anchor" href="#precios">Precios</a>
+          <a className="lp-navlink lp-navlink--anchor" href="#preguntas">Preguntas</a>
           <Link className="lp-navlink lp-navlink--fuerte" href="/login">Iniciar sesión</Link>
           <Link className="ap-btn ap-btn--primary ap-btn--sm" href="/registro">Crear cuenta</Link>
         </nav>

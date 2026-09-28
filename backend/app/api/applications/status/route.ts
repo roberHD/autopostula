@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { decidirCambioEstado } from "@/lib/estado-postulacion";
+import { portalPuedeCambiar, type Origen } from "@/lib/estado-real";
 
 async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -68,22 +68,16 @@ export async function PATCH(request: Request) {
 
     // Este endpoint es SIEMPRE el camino del portal: lo llama la extensión con
     // el token de la cuenta, desde escanearMisPostulaciones(). Lo que reporte
-    // la persona va a entrar por otra ruta con origen USUARIO.
+    // la persona entra por /api/applications/[id]/reporte con origen USUARIO.
     //
-    // La decisión vive en lib/estado-postulacion.ts para que las dos rutas no
-    // puedan divergir (docs/estado-real-de-postulaciones.md §6.5). Cubre lo que
-    // antes estaba suelto acá: que solo INCOMPLETA pueda pasar a ENVIADO, y
-    // ahora además que el portal nunca pise lo que reportó la persona ni haga
-    // retroceder una postulación que ya avanzó.
-    const decision = decidirCambioEstado({
-      actual: application.estadoActual,
-      origenActual: application.origenEstado,
-      nuevo: estado,
-      origen: "PORTAL",
-    });
-
-    if (!decision.aplica) {
-      return NextResponse.json({ id: application.id, sinCambios: true, motivo: decision.motivo });
+    // docs/estado-real-de-postulaciones.md §6.5: el portal solo sube de rango,
+    // nunca baja, y nunca pisa lo que contó la persona ("tuve entrevista" no se
+    // revierte porque el portal siga diciendo "postulado"). La única excepción
+    // hacia abajo es INCOMPLETA → ENVIADO (§8.2/§8.3 de la revisión): "Postulado"
+    // en el portal es la evidencia de que sí llegó. Todo eso vive en
+    // lib/estado-real.ts, verificado por scripts/verificar-estado-real.ts.
+    if (!portalPuedeCambiar(application.estadoActual, application.origenEstado as Origen, estado)) {
+      return NextResponse.json({ id: application.id, sinCambios: true });
     }
 
     await prisma.application.update({
@@ -96,10 +90,10 @@ export async function PATCH(request: Request) {
     });
 
     await prisma.applicationStatusHistory.create({
-      data: { applicationId: application.id, estado: estado as any },
+      data: { applicationId: application.id, estado: estado as any, origen: "PORTAL" },
     });
 
-    return NextResponse.json({ id: application.id, sinCambios: false, motivo: decision.motivo });
+    return NextResponse.json({ id: application.id, sinCambios: false });
   } catch (err) {
     console.error("Error en /api/applications/status:", err);
     return NextResponse.json(

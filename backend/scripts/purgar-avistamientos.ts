@@ -2,8 +2,10 @@ import "dotenv/config";
 import { prisma } from "../lib/prisma";
 import {
   DIAS_RETENCION_AVISTAMIENTOS,
+  DIAS_RETENCION_DESCARTES,
   DIAS_RETENCION_RAFAGAS,
   purgarAvistamientos,
+  purgarDescartes,
   purgarRafagas,
 } from "../lib/purgar-avistamientos";
 
@@ -17,6 +19,8 @@ async function main() {
   console.log(`Purgados ${count} avistamiento(s) sin postulación de más de ${DIAS_RETENCION_AVISTAMIENTOS} días.`);
   const rafagas = await purgarRafagas();
   console.log(`Purgadas ${rafagas} ráfaga(s) de más de ${DIAS_RETENCION_RAFAGAS} días.`);
+  const descartes = await purgarDescartes();
+  console.log(`Purgados ${descartes} descarte(s) de más de ${DIAS_RETENCION_DESCARTES} días.`);
 }
 
 main()

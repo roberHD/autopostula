@@ -4,15 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const PESTANAS = [
+  { href: "/dashboard/perfil/conversacion", label: "Conversación" },
   { href: "/dashboard/perfil/calibracion", label: "Calibración" },
   { href: "/dashboard/perfil/entrenar", label: "Ajuste fino" },
 ];
 
 /**
- * Calibración y Ajuste fino son la misma tarea — enseñarle a la IA cómo
- * escribes — así que dejan de ser dos entradas del menú y pasan a ser dos
- * pestañas del mismo módulo. Cada una sigue teniendo su propia ruta, para
- * que un enlace directo siga funcionando.
+ * Conversación, Calibración y Ajuste fino son la misma tarea — enseñarle a
+ * la IA cómo escribes — así que son pestañas de un solo módulo, Entrenar IA,
+ * separado de Perfil (tu CV y tus datos). Cada una sigue teniendo su propia
+ * ruta, para que un enlace directo siga funcionando.
  */
 export default function PestanasEntrenar() {
   const pathname = usePathname();

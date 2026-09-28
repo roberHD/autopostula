@@ -786,6 +786,9 @@ async function escanear() {
   const avistamientos = [];
   const conteos = { postular: 0, gris: 0, descartar: 0 };
   const razonesDescartadas = [];
+  // Cada descarte con su razón va al panel (docs/estrategia-y-rediseno.md
+  // §5.2): "Lo último que hizo" dice cuál y por qué, y se puede corregir.
+  const descartes = [];
   const candidatosGris = [];
 
   tarjetas.forEach((t, idx) => {
@@ -810,6 +813,7 @@ async function escanear() {
       conteos.descartar++;
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
+      descartes.push({ externalId: id, titulo, empresa, url, razon });
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:AP.formatearRazonCorta(razon)});
     }
@@ -841,6 +845,7 @@ async function escanear() {
       conteos.descartar++;
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
+      descartes.push({ externalId: cand.id, titulo: cand.titulo, empresa: cand.empresa, url: cand.url, razon });
       addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:AP.formatearRazonCorta(razon)});
     } else {
       conteos.gris++;
@@ -856,6 +861,7 @@ async function escanear() {
   pendientes = await AP.quitarDuplicados('Trabajando', pendientes, (p, razon) => {
     conteos.descartar++;
     razonesDescartadas.push(razon);
+    descartes.push({ externalId: p.id, titulo: p.titulo, empresa: p.empresa, url: null, razon });
     AP.vistos.add(p.id);
     addLog({ts:Date.now(), status:'skip', title:p.titulo, url:'', uid:p.id, reason:AP.formatearRazonCorta(razon)});
   });
@@ -866,6 +872,7 @@ async function escanear() {
   {
     if (soloObservar) conteos.observado = pendientes.length;
     else conteos.postular = pendientes.length;
+    AP.reportarDescartes(descartes, 'Trabajando');
     const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
     msg(resumen.texto, resumen.estado);
   }

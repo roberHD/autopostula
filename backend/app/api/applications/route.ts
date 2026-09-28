@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
+import { gastarExtra } from "@/lib/extras";
 import { usuarioTieneAnaliticaAvanzada } from "@/lib/plan-beneficios";
 import { limpiarTitulo } from "@/lib/text";
 import { obtenerModoAutomatico, consumirPrueba } from "@/lib/prueba-automatica";
@@ -37,6 +38,8 @@ export async function GET() {
       enviadaEn: a.enviadaEn,
       // Una de las 5 de la prueba automática -- lo usa "Ver las 5" (§4.1).
       esDePrueba: a.esDePrueba,
+      // Si el estado lo contó la persona, la lista lo dice ("lo contaste tú").
+      contadoPorTi: a.origenEstado === "USUARIO",
     })),
     analiticaAvanzada,
   });
@@ -142,12 +145,13 @@ export async function POST(request: Request) {
         cvProfileId: cv.id,
         styleProfileId: styleProfileId ?? null,
         estadoActual: estadoInicial,
+        origenEstado: "SISTEMA",
         notaAtencion: incompleta ? (nota || "No se pudo completar automáticamente") : null,
       },
     });
 
     await prisma.applicationStatusHistory.create({
-      data: { applicationId: application.id, estado: estadoInicial },
+      data: { applicationId: application.id, estado: estadoInicial, origen: "SISTEMA" },
     });
 
     // §8.6: si esta postulación viene de una aprobación de banda gris, se
@@ -180,6 +184,21 @@ export async function POST(request: Request) {
             fueEditada: typeof r.fueEditada === "boolean" ? r.fueEditada : false,
           })),
       });
+    }
+
+    // docs/creditos-y-pagina-nueva.md §3: si el cupo del mes ya estaba en cero,
+    // esta postulación salió de las extra (compradas o ganadas) y se descuenta
+    // una. Va después de crear la postulación, con su id: la clave del
+    // movimiento es esa, así que reintentar el mismo POST no cobra dos veces.
+    // Una INCOMPLETA no llegó a la empresa (§8.3), así que no gasta nada.
+    if (!incompleta && estadoPostulaciones.delMes === 0) {
+      try {
+        await gastarExtra(user.id, application.id);
+      } catch (err) {
+        // La postulación ya salió al portal: no se deshace porque el descuento
+        // falle. Queda en el log para revisarlo.
+        console.error("[extras] No se pudo descontar la postulación extra:", application.id, err);
+      }
     }
 
     // §4.1: una postulación ENVIADA desde una ráfaga, en una cuenta gratis que
