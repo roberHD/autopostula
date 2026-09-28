@@ -191,7 +191,8 @@ Fuera de los documentos de diseño, esto es lo que falta para publicar.
 | Revisión legal de privacidad y términos | ⏸ Con el abogado | Chrome Web Store |
 | Definir la política de devolución (`§7.2` de Términos), **para pases y ahora también créditos** | ⏸ Con el abogado | Cobrar de verdad |
 | **Inicio de actividades en el SII** | ✅ **Hecho el 28-09-2026** — folio 17252490, primera categoría, afecto a IVA, micro empresa. Giros `631200` (portales web) y `631100` (procesamiento de datos y hospedaje) | — |
-| Régimen tributario, boleta electrónica y patente municipal | ⚠️ Lo hace Roberto, y tiene plazo | Cobrar de verdad |
+| Régimen tributario | ✅ **Pro Pyme Transparente (14 D N°8)** con contabilidad simplificada, desde el 28-09-2026 (folio 45061802851) | — |
+| Certificado digital, boleta electrónica y patente municipal | ⚠️ Lo hace Roberto; el certificado digital bloquea la boleta | Cobrar de verdad |
 | Cuenta de comercio Flow | ✅ **Aprobada** (24-09) | — |
 | `FLOW_SANDBOX=false` en producción | 🔨 Ya se puede: Flow aprobado + SII hecho | Cobrar de verdad |
 | Verificar dominio en Resend + `RESEND_FROM_EMAIL` | ✅ Resuelto en `323f2a4`; verificado en Vercel el 19-09 | Recuperación de contraseña real |
