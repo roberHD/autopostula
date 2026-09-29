@@ -1,6 +1,6 @@
 # Documentos de diseño de AutoPostula
 
-> Índice y estado del trabajo. **Actualizado: 2026-09-26.**
+> Índice y estado del trabajo. **Actualizado: 2026-09-28.**
 > Si vas a implementar algo, empieza por acá: dice qué está hecho, qué falta y en qué orden.
 
 > ✅ **`main` y `rama-roberto` ya son una sola línea** ([`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md)
@@ -39,6 +39,7 @@
 | [`creditos-y-pagina-nueva.md`](creditos-y-pagina-nueva.md) | Los créditos van sí o sí: el motor ya existe como `postulaciones_extra`. Reglas, devolución cuando la postulación no llegó, precios, y la fase nueva de la página (landing, precios, preguntas frecuentes, chequeo de CV público, medición). Incluye el plan para juntar las dos ramas | 🔴 **Prioridad 1** — decidido el 24-09. El **paso 0** (juntar las ramas) ya está hecho; quedan los pasos 1 a 9 |
 | [`pase-prepagado.md`](pase-prepagado.md) | El Cargo Automático de Flow es solo para empresas y Roberto opera como persona natural: Premium pasa a pases de 30 y 90 días de pago único, sin renovación. Vigencia por fecha en un solo helper (hoy hay 14 lugares que miran `estado: "ACTIVA"`) | ✅ **Implementado** — los 7 pasos programables del §9, verificados el 24-09: `obtenerPlanVigente`, esquema, checkout/confirmación/retorno, `acreditarPago` idempotente, ruta de cancelar retirada, cron de avisos y comprobante por correo. Falta el **paso 0** (inicio de actividades y boletas), que es de Roberto con el contador y bloquea cobrar de verdad, no programar |
 | [`amplitud-de-busqueda.md`](amplitud-de-busqueda.md) | Un caso real que calzaba perfecto y quedó en "Por decidir" por patrones que nunca calzaban; más el control de amplitud por CIUO ("vendedor en general") y el modo "cualquier trabajo", donde el eje deja de ser el cargo y pasan a mandar las condiciones | ✅ **Los 8 pasos hechos** (§2, §4, §5, §6). Queda **recompilar los perfiles existentes** (paso 2): gasta una llamada de IA por cuenta, es decisión de Roberto — hasta que se haga, las cuentas de hoy siguen con los patrones viejos |
+| [`revision-2026-09-28.md`](revision-2026-09-28.md) | Revisión de seguridad y errores de la página y la extensión: otra cuenta podía cambiarte el enlace "Ver oferta" (phishing), tomar una cuenta antes de que existiera, correos que decían "enviado" sin salir, la revisión en pestañas de fondo, aprobadas atascadas, sin límite de intentos ni tope de gasto en IA | ✅ **Implementada** — los 24 hallazgos más el §25, verificados en local con el build de producción. Falta **desplegar** (migración aditiva), **subir la extensión 2.15.0** a la tienda, decidir el correo de contacto y poner `FLOW_SANDBOX="true"` en tu `.env` local |
 | [`revision-scorer-2026-09-04.md`](revision-scorer-2026-09-04.md) | Revisión que encontró 3 bugs del scorer | ✅ Corregidos (`abe563b`) |
 | [`preguntas-abogado.md`](preguntas-abogado.md) | Preguntas legales concretas, contra lo que el código hace | ⏸ Esperando al abogado |
 | [`legal/`](legal/) | Política de privacidad y Términos, en Word y PDF, para revisión legal | ⏸ Esperando al abogado |
