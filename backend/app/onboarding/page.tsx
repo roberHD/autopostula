@@ -249,7 +249,44 @@ function Footer({ onSiguiente, onOmitir, siguienteTexto = "Continuar", deshabili
   );
 }
 
+// La pregunta va acá y no en un paso propio: el paso de bienvenida era solo un
+// botón "Empecemos", así que la pregunta le da algo que hacer sin alargar el
+// onboarding a nueve pasos. Y al ser lo primero, se responde antes de que nadie
+// abandone a mitad de camino.
+const CANALES = [
+  { id: "instagram", etiqueta: "Instagram" },
+  { id: "tiktok", etiqueta: "TikTok" },
+  { id: "facebook", etiqueta: "Facebook" },
+  { id: "buscador", etiqueta: "Buscando en Google" },
+  { id: "youtube", etiqueta: "YouTube" },
+  { id: "recomendacion", etiqueta: "Me lo recomendaron" },
+  { id: "chrome_store", etiqueta: "La tienda de Chrome" },
+  { id: "otro", etiqueta: "Otro" },
+];
+
 function PasoBienvenida({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
+  const [canal, setCanal] = useState<string | null>(null);
+  const [otro, setOtro] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  async function continuar() {
+    // Sin respuesta se sigue igual: es un dato para nosotros, no un peaje.
+    if (!canal) { onSiguiente(); return; }
+    setGuardando(true);
+    try {
+      await fetch("/api/account/como-nos-conocio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ canal, otro: canal === "otro" ? otro : undefined }),
+      });
+    } catch {
+      // Que esto falle no puede dejar a nadie atascado en la bienvenida.
+    } finally {
+      setGuardando(false);
+      onSiguiente();
+    }
+  }
+
   return (
     <>
       <Header
@@ -257,7 +294,43 @@ function PasoBienvenida({ onSiguiente, onOmitir }: { onSiguiente: () => void; on
         titulo="¡Bienvenido a AutoPostula!"
         sub={`En ${PASOS.length - 1} pasos dejamos todo listo para que la IA empiece a postular por ti con tu información real.`}
       />
-      <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} siguienteTexto="Empecemos" />
+
+      <div className="ap-section" style={{ marginBottom: 18 }}>
+        <p className="ap-section-title">Antes de empezar, ¿cómo llegaste acá?</p>
+        <p className="ap-section-sub">
+          Nos sirve para saber dónde nos encuentra la gente. Si prefieres no decirlo, puedes seguir igual.
+        </p>
+        <div className="ap-canales">
+          {CANALES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCanal(canal === c.id ? null : c.id)}
+              className={"ap-option-card" + (canal === c.id ? " ap-option-card-active" : "")}
+              aria-pressed={canal === c.id}
+            >
+              <span className="ap-option-title">{c.etiqueta}</span>
+            </button>
+          ))}
+        </div>
+        {canal === "otro" && (
+          <input
+            className="ap-input"
+            style={{ marginTop: 12 }}
+            value={otro}
+            onChange={(e) => setOtro(e.target.value)}
+            placeholder="¿Dónde lo viste?"
+            maxLength={120}
+            autoFocus
+          />
+        )}
+      </div>
+
+      <Footer
+        onSiguiente={continuar}
+        onOmitir={onOmitir}
+        siguienteTexto={guardando ? "Un momento…" : "Empecemos"}
+      />
     </>
   );
 }

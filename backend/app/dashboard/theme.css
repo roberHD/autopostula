@@ -2880,3 +2880,16 @@
   flex-wrap: wrap;
   margin-top: 12px;
 }
+
+/* Canales de "¿cómo llegaste acá?" en la bienvenida del onboarding. Rejilla
+   en vez de fila: son ocho opciones cortas y en una fila quedarían ilegibles
+   en pantallas chicas. */
+.ap-canales {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 420px) {
+  .ap-canales { grid-template-columns: 1fr 1fr; }
+}
