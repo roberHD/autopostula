@@ -1621,6 +1621,20 @@ try {
       AP.iaDisponible = !!d.autopostulaToken;
       console.log('[AP] core listo — config:', !!AP.cfg, 'activo:', AP.activo, 'IA (token):', AP.iaDisponible);
       AP.reportarSesion();
+      // Pide al service worker que refresque el perfil si esta viejo (el
+      // guardian de tiempo vive alla). Si lo refresco, devuelve la config nueva
+      // y se aplica acá: AP.cfg ya se cargo arriba y no se entera solo de que
+      // cambio en storage. No se bloquea el arranque esperandolo -- onInit
+      // sigue de largo y lo que llegue despues alcanza igual al primer
+      // formulario, que es lo que importa.
+      if (AP.iaDisponible) {
+        try {
+          chrome.runtime.sendMessage({ type: 'SINCRONIZAR_PERFIL' }, (r) => {
+            void chrome.runtime.lastError;
+            if (r && r.config) { AP.cfg = r.config; AP.activo = !!(r.config.active); }
+          });
+        } catch (e) {}
+      }
       if (AP.onInit) AP.onInit();
     });
   });

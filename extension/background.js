@@ -780,6 +780,29 @@ async function actualizarFiltrosDesdeBackend(token) {
           active: !data.estado.pausada,
         } : {}),
         ...(Array.isArray(data.infoAdicional) ? { info: data.infoAdicional } : {}),
+        // El perfil con el que la IA responde los formularios. Lo guardaba el
+        // popup (construirConfig, `perfil: perfilRemoto || {}`); 9896a68 movio
+        // el estado a la cuenta y le quito esa tarea al popup, pero nadie se
+        // la dio a esta funcion. Desde entonces config.perfil quedo congelado
+        // en la ultima foto que alcanzo a tomar el popup: lo que la persona
+        // completara despues en el panel -- su pretension de renta, por
+        // ejemplo -- no lo veia nunca, y la IA lo reportaba como dato
+        // faltante dejando la postulacion a medias.
+        //
+        // Las claves son las de PerfilIA (backend/lib/contexto-ia.ts), que no
+        // se llaman igual que las del endpoint: mapearlas mal deja el campo
+        // vacio en el prompt sin ningun error visible.
+        perfilActualizadoEn: Date.now(),
+        perfil: {
+          bio: data.resumenProfesional || '',
+          nombre: data.nombre || '',
+          email: data.email || '',
+          tel: data.telefono || '',
+          comuna: data.comuna || '',
+          cargo: data.cargoObjetivo || '',
+          renta: data.expectativaRenta || '',
+          disp: data.disponibilidad || '',
+        },
       }
     });
     // `active` vive suelto además de dentro de config (así lo lee core.js al
@@ -804,6 +827,11 @@ async function actualizarFiltrosDesdeBackend(token) {
 // más abajo) es el único que llama a escanearAutomatico() directo, ignorando
 // este umbral a propósito -- por eso el umbral vive acá y no adentro.
 const UMBRAL_HORAS_ENTRE_RAFAGAS = 3;
+
+// Cada cuanto, como mucho, se vuelve a bajar el perfil al abrir una pagina de
+// un portal. Corto a proposito: la gracia es que un cambio recien hecho en el
+// panel se note enseguida, sin convertir cada carga de pagina en una peticion.
+const MINUTOS_ENTRE_SINCRONIZACIONES = 5;
 
 async function quizasRafaga(disparador) {
   const { rafaga, ultimaRafagaFin } = await chrome.storage.local.get(['rafaga', 'ultimaRafagaFin']);
@@ -1696,6 +1724,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     actualizarEstadoBackend(msg.datos).then(sendResponse);
     return true;
   }
+  // El content script lo pide al cargar en un portal. Sin esto, el perfil solo
+  // se refrescaba en las rafagas automaticas: quien completa su perfil en el
+  // panel y se va a postular a mano en ese momento seguia con la foto vieja.
+  // El guardian de tiempo evita una peticion por cada pagina del portal que
+  // abra -- navegar un listado son decenas de cargas.
+  if (msg.type === 'SINCRONIZAR_PERFIL') {
+    (async () => {
+      const { config } = await chrome.storage.local.get('config');
+      const ultima = (config && config.perfilActualizadoEn) || 0;
+      if (Date.now() - ultima < MINUTOS_ENTRE_SINCRONIZACIONES * 60e3) return { ok: true, omitido: true };
+      const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+      if (!autopostulaToken) return { ok: false };
+      await actualizarFiltrosDesdeBackend(autopostulaToken);
+      // Se devuelve la config recien escrita: la pestaña que pregunto ya tiene
+      // su AP.cfg cargado de antes y no se entera sola de que cambio. Mandarla
+      // en la respuesta evita tener que avisarle a TODAS las pestañas
+      // (CONFIG_UPDATED) por algo que pidio una sola.
+      const { config: fresca } = await chrome.storage.local.get('config');
+      return { ok: true, omitido: false, config: fresca || null };
+    })().then(sendResponse).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
   if (msg.type === 'PUEDE_POSTULAR') {
     // §4.1: si la pregunta viene de una pestaña de ráfaga, el servidor también
     // dice si a esta cuenta gratis todavía le queda prueba. Si no (ya la gastó),
