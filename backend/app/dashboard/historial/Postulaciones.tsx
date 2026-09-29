@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Inbox, SearchX, Download, Lock } from "lucide-react";
 import { GRUPOS_ESTADO, colorEstado, fraseEstado } from "@/lib/palabras-estado";
 import Cajon from "./Cajon";
-import SupisteAlgo from "./SupisteAlgo";
+import SupisteAlgo, { type InicialSupisteAlgo } from "./SupisteAlgo";
 
 type Application = {
   id: string;
@@ -27,18 +27,37 @@ type Application = {
 // porque son las postulaciones que envió una ráfaga, en cualquier estado.
 const FILTRO_PRUEBA = { valor: "PRUEBA", etiqueta: "De la prueba" };
 
+/**
+ * docs/optimizacion-2026-09-29.md §1: la página (page.tsx) arma esto en el
+ * servidor, con la misma forma que devuelven /api/applications y
+ * /api/applications/sin-noticias, y la lista llega ya dibujada.
+ */
+export type InicialPostulaciones = {
+  applications: Application[];
+  analiticaAvanzada: boolean;
+  sinNoticias: InicialSupisteAlgo | null;
+};
 
-export default function HistorialPage() {
-  const [applications, setApplications] = useState<Application[]>([]);
+export default function Postulaciones({
+  inicial,
+  soloEsqueleto = false,
+}: {
+  inicial?: InicialPostulaciones | null;
+  // La pantalla de carga de siempre, mientras el servidor arma los datos: se
+  // dibuja igual que antes pero no pide nada (los datos vienen en camino).
+  soloEsqueleto?: boolean;
+}) {
+  const [applications, setApplications] = useState<Application[]>(inicial?.applications ?? []);
   const [mensaje, setMensaje] = useState("");
-  const [cargando, setCargando] = useState(true);
+  const [cargando, setCargando] = useState(!inicial);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("TODAS");
-  const [analiticaAvanzada, setAnaliticaAvanzada] = useState(false);
+  const [analiticaAvanzada, setAnaliticaAvanzada] = useState(inicial?.analiticaAvanzada ?? false);
   // La postulación abierta en el panel lateral (?ver=<id> la abre al llegar).
   const [abierta, setAbierta] = useState<string | null>(null);
 
   useEffect(() => {
+    if (soloEsqueleto) return;
     // Sin useSearchParams: obliga a envolver la página en Suspense, y esto se lee una sola vez.
     const q = new URLSearchParams(window.location.search);
     if (q.get("filtro") === "prueba") setFiltro(FILTRO_PRUEBA.valor);
@@ -48,6 +67,8 @@ export default function HistorialPage() {
   }, []);
 
   useEffect(() => {
+    // Con los datos del servidor no se vuelven a pedir; sin ellos, como antes.
+    if (inicial || soloEsqueleto) return;
     async function cargar() {
       try {
         const res = await fetch("/api/applications");
@@ -66,6 +87,7 @@ export default function HistorialPage() {
       }
     }
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const abrir = useCallback((id: string) => {
@@ -159,7 +181,8 @@ export default function HistorialPage() {
         )}
       </div>
 
-      <SupisteAlgo alContar={alContar} />
+      {/* Mientras carga, este recuadro no dibuja nada (igual que antes). */}
+      {!soloEsqueleto && <SupisteAlgo alContar={alContar} inicial={inicial?.sinNoticias} />}
 
       <div className="ap-toolbar">
         <input
@@ -240,7 +263,7 @@ export default function HistorialPage() {
                   )}
                 </span>
                 <span className="ap-log__fecha">
-                  {new Date(a.enviadaEn).toLocaleDateString("es-CL", { day: "2-digit", month: "short" })}
+                  {new Date(a.enviadaEn).toLocaleDateString("es-CL", { day: "2-digit", month: "short", timeZone: "America/Santiago" })}
                 </span>
               </button>
             );

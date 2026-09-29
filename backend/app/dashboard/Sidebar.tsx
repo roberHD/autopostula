@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -58,15 +58,31 @@ function estaActivo(href: string, pathname: string) {
   return pathname === href;
 }
 
-export default function Sidebar({ userName }: { userName: string }) {
+export default function Sidebar({
+  userName,
+  pendientesPorDecidir = null,
+}: {
+  userName: string;
+  // Cuántas hay en "Por decidir" al cargar, contado en el servidor (layout).
+  pendientesPorDecidir?: number | null;
+}) {
   const pathname = usePathname();
   const [menuAbierto, setMenuAbierto] = useState(false);
-  const [pendientesBandaGris, setPendientesBandaGris] = useState(0);
+  const [pendientesBandaGris, setPendientesBandaGris] = useState(pendientesPorDecidir ?? 0);
+  const yaLoTraeElServidor = useRef(pendientesPorDecidir !== null);
 
+  // docs/optimizacion-2026-09-29.md §3: el número se actualiza en cada cambio
+  // de página, pero pidiendo solo el conteo. Antes se bajaba la lista entera
+  // de "Por decidir" (con el extracto de cada aviso) solo para contarla. Al
+  // cargar no se pide: ya vino del servidor.
   useEffect(() => {
-    fetch("/api/banda-gris")
+    if (yaLoTraeElServidor.current) {
+      yaLoTraeElServidor.current = false;
+      return;
+    }
+    fetch("/api/banda-gris/conteo")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setPendientesBandaGris(data?.pendientes?.length ?? 0))
+      .then((data) => setPendientesBandaGris(data?.pendientes ?? 0))
       .catch(() => {});
   }, [pathname]);
 

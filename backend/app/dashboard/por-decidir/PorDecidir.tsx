@@ -44,9 +44,11 @@ function comunaDeRazones(razones: unknown[] | null): string | null {
   return r?.ofertaEn || null;
 }
 
-function diasRestantes(venceEn: string | null): string {
+// `ahora`: la hora de cuando se armó la página, la misma en el servidor y en el
+// teléfono (docs/optimizacion-2026-09-29.md §1).
+function diasRestantes(venceEn: string | null, ahora: number): string {
   if (!venceEn) return "";
-  const dias = Math.ceil((new Date(venceEn).getTime() - Date.now()) / 86_400_000);
+  const dias = Math.ceil((new Date(venceEn).getTime() - ahora) / 86_400_000);
   if (dias <= 0) return "vence hoy";
   if (dias === 1) return "vence mañana";
   return `vence en ${dias} días`;
@@ -117,9 +119,30 @@ function RazonesEnDos({ razones }: { razones: unknown[] }) {
   );
 }
 
-export default function PorDecidirPage() {
-  const [pendientes, setPendientes] = useState<DecisionGris[] | null>(null);
-  const [expiradasSinRevisar, setExpiradasSinRevisar] = useState(0);
+/**
+ * docs/optimizacion-2026-09-29.md §1: la página (page.tsx) arma esto en el
+ * servidor, con la misma forma que devuelven /api/banda-gris y
+ * /api/account/opciones-extension, y las tarjetas llegan ya dibujadas.
+ */
+export type InicialPorDecidir = {
+  pendientes: DecisionGris[];
+  expiradasSinRevisar: number;
+  estadoExt: EstadoExtension | null;
+  ahora: string;
+};
+
+export default function PorDecidir({
+  inicial,
+  soloEsqueleto = false,
+}: {
+  inicial?: InicialPorDecidir | null;
+  // La pantalla de carga de siempre, mientras el servidor arma los datos: se
+  // dibuja igual que antes pero no pide nada (los datos vienen en camino).
+  soloEsqueleto?: boolean;
+}) {
+  const [pendientes, setPendientes] = useState<DecisionGris[] | null>(inicial?.pendientes ?? null);
+  const [expiradasSinRevisar, setExpiradasSinRevisar] = useState(inicial?.expiradasSinRevisar ?? 0);
+  const [ahora] = useState(() => (inicial ? new Date(inicial.ahora).getTime() : Date.now()));
   const [mensaje, setMensaje] = useState("");
   const [aviso, setAviso] = useState("");
   const temporizadorAviso = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,14 +192,17 @@ export default function PorDecidirPage() {
   // docs/estrategia-y-rediseno.md §6: ahora el panel SÍ sabe en qué está la
   // extensión, así que el aviso deja de salir siempre "por las dudas" y sale
   // solo cuando de verdad tu "sí" va a quedar esperando.
-  const [estadoExt, setEstadoExt] = useState<EstadoExtension | null>(null);
+  const [estadoExt, setEstadoExt] = useState<EstadoExtension | null>(inicial?.estadoExt ?? null);
 
   useEffect(() => {
+    // Con los datos del servidor no se vuelven a pedir; sin ellos, como antes.
+    if (inicial || soloEsqueleto) return;
     cargar();
     fetch("/api/account/opciones-extension")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d?.estado && setEstadoExt(d.estado))
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function decidir(item: ItemSwipe, veredicto: "SI" | "NO") {
@@ -303,7 +329,7 @@ export default function PorDecidirPage() {
                       </a>
                     )}
                     {!!item.venceEn && (
-                      <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{diasRestantes(item.venceEn as string)}</span>
+                      <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{diasRestantes(item.venceEn as string, ahora)}</span>
                     )}
                     {!!detalle?.publicadaHace && (
                       <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{detalle.publicadaHace}</span>

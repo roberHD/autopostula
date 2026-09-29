@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
-import { datosDeLaOferta } from "@/lib/datos-postulacion";
-import { filtroSinNoticias } from "@/lib/estado-real";
+import { listarSinNoticias } from "@/lib/panel/listas";
 
 /**
  * Las postulaciones por las que toca preguntar "¿Supiste algo?" hoy
  * (docs/estado-real-de-postulaciones.md §6.1): desde los 5 días de enviadas,
- * nunca dos veces en 7 días y nunca después de 3 "Nada todavía". Se muestran
- * de a pocas: más de tres seguidas ya no es una pregunta, es un formulario.
+ * nunca dos veces en 7 días y nunca después de 3 "Nada todavía". La lógica vive
+ * en lib/panel/listas.ts: la página de Postulaciones la arma en el servidor
+ * (docs/optimizacion-2026-09-29.md §1).
  */
 export async function GET() {
   const { userId, error } = await getUsuarioSesion();
@@ -16,36 +15,5 @@ export async function GET() {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  const donde = filtroSinNoticias(userId);
-  const [total, primeras] = await Promise.all([
-    prisma.application.count({ where: donde }),
-    prisma.application.findMany({
-      where: donde,
-      orderBy: { enviadaEn: "asc" },
-      take: 3,
-      select: {
-        id: true,
-        enviadaEn: true,
-        estadoActual: true,
-        titulo: true,
-        empresa: true,
-        jobOffer: { select: { titulo: true, platform: { select: { nombre: true } } } },
-      },
-    }),
-  ]);
-
-  return NextResponse.json({
-    total,
-    postulaciones: primeras.map((a) => {
-      const { titulo, empresa } = datosDeLaOferta(a);
-      return {
-        id: a.id,
-        titulo,
-        empresa,
-        portal: a.jobOffer.platform.nombre,
-        estado: a.estadoActual,
-        enviadaEn: a.enviadaEn,
-      };
-    }),
-  });
+  return NextResponse.json(await listarSinNoticias(userId));
 }

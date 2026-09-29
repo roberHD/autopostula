@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
-import { urlDePortal } from "@/lib/entrada";
+import { listarPorDecidir } from "@/lib/panel/listas";
 
 // La cola de decisión de banda gris (docs/rediseno-filtrado-ofertas.md §8) --
 // mismo componente de swipe que el triaje de onboarding, misma tabla
@@ -13,28 +13,9 @@ export async function GET() {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  // Vencimiento perezoso (§8.4): antes de listar, lo que ya pasó su venceEn
-  // sin decisión se marca EXPIRADA -- silencio ahí sería peor que avisar.
-  await prisma.decisionOferta.updateMany({
-    where: { userId, fuente: "BANDA_GRIS", veredicto: "PENDIENTE", venceEn: { lt: new Date() } },
-    data: { veredicto: "EXPIRADA" },
-  });
-
-  const pendientes = await prisma.decisionOferta.findMany({
-    where: { userId, fuente: "BANDA_GRIS", veredicto: "PENDIENTE" },
-    orderBy: { venceEn: "asc" },
-  });
-
-  const expiradasSinRevisar = await prisma.decisionOferta.count({
-    where: { userId, fuente: "BANDA_GRIS", veredicto: "EXPIRADA", decididoEn: null },
-  });
-
-  // docs/revision-2026-09-28.md §1: el enlace "Ver oferta" de la tarjeta solo
-  // si es https:// del portal (las filas de antes no se validaban al guardar).
-  return NextResponse.json({
-    pendientes: pendientes.map((d) => ({ ...d, url: urlDePortal(d.url, d.plataforma) })),
-    expiradasSinRevisar,
-  });
+  // La cola vive en lib/panel/listas.ts: la página Por decidir la arma en el
+  // servidor (docs/optimizacion-2026-09-29.md §1).
+  return NextResponse.json(await listarPorDecidir(userId));
 }
 
 export async function POST(request: Request) {

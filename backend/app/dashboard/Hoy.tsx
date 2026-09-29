@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import dynamic from "next/dynamic";
 import { Ban, Check, CircleCheck, Globe, Inbox, Info, Sparkles, Target, TriangleAlert } from "lucide-react";
 import { SkelStats, SkelGrafico, SkelFilas } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
@@ -78,6 +78,44 @@ type EstadoAuto = {
   pruebaTotal: number;
   limite: number | null;
 };
+
+// Lo que devuelve /api/dashboard/estado, en lo que usa esta página.
+type EstadoCrudo = {
+  motivo?: string | null;
+  modo?: ModoAutomatico;
+  pruebaRestantes?: number | null;
+  pruebaTotal?: number;
+  cupo?: { limite?: number | null } | null;
+};
+
+function aEstadoAuto(e: EstadoCrudo): EstadoAuto {
+  return {
+    motivo: e.motivo ?? null,
+    modo: e.modo ?? "premium",
+    pruebaRestantes: e.pruebaRestantes ?? null,
+    pruebaTotal: e.pruebaTotal ?? PRUEBA_TOTAL,
+    limite: e.cupo?.limite ?? null,
+  };
+}
+
+/**
+ * docs/optimizacion-2026-09-29.md §1: la página (page.tsx) arma esto en el
+ * servidor y la página llega con los datos puestos. `ahora` es la hora del
+ * servidor al armarlo: con ella se calculan la fecha del saludo y los "hace N
+ * min", para que el servidor y el teléfono escriban exactamente lo mismo.
+ */
+export type InicialHoy = { resumen: Resumen; estado: EstadoCrudo | null; ahora: string };
+
+// docs/optimizacion-2026-09-29.md §2: recharts pesa más que todo el resto de la
+// página junta. El gráfico se baja aparte, cuando lo demás ya está a la vista.
+// El contenedor de abajo guarda su alto, así que nada se mueve cuando aparece.
+// El ".js" y el tipo explícito son por "moduleResolution": "NodeNext" del
+// tsconfig: TypeScript pide la extensión en un import() y lo tipa como si fuera
+// CommonJS; para el bundler de Next es un módulo normal con su default.
+const GraficoActividad = dynamic(
+  () => import("./GraficoActividad.js") as unknown as Promise<{ default: ComponentType<{ datos: Resumen["actividad"] }> }>,
+  { ssr: false },
+);
 
 const PALETA_PORTALES = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
@@ -289,32 +327,50 @@ function NoEraAsi({ id, corregido }: { id: string; corregido?: boolean }) {
   );
 }
 
-export default function HoyPage() {
-  const [datos, setDatos] = useState<Resumen | null>(null);
+// Lo que se ve mientras llegan los datos. Lo usa también page.tsx mientras el
+// servidor los arma: es exactamente la misma pantalla de carga de siempre.
+export function HoyCargando() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="ap-page-header" style={{ marginBottom: 0 }}>
+        <h1 className="ap-page-title">Hoy</h1>
+        <p className="ap-page-sub">Cargando lo que te espera...</p>
+      </div>
+      <div className="ap-card"><SkelFilas n={3} /></div>
+      <SkelStats />
+      <div className="ap-charts-row">
+        <SkelGrafico alto={220} />
+        <SkelGrafico alto={220} />
+      </div>
+    </div>
+  );
+}
+
+export default function Hoy({ inicial }: { inicial?: InicialHoy | null }) {
+  const [datos, setDatos] = useState<Resumen | null>(inicial?.resumen ?? null);
   // La misma fuente que la barra de arriba (/api/dashboard/estado): las
   // tareas y la barra no pueden contar dos historias distintas.
-  const [estado, setEstado] = useState<EstadoAuto | null>(null);
-  const [cargando, setCargando] = useState(true);
+  const [estado, setEstado] = useState<EstadoAuto | null>(inicial?.estado ? aEstadoAuto(inicial.estado) : null);
+  const [cargando, setCargando] = useState(!inicial);
   const [mensaje, setMensaje] = useState("");
   const { error: avisarError } = useAvisos();
 
+  // Con los datos del servidor no se vuelven a pedir. Sin ellos (si el
+  // servidor no pudo armarlos), se piden desde acá como antes.
   useEffect(() => {
+    if (inicial) return;
     fetch("/api/dashboard/estado")
       .then((r) => (r.ok ? r.json() : null))
       .then((e) => {
         if (!e) return;
-        setEstado({
-          motivo: e.motivo ?? null,
-          modo: e.modo ?? "premium",
-          pruebaRestantes: e.pruebaRestantes ?? null,
-          pruebaTotal: e.pruebaTotal ?? PRUEBA_TOTAL,
-          limite: e.cupo?.limite ?? null,
-        });
+        setEstado(aEstadoAuto(e));
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    if (inicial) return;
     async function cargar() {
       try {
         const res = await fetch("/api/dashboard/resumen");
@@ -338,20 +394,7 @@ export default function HoyPage() {
   }, []);
 
   if (cargando) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        <div className="ap-page-header" style={{ marginBottom: 0 }}>
-          <h1 className="ap-page-title">Hoy</h1>
-          <p className="ap-page-sub">Cargando lo que te espera...</p>
-        </div>
-        <div className="ap-card"><SkelFilas n={3} /></div>
-        <SkelStats />
-        <div className="ap-charts-row">
-          <SkelGrafico alto={220} />
-          <SkelGrafico alto={220} />
-        </div>
-      </div>
-    );
+    return <HoyCargando />;
   }
 
   if (mensaje || !datos) {
@@ -369,7 +412,9 @@ export default function HoyPage() {
     );
   }
 
-  const hoy = new Date().toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+  // En hora de Chile: el servidor corre en UTC y de noche daría otro día.
+  const ahora = inicial ? new Date(inicial.ahora) : new Date();
+  const hoy = ahora.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Santiago" });
   const hoyTitulo = hoy.charAt(0).toUpperCase() + hoy.slice(1);
   const tareas = armarTareas(datos, estado);
   const pendientes = tareas.length;
@@ -539,7 +584,7 @@ export default function HoyPage() {
                         {conf.accion}
                       </Link>
                     )}
-                    <span className="ap-hecho__h">{haceCuanto(h.en)}</span>
+                    <span className="ap-hecho__h">{haceCuanto(h.en, ahora)}</span>
                   </div>
                 );
               })}
@@ -625,27 +670,7 @@ export default function HoyPage() {
             </div>
           </div>
           <div style={{ height: 240 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={datos.actividad} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gEnviadas" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="gRespuestas" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="etiqueta" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "var(--text-muted)" }} />
-                <Tooltip
-                  contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-elevated)", fontSize: 12 }}
-                  labelStyle={{ color: "var(--text)", fontWeight: 600 }}
-                />
-                <Area type="monotone" dataKey="enviadas" name="Enviadas" stroke="var(--chart-1)" strokeWidth={2} fill="url(#gEnviadas)" animationDuration={900} />
-                <Area type="monotone" dataKey="respuestas" name="Respuestas" stroke="var(--chart-2)" strokeWidth={2} fill="url(#gRespuestas)" animationDuration={900} animationBegin={150} />
-              </AreaChart>
-            </ResponsiveContainer>
+            <GraficoActividad datos={datos.actividad} />
           </div>
         </div>
 

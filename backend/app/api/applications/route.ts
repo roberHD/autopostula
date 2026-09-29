@@ -3,12 +3,11 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { gastarExtra } from "@/lib/extras";
-import { usuarioTieneAnaliticaAvanzada } from "@/lib/plan-beneficios";
 import { obtenerModoAutomatico, consumirPrueba } from "@/lib/prueba-automatica";
 import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
 import { enviarCorreoPruebaTerminada } from "@/lib/correo";
 import { textoCorto, urlDePortal } from "@/lib/entrada";
-import { datosDeLaOferta } from "@/lib/datos-postulacion";
+import { listarPostulaciones } from "@/lib/panel/listas";
 
 // docs/revision-2026-09-28.md §25: topes para lo que llega de la extensión. Un
 // formulario real tiene unas pocas preguntas; esto solo corta lo absurdo.
@@ -23,36 +22,9 @@ export async function GET() {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  const [applications, analiticaAvanzada] = await Promise.all([
-    prisma.application.findMany({
-      where: { userId },
-      include: {
-        jobOffer: { include: { platform: true } },
-      },
-      orderBy: { enviadaEn: "desc" },
-    }),
-    usuarioTieneAnaliticaAvanzada(userId),
-  ]);
-
-  return NextResponse.json({
-    applications: applications.map((a) => {
-      const { titulo, empresa } = datosDeLaOferta(a);
-      return {
-        id: a.id,
-        titulo,
-        empresa,
-        portal: a.jobOffer.platform.nombre,
-        estado: a.estadoActual,
-        notaAtencion: a.notaAtencion,
-        enviadaEn: a.enviadaEn,
-        // Una de las 5 de la prueba automática -- lo usa "Ver las 5" (§4.1).
-        esDePrueba: a.esDePrueba,
-        // Si el estado lo contó la persona, la lista lo dice ("lo contaste tú").
-        contadoPorTi: a.origenEstado === "USUARIO",
-      };
-    }),
-    analiticaAvanzada,
-  });
+  // La lista vive en lib/panel/listas.ts: la página de Postulaciones la arma
+  // en el servidor (docs/optimizacion-2026-09-29.md §1).
+  return NextResponse.json(await listarPostulaciones(userId));
 }
 
 async function getUserFromToken(request: Request) {
