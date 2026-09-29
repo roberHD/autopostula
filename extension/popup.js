@@ -20,6 +20,7 @@ const BACKEND_URL = 'https://autopostula.cl';
 
 // ── Estado ─────────────────────────────────────────────────────
 let tokenActual = null;
+let tokenRechazado = false; // el servidor respondió 401 con este token (§16)
 let estadoActual = null;   // { modo, pausada, soloObservar, revisarAntes, ... }
 let resumen = null;        // lo que devuelve /api/extension/resumen
 
@@ -41,8 +42,13 @@ const TEXTO_MODO = {
   },
 };
 const TEXTO_MODO_PRUEBA =
-  'Tu cuenta está en modo prueba: mira y puntúa, pero no envía. Actívala cuando veas que acierta.';
+  'Todavía no activas la postulación: mira y puntúa, pero no envía. Actívala en el panel cuando veas que acierta.';
 const TEXTO_SIN_CUENTA = 'Conecta tu cuenta para que empiece a trabajar por ti.';
+// docs/revision-2026-09-28.md §16: un token que el servidor ya no acepta (se
+// cambió la contraseña, se generó uno nuevo en otro computador) se mostraba
+// como "revisa tu conexión", y no había nada que revisar en la conexión.
+const TEXTO_TOKEN_VENCIDO =
+  'La conexión con tu cuenta dejó de valer (por ejemplo, porque cambiaste tu contraseña). Entra al panel, Portales, y toca "Conectar esta extensión".';
 
 // ── DOM ────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -81,6 +87,13 @@ function renderEstado() {
     estadoLuz.className = 'luz';
     estadoTitulo.textContent = 'Sin conectar';
     estadoDetalle.textContent = TEXTO_SIN_CUENTA;
+    pausarBtn.disabled = true;
+    return;
+  }
+  if (tokenRechazado) {
+    estadoLuz.className = 'luz';
+    estadoTitulo.textContent = 'Reconecta tu cuenta';
+    estadoDetalle.textContent = TEXTO_TOKEN_VENCIDO;
     pausarBtn.disabled = true;
     return;
   }
@@ -183,6 +196,13 @@ async function cargarResumen(mostrarToast) {
     const res = await fetch(BACKEND_URL + '/api/extension/resumen', {
       headers: { 'Authorization': 'Bearer ' + tokenActual },
     });
+    tokenRechazado = res.status === 401;
+    if (tokenRechazado) {
+      renderEstado();
+      cuentaSec.classList.remove('hidden');
+      if (mostrarToast) toast('⚠ Tu cuenta pide volver a conectar la extensión');
+      return;
+    }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     resumen = await res.json();
     estadoActual = resumen.estado || null;
@@ -268,10 +288,24 @@ apTokenEye.addEventListener('click', () => {
   apTokenInput.type = apTokenInput.type === 'password' ? 'text' : 'password';
 });
 
-apTokenSaveBtn.addEventListener('click', () => {
+apTokenSaveBtn.addEventListener('click', async () => {
   const valor = apTokenInput.value.trim();
+  // docs/revision-2026-09-28.md §16: antes se guardaba sin probarlo, y un token
+  // mal copiado se veía como "conectado" hasta que algo fallaba en silencio.
+  // Si el servidor dice que no sirve, no se guarda. Sin red no se puede saber:
+  // se guarda igual y el resumen lo vuelve a revisar al abrir el popup.
+  if (valor) {
+    try {
+      const res = await fetch(BACKEND_URL + '/api/extension/resumen', { headers: { 'Authorization': 'Bearer ' + valor } });
+      if (res.status === 401) {
+        toast('⚠ Ese token no sirve: cópialo de nuevo desde Portales');
+        return;
+      }
+    } catch (e) { /* sin red: se guarda igual */ }
+  }
   chrome.storage.sync.set({ autopostulaToken: valor || null }, () => {
     tokenActual = valor || null;
+    tokenRechazado = false;
     actualizarEstadoToken(!!tokenActual);
     if (tokenActual) {
       cargarResumen(true);
@@ -287,6 +321,7 @@ apTokenSaveBtn.addEventListener('click', () => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && changes.autopostulaToken) {
     tokenActual = changes.autopostulaToken.newValue || null;
+    tokenRechazado = false;
     actualizarEstadoToken(!!tokenActual);
     if (tokenActual) cargarResumen(false);
   }

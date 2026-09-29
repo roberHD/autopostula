@@ -611,7 +611,9 @@ function huboEvidenciaDeExito() {
 // oferta. Cortar ahí en vez de intentar "rellenar" una pantalla de login es
 // la diferencia entre un log de error claro y escribirle datos del CV a un
 // campo de contraseña.
-async function postular(url, id, titulo, decisionOfertaId) {
+async function postular(url, id, titulo, decisionOfertaId, empresa) {
+  // docs/revision-2026-09-28.md §1: la empresa viaja con la postulación (se
+  // guarda en la postulación misma, no se toma de la oferta compartida).
   if (AP.vistos.has(id)) return { ok: false, expirada: false };
   AP.vistos.add(id);
 
@@ -620,7 +622,9 @@ async function postular(url, id, titulo, decisionOfertaId) {
   const panelDetalle = document.querySelector(SELECTOR_PANEL);
   if (panelDetalle && /ya (te )?postulaste|postulaci[oó]n (ya )?enviada/i.test(n(panelDetalle.innerText || ''))) {
     addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Ya postulado'});
-    return { ok: false, expirada: false };
+    // docs/revision-2026-09-28.md §6: ya no se puede enviar nunca -- una
+    // aprobada de "Por decidir" en este estado se cierra en vez de reintentarse.
+    return { ok: false, expirada: true };
   }
 
   const btn = obtenerBotonPostular();
@@ -714,7 +718,7 @@ async function postular(url, id, titulo, decisionOfertaId) {
       });
       // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
       // computrabajo.js, es el mismo acá.
-      const reportado = await reportarPostulacion({ id, titulo, plataforma: 'Trabajando', url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
+      const reportado = await reportarPostulacion({ id, titulo, empresa, plataforma: 'Trabajando', url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
       if (!reportado || !reportado.ok) {
         addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
         msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
@@ -745,7 +749,7 @@ async function postular(url, id, titulo, decisionOfertaId) {
       return { ok: false, expirada: false };
     }
     addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
-    const reportado = await reportarPostulacion({ id, titulo, plataforma: 'Trabajando', url, decisionOfertaId });
+    const reportado = await reportarPostulacion({ id, titulo, empresa, plataforma: 'Trabajando', url, decisionOfertaId });
     if (!reportado || !reportado.ok) {
       addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
       msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
@@ -892,7 +896,7 @@ async function escanear() {
   AP.procesando = true;
   let cortado = false;
   let intentadas = 0;
-  for (const {t, id, titulo} of pendientes) {
+  for (const {t, id, titulo, empresa} of pendientes) {
     if (!AP.activo) break;
     const a = t.querySelector('h2 a') || t.querySelector('a');
     const url = a ? a.href.split('#')[0] : '';
@@ -909,7 +913,7 @@ async function escanear() {
     }
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
-    if (btn) { intentadas++; await postular(url, id, titulo); }
+    if (btn) { intentadas++; await postular(url, id, titulo, undefined, empresa); }
     else {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Panel no cargó'});

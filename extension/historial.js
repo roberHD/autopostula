@@ -13,8 +13,20 @@ const statusCfg = {
   observado: { label: 'Observada', color: '#5D6468', bg: '#EDEEEB' },
 };
 
+// docs/revision-2026-09-28.md §24: también las comillas, porque la URL va
+// dentro de un atributo (href="...").
 function escapeHtml(s) {
-  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Solo enlaces http(s): un javascript: u otro esquema no se muestra.
+function urlSegura(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 function render(entry) {
@@ -24,7 +36,8 @@ function render(entry) {
     return;
   }
 
-  const cfg = statusCfg[entry.status] || { label: entry.status, color: '#9CA3AF', bg: '#F3F4F6' };
+  const cfg = statusCfg[entry.status] || { label: escapeHtml(entry.status), color: '#9CA3AF', bg: '#F3F4F6' };
+  const url = entry.url ? urlSegura(entry.url) : null;
   const fecha = new Date(entry.ts).toLocaleString('es-CL', { dateStyle: 'medium', timeStyle: 'short' });
   const respuestas = Array.isArray(entry.respuestas) ? entry.respuestas : [];
 
@@ -46,7 +59,7 @@ function render(entry) {
         <span class="status-pill" style="color:${cfg.color};background:${cfg.bg}">${cfg.label}</span>
         <span>${fecha}</span>
         ${entry.reason ? `<span>· ${escapeHtml(entry.reason)}</span>` : ''}
-        ${entry.url ? `<a class="header-link" href="${entry.url}" target="_blank" rel="noopener">Ver oferta original ↗</a>` : ''}
+        ${url ? `<a class="header-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">Ver oferta original ↗</a>` : ''}
       </div>
     </div>
     ${qaHtml}

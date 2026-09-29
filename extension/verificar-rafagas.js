@@ -32,6 +32,9 @@ function cargarBackgroundJs(opts) {
   const storageLocal = {};
   const tabsCreados = [];
   const tabUpdatedListeners = [];
+  // docs/revision-2026-09-28.md §5: pestañas traídas al frente y ventanas avisadas.
+  const tabsActualizados = [];
+  const ventanas = [];
   const removidos = [];
   // chrome.power (§3.3): se cuentan los pedidos y las liberaciones para
   // poder afirmar cuántas veces se pidió/soltó el bloqueo de suspensión.
@@ -94,6 +97,8 @@ function cargarBackgroundJs(opts) {
           cb(tab);
         },
         remove: (id, cb) => { removidos.push(id); if (cb) cb(); },
+        query: () => Promise.resolve(opts && opts.pestanaActiva ? [{ id: opts.pestanaActiva }] : []),
+        update: (id, cambios) => { tabsActualizados.push([id, cambios]); return Promise.resolve({ id }); },
         sendMessage: (_id, _msg, cb) => { if (cb) cb({}); },
         onUpdated: {
           addListener: fn => tabUpdatedListeners.push(fn),
@@ -102,6 +107,9 @@ function cargarBackgroundJs(opts) {
             if (i >= 0) tabUpdatedListeners.splice(i, 1);
           },
         },
+      },
+      windows: {
+        update: (id, cambios) => { ventanas.push([id, cambios]); return Promise.resolve({ id }); },
       },
       // opts.sinPower simula que el manifest no trae el permiso "power":
       // en ese caso chrome.power es undefined, como en Chrome de verdad.
@@ -121,7 +129,7 @@ function cargarBackgroundJs(opts) {
 
   return {
     ctx, onMessageListeners, onAlarmListeners, onInstalledListeners, onStartupListeners,
-    alarmsStore, storageLocal, tabsCreados, removidos, power, badge, fetchLlamadas,
+    alarmsStore, storageLocal, tabsCreados, removidos, power, badge, fetchLlamadas, tabsActualizados, ventanas,
     // Solo las que fueron al endpoint de ráfagas, con el cuerpo ya parseado.
     reportesRafaga() {
       return fetchLlamadas
@@ -1741,6 +1749,55 @@ bloque(async () => {
   x = await b.enviarMensajeAsync({ type: 'APROBAR_PENDIENTES' });
   await tick(60);
   check('sin ráfaga (el panel o abrir Chrome), las aprobadas se envían igual, sin abrir ninguna búsqueda', x.ok === true && b.aplicadas.join() === 'd1,d2' && busquedas(b).length === 0 && !b.storageLocal.rafaga, { x, eventos: b.eventos });
+});
+
+// ── docs/revision-2026-09-28.md §6: una aprobada que no se puede enviar no se reintenta para siempre ──
+bloque(async () => {
+  const b = cargarBackgroundJs();
+  await tick();
+  b.ctx.puedePostularBackend = async () => ({ permitido: true, motivo: null, restantes: 5 });
+  const expiradas = () => b.fetchLlamadas.filter(l => /banda-gris-expirada/.test(l.url)).map(l => JSON.parse(l.init.body).decisionId);
+  const encolar = (id) => vm.runInContext('encolarAprobadas([{ id: "' + id + '", url: "https://www.computrabajo.cl/o", titulo: "X", plataforma: "Computrabajo" }])', b.ctx);
+
+  let llamadas = 0;
+  b.ctx.applyInTab = async () => { llamadas++; return { ok: false, expirada: false }; };
+  for (let i = 0; i < 3; i++) { encolar('dX'); await vm.runInContext('processQueue()', b.ctx); }
+  check('una aprobada que falla 3 veces se cierra (antes se reintentaba en cada ciclo, para siempre)', llamadas === 3 && expiradas().join() === 'dX', { llamadas, expiradas: expiradas() });
+  check('...y no deja su contador guardado', !(b.storageLocal.intentosAprobadas || {}).dX, b.storageLocal.intentosAprobadas);
+
+  let n = 0;
+  b.ctx.applyInTab = async () => (++n < 3 ? { ok: false, expirada: false } : { ok: true, expirada: false });
+  for (let i = 0; i < 3; i++) { encolar('dY'); await vm.runInContext('processQueue()', b.ctx); }
+  check('dos fallas y a la tercera sale: no se cierra, y el contador se limpia', !expiradas().includes('dY') && !(b.storageLocal.intentosAprobadas || {}).dY, { expiradas: expiradas(), intentos: b.storageLocal.intentosAprobadas });
+
+  b.ctx.applyInTab = async () => ({ success: false, expirada: false, soloObservar: true });
+  for (let i = 0; i < 4; i++) { encolar('dZ'); await vm.runInContext('processQueue()', b.ctx); }
+  check('en "solo observar" no cuenta como intento fallido (queda para cuando se apague)', !expiradas().includes('dZ') && !(b.storageLocal.intentosAprobadas || {}).dZ, b.storageLocal.intentosAprobadas);
+
+  b.ctx.applyInTab = async () => ({ ok: false, expirada: true });
+  encolar('dW'); await vm.runInContext('processQueue()', b.ctx);
+  check('una que ya estaba postulada (expirada) se cierra al primer intento', expiradas().includes('dW'));
+});
+
+// ── docs/revision-2026-09-28.md §5: el panel de revisión en una pestaña de fondo ──
+bloque(async () => {
+  const b = cargarBackgroundJs({ pestanaActiva: 77 });
+  await tick();
+  b.storageLocal.rafaga = { estado: 'en_curso', tabActual: 5, latido: 0, pasos: [], pasoActual: 0, conteos: {} };
+
+  await b.enviarMensajeAsync({ type: 'REVISION_EN_CURSO' }, { tab: { id: 5, active: false, windowId: 1 } });
+  check('con la revisión abierta en la pestaña de la ráfaga, esa pestaña pasa al frente', b.tabsActualizados.some(([id, o]) => id === 5 && o.active === true), b.tabsActualizados);
+  check('...la ventana avisa en la barra de tareas, sin robar el foco', b.ventanas.some(([id, o]) => id === 1 && o.drawAttention === true), b.ventanas);
+  check('...y el seguro de tiempo del paso se alarga a 4 min (antes la cortaba a mitad de la revisión)', (b.alarmsStore.get('autopostula-rafaga-seguro') || {}).delayInMinutes === 4, b.alarmsStore.get('autopostula-rafaga-seguro'));
+  check('...y el latido de la ráfaga se renueva (no se da por interrumpida)', b.storageLocal.rafaga.latido > 0);
+
+  await b.enviarMensajeAsync({ type: 'REVISION_TERMINADA' }, { tab: { id: 5, active: true, windowId: 1 } });
+  check('al cerrar la revisión vuelve la pestaña que la persona estaba mirando', b.tabsActualizados.some(([id, o]) => id === 77 && o.active === true), b.tabsActualizados);
+  check('...y el seguro del paso vuelve a los 8 min de siempre', (b.alarmsStore.get('autopostula-rafaga-seguro') || {}).delayInMinutes === 8);
+
+  const antes = b.tabsActualizados.length;
+  await b.enviarMensajeAsync({ type: 'REVISION_EN_CURSO' }, { tab: { id: 99, active: false, windowId: 1 } });
+  check('una pestaña que abrió la persona no se toca (ya la está mirando)', b.tabsActualizados.length === antes);
 });
 
 const tope = setTimeout(() => {

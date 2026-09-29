@@ -524,10 +524,14 @@ async function rellenar(contexto) {
 }
 
 // ── Postular ──────────────────────────────────────────────────
-// Devuelve { ok, expirada } -- expirada=true SOLO cuando no hay ningún botón
-// de postular (§8.4/§8.6: la oferta ya no existe o ya no acepta postulantes).
-// El resto de los "no ok" son fallas puntuales del flujo, no la oferta en sí.
-async function postular(url, id, titulo, decisionOfertaId) {
+// Devuelve { ok, expirada } -- expirada=true cuando la oferta ya no se puede
+// enviar nunca: no hay ningún botón de postular (§8.4/§8.6: ya no existe o no
+// acepta postulantes), o ya estaba postulada (docs/revision-2026-09-28.md §6:
+// antes una aprobada de "Por decidir" que ya estaba postulada se reintentaba
+// para siempre). El resto de los "no ok" son fallas puntuales del flujo.
+async function postular(url, id, titulo, decisionOfertaId, empresa) {
+  // docs/revision-2026-09-28.md §1: la empresa viaja con la postulación (se
+  // guarda en la postulación misma, no se toma de la oferta compartida).
   if (AP.vistos.has(id)) return { ok: false, expirada: false };
   AP.vistos.add(id);
 
@@ -539,7 +543,7 @@ async function postular(url, id, titulo, decisionOfertaId) {
     n(panelDetalle.innerText||'').includes('ya aplicaste')
   )) {
     addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Ya postulado'});
-    return { ok: false, expirada: false };
+    return { ok: false, expirada: true };
   }
 
   const btnSpan = document.querySelector('span[offer-detail-button]');
@@ -639,7 +643,7 @@ async function postular(url, id, titulo, decisionOfertaId) {
       // Computrabajo -- lo que puede fallar acá es solo el guardado en
       // AutoPostula (tope mensual, portal desconectado). Antes ese rechazo
       // se perdía en silencio y el aviso decía "✓" igual.
-      const reportado = await reportarPostulacion({ id, titulo, url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
+      const reportado = await reportarPostulacion({ id, titulo, empresa, url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
       if (!reportado || !reportado.ok) {
         addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
         msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
@@ -653,7 +657,9 @@ async function postular(url, id, titulo, decisionOfertaId) {
     }
   } else {
     addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
-    const reportado = await reportarPostulacion({ id, titulo, decisionOfertaId });
+    // docs/revision-2026-09-28.md §1: con el enlace, para que el historial pueda
+    // mostrar "Ver oferta" (antes esta rama no lo mandaba).
+    const reportado = await reportarPostulacion({ id, titulo, empresa, url, decisionOfertaId });
     if (!reportado || !reportado.ok) {
       addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
       msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
@@ -826,7 +832,7 @@ async function escanear() {
   AP.procesando = true;
   let cortado = false;
   let intentadas = 0;
-  for (const {t, id, titulo} of pendientes) {
+  for (const {t, id, titulo, empresa} of pendientes) {
     if (!AP.activo) break;
     const a = t.querySelector('h2 a, a[href*="oferta"], a[href*="trabajo"]') || t.querySelector('a');
     const url = a && a.href.split('#')[0] || '';
@@ -846,7 +852,7 @@ async function escanear() {
     }
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
-    if (btn) { intentadas++; await postular(url, id, titulo); }
+    if (btn) { intentadas++; await postular(url, id, titulo, undefined, empresa); }
     else {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Panel no cargó'});
