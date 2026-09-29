@@ -12,7 +12,7 @@ export async function GET() {
   return NextResponse.json({
     perfilCompilado: prefs?.perfilCompilado ?? null,
     versionPerfil: prefs?.versionPerfil ?? 0,
-    actualizadoEn: prefs?.actualizadoEn ?? null,
+    perfilCompiladoEn: prefs?.perfilCompiladoEn ?? null,
   });
 }
 
