@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { flow } from "@/lib/flow";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
+import { olvidarCuentaDeLaSesion } from "@/auth";
 
 // Borrado real de la cuenta (Ley 21.719 -- derecho a la eliminación). El
 // respaldo por correo con plazo de 30 días sigue existiendo para quien no
@@ -58,6 +59,8 @@ export async function DELETE(request: Request) {
     }),
     prisma.user.delete({ where: { id: userId } }),
   ]);
+  // docs/optimizacion-2026-09-29.md §4: que ninguna ruta la siga dando por existente.
+  olvidarCuentaDeLaSesion(userId);
 
   return NextResponse.json({ ok: true });
 }

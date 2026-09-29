@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { problemaConPassword } from "@/lib/entrada";
 import { premiarInvitacion } from "@/lib/extras";
+import { olvidarCuentaDeLaSesion } from "@/auth";
 
 export async function POST(request: Request) {
   try {
@@ -45,6 +46,10 @@ export async function POST(request: Request) {
         ...(user.emailVerificado ? {} : { emailVerificado: new Date(), verifyToken: null, verifyTokenExpiry: null }),
       },
     });
+
+    // Las sesiones anteriores dejan de valer ya en esta instancia (§22), sin
+    // esperar a que venza lo recordado (docs/optimizacion-2026-09-29.md §4).
+    olvidarCuentaDeLaSesion(user.id);
 
     // Si recién quedó verificado, es el mismo momento en que se paga el premio
     // de quien lo invitó (igual que en /api/auth/verificar-email).

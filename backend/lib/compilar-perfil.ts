@@ -92,8 +92,8 @@ export async function compilarPerfil(
     return { ok: false, status: 400, error: "Primero sube tu CV para poder compilar tu perfil de búsqueda" };
   }
 
-  if (!opts?.forzar && prefsActuales?.perfilCompilado && prefsActuales.actualizadoEn) {
-    const horasDesdeUltima = (Date.now() - prefsActuales.actualizadoEn.getTime()) / 3_600_000;
+  if (!opts?.forzar && prefsActuales?.perfilCompilado && prefsActuales.perfilCompiladoEn) {
+    const horasDesdeUltima = (Date.now() - prefsActuales.perfilCompiladoEn.getTime()) / 3_600_000;
     if (horasDesdeUltima < HORAS_MIN_ENTRE_RECOMPILACIONES) {
       return {
         ok: false,
@@ -228,10 +228,11 @@ export async function compilarPerfil(
       umbralGris: 45,
     };
 
+    const perfilCompiladoEn = new Date();
     await prisma.searchPreferences.upsert({
       where: { userId },
-      create: { userId, perfilCompilado, versionPerfil: nuevaVersion, perfilDesactualizado: false },
-      update: { perfilCompilado, versionPerfil: nuevaVersion, perfilDesactualizado: false },
+      create: { userId, perfilCompilado, versionPerfil: nuevaVersion, perfilDesactualizado: false, perfilCompiladoEn },
+      update: { perfilCompilado, versionPerfil: nuevaVersion, perfilDesactualizado: false, perfilCompiladoEn },
     });
 
     return { ok: true, perfilCompilado };

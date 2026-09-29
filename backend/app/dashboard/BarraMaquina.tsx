@@ -62,12 +62,26 @@ const EXPLICACION: Record<string, { t: string; d: string; ir?: { href: string; t
  * AutoPostula trabaja cuando nadie está mirando: sin esto, entras y no sabes
  * si la cosa está corriendo, qué hizo o cuánto cupo te queda.
  */
-export default function BarraMaquina() {
+export default function BarraMaquina({
+  inicial,
+  ahora,
+  soloEsqueleto = false,
+}: {
+  // docs/optimizacion-2026-09-29.md §1: el layout arma el estado en el servidor
+  // y la barra llega llena, en vez de pedirlo después de cargar el JavaScript.
+  inicial?: Estado | null;
+  // La hora del servidor al armarlo: el primer dibujo usa esa para los "hace N
+  // min", así el servidor y el teléfono escriben lo mismo. Después, la del teléfono.
+  ahora?: string;
+  // El esqueleto de siempre mientras el servidor arma el estado (no pide nada).
+  soloEsqueleto?: boolean;
+}) {
   const { exito, error: avisarError } = useAvisos();
-  const [e, setE] = useState<Estado | null>(null);
+  const [e, setE] = useState<Estado | null>(inicial ?? null);
   const [cambiando, setCambiando] = useState(false);
   // Solo fuerza el re-render para que el "hace N min" avance; su valor no se lee.
   const [, setTic] = useState(0);
+  const [horaDelServidor, setHoraDelServidor] = useState(ahora ?? null);
 
   const cargar = useCallback(async () => {
     try {
@@ -80,8 +94,17 @@ export default function BarraMaquina() {
   }, []);
 
   useEffect(() => {
+    // Con el estado del servidor no se vuelve a pedir; sin él, como antes.
+    if (inicial || soloEsqueleto) return;
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargar]);
+
+  // Ya dibujada con la hora del servidor, sigue con la del teléfono.
+  useEffect(() => {
+    if (horaDelServidor) setHoraDelServidor(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // El "hace N min" se refresca solo, sin volver a pedir datos al servidor.
   useEffect(() => {
@@ -137,8 +160,9 @@ export default function BarraMaquina() {
 
   // Con la búsqueda andando, lo que importa es cuándo se puso al día y qué
   // encontró -- lo mismo que decía la tarjeta del Inicio, que ahora vive acá.
-  const rafaga = e.activa ? textoTarjetaRafaga(e.ultimaRafaga, new Date()) : null;
-  const horasDesde = e.ultimaRafaga ? (Date.now() - new Date(e.ultimaRafaga.en).getTime()) / 3_600_000 : null;
+  const ahoraRender = horaDelServidor ? new Date(horaDelServidor) : new Date();
+  const rafaga = e.activa ? textoTarjetaRafaga(e.ultimaRafaga, ahoraRender) : null;
+  const horasDesde = e.ultimaRafaga ? (ahoraRender.getTime() - new Date(e.ultimaRafaga.en).getTime()) / 3_600_000 : null;
   const alDia = horasDesde !== null && horasDesde < HORAS_AL_DIA;
   const titulo = e.activa ? (alDia ? "Al día" : "Sin ponerse al día") : (aviso?.t ?? "Detenida");
 
@@ -157,7 +181,7 @@ export default function BarraMaquina() {
           </>
         ) : e.ultima ? (
           <>
-            {aviso?.d} Última: <b>{e.ultima.titulo}</b>, {haceCuanto(e.ultima.enviadaEn)}
+            {aviso?.d} Última: <b>{e.ultima.titulo}</b>, {haceCuanto(e.ultima.enviadaEn, ahoraRender)}
           </>
         ) : (
           aviso?.d ?? "Todavía no hay postulaciones enviadas."
@@ -201,3 +225,6 @@ export default function BarraMaquina() {
     </div>
   );
 }
+
+/** La forma de /api/dashboard/estado que usa la barra (la arma el layout en el servidor). */
+export type EstadoBarra = Estado;

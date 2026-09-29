@@ -6,6 +6,9 @@ import { OPCIONES_PERSONA, fraseEstado } from "@/lib/palabras-estado";
 
 type Pendiente = { id: string; titulo: string; empresa: string | null; portal: string; enviadaEn: string };
 
+/** Lo que devuelve /api/applications/sin-noticias. */
+export type InicialSupisteAlgo = { total: number; postulaciones: Pendiente[] };
+
 const dias = (iso: string) => Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000));
 
 /**
@@ -13,10 +16,18 @@ const dias = (iso: string) => Math.max(1, Math.round((Date.now() - new Date(iso)
  * persona es la única que sabe si la llamaron o si tuvo entrevista. Un toque
  * por postulación; al contestar, la fila se va y la lista se actualiza.
  */
-export default function SupisteAlgo({ alContar }: { alContar: (id: string, estado: string | null) => void }) {
+export default function SupisteAlgo({
+  alContar,
+  inicial,
+}: {
+  alContar: (id: string, estado: string | null) => void;
+  // docs/optimizacion-2026-09-29.md §1: viene del servidor junto con la lista,
+  // así el recuadro no aparece después empujando la lista hacia abajo.
+  inicial?: InicialSupisteAlgo | null;
+}) {
   const { exito, error: avisarError } = useAvisos();
-  const [pendientes, setPendientes] = useState<Pendiente[]>([]);
-  const [total, setTotal] = useState(0);
+  const [pendientes, setPendientes] = useState<Pendiente[]>(inicial?.postulaciones ?? []);
+  const [total, setTotal] = useState(inicial?.total ?? 0);
   const [enviando, setEnviando] = useState<string | null>(null);
 
   function cargar() {
@@ -30,7 +41,10 @@ export default function SupisteAlgo({ alContar }: { alContar: (id: string, estad
       .catch(() => {});
   }
 
-  useEffect(cargar, []);
+  useEffect(() => {
+    if (!inicial) cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function contar(p: Pendiente, respuesta: string) {
     setEnviando(p.id);

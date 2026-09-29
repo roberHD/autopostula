@@ -544,6 +544,15 @@ model SearchPreferences {
   // default puede ser "parecidos" sin que nadie empiece a postular a más cosas.
   amplitud        String   @default("parecidos")
   actualizadoEn   DateTime @updatedAt @map("actualizado_en")
+  // Cuándo se compiló perfilCompilado por última vez de verdad -- a
+  // diferencia de actualizadoEn (que Prisma pisa en CUALQUIER escritura a
+  // esta fila, incluyendo guardar ubicación o amplitud desde
+  // /api/preferencias-busqueda), este campo solo lo toca compilarPerfil().
+  // Reportado en vivo el 2026-09-29: guardar ubicación/objetivo dejaba el
+  // botón manual "Actualizar mi búsqueda" bloqueado 24h aunque el perfil no
+  // se hubiera recompilado, porque el límite de HORAS_MIN_ENTRE_RECOMPILACIONES
+  // leía actualizadoEn en vez de esto.
+  perfilCompiladoEn DateTime? @map("perfil_compilado_en")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

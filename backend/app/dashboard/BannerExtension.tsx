@@ -10,10 +10,12 @@ import { sinSoporteExtension } from "@/lib/dispositivo";
 // puede instalar -- no es un error ni una tarea pendiente en ESE aparato --, así
 // que el cartel dice qué se puede hacer ahí y qué se desbloquea en un computador.
 // En un computador no muestra nada: ahí lo que falta se resuelve desde Portales.
-export default function BannerExtension() {
-  // null hasta montar: el servidor no sabe qué aparato es, y decidirlo en el
-  // primer render desajustaría la hidratación.
-  const [enMovil, setEnMovil] = useState<boolean | null>(null);
+export default function BannerExtension({ enMovilSegunServidor = null }: { enMovilSegunServidor?: boolean | null }) {
+  // docs/optimizacion-2026-09-29.md §5: el servidor ya lo adivina por las
+  // cabeceras del pedido (lib/dispositivo.ts), así el aviso llega dibujado en
+  // vez de aparecer cuando termina el JavaScript y empujar la página hacia
+  // abajo. Al montar se confirma con el navegador, como antes.
+  const [enMovil, setEnMovil] = useState<boolean | null>(enMovilSegunServidor);
 
   useEffect(() => {
     setEnMovil(sinSoporteExtension());

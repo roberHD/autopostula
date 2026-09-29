@@ -26,6 +26,41 @@ function cuentasConEmail(email: string) {
   });
 }
 
+// docs/optimizacion-2026-09-29.md §4: desde la revisión del 28-09 (§22) cada
+// uso de la sesión lee la cuenta para ver si sigue valiendo, y una sola carga
+// del panel usa la sesión varias veces (el proxy, el layout, la página y cada
+// ruta de la API). La respuesta se recuerda 30 segundos por instancia del
+// servidor. Lo que cambia la vigencia (restablecer la contraseña, que Google
+// recupere una cuenta, borrarla) la olvida al tiro en esa instancia; en las
+// demás, a lo más tarda esos 30 segundos.
+const MS_CUENTA_EN_CACHE = 30_000;
+const MAXIMO_CUENTAS_EN_CACHE = 2_000;
+
+function leerCuenta(userId: string) {
+  return prisma.user.findUnique({ where: { id: userId }, select: { rol: true, sesionesValidasDesde: true } });
+}
+type CuentaDeLaSesion = NonNullable<Awaited<ReturnType<typeof leerCuenta>>>;
+const cuentasEnCache = new Map<string, { cuenta: CuentaDeLaSesion; vence: number }>();
+
+/** El rol y desde cuándo valen las sesiones de la cuenta, o null si ya no existe. */
+export async function cuentaDeLaSesion(userId: string): Promise<CuentaDeLaSesion | null> {
+  const ahora = Date.now();
+  const enCache = cuentasEnCache.get(userId);
+  if (enCache && enCache.vence > ahora) return enCache.cuenta;
+  const cuenta = await leerCuenta(userId);
+  if (!cuenta) {
+    cuentasEnCache.delete(userId);
+    return null;
+  }
+  if (cuentasEnCache.size >= MAXIMO_CUENTAS_EN_CACHE) cuentasEnCache.clear();
+  cuentasEnCache.set(userId, { cuenta, vence: ahora + MS_CUENTA_EN_CACHE });
+  return cuenta;
+}
+
+export function olvidarCuentaDeLaSesion(userId: string) {
+  cuentasEnCache.delete(userId);
+}
+
 async function codigoDeInvitacion(): Promise<string | null> {
   try {
     const valor = (await cookies()).get(COOKIE_INVITACION)?.value;
@@ -146,6 +181,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             sesionesValidasDesde: new Date(),
           },
         });
+        olvidarCuentaDeLaSesion(existente.id);
         await premiarInvitacion(existente.id).catch((e) => console.error("[extras] premio de invitación (Google):", e));
       }
       return true;
@@ -173,10 +209,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // cuenta) cierra las sesiones abiertas antes, en todos los navegadores.
       // De paso, el rol se lee fresco: un cambio de rol ya no espera al próximo login.
       if (typeof token.userId === "string") {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.userId },
-          select: { rol: true, sesionesValidasDesde: true },
-        });
+        const dbUser = await cuentaDeLaSesion(token.userId);
         // Una cuenta borrada la sigue manejando getUsuarioSesion, con su mensaje.
         if (!dbUser) return token;
         const emitido =
