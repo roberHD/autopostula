@@ -1,5 +1,4 @@
-import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { auth, cuentaDeLaSesion } from "@/auth";
 
 // Auth.js firma la sesión con el userId adentro del JWT — si la base de datos
 // se resetea/migra (local, o al cambiar de ambiente) pero el navegador sigue
@@ -12,7 +11,9 @@ export async function getUsuarioSesion() {
   const userId = (session?.user as any)?.id as string | undefined;
   if (!userId) return { userId: null, error: "No autenticado" as const };
 
-  const existe = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  // La misma lectura (recordada unos segundos) que ya hizo auth() para ver si
+  // la sesión sigue valiendo (docs/optimizacion-2026-09-29.md §4).
+  const existe = await cuentaDeLaSesion(userId);
   if (!existe) {
     return {
       userId: null,
