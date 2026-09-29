@@ -120,7 +120,7 @@ function cargarCoreJs() {
     pulse: crearElemento(),
     pulseLabel: crearElemento(),
   };
-  const ctx = Object.assign({}, elementos, { tokenActual: null, estadoActual: null });
+  const ctx = Object.assign({}, elementos, { tokenActual: null, estadoActual: null, tokenRechazado: false });
   vm.createContext(ctx);
   vm.runInContext(
     src.slice(desdeTextos, hastaTextos) +
@@ -149,12 +149,20 @@ function cargarCoreJs() {
   // dónde apagarlo.
   ctx.estadoActual = { modo: 'observando', pausada: false, soloObservar: false, porModoPrueba: true };
   ctx.renderEstado();
-  check('modo prueba: explica por qué solo mira, en vez de dejarlo en misterio', elementos.estadoDetalle.textContent.includes('modo prueba'));
+  check('postulación sin activar: explica por qué solo mira, en vez de dejarlo en misterio', elementos.estadoDetalle.textContent.includes('no activas la postulación'));
 
   ctx.estadoActual = { modo: 'pausada', pausada: true, soloObservar: false, porModoPrueba: false };
   ctx.renderEstado();
   check('en pausa: lo dice y el botón pasa a "Reanudar"', elementos.estadoTitulo.textContent === 'En pausa' && elementos.pausarBtn.textContent === 'Reanudar');
   check('en pausa: aclara que tampoco hace nada al entrar a un portal', elementos.estadoDetalle.textContent.includes('ni siquiera cuando entras a un portal'));
+
+  // docs/revision-2026-09-28.md §16: un token que el servidor rechaza (401) no
+  // es un problema de conexión: se pide reconectar, y no se ofrece pausar.
+  ctx.tokenRechazado = true;
+  ctx.renderEstado();
+  check('token rechazado: pide reconectar la cuenta en vez de culpar a la conexión', elementos.estadoTitulo.textContent === 'Reconecta tu cuenta' && elementos.estadoDetalle.textContent.includes('Conectar esta extensión'));
+  check('token rechazado: no deja pausar algo que no puede cambiar', elementos.pausarBtn.disabled === true);
+  ctx.tokenRechazado = false;
 
   // Los interruptores viejos no pueden volver por la puerta de atrás: si
   // alguien los reintroduce en el popup, vuelven las dos verdades distintas.

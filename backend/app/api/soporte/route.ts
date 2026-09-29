@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
-import { remitente } from "@/lib/correo";
-
-// Igual que en forgot-password: se instancia adentro del handler. Si se crea a
-// nivel de módulo y falta RESEND_API_KEY, revienta apenas Next carga el módulo
-// para juntar la config de la ruta y se cae el build entero.
-function getResend() {
-  return new Resend(process.env.RESEND_API_KEY);
-}
+import { enviarOFallar } from "@/lib/correo";
+import { claveLimite, LIMITES as LIMITES_DE_INTENTOS, permitirIntento } from "@/lib/limite-tasa";
 
 // El cuerpo de una función serverless en Vercel no puede pasar de 4.5 MB, y
 // eso incluye el multipart completo (archivos + campos + separadores). Los
@@ -53,6 +46,15 @@ export async function POST(request: Request) {
     const { userId, error } = await getUsuarioSesion();
     if (!userId) {
       return NextResponse.json({ error }, { status: 401 });
+    }
+
+    // docs/revision-2026-09-28.md §17: cada mensaje llega como correo a la
+    // casilla de soporte; sin tope, una cuenta podía llenarla.
+    if (!(await permitirIntento(claveLimite("soporte-usuario", userId), LIMITES_DE_INTENTOS.soportePorUsuario))) {
+      return NextResponse.json(
+        { error: "Ya nos mandaste varios mensajes en la última hora. Espera un poco y escríbenos de nuevo." },
+        { status: 429 }
+      );
     }
 
     const formData = await request.formData();
@@ -135,14 +137,12 @@ export async function POST(request: Request) {
     const asunto = ASUNTOS[tipo] || ASUNTOS.otro;
 
     try {
-      await getResend().emails.send({
-        from: remitente(),
-        to: destino,
-        // Contestar el correo le responde directo a la persona, sin tener que
-        // copiar la dirección a mano.
-        replyTo: usuario?.email ? [usuario.email] : undefined,
-        subject: `[Soporte] ${asunto} — ${usuario?.email ?? userId}`,
-        html: `
+      // docs/revision-2026-09-28.md §3: enviarOFallar lanza si Resend rechaza
+      // el envío. Antes la persona veía "enviado" y el mensaje se perdía.
+      await enviarOFallar(
+        destino,
+        `[Soporte] ${asunto} — ${usuario?.email ?? userId}`,
+        `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px;">
             <h2 style="color: #111827; margin-bottom: 4px;">${escapar(asunto)}</h2>
             <p style="color: #6B7280; font-size: 13px; margin-top: 0;">
@@ -156,8 +156,11 @@ export async function POST(request: Request) {
             </p>
           </div>
         `,
-        attachments: adjuntos.length ? adjuntos : undefined,
-      });
+        undefined,
+        // Contestar el correo le responde directo a la persona, sin tener que
+        // copiar la dirección a mano.
+        { replyTo: usuario?.email ? [usuario.email] : undefined, attachments: adjuntos },
+      );
     } catch (errEmail) {
       console.error("Error enviando reporte de soporte con Resend:", errEmail);
       return NextResponse.json(

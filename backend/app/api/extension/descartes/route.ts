@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { urlDePortal } from "@/lib/entrada";
 
 async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -29,18 +30,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Faltan plataforma o descartes" }, { status: 400 });
   }
 
+  const portal = plataforma.slice(0, 50);
   const filas = descartes
     .slice(0, 200)
     .filter((d: any) => d && typeof d.externalId === "string" && d.externalId && typeof d.titulo === "string" && d.titulo)
     .map((d: any) => ({
       userId: user.id,
-      plataforma,
+      plataforma: portal,
       externalId: d.externalId.slice(0, 200),
       titulo: d.titulo.slice(0, 300),
       empresa: typeof d.empresa === "string" && d.empresa ? d.empresa.slice(0, 200) : null,
-      url: typeof d.url === "string" && d.url ? d.url.slice(0, 1000) : null,
+      // docs/revision-2026-09-28.md §1: "No era así" convierte esto en una
+      // aprobación que la extensión abre para postular -- solo https:// del portal.
+      url: urlDePortal(d.url, portal),
       // La razón tal como la dio el scorer: un objeto { tipo, ... } o un string.
-      razon: d.razon && (typeof d.razon === "object" || typeof d.razon === "string") ? d.razon : undefined,
+      razon:
+        d.razon && (typeof d.razon === "object" || typeof d.razon === "string") && JSON.stringify(d.razon).length < 2_000
+          ? d.razon
+          : undefined,
     }));
 
   if (!filas.length) return NextResponse.json({ ok: true, guardados: 0 });

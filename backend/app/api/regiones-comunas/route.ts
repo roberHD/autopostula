@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { LISTA_LIMPIEZA_CL } from "@/scripts/limpieza/cl";
+import { nombrePropio } from "@/lib/text";
 
 // docs/revision-2026-09-16.md §2.1: la ubicación se declara con opciones
 // cerradas (región + comuna), no texto libre -- este endpoint le da al
@@ -27,10 +28,6 @@ const NOMBRE_REGION: Record<string, string> = {
   MA: "Magallanes y la Antártica",
 };
 
-function tituloCaso(s: string): string {
-  return s.replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase());
-}
-
 export async function GET() {
   const { userId, error } = await getUsuarioSesion();
   if (!userId) {
@@ -49,7 +46,7 @@ export async function GET() {
     // La variante con tilde cambia al quitarle los diacríticos; la otra no.
     const tieneTilde = t.termino.normalize("NFD").replace(/[̀-ͯ]/g, "") !== t.termino;
     if (!yaEsta || tieneTilde) {
-      porComuna.set(clave, { nombre: tituloCaso(t.termino), region: t.region });
+      porComuna.set(clave, { nombre: nombrePropio(t.termino), region: t.region });
     }
   }
   const comunas = [...porComuna.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));

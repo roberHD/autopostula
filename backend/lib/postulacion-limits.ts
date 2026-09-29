@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { saldoExtras } from "@/lib/extras";
+import { inicioDelMesChile } from "@/lib/tiempo";
 
 /**
  * Cuántas postulaciones lleva el usuario este mes y cuántas le quedan según su
@@ -25,9 +26,8 @@ export async function obtenerEstadoPostulaciones(userId: string) {
     return { permitido: true, restantes: null, limite: null, delMes: null, extras: 0 };
   }
 
-  const inicioMes = new Date();
-  inicioMes.setDate(1);
-  inicioMes.setHours(0, 0, 0, 0);
+  // docs/revision-2026-09-28.md §15: el mes de Chile, no el del servidor (UTC).
+  const inicioMes = inicioDelMesChile();
 
   // §8.3 (docs/revision-2026-09-16.md): INCOMPLETA es un intento que no llegó
   // a la empresa (el formulario se quedó a medio enviar) -- contarla acá

@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { usuarioTienePerfilDinamico } from "@/lib/plan-beneficios";
+import { claveLimite, LIMITES, permitirIntento } from "@/lib/limite-tasa";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -11,6 +12,12 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // nunca finalizar. En la práctica no se nota: un perfil normal se arma en
 // 4-15 mensajes del usuario, esto da margen de sobra antes de cortar.
 const LIMITE_MENSAJES_FASE_1 = 30;
+
+// docs/revision-2026-09-28.md §19: esta conversación es gratis, no exige correo
+// verificado y no cuenta en el cupo de IA, y cada mensaje reenvía la
+// conversación entera. Sin tope de largo, unos pocos mensajes enormes costaban
+// lo mismo que cientos de postulaciones.
+const LARGO_MAXIMO_MENSAJE = 2000;
 
 const SYSTEM_PROMPT_BASE =
   "Eres un entrevistador cercano y curioso, no un formulario. Tu trabajo es conocer a esta " +
@@ -25,22 +32,27 @@ const SYSTEM_PROMPT_BASE =
   "si ya tienes esa información dala por sabida y ve directo a lo que el CV no puede contarte. " +
   "Escribe en texto plano, como en un chat real: nunca uses markdown (nada de **negritas**, " +
   "#títulos, guiones de lista, etc.).\n\n" +
-  "TU PRIMER MENSAJE de la conversación (cuando todavía no le preguntaste nada) tiene una " +
-  "estructura fija, distinta del resto: arranca reconociendo en una frase natural en qué trabaja " +
-  "actualmente o en qué trabajó más recientemente esta persona, usando lo que ya sabés por su CV " +
-  "-- se lo decís vos, no se lo preguntás (ej. \"vi que últimamente estuviste en [cargo] en " +
-  "[empresa]\"). Desde ahí pivotea hacia adelante con una pregunta abierta sobre qué tiene pensado " +
+  // docs/revision-2026-09-28.md §14: este prompt estaba escrito con voseo
+  // argentino ("sabés", "arrancá", "vos decidís"), y la IA tiende a contestar
+  // como le hablan. Los usuarios son chilenos: se les habla de tú.
+  "Habla en español de Chile y tutea a la persona (tú): nunca uses voseo argentino (nada de " +
+  "\"vos\", \"tenés\", \"querés\", \"contame\").\n\n" +
+  "TU PRIMER MENSAJE de la conversación (cuando todavía no le has preguntado nada) tiene una " +
+  "estructura fija, distinta del resto: parte reconociendo en una frase natural en qué trabaja " +
+  "actualmente o en qué trabajó más recientemente esta persona, usando lo que ya sabes por su CV " +
+  "-- se lo dices tú, no se lo preguntas (ej. \"vi que últimamente estuviste en [cargo] en " +
+  "[empresa]\"). Desde ahí pasa hacia adelante con una pregunta abierta sobre qué tiene pensado " +
   "para lo que sigue (ej. \"¿y ahora qué te gustaría que fuera distinto?\", \"¿en qué te gustaría " +
   "enfocarte de acá en adelante?\") -- esa pregunta hacia adelante reemplaza tu primera pregunta " +
   "normal, no la agregues aparte. Si el CV no trae ninguna experiencia laboral reconocible, " +
-  "saltate esta estructura y arrancá directo con tu primera pregunta como de costumbre.\n\n" +
-  "IMPORTANTE -- vos decidís cuándo ya sabes suficiente, no sigas preguntando por preguntar: una " +
+  "sáltate esta estructura y parte directo con tu primera pregunta como de costumbre.\n\n" +
+  "IMPORTANTE -- tú decides cuándo ya sabes suficiente, no sigas preguntando por preguntar: una " +
   "vez que ya tengas fortalezas reales con ejemplos, qué la motiva, cómo prefiere que la " +
   "describan, y al menos un ejemplo real de cómo se expresa con sus propias palabras, da por " +
   "terminada la entrevista con un cierre breve y cálido (no otra pregunta), y marca listo=true. " +
-  "No alargues la conversación de más una vez que ya tenés esto -- mientras más corta y " +
+  "No alargues la conversación de más una vez que ya tienes esto -- mientras más corta y " +
   "certera, mejor.\n\n" +
-  'Respondé SIEMPRE con un JSON válido, sin texto adicional ni markdown alrededor, con esta ' +
+  'Responde SIEMPRE con un JSON válido, sin texto adicional ni markdown alrededor, con esta ' +
   'forma exacta: {"mensaje":"...","listo":false} -- "mensaje" es lo que le vas a decir a la ' +
   'persona (tu próxima pregunta, o el cierre si listo=true). "listo" es true solo cuando ya ' +
   "terminaste la entrevista como se explicó arriba, false mientras sigas preguntando.";
@@ -136,7 +148,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error }, { status: 401 });
   }
 
-  const { mensaje } = await request.json();
+  const cuerpo = await request.json().catch(() => null);
+  const mensaje = typeof cuerpo?.mensaje === "string" ? cuerpo.mensaje.trim() : "";
+  if (mensaje.length > LARGO_MAXIMO_MENSAJE) {
+    return NextResponse.json(
+      { error: `Tu mensaje es muy largo: como máximo ${LARGO_MAXIMO_MENSAJE} caracteres por mensaje.` },
+      { status: 400 }
+    );
+  }
+  if (!(await permitirIntento(claveLimite("estilo-usuario", userId), LIMITES.mensajesEstiloPorUsuario))) {
+    return NextResponse.json(
+      { error: "Llevas muchos mensajes en la última hora. Descansa un rato y sigue después: la conversación queda guardada." },
+      { status: 429 }
+    );
+  }
 
   const perfil = await getOrCreateStyleProfile(userId);
   const conversacion: { role: "user" | "assistant"; content: string }[] =
@@ -165,14 +190,24 @@ export async function POST(request: Request) {
   const cv = await prisma.cvProfile.findUnique({ where: { userId } });
   const systemPrompt = construirSystemPrompt(resumirCvParaContexto(cv));
 
-  const respuesta = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 220,
-    system: systemPrompt,
-    messages: conversacion.length
-      ? conversacion
-      : [{ role: "user", content: "Hola, empecemos." }],
-  });
+  let respuesta: Anthropic.Message;
+  try {
+    respuesta = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 220,
+      system: systemPrompt,
+      messages: conversacion.length
+        ? conversacion
+        : [{ role: "user", content: "Hola, empecemos." }],
+    });
+  } catch (err) {
+    // Antes esto reventaba sin manejo y la persona veía un 500 genérico.
+    console.error("Error de IA en la conversación de estilo:", err);
+    return NextResponse.json(
+      { error: "La IA no respondió esta vez. Vuelve a enviar tu mensaje en un momento." },
+      { status: 502 }
+    );
+  }
 
   const crudo = respuesta.content
     .filter((b) => b.type === "text")

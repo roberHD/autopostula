@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
-import { limpiarTitulo } from "@/lib/text";
+import { datosDeLaOferta } from "@/lib/datos-postulacion";
 import { resumenUltimaRafaga, estimadoDuracionRafagaMs } from "@/lib/rafagas";
 import { modoAutomatico, motivoInactivo, PRUEBA_TOTAL } from "@/lib/estado-automatico";
 
@@ -34,7 +34,9 @@ export async function GET() {
       select: {
         enviadaEn: true,
         estadoActual: true,
-        jobOffer: { select: { titulo: true, empresa: true, platform: { select: { nombre: true } } } },
+        titulo: true,
+        empresa: true,
+        jobOffer: { select: { titulo: true, platform: { select: { nombre: true } } } },
       },
     }),
     prisma.platformAccount.count({ where: { userId, activa: true } }),
@@ -90,8 +92,8 @@ export async function GET() {
       : null,
     ultima: ultima
       ? {
-          titulo: limpiarTitulo(ultima.jobOffer.titulo),
-          empresa: ultima.jobOffer.empresa,
+          titulo: datosDeLaOferta(ultima).titulo,
+          empresa: ultima.empresa ?? null,
           portal: ultima.jobOffer.platform.nombre,
           estado: ultima.estadoActual,
           enviadaEn: ultima.enviadaEn.toISOString(),

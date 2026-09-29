@@ -26,10 +26,13 @@ async function getUserFromToken(request: Request) {
   return prisma.user.findUnique({ where: { apiToken: token } });
 }
 
+// docs/revision-2026-09-28.md §14: sin voseo ("Dejala", "Subile", "Bajale"): la
+// IA tiende a contestar como le hablan, y el texto va con el nombre de una
+// persona chilena.
 const AJUSTES: Record<string, string> = {
-  corta: "Dejala mas corta: una o dos frases, sin perder lo concreto. Saca el relleno, no los hechos.",
-  formal: "Subile el registro: trato de usted, sin modismos ni abreviaciones, pero sin sonar acartonada.",
-  cercana: "Bajale el almidon: mas directa y natural, como habla una persona en Chile, sin caer en informal ni en chiste.",
+  corta: "Déjala más corta: una o dos frases, sin perder lo concreto. Saca el relleno, no los hechos.",
+  formal: "Súbele el registro: trato de usted, sin modismos ni abreviaciones, pero sin sonar acartonada.",
+  cercana: "Hazla menos rígida: más directa y natural, como habla una persona en Chile, sin caer en informal ni en chiste.",
 };
 
 // Misma limpieza que /api/ai/responder-pregunta: el texto va derecho a un
@@ -76,7 +79,7 @@ export async function POST(request: Request) {
         "Reglas duras:\n" +
         "- No agregues ningun hecho nuevo: ni anios de experiencia, ni cifras, ni herramientas, ni certificaciones. " +
         "Solo puedes reordenar, acortar o cambiar el tono de lo que ya dice.\n" +
-        "- Primera persona, espanol de Chile.\n" +
+        "- Primera persona, espanol de Chile, sin voseo argentino (nada de 'tenés', 'podés', 'vos').\n" +
         "- Maximo " + tope + " caracteres.\n" +
         "- Devuelve SOLO el texto final, sin comillas ni explicaciones.",
       messages: [

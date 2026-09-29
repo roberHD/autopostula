@@ -68,7 +68,7 @@ function textoDeAprobacion(r: ResultadoAprobar | null): string {
   }
   switch (r.motivo) {
     case "solo_observar":
-      return "Aprobada, pero no se envía todavía: tienes \"Solo observar\" activado (o tu cuenta sigue en modo prueba). Se enviará cuando lo desactives.";
+      return "Aprobada, pero no se envía todavía: tienes \"Solo observar\" activado (o todavía no activas la postulación). Se enviará cuando lo desactives.";
     case "sin_token":
       return "Aprobada, pero la extensión no está conectada a tu cuenta. Conéctala desde Portales para que se envíe.";
     default:

@@ -6,6 +6,8 @@
 // dependen de adivinar el diseño del PDF (por ejemplo, si está en dos
 // columnas) se dejan fuera hasta tener una forma confiable de saberlo.
 
+import { LISTA_LIMPIEZA_CL } from "@/scripts/limpieza/cl";
+
 export type EstadoRevision = "ok" | "aviso" | "mal";
 
 export type Revision = {
@@ -32,6 +34,21 @@ const MINIMO_CARACTERES_LEGIBLES = 300;
 // Un año suelto (1990-2039) no es una cifra de logro: son fechas.
 const RE_ANIO = /\b(19[89]\d|20[0-3]\d)\b/g;
 const RE_VINETA = /^\s*(?:[-•·▪◦*]|\d+[.)])\s+\S/;
+
+// docs/revision-2026-09-28.md §13: el correo y el teléfono se buscaban también
+// en el texto del CV, pero la comuna solo en el campo que llena la IA. Un CV
+// con "Comuna: Maipú" escrito igual decía "Falta tu comuna" si ese análisis no
+// había corrido. Se busca cualquier comuna de Chile como palabra suelta.
+function sinTildes(texto: string): string {
+  return texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+const COMUNAS = [...new Set(LISTA_LIMPIEZA_CL.filter((t) => t.tipo === "comuna").map((t) => sinTildes(t.termino)))].filter(
+  (c) => c.length >= 4,
+);
+function mencionaUnaComuna(texto: string): boolean {
+  const t = ` ${sinTildes(texto).replace(/[^a-z0-9ñ]+/g, " ")} `;
+  return COMUNAS.some((c) => t.includes(` ${c} `));
+}
 
 function lineasDeTareas(texto: string): string[] {
   return texto.split(/\r?\n/).filter((l) => RE_VINETA.test(l));
@@ -65,7 +82,7 @@ export function chequearCv(d: DatosCv): { legible: boolean; revisiones: Revision
   const faltan = [
     !d.email && !/\S+@\S+\.\S+/.test(texto) ? "tu correo" : null,
     !d.telefono && !/(\+?56)?\s*9\s*\d{4}\s*\d{4}/.test(texto) ? "tu teléfono" : null,
-    !d.comuna ? "tu comuna" : null,
+    !d.comuna && !mencionaUnaComuna(texto) ? "tu comuna" : null,
   ].filter((x): x is string => !!x);
   revisiones.push(
     faltan.length === 0

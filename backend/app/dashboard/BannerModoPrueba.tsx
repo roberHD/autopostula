@@ -62,7 +62,7 @@ export default function BannerModoPrueba({ habilitadaAlCargar }: { habilitadaAlC
     <div className="ap-cartel-maqueta" role="status">
       <ShieldAlert size={17} />
       <div>
-        <p className="ap-cartel-maqueta__t">Tu cuenta está en modo prueba</p>
+        <p className="ap-cartel-maqueta__t">Todavía no activas la postulación</p>
         <p className="ap-cartel-maqueta__d">
           La extensión escanea y puntúa ofertas, pero no envía ninguna postulación todavía. Revisa
           qué habría postulado y actívala cuando confíes en el resultado.

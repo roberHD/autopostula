@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
+import { inicioDelMesChile } from "@/lib/tiempo";
 
 // Se siguen registrando en AiUsageLog para métricas, pero no cuentan para el
 // límite de "resto de llamadas de IA" de acá -- tienen su propio control (tope
@@ -44,9 +45,8 @@ export async function checkAndLogAiUsage(userId: string, tipo: string) {
   const limite = subscripcion?.plan.limiteLlamadasIaMes ?? 150;
 
   if (limite !== null) {
-    const inicioMes = new Date();
-    inicioMes.setDate(1);
-    inicioMes.setHours(0, 0, 0, 0);
+    // docs/revision-2026-09-28.md §15: el mes de Chile, no el del servidor (UTC).
+    const inicioMes = inicioDelMesChile();
 
     const usadas = await prisma.aiUsageLog.count({
       where: {

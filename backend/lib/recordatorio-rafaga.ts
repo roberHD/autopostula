@@ -149,7 +149,16 @@ export async function ejecutarRecordatorios(opciones: {
     // Las mismas que la extensión enviaría al abrir Chrome (/api/extension/perfil):
     // sin URL o sin portal no hay cómo enviarlas, así que no se cuentan.
     const aprobadas = await prisma.decisionOferta.count({
-      where: { userId: u.id, fuente: "BANDA_GRIS", veredicto: "SI", jobOfferId: null, url: { not: null }, plataforma: { not: null } },
+      where: {
+        userId: u.id,
+        fuente: "BANDA_GRIS",
+        veredicto: "SI",
+        jobOfferId: null,
+        url: { not: null },
+        plataforma: { not: null },
+        // Las mismas que /api/extension/perfil sigue intentando enviar (14 días).
+        OR: [{ decididoEn: null }, { decididoEn: { gte: new Date(ahora.getTime() - 14 * 24 * HORA_MS) } }],
+      },
     });
 
     try {

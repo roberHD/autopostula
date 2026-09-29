@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
-import { limpiarTitulo } from "@/lib/text";
+import { datosDeLaOferta } from "@/lib/datos-postulacion";
 import { filtroSinNoticias } from "@/lib/estado-real";
 
 /**
@@ -27,20 +27,25 @@ export async function GET() {
         id: true,
         enviadaEn: true,
         estadoActual: true,
-        jobOffer: { select: { titulo: true, empresa: true, platform: { select: { nombre: true } } } },
+        titulo: true,
+        empresa: true,
+        jobOffer: { select: { titulo: true, platform: { select: { nombre: true } } } },
       },
     }),
   ]);
 
   return NextResponse.json({
     total,
-    postulaciones: primeras.map((a) => ({
-      id: a.id,
-      titulo: limpiarTitulo(a.jobOffer.titulo),
-      empresa: a.jobOffer.empresa,
-      portal: a.jobOffer.platform.nombre,
-      estado: a.estadoActual,
-      enviadaEn: a.enviadaEn,
-    })),
+    postulaciones: primeras.map((a) => {
+      const { titulo, empresa } = datosDeLaOferta(a);
+      return {
+        id: a.id,
+        titulo,
+        empresa,
+        portal: a.jobOffer.platform.nombre,
+        estado: a.estadoActual,
+        enviadaEn: a.enviadaEn,
+      };
+    }),
   });
 }

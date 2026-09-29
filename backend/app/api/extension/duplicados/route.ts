@@ -43,14 +43,16 @@ export async function POST(request: Request) {
       estadoActual: { not: "INCOMPLETA" },
       platformAccount: { platform: { nombre: plataforma } },
     },
-    select: { enviadaEn: true, jobOffer: { select: { titulo: true, empresa: true } } },
+    select: { enviadaEn: true, titulo: true, empresa: true, jobOffer: { select: { titulo: true } } },
     orderBy: { enviadaEn: "desc" },
   });
 
   // La más reciente por clave (orderBy desc: la primera que entra gana).
   const porClave = new Map<string, Date>();
   for (const p of previas) {
-    const clave = claveDuplicado(p.jobOffer.titulo, p.jobOffer.empresa, p.enviadaEn);
+    // docs/revision-2026-09-28.md §1: con lo que guardó la propia postulación,
+    // no con la oferta compartida (que otra cuenta puede haber cambiado).
+    const clave = claveDuplicado(p.titulo || p.jobOffer.titulo, p.empresa, p.enviadaEn);
     if (!porClave.has(clave)) porClave.set(clave, p.enviadaEn);
   }
 

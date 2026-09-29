@@ -6,7 +6,11 @@ import "./theme.css";
 import Sidebar from "./Sidebar";
 
 export const metadata: Metadata = {
-  title: "Tu tablero",
+  // docs/revision-2026-09-28.md (títulos de las pestañas): con un título de
+  // texto plano acá, Next corta la plantilla de app/layout.tsx y las páginas
+  // del panel quedaban "Postulaciones" a secas. Con la plantilla repetida
+  // dicen "Postulaciones · AutoPostula", como el resto del sitio.
+  title: { default: "Tu tablero", template: "%s · AutoPostula" },
   // Detrás de la sesión: no hay nada acá que Google deba indexar.
   robots: { index: false, follow: false },
 };

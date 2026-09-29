@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
+import { urlDePortal } from "@/lib/entrada";
 
 // Lo mismo que dura una oferta en "Por decidir" antes de vencer.
 const DIAS_VIGENCIA = 7;
@@ -30,13 +31,16 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   }
 
   const ahora = new Date();
+  // docs/revision-2026-09-28.md §1: la extensión abre esta dirección para
+  // postular; un descarte guardado antes de validar al llegar se revisa acá.
+  const url = urlDePortal(descarte.url, descarte.plataforma);
   await prisma.$transaction([
     prisma.descarte.update({ where: { id }, data: { corregidoEn: ahora } }),
     prisma.decisionOferta.create({
       data: {
         userId,
         tituloCrudo: descarte.titulo,
-        url: descarte.url,
+        url,
         empresa: descarte.empresa,
         plataforma: descarte.plataforma,
         razones: descarte.razon ? [descarte.razon as any] : undefined,
@@ -49,5 +53,5 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   ]);
 
   // Sin URL la extensión no tiene dónde postular: igual sirve para aprender.
-  return NextResponse.json({ ok: true, seEnvia: !!descarte.url });
+  return NextResponse.json({ ok: true, seEnvia: !!url });
 }

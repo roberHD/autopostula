@@ -3,8 +3,10 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { portalSigueEstado, PORTALES_CON_SEGUIMIENTO } from "@/lib/platforms";
 import { limpiarTitulo } from "@/lib/text";
+import { datosDeLaOferta } from "@/lib/datos-postulacion";
 import { formatearRazon, esRazonPositiva } from "@/lib/formatear-razon";
 import { filtroSinNoticias } from "@/lib/estado-real";
+import { diaEnChile, inicioDelMesChile, inicioDeOtroDiaChile } from "@/lib/tiempo";
 
 /**
  * Todo lo que necesita la página Hoy (docs/estrategia-y-rediseno.md §5.2).
@@ -46,14 +48,12 @@ export async function GET() {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
+  // docs/revision-2026-09-28.md §15: la semana, el mes y "mañana" en hora de
+  // Chile, no del servidor (UTC).
   const hoy = new Date();
-  const inicioSemana = new Date(hoy);
-  inicioSemana.setDate(hoy.getDate() - 6);
-  inicioSemana.setHours(0, 0, 0, 0);
-  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  const manana = new Date(hoy);
-  manana.setDate(hoy.getDate() + 1);
-  manana.setHours(23, 59, 59, 999);
+  const inicioSemana = inicioDeOtroDiaChile(hoy, -6);
+  const inicioMes = inicioDelMesChile(hoy);
+  const finDeManana = inicioDeOtroDiaChile(hoy, 2);
 
   const [
     user,
@@ -72,7 +72,10 @@ export async function GET() {
     descartesRecientes,
     sinNoticias,
   ] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { nombre: true } }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { nombre: true, emailVerificado: true, extensionConectada: true, postulacionHabilitada: true },
+    }),
     prisma.application.findMany({
       where: { userId },
       select: {
@@ -102,7 +105,9 @@ export async function GET() {
         estadoActual: true,
         notaAtencion: true,
         enviadaEn: true,
-        jobOffer: { select: { titulo: true, empresa: true } },
+        titulo: true,
+        empresa: true,
+        jobOffer: { select: { titulo: true } },
         platformAccount: { select: { platform: { select: { nombre: true } } } },
         _count: { select: { answers: true } },
       },
@@ -138,7 +143,7 @@ export async function GET() {
   // ── Tareas ────────────────────────────────────────────────────────
   const noEnviadas = todas.filter((a) => a.estadoActual === "INCOMPLETA").length;
   const ultimaNoEnviada = recientes.find((a) => a.estadoActual === "INCOMPLETA") ?? null;
-  const vencenManana = porDecidir.filter((d) => d.venceEn && d.venceEn <= manana).length;
+  const vencenManana = porDecidir.filter((d) => d.venceEn && d.venceEn < finDeManana).length;
 
   // ── Sobre qué se sabe y sobre qué no (docs/estado-real-de-postulaciones.md §4 y §7) ──
   const total = todas.length;
@@ -216,13 +221,13 @@ export async function GET() {
   const hechos: HechoReciente[] = [];
   for (const a of recientes) {
     const portal = a.platformAccount.platform.nombre;
-    const titulo = limpiarTitulo(a.jobOffer.titulo);
+    const { titulo, empresa } = datosDeLaOferta(a);
     if (a.estadoActual === "INCOMPLETA") {
       hechos.push({
         tipo: "no_envio",
         id: a.id,
         titulo,
-        detalle: [a.jobOffer.empresa, portal, a.notaAtencion ?? "no se pudo completar sola"].filter(Boolean).join(" · "),
+        detalle: [empresa, portal, a.notaAtencion ?? "no se pudo completar sola"].filter(Boolean).join(" · "),
         en: a.enviadaEn.toISOString(),
       });
     } else {
@@ -231,7 +236,7 @@ export async function GET() {
         tipo: "postulo",
         id: a.id,
         titulo,
-        detalle: [a.jobOffer.empresa, portal, n ? `${n} ${n === 1 ? "respuesta" : "respuestas"}` : null].filter(Boolean).join(" · "),
+        detalle: [empresa, portal, n ? `${n} ${n === 1 ? "respuesta" : "respuestas"}` : null].filter(Boolean).join(" · "),
         en: a.enviadaEn.toISOString(),
       });
     }
@@ -280,13 +285,13 @@ export async function GET() {
   // ── Actividad de la semana y reparto por portal (se quedan como estaban) ──
   const actividad: { etiqueta: string; enviadas: number; respuestas: number }[] = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(hoy);
-    d.setDate(hoy.getDate() - i);
-    const clave = d.toDateString();
+    // Mediodía de ese día de Chile: queda dentro del día sin importar el desfase.
+    const d = new Date(inicioDeOtroDiaChile(hoy, -i).getTime() + 12 * 3_600_000);
+    const clave = diaEnChile(d);
     actividad.push({
-      etiqueta: d.toLocaleDateString("es-CL", { weekday: "short" }),
-      enviadas: todas.filter((a) => a.enviadaEn.toDateString() === clave).length,
-      respuestas: cambiosDeEstado.filter((c) => c.cambiadoEn.toDateString() === clave).length,
+      etiqueta: d.toLocaleDateString("es-CL", { weekday: "short", timeZone: "America/Santiago" }),
+      enviadas: todas.filter((a) => diaEnChile(a.enviadaEn) === clave).length,
+      respuestas: cambiosDeEstado.filter((c) => diaEnChile(c.cambiadoEn) === clave).length,
     });
   }
 
@@ -300,6 +305,15 @@ export async function GET() {
 
   return NextResponse.json({
     nombre: nombreCompleto.trim().split(/\s+/)[0] || null,
+    // docs/revision-2026-09-28.md §11: el saludo decía "Nada pendiente.
+    // AutoPostula sigue sola." aunque faltara confirmar el correo o instalar la
+    // extensión, justo debajo de los avisos que decían lo contrario.
+    puesta: {
+      correoVerificado: !!user?.emailVerificado,
+      extensionConectada: !!user?.extensionConectada,
+      postulacionHabilitada: !!user?.postulacionHabilitada,
+      portalesActivos: cuentas.filter((c) => c.activa).length,
+    },
     tareas: {
       porDecidir: porDecidir.length,
       vencenManana,

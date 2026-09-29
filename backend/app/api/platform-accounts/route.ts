@@ -19,7 +19,9 @@ export async function GET() {
   await Promise.all([asegurarPlataformasBase(), asegurarPlanesBase()]);
 
   const [plataformas, cuentas, subscripcion, usuario] = await Promise.all([
-    prisma.jobPlatform.findMany(),
+    // docs/revision-2026-09-28.md: orden fijo (antes el que devolviera la base,
+    // y a veces Trabajando salía primero).
+    prisma.jobPlatform.findMany({ orderBy: { nombre: "asc" } }),
     prisma.platformAccount.findMany({
       where: { userId },
       include: {
@@ -70,9 +72,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  const { platformId } = await request.json();
-  if (!platformId) {
+  const { platformId } = await request.json().catch(() => ({}));
+  if (!platformId || typeof platformId !== "string") {
     return NextResponse.json({ error: "Falta platformId" }, { status: 400 });
+  }
+  // docs/revision-2026-09-28.md §25: un id que no existe daba error 500.
+  if (!(await prisma.jobPlatform.findUnique({ where: { id: platformId }, select: { id: true } }))) {
+    return NextResponse.json({ error: "Ese portal no existe" }, { status: 404 });
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { rol: true } });
@@ -120,13 +126,14 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  const { platformId } = await request.json();
-  if (!platformId) {
+  const { platformId } = await request.json().catch(() => ({}));
+  if (!platformId || typeof platformId !== "string") {
     return NextResponse.json({ error: "Falta platformId" }, { status: 400 });
   }
 
-  await prisma.platformAccount.update({
-    where: { userId_platformId: { userId, platformId } },
+  // updateMany: desconectar uno que nunca se conectó no es un error 500.
+  await prisma.platformAccount.updateMany({
+    where: { userId, platformId },
     data: { activa: false },
   });
 

@@ -4,6 +4,12 @@ import { PDFParse } from "pdf-parse";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { premiarPerfilCompleto } from "@/lib/extras";
+import { claveLimite, LIMITES, permitirIntento } from "@/lib/limite-tasa";
+
+// docs/revision-2026-09-28.md §19: un CV es un PDF de unas pocas páginas. En
+// Vercel el cuerpo ya no puede pasar de 4,5 MB; el tope hace que el mensaje
+// sea claro en vez de un error genérico, y protege también fuera de Vercel.
+const TAMANO_MAXIMO_CV = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
   let parser: PDFParse | null = null;
@@ -14,11 +20,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error }, { status: 401 });
     }
 
-    const formData = await request.formData();
-    const file = formData.get("cv") as File | null;
+    if (!(await permitirIntento(claveLimite("cv-usuario", userId), LIMITES.subidaCvPorUsuario))) {
+      return NextResponse.json(
+        { error: "Subiste muchos CV en la última hora. Espera un rato y vuelve a intentarlo." },
+        { status: 429 }
+      );
+    }
 
-    if (!file) {
+    const formData = await request.formData();
+    const file = formData.get("cv");
+
+    if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json({ error: "Falta el archivo" }, { status: 400 });
+    }
+    if (file.size > TAMANO_MAXIMO_CV) {
+      return NextResponse.json({ error: "El PDF pesa más de 4 MB. Exporta una versión más liviana (sin fotos pesadas)." }, { status: 400 });
     }
 
     // No confiar solo en file.type -- el MIME que reporta el navegador para un

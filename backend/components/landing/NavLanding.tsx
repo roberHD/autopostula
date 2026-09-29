@@ -20,7 +20,7 @@ export default function NavLanding() {
   return (
     <header className={`lp-nav${pegado ? " is-stuck" : ""}`}>
       <div className="lp-nav__in">
-        <Link href="/" className="ap-brand">
+        <Link href="/" className="ap-brand" aria-label="AutoPostula, ir al inicio">
           <MarcaConNombre />
         </Link>
 

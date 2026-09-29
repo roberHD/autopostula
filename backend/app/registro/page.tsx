@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { MarcaAcceso, Mensaje, BotonGoogle, PanelTinta } from "@/components/acceso/Piezas";
+import { COOKIE_INVITACION, LLAVE_INTENCION_PREMIUM } from "@/lib/enlaces";
 
 export default function RegistroPage() {
   const [nombre, setNombre] = useState("");
@@ -21,9 +22,28 @@ export default function RegistroPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const codigo = new URLSearchParams(window.location.search).get("ref");
+    const params = new URLSearchParams(window.location.search);
+    const codigo = params.get("ref");
     if (codigo) setRef(codigo);
+    if (params.get("plan") === "premium") {
+      try {
+        localStorage.setItem(LLAVE_INTENCION_PREMIUM, "1");
+      } catch {
+        // Sin localStorage (incógnito estricto) solo se pierde el atajo al pago.
+      }
+    }
   }, []);
+
+  // §8: registrarse con Google no pasa por /api/register, donde viaja el código
+  // de invitación. Se deja en una cookie que el servidor lee al volver de
+  // Google (auth.ts); dura una hora, lo justo para ir y volver.
+  function entrarConGoogle() {
+    if (ref) {
+      const seguro = window.location.protocol === "https:" ? "; secure" : "";
+      document.cookie = `${COOKIE_INVITACION}=${encodeURIComponent(ref)}; path=/; max-age=3600; samesite=lax${seguro}`;
+    }
+    signIn("google", { callbackUrl: "/dashboard" });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,7 +86,7 @@ export default function RegistroPage() {
 
           <BotonGoogle
             texto="Crear cuenta con Google"
-            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+            onClick={entrarConGoogle}
           />
 
           <div className="ap-separador"><span>o con tu correo</span></div>
@@ -154,7 +174,9 @@ export default function RegistroPage() {
         hechos={[
           "20 postulaciones gratis al mes, sin tarjeta",
           "La IA lee tu CV y arma tu perfil sola",
-          "Tú revisas antes de enviar, siempre",
+          // docs/revision-2026-09-28.md §12: antes decía "Tú revisas antes de
+          // enviar, siempre", pero la revisión es opcional y viene apagada.
+          "Si quieres, revisas cada respuesta antes de que se envíe",
         ]}
         nota="Cancelas o eliminas tu cuenta cuando quieras."
       />

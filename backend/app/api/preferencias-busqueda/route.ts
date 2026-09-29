@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { esAmplitud } from "@/lib/amplitud";
+import { Prisma } from "@/lib/generated/prisma/client";
+import { limpiarUbicacion, listaDeTextos } from "@/lib/entrada";
+
+// docs/revision-2026-09-28.md §25: solo valores conocidos. Antes se guardaba lo
+// que llegara (un objeto en vez de lista, una modalidad inventada).
+const MODALIDADES = new Set(["cualquiera", "remoto", "hibrido", "presencial"]);
+const JORNADAS = new Set(["cualquiera", "full_time", "part_time"]);
 
 async function getOrCreatePreferencias(userId: string) {
   const existente = await prisma.searchPreferences.findUnique({ where: { userId } });
@@ -23,9 +30,13 @@ export async function PUT(request: Request) {
   const userId = (session?.user as any)?.id;
   if (!userId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const body = await request.json();
-  const { palabrasIncluir, palabrasExcluir, modalidad, jornada, usarScorerLocal, ubicacionDeclarada, amplitud } =
-    body || {};
+  const body = await request.json().catch(() => ({}));
+  const { usarScorerLocal, amplitud } = body || {};
+  const palabrasIncluir = body?.palabrasIncluir !== undefined ? listaDeTextos(body.palabrasIncluir, 50, 80) : undefined;
+  const palabrasExcluir = body?.palabrasExcluir !== undefined ? listaDeTextos(body.palabrasExcluir, 50, 80) : undefined;
+  const modalidad = MODALIDADES.has(body?.modalidad) ? body.modalidad : undefined;
+  const jornada = JORNADAS.has(body?.jornada) ? body.jornada : undefined;
+  const ubicacionDeclarada = limpiarUbicacion(body?.ubicacionDeclarada);
 
   await getOrCreatePreferencias(userId);
 
@@ -41,7 +52,7 @@ export async function PUT(request: Request) {
       ...(typeof usarScorerLocal === "boolean" ? { usarScorerLocal } : {}),
       // §2.1 (docs/revision-2026-09-16.md): Filtros edita la ubicación
       // declarada con el mismo selector del onboarding.
-      ...(ubicacionDeclarada !== undefined ? { ubicacionDeclarada } : {}),
+      ...(ubicacionDeclarada !== undefined ? { ubicacionDeclarada: ubicacionDeclarada ?? Prisma.DbNull } : {}),
       // docs/amplitud-de-busqueda.md §4. Se valida contra la lista cerrada:
       // un valor cualquiera dejaría al scorer sin saber qué hacer. Cambiar la
       // amplitud NO recompila el perfil -- la expansión es determinista y se

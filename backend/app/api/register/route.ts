@@ -3,18 +3,30 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { enviarCorreoVerificacion } from "@/lib/correo";
+import { normalizarEmail, problemaConPassword, textoCorto } from "@/lib/entrada";
+import { claveLimite, ipDe, LIMITES, permitirIntento } from "@/lib/limite-tasa";
 
 export async function POST(request: Request) {
-  const { email, password, nombre, ref } = await request.json();
+  const cuerpo = await request.json().catch(() => null);
 
-  if (!email || !password) {
-    return NextResponse.json(
-      { error: "Falta correo o contraseña" },
-      { status: 400 }
-    );
+  // docs/revision-2026-09-28.md §18: antes el mínimo de 8 caracteres solo se
+  // revisaba en el navegador (la API aceptó una contraseña de 1), y el correo
+  // se guardaba tal cual: "Juan@Gmail.com" y "juan@gmail.com" eran dos cuentas.
+  const email = normalizarEmail(cuerpo?.email);
+  if (!email || typeof cuerpo?.password !== "string") {
+    return NextResponse.json({ error: "Falta un correo válido o la contraseña" }, { status: 400 });
   }
+  const problema = problemaConPassword(cuerpo.password);
+  if (problema) {
+    return NextResponse.json({ error: problema }, { status: 400 });
+  }
+  const nombre = textoCorto(cuerpo?.nombre, 100);
+  const ref = textoCorto(cuerpo?.ref, 20);
 
-  const existente = await prisma.user.findUnique({ where: { email } });
+  const existente = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { id: true },
+  });
   if (existente) {
     return NextResponse.json(
       { error: "Ese correo ya está registrado" },
@@ -22,17 +34,26 @@ export async function POST(request: Request) {
     );
   }
 
+  // §17: cada cuenta nueva manda un correo de verificación. Sin tope, desde una
+  // misma IP se podían crear cuentas (y mandar correos) sin límite.
+  if (!(await permitirIntento(claveLimite("registro-ip", ipDe(request)), LIMITES.registroPorIp))) {
+    return NextResponse.json(
+      { error: "Se crearon demasiadas cuentas desde esta conexión. Intenta de nuevo en una hora." },
+      { status: 429 }
+    );
+  }
+
   // docs/creditos-y-pagina-nueva.md §3: quién te invitó. El premio no se paga
   // acá -- se paga cuando esta cuenta verifica su correo, para que nadie se
   // regale postulaciones creando cuentas con direcciones inventadas.
-  const invitadoPor = typeof ref === "string" && ref.trim()
+  const invitadoPor = ref
     ? await prisma.user.findUnique({
-        where: { codigoInvitacion: ref.trim().toUpperCase() },
+        where: { codigoInvitacion: ref.toUpperCase() },
         select: { id: true },
       })
     : null;
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(cuerpo.password, 10);
   const verifyToken = crypto.randomBytes(32).toString("hex");
   const verifyTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
 

@@ -1094,6 +1094,22 @@ AP.analizarYResponder = async function (contexto, preguntas) {
 // confirmación SIN respuestas -- para postulaciones que se envían con un solo
 // clic, donde no hay formulario que revisar y el clic ya es el envío: el
 // "Revisar antes de enviar" tiene que pedir el visto bueno ANTES de ese clic.
+// docs/revision-2026-09-28.md §5: el panel de revisión avisa al background
+// cuando se abre (y cada 20 segundos mientras sigue abierto: Chrome duerme el
+// service worker a los 30 s sin eventos, y con él se perdería la pestaña que
+// está esperando) y cuando se cierra.
+// Las ráfagas y las aprobadas de "Por decidir" abren pestañas de fondo: sin
+// esto, el panel quedaba en una pestaña que nadie veía, la ráfaga lo saltaba a
+// los 3 minutos y la pestaña de una aprobada se cerraba a los 35 segundos.
+// El background trae la pestaña al frente y le da tiempo.
+AP.avisarRevision = function (enCurso) {
+  try {
+    chrome.runtime.sendMessage({ type: enCurso ? 'REVISION_EN_CURSO' : 'REVISION_TERMINADA' }, () => {
+      if (chrome.runtime.lastError) { /* el service worker se está reiniciando */ }
+    });
+  } catch (e) { /* extensión recargada: esta pestaña quedó huérfana */ }
+};
+
 AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
   const soloConfirmar = !!(opciones && opciones.mensaje);
   return new Promise(resolve => {
@@ -1264,6 +1280,8 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
       '</div>';
 
     document.body.appendChild(host);
+    AP.avisarRevision(true);
+    const latidoRevision = setInterval(() => AP.avisarRevision(true), 20000);
 
     const panel = raiz.getElementById('panel');
 
@@ -1450,6 +1468,8 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
 
     function cerrar(resultado) {
       clearInterval(tic);
+      clearInterval(latidoRevision);
+      AP.avisarRevision(false);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       if (resultado === 'confirm') aplicarEdiciones();
@@ -1531,7 +1551,8 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
     // false): queda pendiente para reintentarse en el próximo ciclo, cuando
     // la persona salga del modo observar.
     if (AP.soloObservarEfectivo()) {
-      sendResponse({ success: false, expirada: false, motivo: 'Estás en modo solo observar' });
+      // soloObservar: el background no lo cuenta como un intento fallido (§6).
+      sendResponse({ success: false, expirada: false, soloObservar: true, motivo: 'Estás en modo solo observar' });
       return true;
     }
     if (!AP.aplicarDirecto) { sendResponse({ success: false, expirada: false }); return true; }

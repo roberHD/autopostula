@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { emailCanonico } from "@/lib/entrada";
 
 /**
  * Postulaciones extra (docs/creditos-y-pagina-nueva.md §3).
@@ -24,6 +25,9 @@ export type IdPaquete = keyof typeof PAQUETES;
 export function esIdPaquete(valor: unknown): valor is IdPaquete {
   return typeof valor === "string" && Object.prototype.hasOwnProperty.call(PAQUETES, valor);
 }
+
+/** Invitaciones que pagan premio en 30 días (docs/revision-2026-09-28.md §20). */
+export const MAXIMO_INVITACIONES_PREMIADAS_POR_MES = 10;
 
 /** Cuántas postulaciones extra se ganan por cada cosa (§7). */
 export const PREMIOS = {
@@ -111,8 +115,34 @@ export async function premiarInvitacion(invitadoId: string): Promise<boolean> {
     select: { invitadoPorId: true, emailVerificado: true, email: true },
   });
   if (!invitado?.invitadoPorId || !invitado.emailVerificado) return false;
-  // Invitarse a uno mismo con otro correo no paga.
   if (invitado.invitadoPorId === invitadoId) return false;
+
+  // docs/revision-2026-09-28.md §20: antes solo se comparaba el id, así que
+  // una misma persona podía "invitarse" con alias de su propio correo
+  // (tu+1@gmail.com, t.u@gmail.com...), verificarlos todos en su casilla y
+  // cobrar 10 postulaciones por cada uno.
+  const anfitrion = await prisma.user.findUnique({ where: { id: invitado.invitadoPorId }, select: { email: true } });
+  if (!anfitrion) return false;
+  const canonico = emailCanonico(invitado.email);
+  // Invitarse a uno mismo con otro correo no paga.
+  if (canonico === emailCanonico(anfitrion.email)) return false;
+
+  const premiosAnteriores = await prisma.postulacionExtra.findMany({
+    where: { userId: invitado.invitadoPorId, motivo: "PREMIO_INVITACION" },
+    select: { clave: true, creadoEn: true },
+  });
+  // La misma casilla detrás de otra cuenta ya invitada: no paga dos veces.
+  const idsYaPremiados = premiosAnteriores.map((p) => p.clave.replace(/^invitacion:/, ""));
+  if (idsYaPremiados.length) {
+    const yaPremiados = await prisma.user.findMany({ where: { id: { in: idsYaPremiados } }, select: { email: true } });
+    if (yaPremiados.some((u) => emailCanonico(u.email) === canonico)) return false;
+  }
+  // Y un tope por mes: invitar a diez personas de verdad en un mes ya es mucho.
+  const haceUnMes = Date.now() - 30 * 24 * 3_600_000;
+  if (premiosAnteriores.filter((p) => p.creadoEn.getTime() >= haceUnMes).length >= MAXIMO_INVITACIONES_PREMIADAS_POR_MES) {
+    return false;
+  }
+
   return anotarExtra({
     userId: invitado.invitadoPorId,
     cantidad: PREMIOS.invitacion,

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { compilarPerfil } from "@/lib/compilar-perfil";
 import { premiarPerfilCompleto } from "@/lib/extras";
+import { limpiarUbicacion } from "@/lib/entrada";
 
 // docs/objetivo-laboral.md §6: endpoint propio para el objetivo laboral,
 // separado de /api/perfil (que mezcla datos de contacto y no dispara nada).
@@ -57,21 +59,24 @@ export async function PUT(request: Request) {
   // recompilar (más abajo) para que la recompilación ya la use, en vez de
   // quedar un ciclo atrás. Opcional: /dashboard/filtros puede guardar
   // ubicación aparte, sin tocar objetivos, vía /api/preferencias-busqueda.
-  const ubicacionDeclarada = body?.ubicacionDeclarada;
-  if (ubicacionDeclarada !== undefined) {
-    await prisma.searchPreferences.upsert({
-      where: { userId },
-      create: { userId, ubicacionDeclarada },
-      update: { ubicacionDeclarada },
-    });
-  }
   if (objetivosIn.length > 4) {
     return NextResponse.json({ error: "Como máximo 4 objetivos a la vez" }, { status: 400 });
   }
   for (const o of objetivosIn) {
-    if (!o?.etiqueta || typeof o.etiqueta !== "string") {
+    if (!o?.etiqueta || typeof o.etiqueta !== "string" || !o.etiqueta.trim()) {
       return NextResponse.json({ error: "Cada objetivo necesita una etiqueta" }, { status: 400 });
     }
+  }
+  // docs/revision-2026-09-28.md §25: antes se guardaba ANTES de validar los
+  // objetivos (un pedido rechazado igual dejaba la ubicación cambiada) y
+  // aceptaba cualquier JSON.
+  const ubicacionDeclarada = limpiarUbicacion(body?.ubicacionDeclarada);
+  if (ubicacionDeclarada !== undefined) {
+    await prisma.searchPreferences.upsert({
+      where: { userId },
+      create: { userId, ubicacionDeclarada: ubicacionDeclarada ?? undefined },
+      update: { ubicacionDeclarada: ubicacionDeclarada ?? Prisma.DbNull },
+    });
   }
 
   // El principal ANTES del cambio (mayor peso) -- se necesita para comparar

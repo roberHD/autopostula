@@ -76,16 +76,54 @@ async function vaciarCola() {
       console.warn('[AP] Falló al enviar una oferta aprobada:', e);
     }
     if (item.decisionId) decisionesEnCola.delete(item.decisionId);
-    if (resultado && (resultado.ok === true || resultado.success === true)) enviadas++;
-    // §8.4/§8.6: si la oferta aprobada en banda gris ya no existe o no tiene
-    // botón de postular, se marca EXPIRADA en vez de reintentarla para
-    // siempre en cada ciclo -- "silencio ahí sería peor que el error".
-    if (item.decisionId && resultado && resultado.expirada) {
-      marcarBandaGrisExpirada(item.decisionId);
+    const enviada = !!(resultado && (resultado.ok === true || resultado.success === true));
+    if (enviada) enviadas++;
+    if (item.decisionId) {
+      // §8.4/§8.6: si la oferta aprobada en banda gris ya no existe, no tiene
+      // botón de postular o ya estaba postulada, se marca EXPIRADA en vez de
+      // reintentarla para siempre en cada ciclo -- "silencio ahí sería peor
+      // que el error".
+      if (resultado && resultado.expirada) {
+        marcarBandaGrisExpirada(item.decisionId);
+        await olvidarIntentosAprobada(item.decisionId);
+      } else if (enviada) {
+        await olvidarIntentosAprobada(item.decisionId);
+      } else if (!(resultado && resultado.soloObservar) && (await anotarIntentoFallidoAprobada(item.decisionId))) {
+        // docs/revision-2026-09-28.md §6: cualquier otra falla (la pestaña no
+        // respondió, se saltó en la revisión, faltó un dato...) se reintentaba
+        // sin fin; y como el servidor entregaba siempre las 5 más antiguas,
+        // cinco así bloqueaban todas las aprobaciones nuevas. Tres intentos y se cierra.
+        marcarBandaGrisExpirada(item.decisionId);
+      }
     }
     await sleep(5000);
   }
   return enviadas;
+}
+
+// docs/revision-2026-09-28.md §6: intentos fallidos de cada aprobada, en
+// chrome.storage (sobrevive a que el service worker se duerma).
+const MAX_INTENTOS_APROBADA = 3;
+
+async function anotarIntentoFallidoAprobada(decisionId) {
+  const { intentosAprobadas } = await chrome.storage.local.get('intentosAprobadas');
+  const intentos = intentosAprobadas || {};
+  const n = (intentos[decisionId] || 0) + 1;
+  if (n >= MAX_INTENTOS_APROBADA) {
+    delete intentos[decisionId];
+    await chrome.storage.local.set({ intentosAprobadas: intentos });
+    return true;
+  }
+  intentos[decisionId] = n;
+  await chrome.storage.local.set({ intentosAprobadas: intentos });
+  return false;
+}
+
+async function olvidarIntentosAprobada(decisionId) {
+  const { intentosAprobadas } = await chrome.storage.local.get('intentosAprobadas');
+  if (!intentosAprobadas || !(decisionId in intentosAprobadas)) return;
+  delete intentosAprobadas[decisionId];
+  await chrome.storage.local.set({ intentosAprobadas });
 }
 
 async function marcarBandaGrisExpirada(decisionId) {
@@ -112,6 +150,18 @@ async function marcarBandaGrisExpirada(decisionId) {
 // Devuelve { success, expirada } -- si la pestaña nunca contestó (cerrada,
 // sin content script, o timeout de seguridad) no se marca nada, queda
 // pendiente para el siguiente ciclo en vez de asumir que expiró.
+// docs/revision-2026-09-28.md §5: el tope era de 35 s desde que se abría la
+// pestaña. Una postulación con formulario (la IA sola puede tardar hasta 25 s,
+// más la carga del portal) podía quedar cortada a la mitad, y con "Revisar
+// antes de enviar" no alcanzaba nunca: la pestaña se cerraba antes de que la
+// persona viera el panel. Ahora el tope base es más holgado y, mientras el
+// panel de revisión esté abierto (REVISION_EN_CURSO), se alarga.
+const TOPE_APROBADA_MS = 90 * 1000;
+const TOPE_EN_REVISION_MS = 4 * 60 * 1000;
+const TOPE_TRAS_REVISION_MS = 60 * 1000;
+// Pestañas de aprobadas abiertas ahora: tabId → { alargar(ms) }.
+const pestanasDeAprobadas = new Map();
+
 function applyInTab(url, titulo, decisionId) {
   return new Promise(resolve => {
     chrome.tabs.create({ url, active: false }, tab => {
@@ -119,28 +169,91 @@ function applyInTab(url, titulo, decisionId) {
       // callback y la promesa no se resolvía nunca, dejando la cola colgada.
       if (chrome.runtime.lastError || !tab) { resolve({ success: false, expirada: false }); return; }
       const id = tab.id;
+      let terminado = false;
+      let seguro = null;
+      const terminar = (res) => {
+        if (terminado) return;
+        terminado = true;
+        clearTimeout(seguro);
+        pestanasDeAprobadas.delete(id);
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        chrome.tabs.remove(id, () => { if (chrome.runtime.lastError) {} });
+        resolve(res);
+      };
+      // Timeout de seguridad, que la revisión puede alargar.
+      const armarSeguro = (ms) => {
+        clearTimeout(seguro);
+        seguro = setTimeout(() => terminar({ success: false, expirada: false }), ms);
+      };
       const onUpdated = (tabId, info) => {
         if (tabId !== id || info.status !== 'complete') return;
         chrome.tabs.onUpdated.removeListener(onUpdated);
         setTimeout(() => {
           chrome.tabs.sendMessage(id, { type: 'DO_APPLY', decisionId }, res => {
             if (chrome.runtime.lastError) { /* tab cerrada o sin content script */ }
-            setTimeout(() => {
-              chrome.tabs.remove(id, () => { if(chrome.runtime.lastError){} });
-              resolve(res || { success: false, expirada: false });
-            }, 3500);
+            setTimeout(() => terminar(res || { success: false, expirada: false }), 3500);
           });
         }, 3000);
       };
+      pestanasDeAprobadas.set(id, { alargar: armarSeguro });
       chrome.tabs.onUpdated.addListener(onUpdated);
-      // Timeout de seguridad
-      setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(onUpdated);
-        chrome.tabs.remove(id, () => {});
-        resolve({ success: false, expirada: false });
-      }, 35000);
+      armarSeguro(TOPE_APROBADA_MS);
     });
   });
+}
+
+// ── El panel de revisión en una pestaña de fondo (docs/revision-2026-09-28.md §5) ──
+//
+// Las pestañas que abre la extensión (el paso de una ráfaga, una aprobada de
+// "Por decidir") se abren de fondo. Con "Revisar antes de enviar", el panel
+// aparecía ahí sin que nadie lo viera: la ráfaga lo saltaba a los 3 minutos y
+// la aprobada se cerraba antes. Cuando el panel se abre, la pestaña pasa al
+// frente (y la ventana avisa en la barra de tareas, sin robar el foco de otra
+// aplicación); cuando se cierra, vuelve la pestaña que la persona estaba
+// mirando. Mientras está abierto, los seguros de tiempo se alargan.
+// Las pestañas que abrió la persona no se tocan: ya las está mirando.
+const pestanaAnteriorPorRevision = new Map();
+
+async function atenderRevision(sender, enCurso) {
+  const tab = sender && sender.tab;
+  if (!tab || tab.id == null) return;
+  const { rafaga } = await chrome.storage.local.get('rafaga');
+  const esDeRafaga = !!(rafaga && rafaga.estado === 'en_curso' && rafaga.tabActual === tab.id);
+  const aprobada = pestanasDeAprobadas.get(tab.id);
+  if (!esDeRafaga && !aprobada) return;
+
+  if (enCurso) {
+    if (aprobada) aprobada.alargar(TOPE_EN_REVISION_MS);
+    if (esDeRafaga) {
+      const alarma = await chrome.alarms.get(NOMBRE_ALARMA_SEGURO_RAFAGA);
+      if (!alarma || !alarma.scheduledTime || alarma.scheduledTime - Date.now() < TOPE_EN_REVISION_MS) {
+        chrome.alarms.create(NOMBRE_ALARMA_SEGURO_RAFAGA, { delayInMinutes: TOPE_EN_REVISION_MS / 60000 });
+      }
+      rafaga.latido = Date.now();
+      await chrome.storage.local.set({ rafaga });
+    }
+    if (!tab.active && !pestanaAnteriorPorRevision.has(tab.id)) {
+      try {
+        const [activa] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+        pestanaAnteriorPorRevision.set(tab.id, activa ? activa.id : null);
+        await chrome.tabs.update(tab.id, { active: true });
+        await chrome.windows.update(tab.windowId, { drawAttention: true });
+      } catch (e) {
+        console.warn('[AP] No se pudo traer al frente la pestaña con la revisión:', e);
+      }
+    }
+    return;
+  }
+
+  if (aprobada) aprobada.alargar(TOPE_TRAS_REVISION_MS);
+  if (esDeRafaga) chrome.alarms.create(NOMBRE_ALARMA_SEGURO_RAFAGA, { delayInMinutes: SEGURO_MINUTOS_POR_PASO });
+  const anterior = pestanaAnteriorPorRevision.get(tab.id);
+  pestanaAnteriorPorRevision.delete(tab.id);
+  if (anterior != null) {
+    try {
+      await chrome.tabs.update(anterior, { active: true });
+    } catch (e) { /* la persona ya la cerró */ }
+  }
 }
 
 // ── Llamadas a la IA del backend (con nuestra key, no la del usuario) ──
@@ -1503,10 +1616,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
-  if (msg.type === 'OPEN_AND_APPLY') {
-    queue.push({ url: msg.url, titulo: msg.titulo });
-    processQueue();
-    sendResponse({ queued: true });
+  // docs/revision-2026-09-28.md §5: el panel de revisión se abrió (o sigue
+  // abierto) / se cerró en una pestaña.
+  if (msg.type === 'REVISION_EN_CURSO' || msg.type === 'REVISION_TERMINADA') {
+    atenderRevision(sender, msg.type === 'REVISION_EN_CURSO')
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => { console.warn('[AP] Falló atender la revisión:', e); sendResponse({ ok: false }); });
+    return true;
   }
   // Las 4 de acá abajo hacían fire-and-forget (sin return true) -- en MV3 eso
   // le dice a Chrome "esta llamada ya terminó", y el service worker se puede

@@ -371,8 +371,8 @@ export default function FiltrosPage() {
           <p className="ap-section-title" style={{ marginBottom: 0 }}>Ubicación</p>
         </div>
         <p className="ap-section-sub">
-          Dónde estás dispuesto a trabajar. Antes esto se adivinaba con IA a partir de tu CV — se
-          declara acá para no equivocarse (agregar una comuna que quieres evitar, u omitir una que sí pediste).
+          Dónde estás dispuesto a trabajar. Lo decides tú, no lo adivinamos de tu CV: así no se
+          cuela una comuna que quieres evitar ni se queda afuera una que sí te sirve.
         </p>
 
         {mensajeUbicacion && (

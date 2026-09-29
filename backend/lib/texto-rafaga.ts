@@ -157,7 +157,7 @@ const TEXTO_ACTIVADA_MAS_TARDE = "La primera búsqueda empieza la próxima vez q
 // apretar de nuevo.
 const MOTIVOS_ACTIVACION: Record<string, string> = {
   en_curso:
-    "Ya había una búsqueda en curso, que termina sin enviar nada (todavía estabas en modo prueba). La siguiente sí postula.",
+    "Ya había una búsqueda en curso, que termina sin enviar nada (todavía no activabas la postulación). La siguiente sí postula.",
   sin_conexion: "No pudimos consultar tu cuenta desde la extensión. " + TEXTO_ACTIVADA_MAS_TARDE,
   extension_no_responde: "La extensión no respondió. " + TEXTO_ACTIVADA_MAS_TARDE,
 };

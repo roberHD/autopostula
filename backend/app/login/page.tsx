@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { MarcaAcceso, Mensaje, BotonGoogle, PanelTinta } from "@/components/acceso/Piezas";
+import { CORREO_CONTACTO } from "@/lib/enlaces";
 
 // useSearchParams() obliga a Next a renderizar esto dentro de un <Suspense> en
 // el build de producción (si no, "next build" falla al pre-renderizar /login)
@@ -17,7 +18,13 @@ function ErrorDesdeQuery({ onError, onInfo }: { onError: (msg: string) => void; 
     const errorParam = searchParams.get("error");
     if (errorParam) {
       console.error("Error de Auth.js:", errorParam);
-      onError("No pudimos iniciar tu sesión. Revisa tu correo y contraseña, o entra con Google.");
+      // docs/revision-2026-09-28.md §17: el bloqueo por intentos también puede
+      // llegar por la URL (sin JavaScript, el formulario vuelve con ?code=).
+      onError(
+        searchParams.get("code") === "demasiados_intentos"
+          ? "Hubo demasiados intentos seguidos. Espera unos 15 minutos y vuelve a probar, o recupera tu contraseña."
+          : "No pudimos iniciar tu sesión. Revisa tu correo y contraseña, o entra con Google."
+      );
     }
     if (searchParams.get("eliminada") === "1") {
       onInfo("Tu cuenta se eliminó. Puedes crear una nueva cuando quieras.");
@@ -28,13 +35,14 @@ function ErrorDesdeQuery({ onError, onInfo }: { onError: (msg: string) => void; 
   return null;
 }
 
-// A dónde volver después de entrar: solo rutas internas del panel. Un
+// A dónde volver después de entrar: solo rutas internas del panel (y el
+// onboarding, que también pide sesión: docs/revision-2026-09-28.md §7). Un
 // callbackUrl que apunte a otro sitio (o a cualquier otra ruta) se ignora, para
 // que el login no sirva de redirección abierta.
 function destinoDespuesDeEntrar(): string {
   try {
     const pedido = new URLSearchParams(window.location.search).get("callbackUrl");
-    if (pedido && /^\/dashboard(\/[\w\-/]*)?(\?[\w\-=&%.]*)?$/.test(pedido)) return pedido;
+    if (pedido && /^\/(dashboard|onboarding)(\/[\w\-/]*)?(\?[\w\-=&%.]*)?$/.test(pedido)) return pedido;
   } catch {
     // sin window (no debería pasar en un handler de cliente)
   }
@@ -55,10 +63,20 @@ export default function LoginPage() {
     setError("");
     setEnviando(true);
 
-    const res = await signIn("credentials", { email, password, redirect: false });
+    // docs/revision-2026-09-28.md: sin redirectTo, next-auth usa la URL actual
+    // y después busca "error" en ella. Si la página venía con ?error= (por
+    // ejemplo, tras un intento fallido con Google), un login correcto se leía
+    // como fallido: la sesión quedaba abierta pero la pantalla decía que la
+    // contraseña no coincidía.
+    const res = await signIn("credentials", { email, password, redirect: false, redirectTo: destinoDespuesDeEntrar() });
     setEnviando(false);
 
     if (res?.error) {
+      // docs/revision-2026-09-28.md §17: demasiados intentos fallidos seguidos.
+      if (res.code === "demasiados_intentos") {
+        setError("Hubo demasiados intentos seguidos. Espera unos 15 minutos y vuelve a probar, o recupera tu contraseña.");
+        return;
+      }
       // El código de Auth.js no le sirve a nadie que esté entrando: se
       // registra en consola y en pantalla va lo que se puede hacer.
       console.error("Falló el login:", res.error);
@@ -151,15 +169,18 @@ export default function LoginPage() {
       </div>
 
       <PanelTinta
+        // docs/revision-2026-09-28.md §12: "siguió postulando" no es cierto en
+        // el plan gratis (ahí postula mientras estás en el portal). Lo que sí
+        // es cierto para todos: lo que envía queda anotado acá.
         frase="Mientras no estabas,"
-        marcado="siguió postulando."
-        bajada="AutoPostula no para cuando cierras la pestaña. Entra y mira en qué quedó cada postulación."
+        marcado="todo quedó anotado."
+        bajada="Cada postulación que envía la extensión queda acá, aunque cierres esta pestaña. Entra y mira en qué quedó cada una."
         hechos={[
           "Cada postulación registrada con su portal y su fecha",
           "Respuestas escritas con tus palabras, no con plantillas",
           "Computrabajo, Laborum y Trabajando.com en el mismo lugar",
         ]}
-        nota="¿Problemas para entrar? Escríbenos a hola@autopostula.cl"
+        nota={`¿Problemas para entrar? Escríbenos a ${CORREO_CONTACTO}`}
       />
     </div>
   );

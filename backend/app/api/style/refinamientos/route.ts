@@ -103,8 +103,10 @@ export async function POST(request: Request) {
     const instruccionesPrevias = refinamiento.styleProfile.instrucciones ?? "";
     // Se acumulan en vez de reemplazar: cada refinamiento agrega una regla, y
     // pisar las anteriores perdería lo que la persona ya pidió.
+    // docs/revision-2026-09-28.md §19: se acumulan, pero con tope (van en cada
+    // llamada de IA). Si se pasa, se quedan las más recientes.
     const instrucciones = ajuste.instruccion
-      ? [instruccionesPrevias, ajuste.instruccion].filter(Boolean).join("\n")
+      ? [instruccionesPrevias, ajuste.instruccion].filter(Boolean).join("\n").slice(-1500)
       : instruccionesPrevias;
 
     await prisma.styleProfile.update({

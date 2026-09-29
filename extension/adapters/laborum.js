@@ -381,13 +381,17 @@ function marcarIncompleta(id, titulo, url, razon, respuestas, decisionOfertaId) 
 }
 
 // ── Postular a una oferta ya abierta ──────────────────────────────
-// Devuelve { ok, expirada } -- expirada=true SOLO cuando no hay ningún botón
-// de postular (§8.4/§8.6: la oferta ya no existe o ya no acepta postulantes).
-// El resto de los "no ok" son fallas puntuales del flujo, no la oferta en sí.
-async function postularEnPagina(id, titulo, url, decisionOfertaId) {
+// Devuelve { ok, expirada } -- expirada=true cuando la oferta ya no se puede
+// enviar nunca: no hay ningún botón de postular (§8.4/§8.6), o ya estaba
+// postulada (docs/revision-2026-09-28.md §6: antes una aprobada de "Por
+// decidir" que ya estaba postulada se reintentaba para siempre). El resto de
+// los "no ok" son fallas puntuales del flujo, no la oferta en sí.
+async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
+  // docs/revision-2026-09-28.md §1: la empresa viaja con la postulación (se
+  // guarda en la postulación misma, no se toma de la oferta compartida).
   if (yaPostulado()) {
     addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: 'Ya estaba postulada' });
-    return { ok: false, expirada: false };
+    return { ok: false, expirada: true };
   }
 
   // docs/modo-solo-observar.md §3.2/§4.3: único punto por el que pasan los
@@ -466,7 +470,7 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
       addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación con preguntas enviada', respuestas: respuestasParaLog });
       // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
       // computrabajo.js, es el mismo acá.
-      const reportado = await reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, matchScore: resultado.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
+      const reportado = await reportarPostulacion({ id, titulo, empresa, plataforma: 'Laborum', url, matchScore: resultado.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
       if (!reportado || !reportado.ok) {
         addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: 'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido') });
         msg('⚠ Enviado, no se guardó: ' + titulo.slice(0, 30), '#DC2626');
@@ -483,7 +487,7 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId) {
   const ok = await esperarConfirmacion();
   if (ok) {
     addLog({ ts: Date.now(), status: 'ok', title: titulo, url, uid: id, reason: 'Postulación rápida enviada' });
-    const reportado = await reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, decisionOfertaId });
+    const reportado = await reportarPostulacion({ id, titulo, empresa, plataforma: 'Laborum', url, decisionOfertaId });
     if (!reportado || !reportado.ok) {
       addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: 'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido') });
       msg('⚠ Enviado, no se guardó: ' + titulo.slice(0, 30), '#DC2626');
@@ -534,7 +538,7 @@ async function resolverEtapa2Gris(pendiente) {
 
     if (resultadoFinal.banda === 'postular') {
       AP.procesando = true;
-      await postularEnPagina(pendiente.id, pendiente.titulo, location.href);
+      await postularEnPagina(pendiente.id, pendiente.titulo, location.href, undefined, pendiente.empresa);
       await sleep(DELAY);
       AP.procesando = false;
     } else {

@@ -4,6 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { construirMensajesCV } from "@/lib/ai-messages";
 import { DESCRIPCION_TONO, DESCRIPCION_LONGITUD } from "@/lib/style-descriptions";
+import {
+  aplicarUsarPerfil,
+  AVISO_SIN_PERFIL,
+  bloqueRespuestasAnteriores,
+  limpiarAviso,
+  limpiarInfoIA,
+  limpiarPerfilIA,
+  limpiarPreguntasIA,
+} from "@/lib/contexto-ia";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -27,8 +36,6 @@ function limpiarRespuestaIA(txt: string) {
   return t.trim();
 }
 
-type PreguntaIn = { id: string; pregunta: string; opciones?: string[] | null };
-
 // Fusiona lo que antes eran analizar-oferta + N llamadas a responder-pregunta
 // (una por cada pregunta del formulario) en una sola llamada: el CV, el estilo,
 // la calibración y el aviso se mandan una vez, no una vez por pregunta.
@@ -39,11 +46,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
     }
 
-    const { contexto, perfil, info, preguntas } = await request.json();
+    const cuerpo = await request.json().catch(() => null);
+    // docs/revision-2026-09-28.md §19: todo con tope de tamaño. Antes una sola
+    // llamada podía llevar cualquier cantidad de preguntas y de texto.
+    const contexto = limpiarAviso(cuerpo?.contexto, 3000);
     if (!contexto) {
       return NextResponse.json({ error: "Falta contexto" }, { status: 400 });
     }
-    const listaPreguntas: PreguntaIn[] = Array.isArray(preguntas) ? preguntas : [];
+    const listaPreguntas = limpiarPreguntasIA(cuerpo?.preguntas);
 
     const uso = await checkAndLogAiUsage(user.id, "procesar_postulacion");
     if (!uso.permitido) {
@@ -73,8 +83,14 @@ export async function POST(request: Request) {
       ? await prisma.styleCalibrationAnswer.findMany({ where: { styleProfileId: styleProfile.id } })
       : [];
 
-    const p = perfil || {};
-    const infoTexto = (info || []).map((t: string) => "- " + t).join("\n");
+    // §10: "Usar mi perfil" apagado = la IA no recibe CV, perfil ni datos sueltos.
+    const { perfil: p, info, incluirCv } = aplicarUsarPerfil(
+      styleProfile?.usarPerfil,
+      limpiarPerfilIA(cuerpo?.perfil),
+      limpiarInfoIA(cuerpo?.info),
+    );
+    const infoTexto = info.map((t) => "- " + t).join("\n");
+    const bloqueAnteriores = await bloqueRespuestasAnteriores(user.id, styleProfile?.evitarRepetidas);
 
     const bloqueEstilo =
       estilo && estilo.confirmado
@@ -95,7 +111,7 @@ export async function POST(request: Request) {
       ? "Configuracion de tono y extension elegida por el candidato en 'Entrenar IA' (usala como base en las respuestas de texto libre; ajustala levemente solo si el aviso lo amerita):\n" +
         "- Tono: " + (DESCRIPCION_TONO[styleProfile.tono || ""] || DESCRIPCION_TONO.profesional_cercano) + "\n" +
         "- Extension de la respuesta: " + (DESCRIPCION_LONGITUD[styleProfile.longitudRespuesta] || DESCRIPCION_LONGITUD.media) + "\n" +
-        (styleProfile.instrucciones ? "- Instrucciones adicionales del candidato: " + styleProfile.instrucciones + "\n" : "") +
+        (styleProfile.instrucciones ? "- Instrucciones adicionales del candidato: " + styleProfile.instrucciones.slice(0, 1500) + "\n" : "") +
         "\n"
       : "";
 
@@ -105,11 +121,7 @@ export async function POST(request: Request) {
         "\n\n"
       : "";
 
-    const preguntasParaPrompt = listaPreguntas.map((q) => ({
-      id: q.id,
-      pregunta: q.pregunta,
-      opciones: q.opciones && q.opciones.length ? q.opciones : null,
-    }));
+    const preguntasParaPrompt = listaPreguntas;
 
     const instruccion =
       "Vas a hacer DOS cosas a la vez para " + (p.nombre || "el candidato") + ", que esta postulando a un empleo, y responder TODO en un unico JSON valido (sin markdown, sin texto fuera del JSON):\n\n" +
@@ -132,9 +144,11 @@ export async function POST(request: Request) {
       "5. Responde en TEXTO PLANO. NUNCA uses markdown (nada de #, ##, **, guiones ni listas). NUNCA repitas ni cites la pregunta antes de responder. NUNCA agregues introducciones tipo \"Respuesta:\" ni comillas envolviendo el texto.\n" +
       '6. SE CONCISO Y EVITA REDUNDANCIA: no repitas la misma idea con otras palabras. Usa el tono que tu mismo determinaste en el "analisis" en vez de sonar siempre igual de formal en todas las respuestas.\n' +
       "7. Registro escrito profesional siempre, aunque el tono configurado sea cercano: sin muletillas orales (\"nomas\", \"cachai\", \"o sea\") ni groserias. Cercano no es igual a hablado.\n\n" +
+      (incluirCv ? "" : AVISO_SIN_PERFIL) +
       bloqueEstilo +
       bloqueEntrenamiento +
       bloqueCalibracion +
+      bloqueAnteriores +
       "Perfil: " + (p.bio || "Sin informacion de perfil aun") + "\n" +
       "Nombre: " + (p.nombre || "") + "\n" +
       "Email: " + (p.email || "") + "\n" +
@@ -150,7 +164,7 @@ export async function POST(request: Request) {
       "Responde SOLO con este JSON, sin texto adicional ni markdown:\n" +
       '{"analisis":{"cargo":"","empresa":"","prioridades":"","fortalezas":"","tono":"","matchScore":0},"respuestas":[{"id":"","respuesta":"","datoFaltante":null}]}';
 
-    const messages = await construirMensajesCV(user.id, instruccion);
+    const messages = await construirMensajesCV(user.id, instruccion, incluirCv);
 
     const maxTokens = Math.min(2200, 350 + listaPreguntas.length * 150);
 

@@ -10,10 +10,14 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { extensionConectada: true },
+    select: { extensionConectada: true, emailVerificado: true },
   });
 
-  return NextResponse.json({ extensionConectada: user?.extensionConectada ?? false });
+  return NextResponse.json({
+    extensionConectada: user?.extensionConectada ?? false,
+    // docs/revision-2026-09-28.md §11: el cierre del onboarding avisa si falta confirmarlo.
+    emailVerificado: !!user?.emailVerificado,
+  });
 }
 
 export async function POST() {

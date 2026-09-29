@@ -730,3 +730,16 @@ p { margin: 0; }
   transition: text-decoration-color 0.18s ease;
 }
 .ap-enlace:hover { text-decoration-color: var(--enlace); }
+
+/* docs/revision-2026-09-28.md: en el celular (98,9% del tráfico), un campo con
+   letra de menos de 16 px hace que el iPhone agrande la página cada vez que
+   se toca, y hay que achicarla a mano después. Los campos del registro, el
+   login y el panel venían en 13-13,5 px. !important porque varios traen el
+   tamaño en línea o en su propia clase. */
+@media (max-width: 640px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

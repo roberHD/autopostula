@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, X, type LucideIcon } from "lucide-react";
+import { mayusculaInicial } from "@/lib/text";
 
 // Componente único de swipe (docs/rediseno-filtrado-ofertas.md §8.1): la misma
 // interacción "¿postularías a esto? Sí/No" sirve tanto para el triaje de
@@ -125,7 +126,9 @@ export function SwipeTriaje<V extends string = "SI" | "NO">({
           background: "var(--bg-elevated)",
         }}
       >
-        <p style={{ fontSize: 18, fontWeight: 700, textTransform: "capitalize" }}>{actual.titulo}</p>
+        {/* docs/revision-2026-09-28.md: text-transform: capitalize dejaba
+            "Auxiliar De Bodega Y Despacho". Solo la primera letra. */}
+        <p style={{ fontSize: 18, fontWeight: 700 }}>{mayusculaInicial(actual.titulo)}</p>
       </div>
       {renderDetalle && <div style={{ marginBottom: 16 }}>{renderDetalle(actual)}</div>}
       <p style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", marginBottom: 20 }}>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
+import { urlDePortal } from "@/lib/entrada";
 
 // La cola de decisión de banda gris (docs/rediseno-filtrado-ofertas.md §8) --
 // mismo componente de swipe que el triaje de onboarding, misma tabla
@@ -28,7 +29,12 @@ export async function GET() {
     where: { userId, fuente: "BANDA_GRIS", veredicto: "EXPIRADA", decididoEn: null },
   });
 
-  return NextResponse.json({ pendientes, expiradasSinRevisar });
+  // docs/revision-2026-09-28.md §1: el enlace "Ver oferta" de la tarjeta solo
+  // si es https:// del portal (las filas de antes no se validaban al guardar).
+  return NextResponse.json({
+    pendientes: pendientes.map((d) => ({ ...d, url: urlDePortal(d.url, d.plataforma) })),
+    expiradasSinRevisar,
+  });
 }
 
 export async function POST(request: Request) {
