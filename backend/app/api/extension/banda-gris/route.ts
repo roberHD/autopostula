@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { textoCorto, urlDePortal } from "@/lib/entrada";
 
 // Reporta una oferta que el scorer local (§6) dejó en banda gris -- entra a
 // la cola de decisión del usuario (§8), no se descarta ni se postula sola.
@@ -20,7 +21,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
   }
 
-  const { titulo, url, empresa, plataforma, scoreLocal, razones, detalleAviso } = await request.json().catch(() => ({}));
+  const cuerpo = await request.json().catch(() => ({}));
+  const { scoreLocal, razones, detalleAviso } = cuerpo ?? {};
+  // docs/revision-2026-09-28.md §1 y §25: lo que llega se recorta, y el enlace
+  // (que la extensión abre después para postular) tiene que ser https:// del
+  // portal. Uno que no lo es se guarda como null: la decisión igual sirve para
+  // que el perfil aprenda.
+  const titulo = textoCorto(cuerpo?.titulo, 300);
+  const plataforma = textoCorto(cuerpo?.plataforma, 50);
+  const empresa = textoCorto(cuerpo?.empresa, 200);
+  const url = urlDePortal(cuerpo?.url, plataforma);
   if (!titulo) {
     return NextResponse.json({ error: "Falta titulo" }, { status: 400 });
   }
@@ -55,8 +65,8 @@ export async function POST(request: Request) {
       url: url || null,
       empresa: empresa || null,
       plataforma: plataforma || null,
-      scoreLocal: typeof scoreLocal === "number" ? scoreLocal : null,
-      razones: Array.isArray(razones) ? razones : undefined,
+      scoreLocal: typeof scoreLocal === "number" && Number.isFinite(scoreLocal) ? Math.round(scoreLocal) : null,
+      razones: Array.isArray(razones) && JSON.stringify(razones).length < 5_000 ? razones.slice(0, 20) : undefined,
       detalleAviso: detalleAvisoValido,
       fuente: "BANDA_GRIS",
       veredicto: "PENDIENTE",

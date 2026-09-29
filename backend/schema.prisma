@@ -213,6 +213,12 @@ model User {
   // formularios ("tengo licencia B", "puedo empezar en dos semanas"). Vivían
   // en el popup, donde se perdían al cambiar de computador. Forma: [{id, texto}].
   infoAdicional        Json?    @map("info_adicional")
+  // docs/revision-2026-09-28.md §2 y §22: las sesiones (JWT) y el token de la
+  // extensión emitidos ANTES de esta fecha dejan de valer. Se marca al
+  // restablecer la contraseña y cuando una cuenta sin verificar pasa a ser de
+  // quien entra con Google: quien tuviera la contraseña vieja (o una sesión
+  // abierta con ella) queda afuera. null = nunca cambió nada.
+  sesionesValidasDesde DateTime? @map("sesiones_validas_desde")
   creadoEn        DateTime @default(now()) @map("creado_en")
 
   subscriptions     Subscription[]
@@ -643,6 +649,13 @@ model Application {
   // se cuenta cada "Nada todavía", y a las 3 se deja de preguntar.
   ultimaConsulta      DateTime?         @map("ultima_consulta")
   vecesConsultada     Int               @default(0) @map("veces_consultada")
+  // docs/revision-2026-09-28.md §1: la copia propia de lo que se muestra de la
+  // oferta. JobOffer es compartida y la actualiza la extensión de cualquier
+  // cuenta; lo que ve cada persona en su historial sale de acá (lib/datos-postulacion.ts).
+  titulo              String?
+  empresa             String?
+  url                 String?
+  relevanciaAi        Float?            @map("relevancia_ai")
 
   user             User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobOffer         JobOffer                   @relation(fields: [jobOfferId], references: [id])
@@ -827,4 +840,22 @@ model PostulacionExtra {
 
   @@index([userId, creadoEn])
   @@map("postulaciones_extra")
+}
+
+// ─────────────────────────────────────────
+// Límites de intentos (docs/revision-2026-09-28.md §17)
+// ─────────────────────────────────────────
+// Una fila por intento, con una clave que dice de qué y de quién
+// ("login-ip:<huella>", "registro-ip:<huella>", "reset-email:<huella>"). La
+// huella es un HMAC de la IP, el correo o el id: la tabla no guarda ninguno
+// tal cual. Se cuentan las de la ventana de tiempo (lib/limite-tasa.ts) y el
+// purgado diario borra las viejas. Vive en Postgres y no en memoria porque en
+// Vercel cada request puede caer en una instancia distinta.
+model LimiteTasa {
+  id       String   @id @default(uuid())
+  clave    String
+  creadoEn DateTime @default(now()) @map("creado_en")
+
+  @@index([clave, creadoEn])
+  @@map("limites_tasa")
 }

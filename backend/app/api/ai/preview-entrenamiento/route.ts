@@ -21,7 +21,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
 
-    const { tono, longitudRespuesta, instrucciones } = await request.json();
+    const cuerpo = await request.json().catch(() => ({}));
+    // docs/revision-2026-09-28.md §19: solo valores conocidos y con tope.
+    const tono = typeof cuerpo?.tono === "string" && cuerpo.tono in DESCRIPCION_TONO ? cuerpo.tono : "profesional_cercano";
+    const longitudRespuesta =
+      typeof cuerpo?.longitudRespuesta === "string" && cuerpo.longitudRespuesta in DESCRIPCION_LONGITUD
+        ? cuerpo.longitudRespuesta
+        : "media";
+    const instrucciones = typeof cuerpo?.instrucciones === "string" ? cuerpo.instrucciones.slice(0, 1500) : "";
+    // docs/revision-2026-09-28.md §10: el ejemplo tiene que sonar como las
+    // respuestas de verdad. Con "Usar mi perfil" apagado, esas no ven el CV
+    // (lib/contexto-ia.ts), así que el ejemplo tampoco.
+    const usarPerfil = cuerpo?.usarPerfil !== false;
 
     const uso = await checkAndLogAiUsage(userId, "preview_entrenamiento");
     if (!uso.permitido) {
@@ -39,10 +50,13 @@ export async function POST(request: Request) {
       "Preguntas a responder:\n" +
       PREGUNTAS_EJEMPLO.map((p, i) => i + 1 + ". " + p).join("\n") +
       "\n\n" +
-      "Usa el CV del candidato para que la primera respuesta sea real y especifica, no generica. Para la pregunta de renta, si no hay dato de renta esperada, responde algo razonable tipo estar abierto a conversarlo segun la descripcion del cargo, en el tono pedido.\n\n" +
+      (usarPerfil
+        ? "Usa el CV del candidato para que la primera respuesta sea real y especifica, no generica. "
+        : "El candidato pidio que NO se usen su CV ni sus datos personales: no los tienes, asi que no inventes experiencia, empresas ni datos concretos; responde de forma honesta y general. ") +
+      "Para la pregunta de renta, si no hay dato de renta esperada, responde algo razonable tipo estar abierto a conversarlo segun la descripcion del cargo, en el tono pedido.\n\n" +
       'Responde SOLO un JSON valido, sin texto adicional, sin markdown, con esta forma exacta: {"respuestas":[{"pregunta":"...","respuesta":"..."},{"pregunta":"...","respuesta":"..."}]}';
 
-    const messages = await construirMensajesCV(userId, instruccion);
+    const messages = await construirMensajesCV(userId, instruccion, usarPerfil);
 
     const respuestaIA = await anthropic.messages.create({
       model: "claude-haiku-4-5",

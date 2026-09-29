@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { estadoExtension } from "@/lib/estado-extension";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
+import { inicioDelDiaChile, inicioDeOtroDiaChile } from "@/lib/tiempo";
 
 /**
  * Lo que muestra el popup de la extensión (docs/estrategia-y-rediseno.md §6).
@@ -24,12 +25,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
   }
 
+  // docs/revision-2026-09-28.md §15: "hoy" y "mañana" de Chile, no del servidor
+  // (UTC): antes "enviadas hoy" volvía a 0 a las 21:00.
   const hoy = new Date();
-  const inicioDia = new Date(hoy);
-  inicioDia.setHours(0, 0, 0, 0);
-  const manana = new Date(hoy);
-  manana.setDate(hoy.getDate() + 1);
-  manana.setHours(23, 59, 59, 999);
+  const inicioDia = inicioDelDiaChile(hoy);
+  const finDeManana = inicioDeOtroDiaChile(hoy, 2);
 
   const [enviadasHoy, descartadasHoy, porDecidir, cuentas, cupo] = await Promise.all([
     prisma.application.count({
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
     },
     porDecidir: {
       total: porDecidir.length,
-      vencenManana: porDecidir.filter((d) => d.venceEn && d.venceEn <= manana).length,
+      vencenManana: porDecidir.filter((d) => d.venceEn && d.venceEn < finDeManana).length,
     },
     portales: cuentas.map((c) => ({ nombre: c.platform.nombre, conectado: c.activa })),
   });

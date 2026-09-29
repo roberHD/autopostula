@@ -4,6 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { construirMensajesCV } from "@/lib/ai-messages";
 import { DESCRIPCION_TONO, DESCRIPCION_LONGITUD } from "@/lib/style-descriptions";
+import { listaDeTextos, textoCorto } from "@/lib/entrada";
+import {
+  aplicarUsarPerfil,
+  AVISO_SIN_PERFIL,
+  bloqueRespuestasAnteriores,
+  limpiarAviso,
+  limpiarInfoIA,
+  limpiarPerfilIA,
+} from "@/lib/contexto-ia";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -34,7 +43,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
     }
 
-    const { pregunta, contexto, opciones, analisis, perfil, info } = await request.json();
+    const cuerpo = await request.json().catch(() => null);
+    // docs/revision-2026-09-28.md §19: todo lo que llega, recortado.
+    const pregunta = textoCorto(cuerpo?.pregunta, 600);
+    const contexto = limpiarAviso(cuerpo?.contexto, 2500);
+    const opciones = listaDeTextos(cuerpo?.opciones, 40, 200);
+    const analisisCrudo = cuerpo?.analisis && typeof cuerpo.analisis === "object" ? cuerpo.analisis : null;
+    const analisis = analisisCrudo
+      ? {
+          cargo: textoCorto(analisisCrudo.cargo, 200),
+          empresa: textoCorto(analisisCrudo.empresa, 200),
+          prioridades: textoCorto(analisisCrudo.prioridades, 500),
+          fortalezas: textoCorto(analisisCrudo.fortalezas, 500),
+          tono: textoCorto(analisisCrudo.tono, 100),
+        }
+      : null;
     if (!pregunta) {
       return NextResponse.json({ error: "Falta pregunta" }, { status: 400 });
     }
@@ -71,8 +94,14 @@ export async function POST(request: Request) {
         })
       : [];
 
-    const p = perfil || {};
-    const infoTexto = (info || []).map((t: string) => "- " + t).join("\n");
+    // §10: "Usar mi perfil" apagado = la IA no recibe CV, perfil ni datos sueltos.
+    const { perfil: p, info, incluirCv } = aplicarUsarPerfil(
+      styleProfile?.usarPerfil,
+      limpiarPerfilIA(cuerpo?.perfil),
+      limpiarInfoIA(cuerpo?.info),
+    );
+    const infoTexto = info.map((t) => "- " + t).join("\n");
+    const bloqueAnteriores = await bloqueRespuestasAnteriores(user.id, styleProfile?.evitarRepetidas);
 
     const bloqueOpciones =
       opciones && opciones.length
@@ -110,7 +139,7 @@ export async function POST(request: Request) {
         "- Tono: " + (DESCRIPCION_TONO[styleProfile.tono || ""] || DESCRIPCION_TONO.profesional_cercano) + "\n" +
         "- Extension de la respuesta: " + (DESCRIPCION_LONGITUD[styleProfile.longitudRespuesta] || DESCRIPCION_LONGITUD.media) + "\n" +
         (styleProfile.instrucciones
-          ? "- Instrucciones adicionales del candidato: " + styleProfile.instrucciones + "\n"
+          ? "- Instrucciones adicionales del candidato: " + styleProfile.instrucciones.slice(0, 1500) + "\n"
           : "") +
         "\n"
       : "";
@@ -135,10 +164,12 @@ export async function POST(request: Request) {
           "4. Debes elegir una de las opciones dadas textualmente, o SINRESPUESTA si ninguna aplica.\n"
         : "2. Si no tienes el dato exacto que pide la pregunta, NUNCA respondas SINRESPUESTA ni dejes el campo vacio: responde con honestidad, reconociendo que no tienes esa experiencia especifica, pero conectandolo con la experiencia real mas cercana que si tengas (ej: \"No cuento con experiencia directa en ese rubro, pero tengo experiencia en atencion al cliente y ventas retail que me permite adaptarme rapido\"). Solo usa SINRESPUESTA si la pregunta es completamente irrelevante para un postulante a empleo.\n") +
       "\n" +
+      (incluirCv ? "" : AVISO_SIN_PERFIL) +
       bloqueAnalisis +
       bloqueEstilo +
       bloqueEntrenamiento +
       bloqueCalibracion +
+      bloqueAnteriores +
       "Perfil: " + (p.bio || "Sin informacion de perfil aun") + "\n" +
       "Nombre: " + (p.nombre || "") + "\n" +
       "Email: " + (p.email || "") + "\n" +
@@ -157,7 +188,7 @@ export async function POST(request: Request) {
           (DESCRIPCION_LONGITUD[styleProfile?.longitudRespuesta || "media"] || DESCRIPCION_LONGITUD.media) +
           ", siempre con una respuesta honesta, util y personalizada al aviso de arriba (nunca la dejes en blanco ni la hagas generica ni redundante).");
 
-    const messages = await construirMensajesCV(user.id, instruccion);
+    const messages = await construirMensajesCV(user.id, instruccion, incluirCv);
 
     const respuestaIA = await anthropic.messages.create({
       model: "claude-haiku-4-5",

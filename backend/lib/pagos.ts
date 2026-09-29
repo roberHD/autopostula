@@ -27,6 +27,21 @@ export type ResultadoPago =
   // hay pase ni vigencia, solo saldo.
   | { estado: "PAGADO"; nuevo: boolean; extras: number };
 
+// docs/revision-2026-09-28.md: con el adaptador de Postgres (@prisma/adapter-pg)
+// el choque entre transacciones Serializable no llega como P2034 sino como
+// DriverAdapterError "TransactionWriteConflict" (código 40001 de Postgres), así
+// que el reintento de abajo no lo reconocía: dos pagos del mismo usuario al
+// mismo tiempo hacían fallar uno (lo probó scripts/verificar-pagos.ts).
+function esChoqueDeSerializacion(err: unknown): boolean {
+  const e = err as { code?: string; cause?: { originalCode?: string; kind?: string }; message?: string } | null;
+  return (
+    e?.code === "P2034" ||
+    e?.cause?.originalCode === "40001" ||
+    e?.cause?.kind === "TransactionWriteConflict" ||
+    /TransactionWriteConflict|could not serialize access/.test(String(e?.message ?? ""))
+  );
+}
+
 async function planPremium() {
   const existente = await prisma.plan.findFirst({ where: { tipo: "PREMIUM" } });
   if (existente) return existente;
@@ -137,7 +152,7 @@ export async function acreditarPago(payment: Payment, estadoFlow: EstadoPagoFlow
       );
       break;
     } catch (err) {
-      const choque = (err as { code?: string })?.code === "P2034";
+      const choque = esChoqueDeSerializacion(err);
       if (!choque || intento >= 4) {
         console.error("[pagos] No se pudo acreditar el pago (se reintenta con el próximo aviso):", payment.commerceOrder, err);
         throw err;

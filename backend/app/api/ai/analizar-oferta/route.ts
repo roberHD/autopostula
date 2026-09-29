@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { construirMensajesCV } from "@/lib/ai-messages";
+import { limpiarAviso, limpiarInfoIA, limpiarPerfilIA } from "@/lib/contexto-ia";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -20,7 +21,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
     }
 
-    const { contexto, perfil, info } = await request.json();
+    const cuerpo = await request.json().catch(() => null);
+    // docs/revision-2026-09-28.md §19: todo lo que llega, recortado.
+    const contexto = limpiarAviso(cuerpo?.contexto, 3000);
     if (!contexto) {
       return NextResponse.json({ error: "Falta contexto" }, { status: 400 });
     }
@@ -33,8 +36,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const p = perfil || {};
-    const infoTexto = (info || []).map((t: string) => "- " + t).join("\n");
+    const p = limpiarPerfilIA(cuerpo?.perfil);
+    const infoTexto = limpiarInfoIA(cuerpo?.info).map((t) => "- " + t).join("\n");
 
     const instruccion =
       "Analiza este aviso de trabajo junto al perfil del candidato. Responde SOLO con un JSON valido, sin texto adicional, sin markdown, con exactamente esta forma:\n" +

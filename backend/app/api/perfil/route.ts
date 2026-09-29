@@ -1,6 +1,29 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { listaDeTextos, textoCorto } from "@/lib/entrada";
+
+// docs/revision-2026-09-28.md §25: cada campo con su tipo y su largo. Antes
+// entraba cualquier cosa (un objeto en vez de texto terminaba en error 500, y
+// un texto enorme viajaba después en cada llamada de IA).
+function campoTexto(valor: unknown, max: number) {
+  if (valor === undefined) return undefined;
+  if (valor === null) return null;
+  return textoCorto(valor, max);
+}
+
+function experienciaValida(valor: unknown) {
+  if (valor === undefined) return undefined;
+  if (!Array.isArray(valor)) return [];
+  return valor
+    .filter((e) => e && typeof e === "object")
+    .slice(0, 15)
+    .map((e: any) => ({
+      cargo: textoCorto(e.cargo, 150) ?? "",
+      empresa: textoCorto(e.empresa, 150) ?? "",
+      periodo: textoCorto(e.periodo, 60) ?? "",
+    }));
+}
 
 const CAMPOS_PARA_COMPLETITUD = [
   "nombre", "email", "telefono", "comuna", "rut", "cargoObjetivo",
@@ -33,17 +56,21 @@ export async function PUT(request: Request) {
   const userId = (session?.user as any)?.id;
   if (!userId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const body = await request.json();
-  const {
-    nombre, email, telefono, comuna, rut,
-    cargoObjetivo, expectativaRenta, disponibilidad, modalidad,
-    resumenProfesional, experiencia, habilidades,
-  } = body || {};
+  const body = (await request.json().catch(() => ({}))) || {};
 
   const datos = {
-    nombre, email, telefono, comuna, rut,
-    cargoObjetivo, expectativaRenta, disponibilidad, modalidad,
-    resumenProfesional, experiencia, habilidades,
+    nombre: campoTexto(body.nombre, 120),
+    email: campoTexto(body.email, 200),
+    telefono: campoTexto(body.telefono, 40),
+    comuna: campoTexto(body.comuna, 80),
+    rut: campoTexto(body.rut, 20),
+    cargoObjetivo: campoTexto(body.cargoObjetivo, 150),
+    expectativaRenta: campoTexto(body.expectativaRenta, 80),
+    disponibilidad: campoTexto(body.disponibilidad, 150),
+    modalidad: campoTexto(body.modalidad, 40),
+    resumenProfesional: campoTexto(body.resumenProfesional, 2000),
+    experiencia: experienciaValida(body.experiencia),
+    habilidades: body.habilidades === undefined ? undefined : listaDeTextos(body.habilidades, 30, 80),
   };
 
   const perfil = await prisma.cvProfile.upsert({

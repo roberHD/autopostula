@@ -36,13 +36,14 @@ function getResend() {
 
 // docs/verificacion-de-correo.md §5 -- el registro y el reenvío (§6) mandan
 // exactamente el mismo correo, con un token nuevo cada vez.
+//
+// docs/revision-2026-09-28.md §3: pasa por enviarOFallar. Antes se llamaba a
+// Resend directo y, como Resend no lanza cuando rechaza un envío, el reenvío
+// decía "listo", gastaba los 12 minutos de espera y cambiaba el token aunque el
+// correo nunca hubiera salido.
 export async function enviarCorreoVerificacion(email: string, token: string) {
   const url = `${getBaseUrl()}/verificar?token=${token}`;
-  await getResend().emails.send({
-    from: remitente(),
-    to: email,
-    subject: "Confirma tu correo en AutoPostula",
-    html: `
+  await enviarOFallar(email, "Confirma tu correo en AutoPostula", `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto;">
         <h2 style="color: #111827;">Confirma tu correo</h2>
         <p style="color: #4B5563; line-height: 1.6;">
@@ -57,8 +58,28 @@ export async function enviarCorreoVerificacion(email: string, token: string) {
           Si no creaste una cuenta en AutoPostula, puedes ignorar este correo.
         </p>
       </div>
-    `,
-  });
+    `);
+}
+
+// El de "Olvidé mi contraseña". Vivía armado dentro de la ruta, llamando a
+// Resend sin revisar su respuesta (docs/revision-2026-09-28.md §3).
+export async function enviarCorreoRecuperacion(email: string, resetUrl: string) {
+  await enviarOFallar(email, "Recupera tu contraseña de AutoPostula", `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2 style="color: #111827;">Recupera tu contraseña</h2>
+      <p style="color: #4B5563; line-height: 1.6;">
+        Recibimos una solicitud para restablecer tu contraseña. Si fuiste tú, haz clic en el siguiente enlace (válido por 1 hora):
+      </p>
+      <p style="margin: 24px 0;">
+        <a href="${resetUrl}" style="background: #16181A; color: #F4F5F3; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+          Restablecer contraseña
+        </a>
+      </p>
+      <p style="color: #9CA3AF; font-size: 12px;">
+        Si no solicitaste esto, puedes ignorar este correo -- tu contraseña no cambiará.
+      </p>
+    </div>
+  `);
 }
 
 // docs/rafagas-y-ponerse-al-dia.md §4.1: el único correo que recibe una cuenta
@@ -159,9 +180,24 @@ export function armarComprobanteExtra(datos: { paquete: string; postulaciones: n
 // Resend NO lanza cuando rechaza un envío (dominio sin verificar, clave mala):
 // devuelve { error }. Estos correos marcan "ya se mandó" en la base (los avisos
 // de vencimiento) o son un comprobante de dinero, así que un rechazo silencioso
-// no puede pasar por éxito.
-async function enviarOFallar(email: string, subject: string, html: string, headers?: Record<string, string>) {
-  const { error } = await getResend().emails.send({ from: remitente(), to: email, subject, html, ...(headers ? { headers } : {}) });
+// no puede pasar por éxito. Todos los correos de la app pasan por acá
+// (docs/revision-2026-09-28.md §3).
+export async function enviarOFallar(
+  email: string | string[],
+  subject: string,
+  html: string,
+  headers?: Record<string, string>,
+  extra?: { replyTo?: string[]; attachments?: { filename: string; content: Buffer }[] },
+) {
+  const { error } = await getResend().emails.send({
+    from: remitente(),
+    to: email,
+    subject,
+    html,
+    ...(headers ? { headers } : {}),
+    ...(extra?.replyTo?.length ? { replyTo: extra.replyTo } : {}),
+    ...(extra?.attachments?.length ? { attachments: extra.attachments } : {}),
+  });
   if (error) throw new Error(`Resend rechazó el correo: ${error.message}`);
 }
 

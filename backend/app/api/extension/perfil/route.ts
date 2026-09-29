@@ -4,6 +4,7 @@ import { objetivosPermitenDirectivo } from "@/lib/nivel-cargo";
 import { estadoExtension } from "@/lib/estado-extension";
 import { AMPLITUD_POR_DEFECTO, esAmplitud, rolesPorAmplitud } from "@/lib/amplitud";
 import { requisitosDelCandidato } from "@/lib/requisitos-cv";
+import { urlDePortal } from "@/lib/entrada";
 
 // Mismo patrón de auth por token que /api/ai/analizar-oferta y compañía —
 // esta ruta la usa la extensión (Authorization: Bearer <apiToken>), nunca
@@ -14,6 +15,9 @@ async function getUserFromToken(request: Request) {
   if (!token) return null;
   return prisma.user.findUnique({ where: { apiToken: token } });
 }
+
+// Cuánto se sigue intentando enviar una oferta aprobada en "Por decidir".
+const DIAS_PARA_ENVIAR_APROBADA = 14;
 
 // Perfil de solo lectura para la extensión: reemplaza los campos que antes
 // el usuario tenía que tipear a mano en el popup. La edición real sigue
@@ -32,9 +36,26 @@ export async function GET(request: Request) {
     // /api/applications, que lo enlaza cuando eso pasa. Tope bajo a
     // propósito: cada una abre una pestaña nueva, no tiene sentido
     // acumular decenas en un solo ciclo de la alarma.
+    // docs/revision-2026-09-28.md §6: antes salían siempre las 5 MÁS ANTIGUAS.
+    // Una aprobada que no se puede enviar nunca (ya estaba postulada, se saltó
+    // en la revisión...) quedaba ahí para siempre, y con 5 así ninguna
+    // aprobación nueva se enviaba más. Ahora primero las recientes, y pasados
+    // 14 días se dejan de intentar (siguen siendo un "sí" para el perfil).
     prisma.decisionOferta.findMany({
-      where: { userId: user.id, fuente: "BANDA_GRIS", veredicto: "SI", jobOfferId: null },
-      orderBy: { decididoEn: "asc" },
+      where: {
+        userId: user.id,
+        fuente: "BANDA_GRIS",
+        veredicto: "SI",
+        jobOfferId: null,
+        // Sin enlace o sin portal no hay cómo enviarla: que no ocupe uno de
+        // los 5 cupos (igual que el conteo de lib/recordatorio-rafaga.ts).
+        url: { not: null },
+        plataforma: { not: null },
+        // Una fila sin fecha (no debería haber) no se deja afuera: la extensión
+        // igual la cierra a los 3 intentos fallidos.
+        OR: [{ decididoEn: null }, { decididoEn: { gte: new Date(Date.now() - DIAS_PARA_ENVIAR_APROBADA * 24 * 3_600_000) } }],
+      },
+      orderBy: { decididoEn: "desc" },
       take: 5,
     }),
     // §2.7: el nivel del cargo se calcula acá, en cada consulta, y no dentro de
@@ -45,9 +66,11 @@ export async function GET(request: Request) {
       : Promise.resolve([]),
   ]);
 
+  // docs/revision-2026-09-28.md §1: la extensión abre estas direcciones en una
+  // pestaña para postular, así que solo salen las https:// del portal.
   const bandaGrisAprobadas = aprobadas
-    .filter((d) => d.url && d.plataforma)
-    .map((d) => ({ id: d.id, titulo: d.tituloCrudo, url: d.url, empresa: d.empresa, plataforma: d.plataforma }));
+    .map((d) => ({ id: d.id, titulo: d.tituloCrudo, url: urlDePortal(d.url, d.plataforma), empresa: d.empresa, plataforma: d.plataforma }))
+    .filter((d) => d.url && d.plataforma);
 
   const filtrosBusqueda = {
     palabrasIncluir: (filtros?.palabrasIncluir as string[] | null) ?? [],

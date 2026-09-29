@@ -4,10 +4,17 @@ import { prisma } from "@/lib/prisma";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { gastarExtra } from "@/lib/extras";
 import { usuarioTieneAnaliticaAvanzada } from "@/lib/plan-beneficios";
-import { limpiarTitulo } from "@/lib/text";
 import { obtenerModoAutomatico, consumirPrueba } from "@/lib/prueba-automatica";
 import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
 import { enviarCorreoPruebaTerminada } from "@/lib/correo";
+import { textoCorto, urlDePortal } from "@/lib/entrada";
+import { datosDeLaOferta } from "@/lib/datos-postulacion";
+
+// docs/revision-2026-09-28.md §25: topes para lo que llega de la extensión. Un
+// formulario real tiene unas pocas preguntas; esto solo corta lo absurdo.
+const MAX_RESPUESTAS = 60;
+const MAX_PREGUNTA = 1000;
+const MAX_RESPUESTA = 5000;
 
 export async function GET() {
   const session = await auth();
@@ -28,19 +35,22 @@ export async function GET() {
   ]);
 
   return NextResponse.json({
-    applications: applications.map((a) => ({
-      id: a.id,
-      titulo: limpiarTitulo(a.jobOffer.titulo),
-      empresa: a.jobOffer.empresa,
-      portal: a.jobOffer.platform.nombre,
-      estado: a.estadoActual,
-      notaAtencion: a.notaAtencion,
-      enviadaEn: a.enviadaEn,
-      // Una de las 5 de la prueba automática -- lo usa "Ver las 5" (§4.1).
-      esDePrueba: a.esDePrueba,
-      // Si el estado lo contó la persona, la lista lo dice ("lo contaste tú").
-      contadoPorTi: a.origenEstado === "USUARIO",
-    })),
+    applications: applications.map((a) => {
+      const { titulo, empresa } = datosDeLaOferta(a);
+      return {
+        id: a.id,
+        titulo,
+        empresa,
+        portal: a.jobOffer.platform.nombre,
+        estado: a.estadoActual,
+        notaAtencion: a.notaAtencion,
+        enviadaEn: a.enviadaEn,
+        // Una de las 5 de la prueba automática -- lo usa "Ver las 5" (§4.1).
+        esDePrueba: a.esDePrueba,
+        // Si el estado lo contó la persona, la lista lo dice ("lo contaste tú").
+        contadoPorTi: a.origenEstado === "USUARIO",
+      };
+    }),
     analiticaAvanzada,
   });
 }
@@ -60,18 +70,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
+    }
     const {
-      platformNombre, // ej. "Computrabajo"
-      externalId, // id de la oferta en el portal
-      titulo,
-      empresa,
-      url, // link a la oferta original — útil sobre todo cuando queda incompleta
-      origen = "MANUAL", // MANUAL | AUTOMATICO
       styleProfileId,
       respuestas, // [{ pregunta, respuesta, vacia, fueIA }] — opcional
-      incompleta = false, // true: la extensión no pudo terminar la postulación sola
-      nota, // por qué quedó incompleta (solo aplica si incompleta = true)
       matchScore, // 0-100 — viene de analizarOferta() en la extensión, si se llamó
       decisionOfertaId, // §8.6: viene de una aprobación de banda gris -- enlaza esa decisión con esta postulación
       // docs/rafagas-y-ponerse-al-dia.md §4.1: true cuando la postulación salió
@@ -81,6 +86,16 @@ export async function POST(request: Request) {
       // (OrigenOferta, del corpus de ofertas) y la extensión siempre manda MANUAL.
       desdeRafaga,
     } = body;
+    const platformNombre = textoCorto(body.platformNombre, 50); // ej. "Computrabajo"
+    const externalId = textoCorto(body.externalId, 200); // id de la oferta en el portal
+    const titulo = textoCorto(body.titulo, 300);
+    const empresa = textoCorto(body.empresa, 200);
+    // El link a la oferta original -- útil sobre todo cuando queda incompleta.
+    // docs/revision-2026-09-28.md §1: solo https:// del portal; si no, null.
+    const url = urlDePortal(body.url, platformNombre);
+    const origen = body.origen === "AUTOMATICO" ? "AUTOMATICO" : "MANUAL";
+    const incompleta = body.incompleta === true; // la extensión no pudo terminar la postulación sola
+    const nota = textoCorto(body.nota, 500); // por qué quedó incompleta (solo aplica si incompleta = true)
 
     if (!platformNombre || !externalId || !titulo) {
       return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
@@ -127,6 +142,13 @@ export async function POST(request: Request) {
       create: { platformId: platform.id, externalId, titulo, empresa, url, origen, relevanciaAi, postulada: true },
     });
 
+    // docs/revision-2026-09-28.md §25: el perfil de estilo tiene que ser de esta
+    // misma cuenta. Uno ajeno se ignora en vez de quedar enlazado.
+    const styleProfileValido =
+      typeof styleProfileId === "string" && styleProfileId
+        ? await prisma.styleProfile.findFirst({ where: { id: styleProfileId, userId: user.id }, select: { id: true } })
+        : null;
+
     const cv = await prisma.cvProfile.findUnique({ where: { userId: user.id } });
     if (!cv) {
       return NextResponse.json(
@@ -143,10 +165,18 @@ export async function POST(request: Request) {
         jobOfferId: jobOffer.id,
         platformAccountId: platformAccount.id,
         cvProfileId: cv.id,
-        styleProfileId: styleProfileId ?? null,
+        styleProfileId: styleProfileValido?.id ?? null,
         estadoActual: estadoInicial,
         origenEstado: "SISTEMA",
         notaAtencion: incompleta ? (nota || "No se pudo completar automáticamente") : null,
+        // docs/revision-2026-09-28.md §1: la copia propia de lo que se muestra.
+        // Lo que no mandó la extensión se toma de la oferta tal como está AHORA
+        // (el escaneo de esta misma persona la acaba de refrescar); lo que otra
+        // cuenta le cambie a la oferta después ya no aparece acá.
+        titulo,
+        empresa: empresa ?? jobOffer.empresa,
+        url: url ?? urlDePortal(jobOffer.url, platformNombre),
+        relevanciaAi: relevanciaAi ?? null,
       },
     });
 
@@ -159,7 +189,7 @@ export async function POST(request: Request) {
     // (esa query filtra por jobOfferId: null). Guardado con condiciones
     // (userId + veredicto SI) para que un id ajeno o ya resuelto no pueda
     // pisar el estado de otra decisión.
-    if (decisionOfertaId) {
+    if (typeof decisionOfertaId === "string" && decisionOfertaId) {
       await prisma.decisionOferta.updateMany({
         where: { id: decisionOfertaId, userId: user.id, veredicto: "SI" },
         data: { jobOfferId: jobOffer.id },
@@ -169,20 +199,24 @@ export async function POST(request: Request) {
     if (Array.isArray(respuestas) && respuestas.length) {
       await prisma.applicationAnswer.createMany({
         data: respuestas
-          .filter((r: any) => r?.pregunta)
-          .map((r: any) => ({
-            applicationId: application.id,
-            pregunta: r.pregunta,
-            // docs/banco-de-preguntas.md §3: la extensión ahora manda el valor
-            // que generó la IA por separado del que quedó después del modo
-            // revisión -- es el dataset de correcciones etiquetadas, lo más
-            // caro de conseguir en un sistema así, y antes se perdía guardando
-            // los dos campos iguales. Si viene de una extensión vieja sin
-            // respuestaIa, cae al valor final (mismo comportamiento de antes).
-            respuestaIa: r.respuestaIa ?? r.respuesta ?? "",
-            respuestaFinal: r.respuesta || "",
-            fueEditada: typeof r.fueEditada === "boolean" ? r.fueEditada : false,
-          })),
+          .filter((r: any) => r && typeof r.pregunta === "string" && r.pregunta.trim())
+          .slice(0, MAX_RESPUESTAS)
+          .map((r: any) => {
+            const respuestaFinal = typeof r.respuesta === "string" ? r.respuesta.slice(0, MAX_RESPUESTA) : "";
+            return {
+              applicationId: application.id,
+              pregunta: r.pregunta.slice(0, MAX_PREGUNTA),
+              // docs/banco-de-preguntas.md §3: la extensión ahora manda el valor
+              // que generó la IA por separado del que quedó después del modo
+              // revisión -- es el dataset de correcciones etiquetadas, lo más
+              // caro de conseguir en un sistema así, y antes se perdía guardando
+              // los dos campos iguales. Si viene de una extensión vieja sin
+              // respuestaIa, cae al valor final (mismo comportamiento de antes).
+              respuestaIa: typeof r.respuestaIa === "string" ? r.respuestaIa.slice(0, MAX_RESPUESTA) : respuestaFinal,
+              respuestaFinal,
+              fueEditada: typeof r.fueEditada === "boolean" ? r.fueEditada : false,
+            };
+          }),
       });
     }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { textoCorto, urlDePortal } from "@/lib/entrada";
 
 async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -31,7 +32,13 @@ export async function POST(request: Request) {
 
   let guardados = 0;
   for (const a of avistamientos.slice(0, 200)) {
-    if (!a?.externalId || !a?.titulo) continue;
+    const externalId = textoCorto(a?.externalId, 200);
+    const titulo = textoCorto(a?.titulo, 300);
+    if (!externalId || !titulo) continue;
+    // docs/revision-2026-09-28.md §1: esta fila la comparten todas las cuentas.
+    // Solo entra un enlace https:// del mismo portal; lo demás queda afuera.
+    const empresa = textoCorto(a?.empresa, 200);
+    const url = urlDePortal(a?.url, platform.nombre);
     // Se refresca empresa/url en cada escaneo -- un bug de extracción del
     // adaptador (ej. Laborum guardando la fecha como si fuera la empresa,
     // corregido en ef6d639) quedaba grabado para siempre porque acá no se
@@ -39,17 +46,17 @@ export async function POST(request: Request) {
     // borre un valor bueno ya guardado. postulada NUNCA se toca en el update:
     // nunca se debe pisar un true con un false.
     await prisma.jobOffer.upsert({
-      where: { platformId_externalId: { platformId: platform.id, externalId: a.externalId } },
+      where: { platformId_externalId: { platformId: platform.id, externalId } },
       update: {
-        empresa: a.empresa || undefined,
-        url: a.url || undefined,
+        empresa: empresa || undefined,
+        url: url || undefined,
       },
       create: {
         platformId: platform.id,
-        externalId: a.externalId,
-        titulo: a.titulo,
-        empresa: a.empresa || null,
-        url: a.url || null,
+        externalId,
+        titulo,
+        empresa,
+        url,
         origen: "AUTOMATICO",
         postulada: false,
       },

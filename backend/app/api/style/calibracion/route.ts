@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  const { preguntaId, opcionElegida } = await request.json();
+  const { preguntaId, opcionElegida } = await request.json().catch(() => ({}));
   if (!preguntaId || !opcionElegida) {
     return NextResponse.json({ error: "Falta preguntaId u opcionElegida" }, { status: 400 });
   }
@@ -61,6 +61,11 @@ export async function POST(request: Request) {
   const pregunta = BANCO_CALIBRACION.find((p) => p.id === preguntaId);
   if (!pregunta) {
     return NextResponse.json({ error: "Pregunta desconocida" }, { status: 400 });
+  }
+  // docs/revision-2026-09-28.md §25: la respuesta tiene que ser una de las
+  // opciones de esa pregunta (va tal cual en cada llamada de IA).
+  if (typeof opcionElegida !== "string" || !pregunta.opciones.includes(opcionElegida)) {
+    return NextResponse.json({ error: "Esa opción no es de esta pregunta" }, { status: 400 });
   }
 
   if (!(await usuarioTienePerfilDinamico(userId))) {
@@ -72,14 +77,23 @@ export async function POST(request: Request) {
 
   const perfil = await getOrCreateStyleProfile(userId);
 
-  await prisma.styleCalibrationAnswer.create({
-    data: {
-      styleProfileId: perfil.id,
-      tipo: pregunta.tipo.toUpperCase() as any,
-      pregunta: pregunta.texto,
-      opcionElegida,
-    },
+  // Responder dos veces la misma pregunta la duplicaba (y subía la "confianza").
+  const yaRespondida = await prisma.styleCalibrationAnswer.findFirst({
+    where: { styleProfileId: perfil.id, pregunta: pregunta.texto },
+    select: { id: true },
   });
+  if (yaRespondida) {
+    await prisma.styleCalibrationAnswer.update({ where: { id: yaRespondida.id }, data: { opcionElegida } });
+  } else {
+    await prisma.styleCalibrationAnswer.create({
+      data: {
+        styleProfileId: perfil.id,
+        tipo: pregunta.tipo.toUpperCase() as any,
+        pregunta: pregunta.texto,
+        opcionElegida,
+      },
+    });
+  }
 
   const totalRespondidas = await prisma.styleCalibrationAnswer.count({
     where: { styleProfileId: perfil.id },

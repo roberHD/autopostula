@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
+import { claveLimite, LIMITES, permitirIntento } from "@/lib/limite-tasa";
 
 /**
  * El texto para el perfil de Computrabajo (docs/estrategia-y-rediseno.md
@@ -65,6 +66,16 @@ export async function POST() {
   ]);
   if (!cv?.textoExtraido?.trim()) {
     return NextResponse.json({ error: "Primero sube tu CV" }, { status: 400 });
+  }
+
+  // docs/revision-2026-09-28.md §19: usa el modelo más caro (Opus 5) y está
+  // disponible también en el plan gratis. El texto se arma una vez y se copia;
+  // unas pocas veces al día alcanzan de sobra.
+  if (!(await permitirIntento(claveLimite("perfil-portal-usuario", userId), LIMITES.perfilPortalPorUsuario))) {
+    return NextResponse.json(
+      { error: "Ya armaste este texto varias veces hoy. Vuelve mañana si quieres otra versión." },
+      { status: 429 },
+    );
   }
 
   const uso = await checkAndLogAiUsage(userId, "perfil_portal");

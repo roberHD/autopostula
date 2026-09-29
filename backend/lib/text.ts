@@ -31,3 +31,25 @@ export function limpiarTitulo(titulo: string): string {
 
   return (primeraLinea ?? titulo).replace(/\s+/g, " ").trim();
 }
+
+// docs/revision-2026-09-28.md: "Isla De Maipo", "Auxiliar De Bodega Y Despacho".
+// Poner mayúscula a cada palabra deja con mayúscula las que en español van en
+// minúscula dentro de un nombre.
+const MINUSCULAS_EN_NOMBRES = new Set(["de", "del", "y", "e"]);
+
+/** Nombre propio (comunas): cada palabra con mayúscula salvo "de", "del", "y". */
+export function nombrePropio(texto: string): string {
+  return texto
+    .split(/(\s+)/)
+    .map((parte, i) => {
+      if (/^\s*$/.test(parte)) return parte;
+      if (i > 0 && MINUSCULAS_EN_NOMBRES.has(parte.toLowerCase())) return parte.toLowerCase();
+      return parte.charAt(0).toUpperCase() + parte.slice(1);
+    })
+    .join("");
+}
+
+/** Solo la primera letra en mayúscula; el resto tal cual (títulos de avisos). */
+export function mayusculaInicial(texto: string): string {
+  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : texto;
+}

@@ -80,4 +80,4 @@ export const TEXTO_MODO: Record<ModoExtension, { titulo: string; detalle: string
 
 /** Lo que se dice debajo del estado cuando la cuenta todavía está en prueba. */
 export const TEXTO_MODO_PRUEBA =
-  "Tu cuenta está en modo prueba: mira y puntúa, pero no envía. Actívala cuando veas que acierta.";
+  "Todavía no activas la postulación: mira y puntúa, pero no envía. Actívala en el panel cuando veas que acierta.";

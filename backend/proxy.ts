@@ -1,7 +1,9 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
-const rutasProtegidas = ["/dashboard"];
+// docs/revision-2026-09-28.md §7: /onboarding también. Antes se abría sin
+// sesión, mostraba "¡Bienvenido!" y dejaba avanzar mientras todo fallaba con 401.
+const rutasProtegidas = ["/dashboard", "/onboarding"];
 
 export default auth((req) => {
   const esProtegida = rutasProtegidas.some((ruta) =>
@@ -19,5 +21,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/onboarding/:path*"],
 };

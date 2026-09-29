@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
+import { listaDeTextos, textoCorto } from "@/lib/entrada";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -19,8 +20,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
     }
 
-    const { titulos, objetivo } = await request.json();
-    if (!titulos || !titulos.length || !objetivo) {
+    const cuerpo = await request.json().catch(() => null);
+    // docs/revision-2026-09-28.md §19: un escaneo trae ~20 títulos; esto solo
+    // corta lo absurdo (antes no había tope y cada título se paga por token).
+    const titulos = listaDeTextos(cuerpo?.titulos, 100, 300);
+    const objetivo = textoCorto(cuerpo?.objetivo, 200);
+    if (!titulos.length || !objetivo) {
       return NextResponse.json({ error: "Faltan titulos u objetivo" }, { status: 400 });
     }
 
@@ -32,7 +37,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const lista = titulos.map((t: string, i: number) => i + 1 + ". " + t).join("\n");
+    const lista = titulos.map((t, i) => i + 1 + ". " + t).join("\n");
     const instruccion =
       'El candidato busca trabajo relacionado con: "' +
       objetivo +
