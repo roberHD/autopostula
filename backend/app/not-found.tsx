@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Marca } from "@/components/Marca";
+import { CORREO_CONTACTO } from "@/lib/enlaces";
 import "./landing.css";
 
 export const metadata: Metadata = {
@@ -48,8 +49,8 @@ export default function NoEncontrada() {
 
         <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 26 }}>
           ¿Llegaste buscando otra cosa? Escríbenos a{" "}
-          <a href="mailto:hola@autopostula.cl" style={{ color: "var(--accent)", fontWeight: 600 }}>
-            hola@autopostula.cl
+          <a href={`mailto:${CORREO_CONTACTO}`} style={{ color: "var(--accent)", fontWeight: 600 }}>
+            {CORREO_CONTACTO}
           </a>
           .
         </p>

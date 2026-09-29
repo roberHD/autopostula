@@ -132,7 +132,7 @@ export default function Extras() {
           <div>
             <p><b>+{datos.premios.invitacion} por cada persona que invites</b></p>
             <p>
-              Se te acreditan cuando entra con tu enlace y verifica su correo.
+              Se te acreditan cuando entra con tu enlace y verifica su correo. Hasta 10 personas cada 30 días.
               {datos.invitacion.aceptadas > 0
                 ? ` Ya lo hicieron ${datos.invitacion.aceptadas}.`
                 : " Todavía no las usa nadie."}

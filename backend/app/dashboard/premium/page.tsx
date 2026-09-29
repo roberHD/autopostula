@@ -282,7 +282,7 @@ export default function PremiumPage() {
         >
           <Sparkles size={13} /> AutoPostula Premium
         </div>
-        <h2 className="ap-page-title" style={{ fontSize: 26 }}>Postula más rápido, sin límites de siempre</h2>
+        <h2 className="ap-page-title" style={{ fontSize: 26 }}>Postula más, sin tener que estar encima</h2>
         <p className="ap-page-sub" style={{ maxWidth: 480, margin: "0 auto" }}>
           Deja que AutoPostula se ponga al día sola cada vez que abres tu computador, mientras tú te enfocas en las entrevistas.
         </p>

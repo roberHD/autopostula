@@ -138,14 +138,16 @@ export default function ComoTrabaja({ textoPausa }: { textoPausa: string }) {
             />
             <div>
               <p style={{ fontSize: 13.5, fontWeight: 600 }}>{TEXTO_MODO[estado.modo].titulo}</p>
+              {/* Una cosa o la otra, como en el popup (popup.js): las dos
+                  juntas decían dos veces que mira y no envía. */}
               <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.5 }}>
-                {TEXTO_MODO[estado.modo].detalle}
-                {estado.porModoPrueba && (
+                {estado.porModoPrueba ? (
                   <>
-                    {" "}
                     {TEXTO_MODO_PRUEBA}{" "}
                     <Link href="/dashboard" style={{ color: "var(--accent)" }}>Activarla</Link>
                   </>
+                ) : (
+                  TEXTO_MODO[estado.modo].detalle
                 )}
               </p>
             </div>
@@ -167,7 +169,7 @@ export default function ComoTrabaja({ textoPausa }: { textoPausa: string }) {
             titulo="Solo observar"
             detalle={
               estado.porModoPrueba
-                ? "Tu cuenta está en modo prueba: por ahora solo mira, aunque apagues esto."
+                ? "Todavía no activas la postulación: por ahora solo mira, aunque apagues esto."
                 : "Revisa y puntúa las ofertas, pero no envía ninguna ni gasta cupo."
             }
             activo={estado.soloObservar || estado.porModoPrueba}

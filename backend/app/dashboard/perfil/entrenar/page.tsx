@@ -92,7 +92,7 @@ export default function EntrenarIAPage() {
       const res = await fetch("/api/ai/preview-entrenamiento", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tono, longitudRespuesta, instrucciones }),
+        body: JSON.stringify({ tono, longitudRespuesta, instrucciones, usarPerfil }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -240,11 +240,19 @@ export default function EntrenarIAPage() {
             <div className="ap-toggle-row">
               <div>
                 <div className="ap-toggle-label">Usar mi perfil</div>
-                <div className="ap-toggle-desc">Experiencia, habilidades y datos personales</div>
+                <div className="ap-toggle-desc">
+                  {/* docs/revision-2026-09-28.md §10: antes este interruptor no hacía nada. */}
+                  {usarPerfil
+                    ? "La IA usa tu CV, tu experiencia y tus datos para responder."
+                    : "Apagado: la IA no ve tu CV ni tus datos. Las respuestas salen genéricas y lo que pida un dato tuyo queda para que lo completes."}
+                </div>
               </div>
               <button
                 className={"ap-switch " + (usarPerfil ? "ap-switch-on" : "ap-switch-off")}
                 onClick={() => setUsarPerfil(!usarPerfil)}
+                role="switch"
+                aria-checked={usarPerfil}
+                aria-label="Usar mi perfil"
               >
                 <span className="ap-switch-knob" />
               </button>
@@ -252,11 +260,14 @@ export default function EntrenarIAPage() {
             <div className="ap-toggle-row">
               <div>
                 <div className="ap-toggle-label">Evitar respuestas repetidas</div>
-                <div className="ap-toggle-desc">Varía la redacción entre postulaciones</div>
+                <div className="ap-toggle-desc">La IA mira tus últimas respuestas enviadas para no mandar el mismo texto a todas las empresas</div>
               </div>
               <button
                 className={"ap-switch " + (evitarRepetidas ? "ap-switch-on" : "ap-switch-off")}
                 onClick={() => setEvitarRepetidas(!evitarRepetidas)}
+                role="switch"
+                aria-checked={evitarRepetidas}
+                aria-label="Evitar respuestas repetidas"
               >
                 <span className="ap-switch-knob" />
               </button>

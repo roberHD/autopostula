@@ -9,7 +9,8 @@ import { Marca } from "@/components/Marca";
 import { Skel } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
 import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
-import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
+import { LLAVE_INTENCION_PREMIUM, URL_CHROME_WEB_STORE } from "@/lib/enlaces";
+import { extensionPresente } from "@/lib/puente-extension";
 import { sinSoporteExtension } from "@/lib/dispositivo";
 import "../dashboard/theme.css";
 
@@ -132,7 +133,7 @@ export default function OnboardingPage() {
     determinarInicio();
   }, []);
 
-  async function terminar() {
+  async function terminar(destino = "/dashboard") {
     try {
       await fetch("/api/account/completar-onboarding", { method: "POST" });
     } catch (e) {
@@ -143,7 +144,7 @@ export default function OnboardingPage() {
     } catch {
       // ver comentario en guardarPaso()
     }
-    router.push("/dashboard");
+    router.push(destino);
   }
 
   // El onboarding siempre se ve en claro — es lo primero que ve una persona
@@ -255,7 +256,7 @@ function PasoBienvenida({ onSiguiente, onOmitir }: { onSiguiente: () => void; on
       <Header
         Icon={Sparkles}
         titulo="¡Bienvenido a AutoPostula!"
-        sub={`En ${PASOS.length - 1} pasos dejamos todo listo para que la IA empiece a postular por ti con tu información real.`}
+        sub="En unos minutos dejamos todo listo para que la IA empiece a postular por ti con tu información real."
       />
       <Footer onSiguiente={onSiguiente} onOmitir={onOmitir} siguienteTexto="Empecemos" />
     </>
@@ -1077,7 +1078,7 @@ function PasoExtensionEscritorio({ onSiguiente, onOmitir }: { onSiguiente: () =>
               textDecoration: "none", marginBottom: 10,
             }}
           >
-            <Download size={15} /> Descargar extensión
+            <Download size={15} /> Instalar la extensión
           </a>
           <button className="ap-button-ghost" style={{ display: "block" }} onClick={() => window.location.reload()}>
             Ya la instalé, verificar
@@ -1194,8 +1195,36 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
     cargar();
   }, []);
 
+  async function quitar(platformId: string): Promise<boolean> {
+    setError("");
+    try {
+      const res = await fetch("/api/platform-accounts", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platformId }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch {
+      // Si no se pudo, sigue conectado: no se muestra como quitado.
+      setError("No se pudo quitar ese portal. Revisa tu conexión e inténtalo de nuevo.");
+      return false;
+    }
+    setConectadas((prev) => {
+      const nuevo = new Set(prev);
+      nuevo.delete(platformId);
+      return nuevo;
+    });
+    return true;
+  }
+
   async function conectar(platformId: string) {
     setError("");
+    // docs/revision-2026-09-28.md: en el plan gratis (un portal a la vez), si
+    // ya había uno conectado el error pedía "desconecta el que ya tienes" sin
+    // ningún botón para hacerlo acá. Ahora elegir otro lo cambia.
+    if (maxPortales === 1) {
+      for (const id of conectadas) if (id !== platformId && !(await quitar(id))) return;
+    }
     const res = await fetch("/api/platform-accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1208,6 +1237,8 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
       setError(data.error ?? "No se pudo conectar el portal");
     }
   }
+
+  const unoYaConectado = maxPortales === 1 && conectadas.size > 0;
 
   return (
     <>
@@ -1228,9 +1259,16 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
             <div key={p.id} className="ap-toggle-row">
               <span style={{ fontSize: 13.5, fontWeight: 500 }}>{p.nombre}</span>
               {conectadas.has(p.id) ? (
-                <span style={{ fontSize: 12, color: "var(--status-finalizado)" }}>Conectado ✓</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 12, color: "var(--status-finalizado)" }}>Conectado ✓</span>
+                  <button className="ap-button-ghost" onClick={() => quitar(p.id)} aria-label={`Quitar ${p.nombre}`}>
+                    Quitar
+                  </button>
+                </span>
               ) : (
-                <button className="ap-button-ghost" onClick={() => conectar(p.id)}>Conectar</button>
+                <button className="ap-button-ghost" onClick={() => conectar(p.id)}>
+                  {unoYaConectado ? "Cambiar a este" : "Conectar"}
+                </button>
               )}
             </div>
           ))}
@@ -1265,10 +1303,46 @@ const BUSQUEDA_POR_PORTAL: Record<string, (etiqueta: string, slug: string) => st
 // §4.2: "¡Todo listo!" sin la acción que da valor. La extensión trabaja
 // DENTRO del portal, así que lo que sigue es abrir el portal con la búsqueda
 // ya armada -- no "ir al dashboard".
-function PasoListo({ onTerminar }: { onTerminar: () => void }) {
+function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
   const [busqueda, setBusqueda] = useState<{ portal: string; etiqueta: string; url: string } | null>(null);
   const [enMovil, setEnMovil] = useState(false);
-  useEffect(() => { setEnMovil(sinSoporteExtension()); }, []);
+  // docs/revision-2026-09-28.md §11: el cierre decía "la extensión empieza sola"
+  // aunque la persona se hubiera saltado instalarla o no hubiera confirmado su
+  // correo (sin eso la extensión no se puede conectar). Ahora dice qué falta.
+  // null = todavía revisando.
+  const [falta, setFalta] = useState<"correo" | "extension" | null>(null);
+  const [quierePremium, setQuierePremium] = useState(false);
+  useEffect(() => {
+    setEnMovil(sinSoporteExtension());
+    try {
+      setQuierePremium(localStorage.getItem(LLAVE_INTENCION_PREMIUM) === "1");
+    } catch {
+      // Sin localStorage no se ofrece el atajo al pago; Premium sigue en el panel.
+    }
+  }, []);
+
+  useEffect(() => {
+    async function revisarQueFalta() {
+      try {
+        const res = await fetch("/api/account/extension-conectada");
+        const data = res.ok ? await res.json() : null;
+        if (data && data.emailVerificado === false) return setFalta("correo");
+        if (!sinSoporteExtension() && !data?.extensionConectada && !(await extensionPresente())) setFalta("extension");
+      } catch {
+        // Si no se puede saber, se muestra el cierre de siempre.
+      }
+    }
+    revisarQueFalta();
+  }, []);
+
+  function irAPremium() {
+    try {
+      localStorage.removeItem(LLAVE_INTENCION_PREMIUM);
+    } catch {
+      // ver arriba
+    }
+    onTerminar("/dashboard/premium/pago?pase=pase_30");
+  }
 
   useEffect(() => {
     async function cargar() {
@@ -1299,8 +1373,12 @@ function PasoListo({ onTerminar }: { onTerminar: () => void }) {
         Icon={CheckCircle2}
         titulo="¡Todo listo!"
         sub={
-          enMovil
+          falta === "correo"
+            ? "Tu cuenta quedó configurada. Falta una cosa: confirma tu correo con el enlace que te mandamos. Sin eso la extensión no se puede conectar ni postular."
+            : enMovil
             ? "Tu cuenta quedó configurada. Para que postule por ti, abre autopostula.cl en tu computador con Chrome e instala la extensión."
+            : falta === "extension"
+            ? "Tu cuenta quedó configurada. Falta instalar la extensión en Chrome: es la que postula por ti. Puedes instalarla cuando quieras desde Portales, en el panel."
             : busqueda
             ? `Abre ${busqueda.portal} y busca "${busqueda.etiqueta}": la extensión empieza sola.`
             : "Abre tu portal de empleo con la extensión instalada: empieza sola. Puedes completar tu perfil cuando quieras desde el panel."
@@ -1309,9 +1387,14 @@ function PasoListo({ onTerminar }: { onTerminar: () => void }) {
       <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 16 }}>
         {enMovil
           ? "Desde el celular puedes decidir qué ofertas te interesan y revisar tus postulaciones."
-          : "Tu cuenta arranca en modo prueba: la extensión mira las ofertas y te muestra a cuáles postularía, pero no envía nada hasta que lo actives desde el panel."}
+          : "Tu cuenta parte con la postulación sin activar: la extensión mira las ofertas y te muestra a cuáles postularía, pero no envía nada hasta que la actives desde el panel."}
       </p>
-      {busqueda && !enMovil && (
+      {quierePremium && (
+        <button onClick={irAPremium} className="ap-button" style={{ width: "100%", marginBottom: 10 }}>
+          Activar Premium
+        </button>
+      )}
+      {busqueda && !enMovil && !falta && (
         <a
           href={busqueda.url}
           target="_blank"
@@ -1322,7 +1405,11 @@ function PasoListo({ onTerminar }: { onTerminar: () => void }) {
           Abrir {busqueda.portal} con tu búsqueda ↗
         </a>
       )}
-      <button onClick={onTerminar} className={busqueda && !enMovil ? "ap-button-ghost" : "ap-button"} style={{ width: "100%" }}>
+      <button
+        onClick={() => onTerminar()}
+        className={(busqueda && !enMovil && !falta) || quierePremium ? "ap-button-ghost" : "ap-button"}
+        style={{ width: "100%" }}
+      >
         Ir al panel
       </button>
     </>

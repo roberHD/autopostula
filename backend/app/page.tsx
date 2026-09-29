@@ -530,7 +530,7 @@ export default function LandingPage() {
       <footer className="lp-pie lp-encima">
         <div className="lp-wrap lp-pie__in">
           <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-            <Link href="/" className="ap-brand">
+            <Link href="/" className="ap-brand" aria-label="AutoPostula, ir al inicio">
               <Marca />
               <b>AutoPostula</b>
             </Link>

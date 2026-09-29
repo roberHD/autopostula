@@ -28,6 +28,12 @@ type Hecho = {
 
 type Resumen = {
   nombre: string | null;
+  puesta?: {
+    correoVerificado: boolean;
+    extensionConectada: boolean;
+    postulacionHabilitada: boolean;
+    portalesActivos: number;
+  };
   tareas: {
     porDecidir: number;
     vencenManana: number;
@@ -76,6 +82,17 @@ type EstadoAuto = {
 const PALETA_PORTALES = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
 const NUMEROS = ["", "Una cosa te espera", "Dos cosas te esperan", "Tres cosas te esperan", "Cuatro cosas te esperan", "Cinco cosas te esperan"];
+
+// docs/revision-2026-09-28.md §11: "sigue sola" solo si de verdad puede. Si
+// falta algo para que postule, se dice qué (en el mismo orden en que se resuelve).
+function textoSinPendientes(puesta: Resumen["puesta"]): string {
+  if (!puesta) return "Nada pendiente. AutoPostula sigue sola.";
+  if (!puesta.correoVerificado) return "Falta confirmar tu correo para que AutoPostula pueda postular.";
+  if (!puesta.extensionConectada) return "Falta conectar la extensión en Chrome, en tu computador.";
+  if (!puesta.portalesActivos) return "Falta conectar un portal en Portales.";
+  if (!puesta.postulacionHabilitada) return "Por ahora solo mira: activa la postulación cuando confíes en lo que elige.";
+  return "Nada pendiente. AutoPostula sigue sola.";
+}
 
 /**
  * Rosca de reparto por portal, dibujada a mano.
@@ -377,7 +394,7 @@ export default function HoyPage() {
               <b>{NUMEROS[pendientes] ?? `${pendientes} cosas te esperan`}.</b> Del resto se encarga AutoPostula.
             </>
           ) : (
-            <>Nada pendiente. AutoPostula sigue sola.</>
+            <>{textoSinPendientes(datos.puesta)}</>
           )}
         </p>
       </div>
