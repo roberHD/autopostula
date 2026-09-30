@@ -388,6 +388,23 @@ const perfil = {
   const perfilCualquiera = Object.assign({}, perfilPartTime, { jornada: 'cualquiera' });
   const rCualquiera = AP.puntuarOferta({ titulo: 'Vendedor jornada completa', empresa: '', cuerpo: '', ubicacion: '' }, perfilCualquiera);
   check('jornada "cualquiera" no filtra nada (como antes)', rCualquiera.banda === 'postular');
+
+  // Bug real reportado en vivo el 2026-09-29: avisos reales de trabajando.com
+  // para "vendedor part time" caían TODOS a gris. AP_KEYWORDS_JORNADA.part_time
+  // solo tenía 'part time' con espacio, y el chequeo era un .includes() crudo
+  // -- "Part-Time" con guion (como lo escribe trabajando.com) nunca calzaba,
+  // así que el aviso quedaba como "no se sabe la jornada" pese a decirlo bien
+  // claro en el título.
+  const rGuion = AP.puntuarOferta({ titulo: 'Vendedor(a) Part-Time (domingos y festivos) - RM', empresa: 'Piwén', cuerpo: '', ubicacion: '' }, perfilPartTime);
+  check('"Part-Time" con guion sí confirma la jornada declarada -> postula', rGuion.banda === 'postular');
+
+  // Misma familia de bug: "PT" es la abreviatura real que usan estos avisos
+  // ("PT 20 hrs"). Con límite de palabra (\bpt\b) no debe calzar dentro de
+  // palabras como "septiembre" o "aceptar".
+  const rAbreviatura = AP.puntuarOferta({ titulo: 'Vendedor/Cajero (PT 20 hrs fines de semana)', empresa: '', cuerpo: '', ubicacion: '' }, perfilPartTime);
+  check('"PT" (abreviatura) confirma la jornada declarada -> postula', rAbreviatura.banda === 'postular');
+  const rFalsoPositivoPt = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Contratación directa desde septiembre, se acepta cambio de turno', ubicacion: '' }, perfilPartTime);
+  check('"pt" no calza dentro de "septiembre" ni "acepta" (limite de palabra)', rFalsoPositivoPt.banda === 'gris' && rFalsoPositivoPt.razones.some((x) => x.tipo === 'jornada_desconocida'));
 }
 
 // ── Modo "cualquier trabajo" (docs/amplitud-de-busqueda.md §5) ──

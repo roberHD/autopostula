@@ -454,7 +454,11 @@ const AP_KEYWORDS_MODALIDAD = {
 };
 const AP_KEYWORDS_JORNADA = {
   full_time: ['full time', 'jornada completa', 'tiempo completo'],
-  part_time: ['part time', 'media jornada', 'jornada parcial', 'medio tiempo'],
+  // "pt" a secas: abreviatura real en avisos chilenos ("PT 20 hrs", visto en
+  // trabajando.com) -- segura acá porque apConstruirPatron exige límite de
+  // palabra completa (\bpt\b), así que no calza dentro de "septiembre" ni
+  // "aceptar".
+  part_time: ['part time', 'media jornada', 'jornada parcial', 'medio tiempo', 'pt'],
 };
 
 // ── Modo "cualquier trabajo" (docs/amplitud-de-busqueda.md §5) ──
@@ -603,10 +607,18 @@ const AP_ENLACE_CORTO = '(?:\\s+\\w{1,4}){0,2}';
 // Frase completa con límites de palabra, nunca subcadena (§6, mismo bug que
 // tenía coincideFiltros con "aseo"/"paseo"). El texto de entrada ya debe venir
 // normalizado con AP.n antes de construir/usar este patrón.
+//
+// El separador entre palabras es "[\s-]+" y no solo "\s+" -- bug real
+// encontrado en vivo el 2026-09-29: avisos de trabajando.com escriben
+// "Part-Time" con guion pegado, así que un patrón de dos palabras como
+// "part time" nunca calzaba contra el título aunque la oferta SÍ fuera part
+// time, y la jornada declarada (§3b, más abajo) quedaba como "no se pudo
+// saber" en vez de confirmada -- toda la búsqueda de un rol part time
+// terminaba en banda gris.
 function apConstruirPatron(patronNormalizado) {
   const palabras = patronNormalizado.split(/\s+/).filter(Boolean).map(apPatronPalabra);
   if (!palabras.length) return null;
-  return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + AP_ENLACE_CORTO + '\\s+') + '\\b');
+  return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + AP_ENLACE_CORTO + '[\\s-]+') + '\\b');
 }
 
 // ── Comuna conocida de una oferta (docs/revision-2026-09-16.md §2.1, punto 4) ──
@@ -819,13 +831,12 @@ AP.puntuarOferta = function (campos, perfil) {
   let jornadaIncierta = null;
   const jornadaDeclarada = perfil.jornada;
   if (jornadaDeclarada === 'full_time' || jornadaDeclarada === 'part_time') {
-    const textoCompleto = titulo + ' ' + empresa + ' ' + cuerpo;
     const contraria = jornadaDeclarada === 'full_time' ? 'part_time' : 'full_time';
-    const diceContraria = AP_KEYWORDS_JORNADA[contraria].some((k) => textoCompleto.includes(AP.n(k)));
+    const diceContraria = AP_KEYWORDS_JORNADA[contraria].some((k) => buscar(k).coincide);
     if (diceContraria) {
       return { score: 0, banda: 'descartar', razones: [{ tipo: 'jornada', declarada: jornadaDeclarada }] };
     }
-    const diceDeclarada = AP_KEYWORDS_JORNADA[jornadaDeclarada].some((k) => textoCompleto.includes(AP.n(k)));
+    const diceDeclarada = AP_KEYWORDS_JORNADA[jornadaDeclarada].some((k) => buscar(k).coincide);
     if (!diceDeclarada) jornadaIncierta = { tipo: 'jornada_desconocida', declarada: jornadaDeclarada };
   }
 
