@@ -978,6 +978,10 @@ async function escanearAutomatico(disparador) {
     // "candidato." -- la de cl.computrabajo.com/candidate/match da 404.
     pasos.push({ tipo: 'estados', portal: 'Computrabajo', url: 'https://candidato.cl.computrabajo.com/candidate/match/' });
   }
+  // docs/estado-real-de-postulaciones.md §5, paso 5 (ver adapters/laborum.js).
+  if (plataformas.includes('Laborum')) {
+    pasos.push({ tipo: 'estados', portal: 'Laborum', url: 'https://www.laborum.cl/postulantes/postulaciones' });
+  }
 
   // Portales conectados pero ninguno con adaptador de búsqueda automática.
   if (!pasos.length) return sinBusqueda('sin_portales');

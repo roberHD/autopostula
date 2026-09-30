@@ -804,12 +804,98 @@ async function aplicarDirecto(decisionOfertaId) {
   }
 }
 
+// ── Seguimiento de estados en "Mis postulaciones" ───────────────
+// docs/estado-real-de-postulaciones.md §5, paso 5. Verificado contra el sitio
+// real el 2026-09-29, con una postulación de verdad:
+//
+// En la lista de laborum.cl/postulantes/postulaciones la fila NO trae el id de
+// la oferta (solo el de la postulación, 11455652467); el id que guardamos al
+// postular (-1118460193.html) aparece únicamente en el panel de detalle de la
+// fila seleccionada. Leer el DOM obligaría a hacer clic fila por fila. La
+// propia página arma la lista con /api/candidates/postulaciones, que devuelve
+// todas con `avisoId` (el mismo número) y `estado`, así que se lee de ahí, con
+// los mismos encabezados que usa ella (sessionJwt en localStorage + site id).
+//
+// Los valores de `estado` salen del código de la página, no de suponerlos:
+// "recibido", "leido", "contactado", "finalizada" (CV enviado → CV leído →
+// Contactado → Finalizada). "Contactado" es que la empresa se comunicó, no
+// necesariamente una entrevista: queda EN_PROCESO y la entrevista la cuenta
+// la persona (§6).
+const URL_MIS_POSTULACIONES_LABORUM = '/postulantes/postulaciones';
+const MAPA_ESTADO_LABORUM = {
+  'recibido': 'ENVIADO',
+  'leido': 'VISTO',
+  'contactado': 'EN_PROCESO',
+  'finalizada': 'FINALIZADO'
+};
+const POSTULACIONES_POR_PAGINA_LABORUM = 50;
+const MAX_PAGINAS_LABORUM = 10;
+
+async function traerPaginaPostulacionesLaborum(pagina) {
+  const headers = { 'x-site-id': 'BMCL' };
+  const jwt = localStorage.getItem('sessionJwt');
+  if (jwt) headers['x-session-jwt'] = jwt;
+  if (localStorage.token) headers['Authorization'] = 'Bearer ' + localStorage.token;
+  const url = '/api/candidates/postulaciones?pageSize=' + POSTULACIONES_POR_PAGINA_LABORUM +
+    '&page=' + pagina + '&sort=fechaPostulacion%20desc&query=';
+  const res = await fetch(url, { headers, credentials: 'include' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+async function escanearMisPostulaciones() {
+  msg('Revisando estados de postulaciones…', 'trabajando');
+  let actualizadas = 0;
+  const desconocidos = new Set();
+  try {
+    for (let pagina = 0; pagina < MAX_PAGINAS_LABORUM; pagina++) {
+      const datos = await traerPaginaPostulacionesLaborum(pagina);
+      const filas = (datos && datos.content) || [];
+      for (const fila of filas) {
+        if (!fila || fila.avisoId == null) continue;
+        const texto = String(fila.estado || '').trim().toLowerCase();
+        const estado = MAPA_ESTADO_LABORUM[texto];
+        if (!estado) { if (texto) desconocidos.add(texto); continue; }
+        const resultado = await AP.actualizarEstadoPostulacion({
+          platformNombre: 'Laborum',
+          externalId: String(fila.avisoId),
+          estado: estado
+        });
+        if (resultado && !resultado.error && !resultado.sinCambios) actualizadas++;
+      }
+      const total = Number(datos && datos.total) || 0;
+      if (filas.length < POSTULACIONES_POR_PAGINA_LABORUM || (pagina + 1) * POSTULACIONES_POR_PAGINA_LABORUM >= total) break;
+    }
+  } catch (e) {
+    console.warn('[AP-Laborum] no se pudo leer "Mis postulaciones":', e && e.message);
+    msg('No se pudieron revisar los estados', '#DC2626');
+    AP.reportarEscaneoTerminado();
+    return;
+  }
+  // Un valor nuevo de Laborum no se adivina: se deja a la vista para sumarlo al mapa.
+  if (desconocidos.size) console.warn('[AP-Laborum] estados sin mapear:', [...desconocidos]);
+  msg(actualizadas ? '✓ ' + actualizadas + ' estado(s) actualizado(s)' : 'Estados al día', '#16A34A');
+  AP.reportarEscaneoTerminado();
+}
+
+function enMisPostulaciones() {
+  return location.pathname.replace(/\/+$/, '') === URL_MIS_POSTULACIONES_LABORUM;
+}
+
 // ── Registro en el núcleo compartido ────────────────────────────
-AP.escanear = AP.sinReentrada(escanear);
+// En "Mis postulaciones" no hay tarjetas de ofertas: el escaneo de listados
+// diría "Sin tarjetas" y avisaría que terminó antes que el de estados (mismo
+// caso que Computrabajo).
+AP.escanear = AP.sinReentrada(function () {
+  if (enMisPostulaciones()) return;
+  return escanear();
+});
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function () {
   console.log('[AP-Laborum] listo — activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length);
-  if (AP.activo) {
+  if (enMisPostulaciones()) {
+    setTimeout(escanearMisPostulaciones, 1500);
+  } else if (AP.activo) {
     msg('Activado — escaneando…', '#16A34A');
     setTimeout(() => AP.escanear(), 1800);
   }

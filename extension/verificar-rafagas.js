@@ -1236,7 +1236,11 @@ bloque(async () => {
   await tick();
   b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: {} }, { tab: { id: b.storageLocal.rafaga.tabActual } });
   await tick();
-  check('control: la ráfaga de dos pasos terminó', b.storageLocal.rafaga.estado === 'terminada');
+  // Tercer paso: con Laborum conectado, la ráfaga también revisa sus estados
+  // en "Mis postulaciones" (docs/estado-real-de-postulaciones.md §5, paso 5).
+  b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: {} }, { tab: { id: b.storageLocal.rafaga.tabActual } });
+  await tick();
+  check('control: la ráfaga (dos búsquedas + estados de Laborum) terminó', b.storageLocal.rafaga.estado === 'terminada');
   await puede(b, tab);
   check('con la ráfaga TERMINADA, su pestaña vieja ya no cuenta como de la ráfaga (no lleva origen)', !/origen=/.test(ultimoPuede(b)), ultimoPuede(b));
 

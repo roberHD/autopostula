@@ -10,14 +10,14 @@ export const PLATAFORMAS_BASE = [
 ] as const;
 
 // Portales cuyo adaptador sabe leer "mis postulaciones" y sincronizar el
-// estado (escanearMisPostulaciones + su MAPA_ESTADO_*). Hoy solo Computrabajo:
-// lo postulado por los otros dos queda congelado en ENVIADO para siempre.
+// estado (escanearMisPostulaciones + su MAPA_ESTADO_*). Computrabajo y Laborum
+// (§5 paso 5); lo postulado por Trabajando queda congelado en ENVIADO.
 //
 // docs/estado-real-de-postulaciones.md §4: mientras esto sea parcial, ninguna
 // métrica de respuesta puede presentarse como si cubriera todo. Al agregarle
 // seguimiento a un portal (§5, pasos 5 y 6), se suma acá y las métricas del
 // dashboard se corrigen solas.
-export const PORTALES_CON_SEGUIMIENTO: readonly string[] = ["Computrabajo"];
+export const PORTALES_CON_SEGUIMIENTO: readonly string[] = ["Computrabajo", "Laborum"];
 
 export function portalSigueEstado(nombre: string) {
   return PORTALES_CON_SEGUIMIENTO.includes(nombre);
