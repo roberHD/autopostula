@@ -12,6 +12,7 @@ import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/componen
 import { LLAVE_INTENCION_PREMIUM, URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 import { extensionPresente } from "@/lib/puente-extension";
 import { sinSoporteExtension } from "@/lib/dispositivo";
+import { valorFormateado } from "@/lib/formato-perfil";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -521,7 +522,7 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
                   value={datosLeidos[campo.key]}
                   placeholder={campo.placeholder}
                   onChange={(e) => {
-                    setDatosLeidos({ ...datosLeidos, [campo.key]: e.target.value });
+                    setDatosLeidos({ ...datosLeidos, [campo.key]: valorFormateado(campo.key, e.target) });
                     setDatosEditados(true);
                   }}
                 />

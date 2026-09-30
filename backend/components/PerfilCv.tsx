@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useAvisos } from "@/components/Avisos";
 import { Skel } from "@/components/Esqueleto";
+import { valorFormateado } from "@/lib/formato-perfil";
 
 type Experiencia = { cargo: string; empresa: string; periodo: string };
 
@@ -279,7 +280,10 @@ export default function PerfilCv({ alCambiar, trasCv }: { alCambiar?: () => void
                 ) : (
                   <input
                     value={(perfil[campo.key] as string) || ""}
-                    onChange={(e) => setPerfil((p) => ({ ...p, [campo.key]: e.target.value }))}
+                    onChange={(e) => {
+                      const valor = valorFormateado(campo.key, e.target);
+                      setPerfil((p) => ({ ...p, [campo.key]: valor }));
+                    }}
                     placeholder={campo.placeholder}
                     className="ap-input"
                   />

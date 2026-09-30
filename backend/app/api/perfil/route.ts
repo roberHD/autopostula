@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { listaDeTextos, textoCorto } from "@/lib/entrada";
+import { formatearRenta, formatearRut } from "@/lib/formato-perfil";
 
 // docs/revision-2026-09-28.md §25: cada campo con su tipo y su largo. Antes
 // entraba cualquier cosa (un objeto en vez de texto terminaba en error 500, y
@@ -10,6 +11,12 @@ function campoTexto(valor: unknown, max: number) {
   if (valor === undefined) return undefined;
   if (valor === null) return null;
   return textoCorto(valor, max);
+}
+
+// El panel ya formatea al escribir; esto cubre lo que llega por otro lado
+// (lo que la IA lee del CV, el onboarding, la API).
+function conFormato(valor: string | null | undefined, formato: (t: string) => string) {
+  return typeof valor === "string" ? formato(valor) : valor;
 }
 
 function experienciaValida(valor: unknown) {
@@ -63,9 +70,9 @@ export async function PUT(request: Request) {
     email: campoTexto(body.email, 200),
     telefono: campoTexto(body.telefono, 40),
     comuna: campoTexto(body.comuna, 80),
-    rut: campoTexto(body.rut, 20),
+    rut: conFormato(campoTexto(body.rut, 20), formatearRut),
     cargoObjetivo: campoTexto(body.cargoObjetivo, 150),
-    expectativaRenta: campoTexto(body.expectativaRenta, 80),
+    expectativaRenta: conFormato(campoTexto(body.expectativaRenta, 80), formatearRenta),
     disponibilidad: campoTexto(body.disponibilidad, 150),
     modalidad: campoTexto(body.modalidad, 40),
     resumenProfesional: campoTexto(body.resumenProfesional, 2000),
