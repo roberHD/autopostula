@@ -86,4 +86,84 @@ function check(desc, cond) {
   check('modalidad remoto: NO combina con la comuna (mismo criterio que CT/Laborum)', remoto === 'https://www.trabajando.cl/trabajo-empleo/vendedor');
 }
 
+// ── 3. huboEvidenciaDeExito (trabajando.js real) ─────────────────────────
+// Bug real reportado en vivo el 2026-09-30: buscaba la señal de éxito en
+// document.body.innerText COMPLETO, que incluye el listado de tarjetas de
+// la izquierda -- y trabajando.com le pone "Ya postulaste" a cualquier
+// tarjeta a la que la cuenta ya se le haya postulado antes (de otro
+// escaneo, de otra oferta sin relación). Con una cuenta que ya tiene
+// postulaciones reales, eso está casi siempre visible en la lista, así que
+// CUALQUIER intento -- funcionara o no el clic -- se reportaba como
+// confirmado. Se extraen obtenerBotonPostular() y huboEvidenciaDeExito()
+// tal cual del archivo real (no se reescriben a mano).
+{
+  const src = fs.readFileSync(path.join(__dirname, 'adapters', 'trabajando.js'), 'utf8');
+  const desdeBoton = src.indexOf('function obtenerBotonPostular()');
+  const hastaBoton = src.indexOf('\n}', desdeBoton) + 2;
+  const desdeExito = src.indexOf('function huboEvidenciaDeExito()');
+  const hastaExito = src.indexOf('\n}', desdeExito) + 2;
+  if (desdeBoton === -1 || desdeExito === -1) {
+    throw new Error('No se encontró obtenerBotonPostular() o huboEvidenciaDeExito() en trabajando.js -- ¿se renombraron?');
+  }
+  const n = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+  function elemento(textContent, opts) {
+    opts = opts || {};
+    return {
+      textContent,
+      innerText: opts.innerText != null ? opts.innerText : textContent,
+      offsetParent: opts.oculto ? null : {},
+      disabled: !!opts.disabled,
+    };
+  }
+
+  function crearDocumento({ botonEnPanel, listadoTexto, textoFueraDelListado }) {
+    const panel = { querySelectorAll: () => (botonEnPanel ? [botonEnPanel] : []) };
+    const listado = elemento(null, { innerText: listadoTexto || '' });
+    const bodyInnerText = (textoFueraDelListado || '') + ' ' + (listadoTexto || '');
+    return {
+      querySelector: (sel) => (sel === SELECTOR_PANEL ? panel : sel === '#listadoOfertas' ? listado : null),
+      querySelectorAll: () => (botonEnPanel ? [botonEnPanel] : []),
+      body: { innerText: bodyInnerText },
+    };
+  }
+
+  const SELECTOR_PANEL = '#detalleOferta';
+  const ctx = { document: null, n, SELECTOR_PANEL };
+  vm.createContext(ctx);
+  const huboEvidenciaDeExito = vm.runInContext(
+    src.slice(desdeBoton, hastaBoton) + '\n' + src.slice(desdeExito, hastaExito) + '\nhuboEvidenciaDeExito;',
+    ctx,
+    { filename: 'trabajando.js (huboEvidenciaDeExito extraído)' }
+  );
+
+  // Caso real reportado: el botón de postular sigue ahí (el clic no logró
+  // nada), pero el LISTADO de la izquierda muestra "Ya postulaste" en OTRA
+  // tarjeta -- antes esto se leía como éxito de la oferta actual.
+  ctx.document = crearDocumento({
+    botonEnPanel: elemento('Postular'),
+    listadoTexto: 'Vendedor/a otra oferta cualquiera Ya postulaste hace 3 días',
+    textoFueraDelListado: 'Vendedor(a) Temporada Verano - Portal La Reina Postular',
+  });
+  check('un "Ya postulaste" que viene del LISTADO (otra oferta) ya no cuenta como éxito', huboEvidenciaDeExito() === false);
+
+  // Si la confirmación aparece FUERA del listado (el panel de detalle, un
+  // modal, un toast) sigue contando -- no se rompió la señal real.
+  ctx.document = crearDocumento({
+    botonEnPanel: elemento('Postular'),
+    listadoTexto: '',
+    textoFueraDelListado: 'Postulación enviada con éxito',
+  });
+  check('un "postulación enviada" FUERA del listado sigue contando como éxito', huboEvidenciaDeExito() === true);
+
+  // Sin ninguna señal de texto, pero el botón de postular ya no está (se
+  // deshabilitó/desapareció) -- la señal (b) sigue funcionando igual que antes.
+  ctx.document = crearDocumento({ botonEnPanel: null, listadoTexto: '', textoFueraDelListado: '' });
+  check('sin texto de éxito y sin botón de postular -> sigue contando como éxito (señal b)', huboEvidenciaDeExito() === true);
+
+  // Sin ninguna señal -- el botón real sigue ahí y nada confirma nada.
+  ctx.document = crearDocumento({ botonEnPanel: elemento('Postular'), listadoTexto: '', textoFueraDelListado: '' });
+  check('sin ninguna señal -> no se confirma', huboEvidenciaDeExito() === false);
+}
+
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));

@@ -595,8 +595,25 @@ async function confirmarPostulacionFinal() {
 // si en el uso real algún envío exitoso NO dispara ninguna de las dos
 // señales, va a quedar registrado como error en vez de "Enviado", nunca al
 // revés (silencioso como "Enviado" sin serlo, que es el bug que esto arregla).
+//
+// Bug real reportado en vivo el 2026-09-30: buscar la señal (a) en
+// document.body.innerText completo incluye el LISTADO de tarjetas de la
+// izquierda -- y trabajando.com le pone "Ya postulaste" a CUALQUIER tarjeta
+// a la que la cuenta ya se le haya postulado antes (de otro escaneo, de
+// otro día, de cualquier oferta sin relación con la que se acaba de
+// intentar). Con una cuenta que ya tiene postulaciones reales, esa frase
+// prácticamente SIEMPRE está visible en algún lado de la lista, así que
+// CUALQUIER intento -- funcionara o no el clic -- se reportaba como
+// confirmado. Se excluye el texto del listado (#listadoOfertas) antes de
+// buscar: la confirmación real de ESTA postulación vive en el panel de
+// detalle o en un modal/toast, nunca en una tarjeta de la lista.
 function huboEvidenciaDeExito() {
-  const texto = n(document.body.innerText || '');
+  const listado = document.querySelector('#listadoOfertas');
+  let texto = n(document.body.innerText || '');
+  if (listado) {
+    const textoListado = n(listado.innerText || '');
+    if (textoListado) texto = texto.split(textoListado).join(' ');
+  }
   if (/ya (te )?postulaste|postulaci[oó]n (ya )?enviada|postulaci[oó]n (recibida|exitosa|realizada)|gracias por postular/.test(texto)) return true;
   return !obtenerBotonPostular();
 }
