@@ -1516,7 +1516,15 @@ bloque(async () => {
   check('lo que sigue después de la prueba dice lo mismo', constante('TEXTO_DESPUES_DE_LA_PRUEBA') && constante('TEXTO_DESPUES_DE_LA_PRUEBA') === p.leer('TEXTO_DESPUES_DE_LA_PRUEBA'));
   check('"Pasar a Premium" dice lo mismo', constante('TEXTO_PASAR_A_PREMIUM') && constante('TEXTO_PASAR_A_PREMIUM') === p.leer('TEXTO_PASAR_A_PREMIUM'));
   check('"Ver las 5" lleva a la misma ruta del historial', constante('RUTA_VER_LAS_DE_PRUEBA') && constante('RUTA_VER_LAS_DE_PRUEBA') === p.leer('RUTA_VER_LAS_DE_PRUEBA'));
-  const historial = fs.readFileSync(path.join(__dirname, '..', 'backend', 'app', 'dashboard', 'historial', 'page.tsx'), 'utf8');
+  // Se lee la carpeta entera y no un archivo puntual: quien lee ?filtro=prueba
+  // ya se movió una vez de page.tsx a Postulaciones.tsx (al pasar la lista al
+  // servidor), y el test falló por eso sin que la función estuviera rota.
+  const dirHistorial = path.join(__dirname, '..', 'backend', 'app', 'dashboard', 'historial');
+  const historial = fs
+    .readdirSync(dirHistorial)
+    .filter((f) => f.endsWith('.tsx'))
+    .map((f) => fs.readFileSync(path.join(dirHistorial, f), 'utf8'))
+    .join('\n');
   check('y esa ruta (?filtro=prueba) es la que el historial del panel sabe leer', /get\("filtro"\)\s*===\s*"prueba"/.test(historial));
 
   // ── El HTML ──
