@@ -256,8 +256,19 @@ $('scan-now-btn').addEventListener('click', () => {
     // Se avisa por chrome.runtime (canal privado de la extensión) y no con un
     // CustomEvent de DOM: un evento de DOM lo puede disparar cualquier script
     // de la propia página (un aviso comprometido, un XSS del portal).
-    chrome.tabs.sendMessage(tabs[0].id, { type: 'FORCE_SCAN' }, () => {});
-    toast('🔍 Escaneando…');
+    // Reportado en vivo el 2026-09-29: si la pestaña quedó "huérfana" (se
+    // recargó la extensión pero no esa pestaña -- pasa siempre que se recarga
+    // desde chrome://extensions dejando abierta una pestaña vieja) o el
+    // content script simplemente no llegó a inyectarse, este mensaje nunca
+    // llega -- chrome.runtime.lastError lo dice, pero antes se ignoraba y el
+    // toast igual mentía "Escaneando…" aunque en la página no pasara nada.
+    chrome.tabs.sendMessage(tabs[0].id, { type: 'FORCE_SCAN' }, () => {
+      if (chrome.runtime.lastError) {
+        toast('⚠ No se pudo conectar con la pestaña — recárgala (F5) e intenta de nuevo');
+        return;
+      }
+      toast('🔍 Escaneando…');
+    });
   });
 });
 
