@@ -180,6 +180,34 @@ Pulcro/Hunter/Pulcro PT30" (23:41) y RayBan (01-10, 12:43). Las tres son part ti
 Sale con el deploy (es del servidor, no de la extensión). `scripts/verificar-renta-ia.ts`, con las
 preguntas reales del día: 25 comprobaciones.
 
+## §10. Las aprobadas de Computrabajo no se enviaban
+
+Prueba real del 01-10: aprobada "Vendedora volante 30hrs pm" (Manpower), la extensión la tomó y
+no pasó nada. En la página suelta de un aviso de Computrabajo, "Postularme" es un enlace a otra
+página (`candidato.cl.computrabajo.com/match/?oi=...`): la extensión perdía el hilo y la pestaña se
+cerraba. En "Mis postulaciones" del portal no quedó enviada.
+
+**Arreglo:** `background.js` abre la aprobada en el panel de un listado (`trabajo-de-{palabra}#ID`,
+como queda al elegir una oferta en una búsqueda; el sitio carga el panel por el ID aunque el aviso
+no esté en ese listado) y `computrabajo.js` no escanea esa pestaña: espera la orden y postula con
+el botón del panel, el mismo del escaneo. `verificar-computrabajo.js` (14; con la versión anterior
+falla en 4).
+
+## §11. Computrabajo cortaba en silencio lo que la IA no sabe
+
+Con el código de §10 cargado, la aprobada "Promo/Vendedor(as) Mall Parque Arauco" (Burô Temps)
+tampoco se envió, dos veces, sin dejar rastro en el panel. Abierta a mano en el panel de un listado
+(con la sesión de Roberto, sin enviar): "Postularme" abre ahí mismo el formulario del aviso, con 4
+preguntas y "Enviar mi CV"; una es "¿Posee disponibilidad de trabajar este jueves 17 y domingo 20
+de septiembre?". La IA lo marca como dato faltante, y Computrabajo cortaba la postulación con una
+línea en el registro local: ni panel, ni incompleta en el panel.
+
+**Arreglo** (`computrabajo.js`, igual que Laborum §5 y trabajando.com §7): se pide lo que falta con
+el panel "Falta información para postular" (2 minutos); si nadie contesta, queda como incompleta en
+el panel con el dato que faltó, y esa pestaña no vuelve a preguntar. **Verificado** con el código
+nuevo en un marco sobre Computrabajo real: el panel apareció con las 4 preguntas y la de las fechas
+marcada; "Saltar esta oferta" no envió nada.
+
 ---
 
 ## Cómo se verificó
