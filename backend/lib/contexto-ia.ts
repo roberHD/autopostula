@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { listaDeTextos, textoCorto } from "@/lib/entrada";
+import { sirveComoEjemplo } from "@/lib/renta-ia";
 
 // Lo que la extensión manda a las rutas de IA, limpio y con tope
 // (docs/revision-2026-09-28.md §19). Antes no había ningún límite de tamaño:
@@ -93,16 +94,22 @@ export const AVISO_SIN_PERFIL =
  */
 export async function bloqueRespuestasAnteriores(userId: string, evitarRepetidas: boolean | null | undefined): Promise<string> {
   if (evitarRepetidas === false) return "";
-  const anteriores = await prisma.applicationAnswer.findMany({
+  // Lo que la IA respondió a una pregunta por un hecho (renta, licencia...) no
+  // es un dato de la persona y no vuelve como ejemplo: un "$1.800.000"
+  // inventado una vez se repitió en las postulaciones siguientes
+  // (lib/renta-ia.ts). Se piden más para que igual queden hasta 6.
+  const recientes = await prisma.applicationAnswer.findMany({
     where: { application: { userId, estadoActual: { not: "INCOMPLETA" } }, respuestaFinal: { not: "" } },
     orderBy: { respondidoEn: "desc" },
-    take: 6,
-    select: { pregunta: true, respuestaFinal: true },
+    take: 20,
+    select: { pregunta: true, respuestaFinal: true, fueEditada: true },
   });
+  const anteriores = recientes.filter(sirveComoEjemplo).slice(0, 6);
   if (!anteriores.length) return "";
   return (
     "Respuestas que el candidato YA envió en otras postulaciones (no las copies: si la pregunta se parece, " +
-    "di lo mismo con otras palabras y conectado con ESTE aviso):\n" +
+    "di lo mismo con otras palabras y conectado con ESTE aviso). Sirven para el estilo, no como fuente de " +
+    "datos: un dato concreto (renta, licencia, disponibilidad) sale solo del CV, el perfil o los datos adicionales:\n" +
     anteriores
       .map((a) => `- A "${a.pregunta.slice(0, 120)}" respondió: "${a.respuestaFinal.slice(0, 300)}"`)
       .join("\n") +

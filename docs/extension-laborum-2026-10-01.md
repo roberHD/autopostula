@@ -28,6 +28,7 @@ el botón para postular"; y la última ráfaga con "1 búsqueda no terminó".
 | El resumen de la ráfaga | Cada aviso es una página nueva y los conteos partían de cero en cada una: las postulaciones de Laborum no llegaban al resumen | §6 |
 | Computrabajo, lo mismo | La ráfaga busca con su filtro `-jornada-part-time`, la tarjeta no muestra la jornada y en Computrabajo los dudosos no se abren: lo que no dijera "part time" en el título iba a "Por decidir" (16 de las 65 de Computrabajo que había en el panel) | §7 |
 | Las horas del título | "Vendedor/a 30 hrs", "Vendedor 20 horas" quedaban en duda; "Vendedor/a Dermocosmética 42 hrs", dentro del filtro part time, pasaba por part time | §8 |
+| **La renta inventada** | La IA respondió "$1.800.000" a "Indique expectativa de renta" sin ningún dato (el perfil la tiene vacía), y como lo enviado vuelve al prompt como "lo que el candidato YA envió", la cifra se repitió: dos postulaciones part time de Trabajando el 30-09 y la de RayBan en Laborum el 01-10 (la prueba real) salieron con esa pretensión | §9 |
 
 ---
 
@@ -154,6 +155,30 @@ descripción "de 9 a 18 hrs" es un horario. Tampoco cuentan "24 horas" (una farm
 (un turno) ni lo que viene después de " a ", " hasta " o un guion ("de 10 a 18 hrs"). La "a" tiene
 que ir suelta: "Vendedor/a 30 hrs" sí es una jornada. 15 comprobaciones nuevas en
 `verificar-scorer.js`.
+
+## §9. La renta que la IA inventó
+
+La primera postulación real (RayBan, aprobada en "Por decidir") se envió en 16 segundos, sin el
+panel de §5: la IA respondió "Indícanos tus pretensiones de renta líquida" con "$1.800.000". El
+perfil de Roberto tiene la expectativa de renta vacía, no hay datos adicionales, y ni el CV ni el
+aviso nombran esa cifra. Viene de "Vendedor/a Jornada Parcial - Lo Barnechea" (trabajando.com,
+30-09 23:31): ahí el modelo la inventó, pese a la regla 1b del prompt, que nombra la pretensión de
+renta como un hecho que no se supone. Desde entonces, `bloqueRespuestasAnteriores` la mostraba como
+"Respuestas que el candidato YA envió" y el modelo la repetía como si fuera suya: "Vendedor
+Pulcro/Hunter/Pulcro PT30" (23:41) y RayBan (01-10, 12:43). Las tres son part time.
+
+**Arreglo** (servidor, `lib/renta-ia.ts`): dos resguardos que no dependen del modelo.
+
+- Si una pregunta pide la renta ("pretensiones de renta", "expectativa de renta", "pretensión
+  salarial", "¿cuánto esperas ganar?") y la persona no la declaró en su perfil ni en sus datos, la
+  respuesta queda como dato faltante, escriba lo que escriba el modelo. La extensión abre el panel
+  (§5), la persona la contesta una vez y queda guardada.
+- Lo que la IA respondió a una pregunta por un hecho (renta, licencia, vehículo, título) ya no
+  vuelve al prompt como ejemplo, salvo que la persona lo haya escrito o corregido. El bloque ahora
+  dice que esas respuestas sirven para el estilo, no como fuente de datos.
+
+Sale con el deploy (es del servidor, no de la extensión). `scripts/verificar-renta-ia.ts`, con las
+preguntas reales del día: 25 comprobaciones.
 
 ---
 

@@ -14,6 +14,7 @@ import {
   limpiarPreguntasIA,
 } from "@/lib/contexto-ia";
 import { bloqueBusquedaDeclarada } from "@/lib/busqueda-declarada";
+import { sinRentaInventada } from "@/lib/renta-ia";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -219,7 +220,8 @@ export async function POST(request: Request) {
       return { id: r?.id, respuesta: datoFaltante ? null : respuesta, datoFaltante };
     });
 
-    return NextResponse.json({ analisis, respuestas });
+    // La renta no se adivina, aunque el modelo escriba un número (lib/renta-ia.ts).
+    return NextResponse.json({ analisis, respuestas: sinRentaInventada(respuestas, listaPreguntas, p.renta, info) });
   } catch (err) {
     console.error("Error en /api/ai/procesar-postulacion:", err);
     return NextResponse.json(
