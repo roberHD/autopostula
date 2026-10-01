@@ -24,6 +24,10 @@ const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos, llama
 const CARGADA_EN_OFERTA = /^#[A-F0-9]{32}$/i.test(location.hash) ||
   /\/ofertas-de-trabajo\/oferta-de-trabajo-/.test(location.pathname);
 
+// Se le pidió a la persona lo que faltaba y nadie contestó a tiempo: en esta
+// pestaña no se vuelve a preguntar (ver postular).
+const CLAVE_NADIE_CONTESTO = 'ap_nadie_contesto_computrabajo';
+
 // Espera a que `condicion()` devuelva algo (con un observador del DOM, no con
 // pausas encadenadas que Chrome estira en las pestañas de fondo).
 function esperarA(condicion, ms) {
@@ -644,12 +648,38 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
       // que no está en el perfil, no se manda con eso sin responder. Con
       // modo revisión SÍ se deja seguir si la persona confirma igual: ya lo
       // vio marcado ("No está en tu perfil — complétalo") y decidió enviar.
-      const faltaDato = respuestasLog.find(r => r.datoFaltante);
-      if (faltaDato) {
-        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
-          reason:'Falta "' + faltaDato.datoFaltante + '" en tu perfil para responder bien -- activa "Revisar antes de enviar" o completa tu perfil',
-          respuestas: respuestasLog});
-        return { ok: false, expirada: false };
+      //
+      // Hasta el 2026-10-01 eso cortaba la postulación en silencio: ni se le
+      // preguntaba a la persona ni quedaba en el panel (una aprobada de "Por
+      // decidir" se reintentaba sin que nadie supiera por qué). Ahora, igual
+      // que en Laborum y trabajando.com, se pide lo que falta con el panel
+      // "Falta información para postular" (lo que conteste se puede guardar
+      // en su perfil), y si nadie contesta queda como incompleta en el panel,
+      // con el dato que faltó (docs/extension-laborum-2026-10-01.md §11).
+      const faltantes = respuestasLog.filter(r => r.datoFaltante);
+      if (faltantes.length) {
+        const faltan = faltantes.map(r => r.datoFaltante).slice(0, 3).join(', ');
+        const paraLog = () => respuestasLog.map(r => ({ pregunta:r.pregunta, respuestaIa:r.respuestaIa, respuesta:r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
+        const incompleta = (razon) => {
+          addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:razon, respuestas: paraLog()});
+          reportarPostulacion({ id, titulo, empresa, url, incompleta: true, nota: razon, respuestas: paraLog(), decisionOfertaId });
+          return { ok: false, expirada: false };
+        };
+        if (sessionStorage.getItem(CLAVE_NADIE_CONTESTO) === '1') {
+          return incompleta('Faltan datos para responder (' + faltan + '): guárdalos en tu perfil o activa "Revisar antes de enviar"');
+        }
+        msg('⏸ Falta información para postular…', '#2563EB');
+        const decision = await mostrarRevision(titulo, respuestasLog, contexto,
+          { titulo: 'Falta información para postular', limiteMs: 120000 });
+        if (decision === 'skip') {
+          if (!AP.revisionVencida) {
+            addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada: faltaban respuestas (' + faltan + ')', respuestas: paraLog()});
+            return { ok: false, expirada: false };
+          }
+          // Nadie contestó: en esta pestaña no se vuelve a preguntar.
+          sessionStorage.setItem(CLAVE_NADIE_CONTESTO, '1');
+          return incompleta('Faltaban respuestas (' + faltan + ') y nadie contestó a tiempo');
+        }
       }
     }
 
