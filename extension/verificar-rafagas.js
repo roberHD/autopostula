@@ -761,7 +761,7 @@ bloque(async () => {
   check('popup.html trae la fila de la puesta al día con sus tres ids', ['rafaga-row', 'rafaga-titulo', 'rafaga-detalle'].every(id => html.includes('id="' + id + '"')));
   check('la fila va arriba: antes de los botones del pie', html.indexOf('id="rafaga-row"') < html.indexOf('class="footer"'));
   check('la fila arranca oculta (no parpadea vacía al abrir)', /class="rafaga-row hidden"/.test(html));
-  check('popup.js pide las ráfagas a storage al cargar y limpia el número', /chrome\.storage\.local\.get\(\[[^\]]*'rafaga'[^\]]*\]/.test(fuente) && fuente.includes('limpiarInsigniaRafaga();\n'));
+  check('popup.js pide las ráfagas a storage al cargar y limpia el número', /chrome\.storage\.local\.get\(\[[^\]]*'rafaga'[^\]]*\]/.test(fuente) && /limpiarInsigniaRafaga\(\);\r?\n/.test(fuente));
 });
 
 // ── 11. "Ponerme al día ahora": el service worker (§3.6) ──────────────────
