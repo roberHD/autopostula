@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useAvisos } from "@/components/Avisos";
 import type { ModoAutomatico, MotivoInactivo } from "@/lib/estado-automatico";
 import { textoTarjetaRafaga, type UltimaRafaga } from "@/lib/texto-rafaga";
+import { EVENTO_PANEL_CAMBIO } from "@/lib/primera-busqueda";
+import { EVENTO_POSTULACION_ACTIVADA } from "@/lib/usar-activar-postulacion";
 import { haceCuanto } from "@/lib/tiempo";
 import BotonPonerseAlDia from "./BotonPonerseAlDia";
 
@@ -16,6 +18,8 @@ type Estado = {
   modo: ModoAutomatico;
   pausadaPorTi: boolean;
   portalesActivos: number;
+  // La extensión ya usó el token de esta cuenta (docs/primera-busqueda-guiada.md §10).
+  extensionConectada?: boolean;
   cupo: { usadas: number | null; limite: number | null; restantes: number | null };
   ultima: {
     titulo: string;
@@ -82,6 +86,13 @@ export default function BarraMaquina({
   // Solo fuerza el re-render para que el "hace N min" avance; su valor no se lee.
   const [, setTic] = useState(0);
   const [horaDelServidor, setHoraDelServidor] = useState(ahora ?? null);
+  // Si la extensión está en este navegador: bridge.js deja la marca en el DOM
+  // antes de que cargue la página. Solo cambia el texto de antes de la primera
+  // ráfaga ("parte sola dentro de la próxima hora" en vez de "abre Chrome").
+  const [extensionAqui, setExtensionAqui] = useState(false);
+  useEffect(() => {
+    setExtensionAqui(!!document.documentElement.dataset.autopostulaExtension);
+  }, []);
 
   const cargar = useCallback(async () => {
     try {
@@ -99,6 +110,19 @@ export default function BarraMaquina({
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargar]);
+
+  // La tarjeta "Probemos" de Hoy conecta portales y la extensión, y activa la
+  // postulación: la barra vuelve a pedir su estado (docs/primera-busqueda-guiada.md §10).
+  useEffect(() => {
+    if (soloEsqueleto) return;
+    const f = () => void cargar();
+    window.addEventListener(EVENTO_PANEL_CAMBIO, f);
+    window.addEventListener(EVENTO_POSTULACION_ACTIVADA, f);
+    return () => {
+      window.removeEventListener(EVENTO_PANEL_CAMBIO, f);
+      window.removeEventListener(EVENTO_POSTULACION_ACTIVADA, f);
+    };
+  }, [cargar, soloEsqueleto]);
 
   // Ya dibujada con la hora del servidor, sigue con la del teléfono.
   useEffect(() => {
@@ -161,10 +185,16 @@ export default function BarraMaquina({
   // Con la búsqueda andando, lo que importa es cuándo se puso al día y qué
   // encontró -- lo mismo que decía la tarjeta del Inicio, que ahora vive acá.
   const ahoraRender = horaDelServidor ? new Date(horaDelServidor) : new Date();
-  const rafaga = e.activa ? textoTarjetaRafaga(e.ultimaRafaga, ahoraRender) : null;
+  const rafaga = e.activa
+    ? textoTarjetaRafaga(e.ultimaRafaga, ahoraRender, { extensionConectada: e.extensionConectada, extensionAqui })
+    : null;
   const horasDesde = e.ultimaRafaga ? (ahoraRender.getTime() - new Date(e.ultimaRafaga.en).getTime()) / 3_600_000 : null;
   const alDia = horasDesde !== null && horasDesde < HORAS_AL_DIA;
-  const titulo = e.activa ? (alDia ? "Al día" : "Sin ponerse al día") : (aviso?.t ?? "Detenida");
+  // Sin ninguna ráfaga todavía no está atrasada: está por empezar
+  // (docs/primera-busqueda-guiada.md §10).
+  const titulo = e.activa
+    ? alDia ? "Al día" : e.ultimaRafaga ? "Sin ponerse al día" : "Por empezar"
+    : (aviso?.t ?? "Detenida");
 
   return (
     <div className="ap-maquina" data-activa={e.activa && alDia ? "1" : undefined}>

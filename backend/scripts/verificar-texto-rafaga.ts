@@ -52,6 +52,15 @@ check("una búsqueda que no terminó se dice (2, plural)", detalleConteos({ ...b
 // ── textoTarjetaRafaga ───────────────────────────────────────────────────
 let r = textoTarjetaRafaga(null, ahora);
 check("nunca se puso al día: lo dice y le pide abrir Chrome", r.t === "Todavía no se puso al día" && r.d.includes("Abre Chrome"), r);
+// docs/primera-busqueda-guiada.md §10: según lo que se sabe de la extensión.
+r = textoTarjetaRafaga(null, ahora, { extensionConectada: false, extensionAqui: true });
+check("nunca, sin la extensión conectada: pide conectarla, no abrir Chrome", r.t === "Falta conectar la extensión" && !r.d.includes("Abre Chrome"), r);
+r = textoTarjetaRafaga(null, ahora, { extensionConectada: true, extensionAqui: true });
+check("nunca, conectada y en este navegador: dice cuándo parte sola", r.t === "Primera búsqueda" && r.d.includes("dentro de la próxima hora"), r);
+r = textoTarjetaRafaga(null, ahora, { extensionConectada: true, extensionAqui: false });
+check("nunca, conectada en otro computador: le pide abrir Chrome allá", r.t === "Todavía no se puso al día" && r.d.includes("Abre Chrome"), r);
+r = textoTarjetaRafaga({ en: hace(1), resumen: null }, ahora, { extensionConectada: false, extensionAqui: false });
+check("con una ráfaga ya hecha, el contexto no cambia nada", r.t.startsWith("Última puesta al día"), r);
 
 r = textoTarjetaRafaga({ en: new Date(2026, 8, 18, 9, 14).toISOString(), resumen: { ...base, postuladas: 7 } }, ahora);
 check("hoy: 'Última puesta al día: hoy 09:14' y el detalle aparte", r.t === "Última puesta al día: hoy 09:14" && r.d === "7 postulaciones", r);

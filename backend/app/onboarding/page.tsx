@@ -10,7 +10,6 @@ import { Skel } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
 import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 import { LLAVE_INTENCION_PREMIUM, URL_CHROME_WEB_STORE } from "@/lib/enlaces";
-import { extensionPresente } from "@/lib/puente-extension";
 import { sinSoporteExtension } from "@/lib/dispositivo";
 import { valorFormateado } from "@/lib/formato-perfil";
 import "../dashboard/theme.css";
@@ -997,6 +996,9 @@ function PasoExtension({ onSiguiente, onOmitir }: { onSiguiente: () => void; onO
   return <PasoExtensionEscritorio onSiguiente={onSiguiente} onOmitir={onOmitir} />;
 }
 
+// Se marca al ir a la tienda de Chrome, para recargar al volver (ver abajo).
+const FUE_A_INSTALAR = "ap_onboarding_fue_a_instalar";
+
 function PasoExtensionEscritorio({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: () => void }) {
   // null = todavía detectando si la extensión está instalada.
   const [extensionDetectada, setExtensionDetectada] = useState<boolean | null>(null);
@@ -1047,10 +1049,28 @@ function PasoExtensionEscritorio({ onSiguiente, onOmitir }: { onSiguiente: () =>
 
     // Si igual no contesta, asumimos que no está instalada.
     const t = setTimeout(() => setExtensionDetectada((v) => (v === null ? false : v)), 700);
+
+    // docs/primera-busqueda-guiada.md §10: volvió de la tienda de Chrome. Las
+    // extensiones no se meten en las pestañas que ya estaban abiertas, así que
+    // la página se recarga sola para encontrarla (antes había que apretar "Ya
+    // la instalé, verificar"). El paso guardado hace que vuelva a este mismo.
+    function alVolver() {
+      if (document.visibilityState !== "visible") return;
+      if (document.documentElement.dataset.autopostulaExtension) return;
+      try {
+        if (sessionStorage.getItem(FUE_A_INSTALAR) === null) return;
+        sessionStorage.removeItem(FUE_A_INSTALAR);
+      } catch {
+        return;
+      }
+      window.location.reload();
+    }
+    document.addEventListener("visibilitychange", alVolver);
     return () => {
       window.removeEventListener("autopostula:extension-presente", onDetectada);
       window.removeEventListener("autopostula:conectado", onConectado);
       window.removeEventListener("autopostula:error-conexion", onError);
+      document.removeEventListener("visibilitychange", alVolver);
       clearTimeout(t);
     };
   }, []);
@@ -1146,6 +1166,13 @@ function PasoExtensionEscritorio({ onSiguiente, onOmitir }: { onSiguiente: () =>
             href={URL_CHROME_WEB_STORE}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => {
+              try {
+                sessionStorage.setItem(FUE_A_INSTALAR, "1");
+              } catch {
+                // Sin sessionStorage queda el botón "Ya la instalé, verificar".
+              }
+            }}
             className="ap-button"
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
@@ -1356,35 +1383,21 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
   );
 }
 
-// Misma normalización que extension/background.js (normalizarParaUrl): la
-// búsqueda que se arma acá tiene que caer en la misma página que la de la
-// extensión.
-function slugDeBusqueda(texto: string): string {
-  return texto
-    .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
-
-const BUSQUEDA_POR_PORTAL: Record<string, (etiqueta: string, slug: string) => string> = {
-  Computrabajo: (_e, slug) => `https://cl.computrabajo.com/trabajo-de-${slug}`,
-  Laborum: (_e, slug) => `https://www.laborum.cl/empleos-busqueda-${slug}.html`,
-  Trabajando: (etiqueta) => `https://www.trabajando.cl/trabajo-empleo/${encodeURIComponent(etiqueta.toLowerCase())}`,
-};
-
-// §4.2: "¡Todo listo!" sin la acción que da valor. La extensión trabaja
-// DENTRO del portal, así que lo que sigue es abrir el portal con la búsqueda
-// ya armada -- no "ir al dashboard".
+// docs/primera-busqueda-guiada.md §10: el cierre ya no abre el portal desde acá.
+// Lo abría con una búsqueda sin comuna ni jornada (todo Chile: lo primero que
+// se veía eran descartes por "es en otra comuna"), solo si todo había quedado
+// listo, y sin forma de saber después qué pasó. Ahora lleva a Hoy, donde la
+// tarjeta "Probemos" sigue paso a paso: instalar y conectar la extensión si
+// falta, abrir el portal con la búsqueda armada igual que la arma la extensión,
+// ver qué haría con cada oferta y recién ahí activar.
+//
+// §4.2 (docs/revision-2026-09-16.md): "¡Todo listo!" sin la acción que da
+// valor. Por eso el botón dice lo que la persona va a hacer, no "Ir al panel".
 function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
-  const [busqueda, setBusqueda] = useState<{ portal: string; etiqueta: string; url: string } | null>(null);
   const [enMovil, setEnMovil] = useState(false);
-  // docs/revision-2026-09-28.md §11: el cierre decía "la extensión empieza sola"
-  // aunque la persona se hubiera saltado instalarla o no hubiera confirmado su
-  // correo (sin eso la extensión no se puede conectar). Ahora dice qué falta.
-  // null = todavía revisando.
-  const [falta, setFalta] = useState<"correo" | "extension" | null>(null);
+  // docs/revision-2026-09-28.md §11: sin el correo confirmado la extensión no
+  // se puede conectar; se dice antes de mandarla a probar.
+  const [faltaCorreo, setFaltaCorreo] = useState(false);
   const [quierePremium, setQuierePremium] = useState(false);
   useEffect(() => {
     setEnMovil(sinSoporteExtension());
@@ -1393,20 +1406,14 @@ function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
     } catch {
       // Sin localStorage no se ofrece el atajo al pago; Premium sigue en el panel.
     }
-  }, []);
-
-  useEffect(() => {
-    async function revisarQueFalta() {
-      try {
-        const res = await fetch("/api/account/extension-conectada");
-        const data = res.ok ? await res.json() : null;
-        if (data && data.emailVerificado === false) return setFalta("correo");
-        if (!sinSoporteExtension() && !data?.extensionConectada && !(await extensionPresente())) setFalta("extension");
-      } catch {
+    fetch("/api/account/extension-conectada")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.emailVerificado === false) setFaltaCorreo(true);
+      })
+      .catch(() => {
         // Si no se puede saber, se muestra el cierre de siempre.
-      }
-    }
-    revisarQueFalta();
+      });
   }, []);
 
   function irAPremium() {
@@ -1418,73 +1425,30 @@ function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
     onTerminar("/dashboard/premium/pago?pase=pase_30");
   }
 
-  useEffect(() => {
-    async function cargar() {
-      try {
-        const [resObj, resCuentas] = await Promise.all([fetch("/api/objetivos"), fetch("/api/platform-accounts")]);
-        const objetivos = await parsearRespuesta(resObj);
-        const cuentas = await parsearRespuesta(resCuentas);
-        const etiqueta: string | undefined = objetivos.objetivos?.[0]?.etiqueta ?? objetivos.sugerenciaCv ?? undefined;
-        if (!etiqueta) return;
-        const idsConectados = new Set((cuentas.cuentas ?? []).filter((c: any) => c.activa).map((c: any) => c.platformId));
-        const portal: string | undefined = (cuentas.plataformas ?? []).find(
-          (p: any) => idsConectados.has(p.id) && BUSQUEDA_POR_PORTAL[p.nombre]
-        )?.nombre;
-        if (!portal) return;
-        const slug = slugDeBusqueda(etiqueta);
-        if (!slug) return;
-        setBusqueda({ portal, etiqueta, url: BUSQUEDA_POR_PORTAL[portal](etiqueta, slug) });
-      } catch (e) {
-        console.error("No se pudo armar la búsqueda de cierre del onboarding:", e);
-      }
-    }
-    cargar();
-  }, []);
-
   return (
     <>
       <Header
         Icon={CheckCircle2}
         titulo="¡Todo listo!"
         sub={
-          falta === "correo"
-            ? "Tu cuenta quedó configurada. Falta una cosa: confirma tu correo con el enlace que te mandamos. Sin eso la extensión no se puede conectar ni postular."
+          faltaCorreo
+            ? "Tu cuenta quedó configurada. Antes de probarla, confirma tu correo con el enlace que te mandamos: sin eso la extensión no se puede conectar."
             : enMovil
-            ? "Tu cuenta quedó configurada. Para que postule por ti, abre autopostula.cl en tu computador con Chrome e instala la extensión."
-            : falta === "extension"
-            ? "Tu cuenta quedó configurada. Falta instalar la extensión en Chrome: es la que postula por ti. Puedes instalarla cuando quieras desde Portales, en el panel."
-            : busqueda
-            ? `Abre ${busqueda.portal} y busca "${busqueda.etiqueta}": la extensión empieza sola.`
-            : "Abre tu portal de empleo con la extensión instalada: empieza sola. Puedes completar tu perfil cuando quieras desde el panel."
+            ? "Tu cuenta quedó configurada. La prueba con ofertas reales se hace en Chrome, en un computador: en tu panel te queda el paso a paso."
+            : "Ahora pruébala con ofertas reales, sin enviar nada. En tu panel te esperan los pasos: abrir tu portal con tu búsqueda y ver qué haría con cada oferta."
         }
       />
-      <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 16 }}>
-        {enMovil
-          ? "Desde el celular puedes decidir qué ofertas te interesan y revisar tus postulaciones."
-          : "Tu cuenta parte con la postulación sin activar: la extensión mira las ofertas y te muestra a cuáles postularía, pero no envía nada hasta que la actives desde el panel."}
-      </p>
       {quierePremium && (
         <button onClick={irAPremium} className="ap-button" style={{ width: "100%", marginBottom: 10 }}>
           Activar Premium
         </button>
       )}
-      {busqueda && !enMovil && !falta && (
-        <a
-          href={busqueda.url}
-          target="_blank"
-          rel="noreferrer"
-          className="ap-button"
-          style={{ display: "block", width: "100%", textAlign: "center", marginBottom: 10, textDecoration: "none" }}
-        >
-          Abrir {busqueda.portal} con tu búsqueda ↗
-        </a>
-      )}
       <button
         onClick={() => onTerminar()}
-        className={(busqueda && !enMovil && !falta) || quierePremium ? "ap-button-ghost" : "ap-button"}
+        className={quierePremium ? "ap-button-ghost" : "ap-button"}
         style={{ width: "100%" }}
       >
-        Ir al panel
+        {enMovil ? "Ir al panel" : "Probarla con ofertas reales"}
       </button>
     </>
   );

@@ -87,6 +87,12 @@ export default function PortalesPage() {
     const alConectar = () => {
       limpiarTemporizador();
       setConexion({ estado: "ok", texto: "Listo: la extensión quedó conectada a esta cuenta." });
+      // Como en el onboarding: que el panel lo sepa al tiro. Antes solo lo
+      // anotaba el onboarding, y quien conectaba desde acá seguía viendo "Falta
+      // conectar la extensión" en Hoy (docs/primera-busqueda-guiada.md §10).
+      fetch("/api/account/extension-conectada", { method: "POST" }).catch((e) => {
+        console.error("No se pudo guardar que la extensión quedó conectada:", e);
+      });
     };
     const alFallar = (e: Event) => {
       limpiarTemporizador();

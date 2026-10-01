@@ -47,8 +47,31 @@ function cuando(fecha: Date, ahora: Date): string {
   return `el ${fecha.toLocaleDateString("es-CL", { weekday: "long" })} ${hora}`;
 }
 
-export function textoTarjetaRafaga(ultima: UltimaRafaga | null, ahora: Date): { t: string; d: string } {
+// Lo que se sabe de la extensión cuando todavía no hubo ninguna ráfaga
+// (docs/primera-busqueda-guiada.md §10). Sin esto la barra le decía "Abre Chrome
+// en tu computador" a alguien que acababa de conectarla, con Chrome abierto, en
+// su computador.
+export type ContextoPrimeraRafaga = {
+  /** User.extensionConectada: la extensión ya usó el token de esta cuenta. */
+  extensionConectada?: boolean;
+  /** La extensión está en el navegador que mira el panel (lo marca bridge.js). */
+  extensionAqui?: boolean;
+};
+
+export function textoTarjetaRafaga(
+  ultima: UltimaRafaga | null,
+  ahora: Date,
+  contexto?: ContextoPrimeraRafaga
+): { t: string; d: string } {
   if (!ultima) {
+    if (contexto?.extensionConectada === false) {
+      return { t: "Falta conectar la extensión", d: "en Chrome, en tu computador" };
+    }
+    // La alarma de la extensión revisa cada 60 minutos (background.js,
+    // INTERVALO_MINUTOS) y sin ninguna ráfaga anterior arranca la primera.
+    if (contexto?.extensionConectada && contexto.extensionAqui) {
+      return { t: "Primera búsqueda", d: "sola, dentro de la próxima hora, con Chrome abierto" };
+    }
     return { t: "Todavía no se puso al día", d: PEDIR_QUE_ABRA_CHROME };
   }
 

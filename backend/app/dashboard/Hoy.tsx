@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Ban, Check, CircleCheck, Globe, Inbox, Info, Sparkles, Target, TriangleAlert } from "lucide-react";
+import { Ban, Check, CircleCheck, Globe, Inbox, Info, ShieldAlert, Sparkles, Target, TriangleAlert } from "lucide-react";
 import { SkelStats, SkelGrafico, SkelFilas } from "@/components/Esqueleto";
 import { useAvisos } from "@/components/Avisos";
+import PrimeraBusqueda, { type PrimeraVez } from "./PrimeraBusqueda";
+import { COOKIE_MISION_OCULTA, EVENTO_PANEL_CAMBIO } from "@/lib/primera-busqueda";
+import { usarActivarPostulacion } from "@/lib/usar-activar-postulacion";
 import {
   RUTA_VER_LAS_DE_PRUEBA,
   TEXTO_DESPUES_DE_LA_PRUEBA,
@@ -34,6 +37,8 @@ type Resumen = {
     postulacionHabilitada: boolean;
     portalesActivos: number;
   };
+  // La tarjeta "Probemos" (docs/primera-busqueda-guiada.md §10).
+  primeraVez?: PrimeraVez;
   tareas: {
     porDecidir: number;
     vencenManana: number;
@@ -77,6 +82,8 @@ type EstadoAuto = {
   pruebaRestantes: number | null;
   pruebaTotal: number;
   limite: number | null;
+  // Cuántas habría postulado la última ráfaga, en modo solo mirar.
+  habriaPostulado: number | null;
 };
 
 // Lo que devuelve /api/dashboard/estado, en lo que usa esta página.
@@ -86,6 +93,7 @@ type EstadoCrudo = {
   pruebaRestantes?: number | null;
   pruebaTotal?: number;
   cupo?: { limite?: number | null } | null;
+  ultimaRafaga?: { resumen?: { observadas?: number } | null } | null;
 };
 
 function aEstadoAuto(e: EstadoCrudo): EstadoAuto {
@@ -95,6 +103,7 @@ function aEstadoAuto(e: EstadoCrudo): EstadoAuto {
     pruebaRestantes: e.pruebaRestantes ?? null,
     pruebaTotal: e.pruebaTotal ?? PRUEBA_TOTAL,
     limite: e.cupo?.limite ?? null,
+    habriaPostulado: e.ultimaRafaga?.resumen?.observadas ?? null,
   };
 }
 
@@ -197,6 +206,23 @@ type Tarea = {
   detalle: string;
   acciones?: React.ReactNode;
 };
+
+// "Activar postulación" como tarea de Hoy, cuando la persona ocultó la tarjeta
+// "Probemos" sin activarla (el aviso del layout no aparece en Hoy).
+function ActivarDesdeHoy({ alActivar, alProbar }: { alActivar: () => void; alProbar: () => void }) {
+  const { activar, activando, aviso } = usarActivarPostulacion(alActivar);
+  return (
+    <>
+      <button type="button" className="ap-button" onClick={() => void activar()} disabled={activando}>
+        {activando ? "Activando…" : "Activar postulación"}
+      </button>
+      <button type="button" className="ap-button-ghost" onClick={alProbar}>
+        Probarla primero
+      </button>
+      {aviso && <p style={{ flexBasis: "100%", fontSize: 12.5, color: "var(--err)", whiteSpace: "normal" }}>{aviso}</p>}
+    </>
+  );
+}
 
 function armarTareas(d: Resumen, e: EstadoAuto | null): Tarea[] {
   const t: Tarea[] = [];
@@ -346,14 +372,42 @@ export function HoyCargando() {
   );
 }
 
-export default function Hoy({ inicial }: { inicial?: InicialHoy | null }) {
+export default function Hoy({
+  inicial,
+  misionOcultaInicial = false,
+  enMovilSegunServidor = null,
+}: {
+  inicial?: InicialHoy | null;
+  // La persona ocultó la tarjeta "Probemos" (cookie, la lee el servidor).
+  misionOcultaInicial?: boolean;
+  enMovilSegunServidor?: boolean | null;
+}) {
   const [datos, setDatos] = useState<Resumen | null>(inicial?.resumen ?? null);
+  const [misionOculta, setMisionOculta] = useState(misionOcultaInicial);
   // La misma fuente que la barra de arriba (/api/dashboard/estado): las
   // tareas y la barra no pueden contar dos historias distintas.
   const [estado, setEstado] = useState<EstadoAuto | null>(inicial?.estado ? aEstadoAuto(inicial.estado) : null);
   const [cargando, setCargando] = useState(!inicial);
   const [mensaje, setMensaje] = useState("");
   const { error: avisarError } = useAvisos();
+
+  // La tarjeta "Probemos" vuelve a pedir el día al volver del portal, para ver
+  // si la extensión ya miró (docs/primera-busqueda-guiada.md §10).
+  const refrescar = useCallback(async () => {
+    try {
+      const [resumen, estadoNuevo] = await Promise.all([fetch("/api/dashboard/resumen"), fetch("/api/dashboard/estado")]);
+      if (resumen.ok) setDatos(await resumen.json());
+      if (estadoNuevo.ok) setEstado(aEstadoAuto(await estadoNuevo.json()));
+      window.dispatchEvent(new CustomEvent(EVENTO_PANEL_CAMBIO));
+    } catch {
+      // Se reintenta la próxima vez que vuelva a la pestaña.
+    }
+  }, []);
+
+  const cambiarPuesta = useCallback((cambio: Partial<NonNullable<Resumen["puesta"]>>) => {
+    setDatos((d) => (d && d.puesta ? { ...d, puesta: { ...d.puesta, ...cambio } } : d));
+    window.dispatchEvent(new CustomEvent(EVENTO_PANEL_CAMBIO));
+  }, []);
 
   // Con los datos del servidor no se vuelven a pedir. Sin ellos (si el
   // servidor no pudo armarlos), se piden desde acá como antes.
@@ -416,9 +470,33 @@ export default function Hoy({ inicial }: { inicial?: InicialHoy | null }) {
   const ahora = inicial ? new Date(inicial.ahora) : new Date();
   const hoy = ahora.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Santiago" });
   const hoyTitulo = hoy.charAt(0).toUpperCase() + hoy.slice(1);
-  const tareas = armarTareas(datos, estado);
+  // docs/primera-busqueda-guiada.md §10: una cuenta que todavía no activa la
+  // postulación no ve un tablero en cero, ve la tarjeta "Probemos". Mientras
+  // está, no hay tareas ni cifras: todo lo que hay que hacer está en sus pasos.
+  const mision = !!datos.primeraVez && !!datos.puesta && !datos.puesta.postulacionHabilitada && !misionOculta;
+  const tareas = mision ? [] : armarTareas(datos, estado);
+  if (!mision && datos.puesta && !datos.puesta.postulacionHabilitada) {
+    tareas.unshift({
+      clave: "activar",
+      icono: <ShieldAlert />,
+      color: "var(--accent)",
+      titulo: "Todavía no activas la postulación",
+      detalle: "La extensión mira tus ofertas y te dice qué haría con cada una, pero no envía ninguna hasta que la actives.",
+      acciones: (
+        <ActivarDesdeHoy
+          alActivar={() => cambiarPuesta({ postulacionHabilitada: true })}
+          alProbar={() => {
+            document.cookie = `${COOKIE_MISION_OCULTA}=; path=/; max-age=0; samesite=lax`;
+            setMisionOculta(false);
+          }}
+        />
+      ),
+    });
+  }
   const pendientes = tareas.length;
-  const pruebaEnCurso = estado?.modo === "prueba" && estado.pruebaRestantes !== null;
+  // "Postula sola hasta completar las 5" no es cierto mientras no se active.
+  const pruebaEnCurso =
+    !mision && datos.puesta?.postulacionHabilitada !== false && estado?.modo === "prueba" && estado.pruebaRestantes !== null;
   const b = datos.busqueda;
   const chips = [
     ...b.lugares,
@@ -434,7 +512,9 @@ export default function Hoy({ inicial }: { inicial?: InicialHoy | null }) {
         <h1 className="ap-page-title">{datos.nombre ? `Hola, ${datos.nombre}` : "Hola"}</h1>
         <p className="ap-page-sub ap-hoy-sub">
           {hoyTitulo} ·{" "}
-          {pendientes > 0 ? (
+          {mision ? (
+            <>Antes de que postule por ti, mira qué haría con ofertas reales.</>
+          ) : pendientes > 0 ? (
             <>
               <b>{NUMEROS[pendientes] ?? `${pendientes} cosas te esperan`}.</b> Del resto se encarga AutoPostula.
             </>
@@ -443,6 +523,25 @@ export default function Hoy({ inicial }: { inicial?: InicialHoy | null }) {
           )}
         </p>
       </div>
+
+      {mision && datos.primeraVez && datos.puesta && (
+        <PrimeraBusqueda
+          correoVerificado={datos.puesta.correoVerificado}
+          extensionConectada={datos.puesta.extensionConectada}
+          primeraVez={datos.primeraVez}
+          porDecidir={datos.tareas.porDecidir}
+          habriaPostulado={estado?.habriaPostulado ?? null}
+          modo={estado?.modo ?? null}
+          pruebaTotal={estado?.pruebaTotal ?? PRUEBA_TOTAL}
+          lugares={datos.busqueda.lugares}
+          jornada={datos.busqueda.jornada}
+          enMovilSegunServidor={enMovilSegunServidor}
+          refrescar={refrescar}
+          alConectar={() => cambiarPuesta({ extensionConectada: true })}
+          alActivar={() => cambiarPuesta({ postulacionHabilitada: true })}
+          alOcultar={() => setMisionOculta(true)}
+        />
+      )}
 
       {/* Lo que te necesita: lo primero que se lee es qué hacer hoy. */}
       {(pendientes > 0 || pruebaEnCurso) && (
@@ -478,7 +577,8 @@ export default function Hoy({ inicial }: { inicial?: InicialHoy | null }) {
         </div>
       )}
 
-      {/* Tres cifras del mes */}
+      {/* Tres cifras del mes (con la tarjeta "Probemos" serían tres ceros) */}
+      {!mision && (
       <div className="ap-metricas ap-metricas--3">
         <div className="ap-card ap-metrica ap-animate-in" style={{ borderTop: "2.5px solid var(--chart-1)" }}>
           <p className="ap-metrica__l">Enviadas</p>
@@ -500,11 +600,12 @@ export default function Hoy({ inicial }: { inicial?: InicialHoy | null }) {
           </p>
         </div>
       </div>
+      )}
 
       {/* Sobre qué se sabe y sobre qué no (docs/estado-real-de-postulaciones.md
           §4 y §7): reemplaza al porcentaje de respuesta, que mezclaba postulaciones
           reales con las que ningún portal reporta. Solo se muestra si hay algo que decir. */}
-      {(datos.desglose.length > 0 || datos.cobertura.sinSeguimiento > 0) && (
+      {!mision && (datos.desglose.length > 0 || datos.cobertura.sinSeguimiento > 0) && (
         <div className="ap-card ap-animate-in" style={{ padding: 20 }}>
           <p className="ap-bloque-t">Sobre qué se sabe</p>
           {datos.desglose.length > 0 && (
@@ -649,7 +750,9 @@ export default function Hoy({ inicial }: { inicial?: InicialHoy | null }) {
         </div>
       </div>
 
-      {/* Actividad de la semana y reparto por portal: se quedan como estaban */}
+      {/* Actividad de la semana y reparto por portal: se quedan como estaban
+          (salvo con la tarjeta "Probemos": serían dos gráficos vacíos) */}
+      {!mision && (
       <div className="ap-fila-2 ap-split--parejo">
         <div className="ap-card ap-animate-in" style={{ padding: 20, animationDelay: "0.24s" }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -692,6 +795,7 @@ export default function Hoy({ inicial }: { inicial?: InicialHoy | null }) {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { MonitorSmartphone } from "lucide-react";
 import { sinSoporteExtension } from "@/lib/dispositivo";
 
@@ -10,18 +11,21 @@ import { sinSoporteExtension } from "@/lib/dispositivo";
 // puede instalar -- no es un error ni una tarea pendiente en ESE aparato --, así
 // que el cartel dice qué se puede hacer ahí y qué se desbloquea en un computador.
 // En un computador no muestra nada: ahí lo que falta se resuelve desde Portales.
+// En Hoy tampoco (docs/primera-busqueda-guiada.md §10): ahí la tarjeta "Probemos"
+// dice lo mismo, con el paso que corresponde.
 export default function BannerExtension({ enMovilSegunServidor = null }: { enMovilSegunServidor?: boolean | null }) {
   // docs/optimizacion-2026-09-29.md §5: el servidor ya lo adivina por las
   // cabeceras del pedido (lib/dispositivo.ts), así el aviso llega dibujado en
   // vez de aparecer cuando termina el JavaScript y empujar la página hacia
   // abajo. Al montar se confirma con el navegador, como antes.
   const [enMovil, setEnMovil] = useState<boolean | null>(enMovilSegunServidor);
+  const pathname = usePathname();
 
   useEffect(() => {
     setEnMovil(sinSoporteExtension());
   }, []);
 
-  if (!enMovil) return null;
+  if (!enMovil || pathname === "/dashboard") return null;
 
   return (
     <div className="ap-cartel-maqueta" role="status">
