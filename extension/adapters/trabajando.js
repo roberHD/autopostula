@@ -801,8 +801,8 @@ async function escanear() {
     if (soloObservar) conteos.observado = pendientes.length;
     else conteos.postular = pendientes.length;
     AP.reportarDescartes(descartes, 'Trabajando');
-    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
-    msg(resumen.texto, resumen.estado);
+    const resumen = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
+    msg(resumen.texto, resumen.estado, resumen.accion);
   }
 
   const botonVerMas = [...document.querySelectorAll('#listadoOfertas button, #listadoOfertas a')]
@@ -860,8 +860,8 @@ async function escanear() {
   AP.reportarEscaneoTerminado(conteos);
   // §5: el aviso final se quedaba en "Escaneo completo" sin el resumen que sí
   // muestran los otros dos portales.
-  const resumenFinal = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
-  msg(resumenFinal.texto, resumenFinal.estado);
+  const resumenFinal = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
+  msg(resumenFinal.texto, resumenFinal.estado, resumenFinal.accion);
 }
 
 // ── Postular directo a UNA oferta ya aprobada en banda gris (§8.6) ──────

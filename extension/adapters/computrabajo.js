@@ -812,8 +812,8 @@ async function escanear() {
     if (soloObservar) conteos.observado = pendientes.length;
     else conteos.postular = pendientes.length;
     AP.reportarDescartes(descartes, 'Computrabajo');
-    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
-    msg(resumen.texto, resumen.estado);
+    const resumen = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
+    msg(resumen.texto, resumen.estado, resumen.accion);
   }
   if (!pendientes.length) {
     if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return; // navegando a la página siguiente
@@ -878,8 +878,8 @@ async function escanear() {
   AP.reportarEscaneoTerminado(conteos);
   // §5: el resumen del escaneo ("👁 Solo observar · …", "N postuladas · …") se
   // quedaba tapado por un "Escaneo completo" sin datos.
-  const resumenFinal = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
-  msg(resumenFinal.texto, resumenFinal.estado);
+  const resumenFinal = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
+  msg(resumenFinal.texto, resumenFinal.estado, resumenFinal.accion);
 }
 
 // ── Seguimiento de estados en "Mis postulaciones" ───────────────

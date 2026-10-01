@@ -242,6 +242,29 @@ const perfil = {
   const razon = AP.razonMasFrecuente(['fuera de tus comunas', 'no calza con tus filtros', 'fuera de tus comunas']);
   check('razón más frecuente cuenta repeticiones, no solo la primera', razon === 'fuera de tus comunas');
 }
+// "Agregar a mi perfil" desde el aviso: con la lista de razones, el resumen
+// trae la acción, y la comuna es la que más se repite (no la de la primera).
+{
+  const razones = [
+    { tipo: 'ubicacion', ofertaEn: 'estacion central' },
+    { tipo: 'ubicacion', ofertaEn: 'santiago' },
+    { tipo: 'ubicacion', ofertaEn: 'santiago' },
+    { tipo: 'jornada', declarada: 'part_time' },
+  ];
+  const r = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 4 }, razones, false);
+  check('con la lista de razones: la comuna del texto es la más repetida', r.texto === '4 descartadas — la mayoría: Santiago no está en tus comunas', r.texto);
+  check('...y trae la acción de agregar esa comuna', r.accion && r.accion.tipo === 'agregar_comuna' && r.accion.comuna === 'santiago', r.accion);
+}
+{
+  const r = AP.mensajeEscaneo({ postular: 1, gris: 0, descartar: 3 }, [{ tipo: 'jornada', declarada: 'part_time' }, { tipo: 'jornada', declarada: 'part_time' }], false);
+  check('una razón que no se arregla desde el aviso no trae acción', r.accion === null && /jornada completa/.test(r.texto));
+}
+{
+  const r = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 2 }, 'fuera de tus comunas');
+  check('con la razón ya en texto (forma anterior) sigue igual y sin acción', r.accion === null && r.texto === '2 descartadas — la mayoría: fuera de tus comunas');
+}
+check('nombre de comuna con partículas: "lo barnechea" → "Lo Barnechea"', AP.formatearRazonCorta({ tipo: 'ubicacion', ofertaEn: 'lo barnechea' }) === 'Lo Barnechea no está en tus comunas');
+check('...y "pedro aguirre cerda", "isla de maipo"', AP.formatearRazonCorta({ tipo: 'ubicacion', ofertaEn: 'isla de maipo' }) === 'Isla de Maipo no está en tus comunas');
 {
   const razon = AP.razonMasFrecuente([]);
   check('lista vacía de razones no revienta, devuelve null', razon === null);
