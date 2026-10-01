@@ -17,6 +17,15 @@ function tick(ms) {
   return new Promise(r => setTimeout(r, ms || 5));
 }
 
+// Espera a que se cumpla la condición, con tope. Las pruebas de la cola de
+// aprobadas esperaban 150 ms fijos a que terminara, y con el computador
+// ocupado fallaban sin que nada estuviera mal (2026-09-30: 6 de 6 corridas, con
+// y sin los cambios de ese día).
+async function hasta(condicion, ms) {
+  const limite = Date.now() + (ms || 3000);
+  while (!condicion() && Date.now() < limite) await tick(10);
+}
+
 // Cada bloque de prueba corre por su lado y el reporte espera a TODOS, en vez
 // de a un tiempo fijo que se queda corto cada vez que se agrega uno.
 const bloques = [];
@@ -1643,7 +1652,7 @@ bloque(async () => {
   // ── El orden: la cola termina ANTES de abrir la primera búsqueda ──
   let b = await nuevo({ aprobadas: [aprobada(1), aprobada(2)] });
   await b.ctx.quizasRafaga('chequeo');
-  await tick(150);
+  await hasta(() => busquedas(b).length >= 1);
   let r = b.storageLocal.rafaga;
   check('con aprobadas por enviar, el PRIMER paso de la ráfaga es "aprobadas"', r.pasos[0].tipo === 'aprobadas' && r.pasos[1].tipo === 'busqueda', r.pasos);
   check('se envían las 2, una a la vez, y solo después se abre la primera búsqueda (nunca dos pestañas a la vez)', JSON.stringify(b.eventos.slice(0, 2)) === '["cola:d1","cola:d2"]' && !!b.eventos[2] && b.eventos[2].startsWith('pestana:') && busquedas(b).length === 1, b.eventos);
@@ -1659,7 +1668,7 @@ bloque(async () => {
   // ── Solo cuenta lo que se envió de verdad ──
   b = await nuevo({ aprobadas: [aprobada(1), aprobada(2), aprobada(3)] }, { resultados: { d2: { ok: false, expirada: false }, d3: { ok: false, expirada: true } } });
   await b.ctx.quizasRafaga('chequeo');
-  await tick(150);
+  await hasta(() => busquedas(b).length >= 1);
   check('de 3 aprobadas, solo cuenta la que se envió (las otras no: una falló, otra expiró)', b.storageLocal.rafaga.conteos.postuladas === 1, b.storageLocal.rafaga.conteos);
   check('...y la que ya no existe se marca expirada en el backend, como antes (no se reintenta para siempre)', b.fetchLlamadas.some(l => /banda-gris-expirada/.test(l.url) && JSON.parse(l.init.body).decisionId === 'd3'));
 
@@ -1725,7 +1734,7 @@ bloque(async () => {
   // ── Un fallo a la mitad no deja la cola trabada ──
   b = await nuevo({ aprobadas: [aprobada(1), aprobada(2)] }, { fallaEn: 'd1' });
   await b.ctx.quizasRafaga('chequeo');
-  await tick(150);
+  await hasta(() => busquedas(b).length >= 1);
   check('una oferta que revienta no se lleva a las demás: la d2 se envía igual y solo esa cuenta', b.aplicadas.join() === 'd1,d2' && b.storageLocal.rafaga.conteos.postuladas === 1, { aplicadas: b.aplicadas, conteos: b.storageLocal.rafaga.conteos });
   check('...la ráfaga sigue con su búsqueda, sin marcar error (una oferta que falla no es una búsqueda que no terminó)', b.storageLocal.rafaga.conteos.errores === 0 && busquedas(b).length === 1 && b.storageLocal.rafaga.pasoActual === 1, b.storageLocal.rafaga);
   check('...y la que falló se puede volver a encolar (no queda marcada "en cola" para siempre)', vm.runInContext('decisionesEnCola.has("d1")', b.ctx) === false);
@@ -1750,7 +1759,7 @@ bloque(async () => {
   b = await nuevo({ aprobadas: [aprobada(1)] });
   b.ctx.processQueue = () => Promise.reject(new Error('reventó todo'));
   await b.ctx.quizasRafaga('chequeo');
-  await tick(150);
+  await hasta(() => busquedas(b).length >= 1);
   check('si la cola falla entera, el paso cuenta como error y la ráfaga sigue con la búsqueda', b.storageLocal.rafaga.conteos.errores === 1 && busquedas(b).length === 1 && b.storageLocal.rafaga.pasoActual === 1, b.storageLocal.rafaga);
 
   // applyInTab real: si Chrome no puede abrir la pestaña, no se cuelga.
