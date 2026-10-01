@@ -2007,7 +2007,7 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
       return true;
     }
     if (!AP.aplicarDirecto) { sendResponse({ success: false, expirada: false }); return true; }
-    AP.aplicarDirecto(m.decisionId).then(sendResponse);
+    AP.aplicarDirecto(m.decisionId, m.url).then(sendResponse);
     return true;
   }
 });

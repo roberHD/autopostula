@@ -180,6 +180,19 @@ Pulcro/Hunter/Pulcro PT30" (23:41) y RayBan (01-10, 12:43). Las tres son part ti
 Sale con el deploy (es del servidor, no de la extensión). `scripts/verificar-renta-ia.ts`, con las
 preguntas reales del día: 25 comprobaciones.
 
+## §10. Las aprobadas de Computrabajo no se enviaban
+
+Prueba real del 01-10: aprobada "Vendedora volante 30hrs pm" (Manpower), la extensión la tomó y
+no pasó nada. En la página suelta de un aviso de Computrabajo, "Postularme" es un enlace a otra
+página (`candidato.cl.computrabajo.com/match/?oi=...`): la extensión perdía el hilo y la pestaña se
+cerraba. En "Mis postulaciones" del portal no quedó enviada.
+
+**Arreglo:** `background.js` abre la aprobada en el panel de un listado (`trabajo-de-{palabra}#ID`,
+como queda al elegir una oferta en una búsqueda; el sitio carga el panel por el ID aunque el aviso
+no esté en ese listado) y `computrabajo.js` no escanea esa pestaña: espera la orden y postula con
+el botón del panel, el mismo del escaneo. `verificar-computrabajo.js` (14; con la versión anterior
+falla en 4). **Falta probarlo con una postulación real** (recargar la extensión antes).
+
 ---
 
 ## Cómo se verificó

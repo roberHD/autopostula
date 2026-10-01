@@ -74,7 +74,7 @@ async function vaciarCola() {
     }
     let resultado;
     try {
-      resultado = await applyInTab(item.url, item.titulo, item.decisionId);
+      resultado = await applyInTab(urlParaPostular(item.url, item.plataforma), item.titulo, item.decisionId, item.url);
     } catch (e) {
       // Una oferta que revienta no debe llevarse a las demás ni dejar la cola
       // trabada: se sigue con la siguiente, y esta queda pendiente para el próximo ciclo.
@@ -149,6 +149,22 @@ async function marcarBandaGrisExpirada(decisionId) {
   }
 }
 
+// Computrabajo: en la página suelta de un aviso, "Postularme" lleva a otra
+// página (candidato.cl.computrabajo.com/match/?oi=...) y la pestaña pierde el
+// hilo: ninguna aprobada de "Por decidir" llegaba a enviarse (verificado el
+// 2026-10-01, docs/extension-laborum-2026-10-01.md §10). El mismo aviso abierto
+// en el panel de un listado ("trabajo-de-{palabra}#ID", como queda al elegir
+// una oferta en una búsqueda) postula en la misma página, igual que el escaneo.
+// El panel lo carga el sitio por el ID, aunque el aviso no esté en ese listado.
+function urlParaPostular(url, plataforma) {
+  if (plataforma !== 'Computrabajo') return url;
+  const limpia = String(url || '').split('#')[0];
+  const id = (limpia.match(/-([A-F0-9]{32})$/i) || [])[1];
+  if (!id) return url;
+  const palabra = (limpia.match(/\/oferta-de-trabajo-de-([a-z0-9]+)-/i) || [])[1] || 'vendedor';
+  return 'https://cl.computrabajo.com/trabajo-de-' + palabra.toLowerCase() + '#' + id.toUpperCase();
+}
+
 // decisionId presente = viene de una aprobación de banda gris (§8.6): se le
 // pasa al content script en el mensaje DO_APPLY para que la postulación
 // resultante quede enlazada a esa decisión (ver reportarPostulacionBackend).
@@ -167,7 +183,9 @@ const TOPE_TRAS_REVISION_MS = 60 * 1000;
 // Pestañas de aprobadas abiertas ahora: tabId → { alargar(ms) }.
 const pestanasDeAprobadas = new Map();
 
-function applyInTab(url, titulo, decisionId) {
+// `urlOferta` es la dirección del aviso, la que queda en la postulación; `url`
+// es la que se abre (ver urlParaPostular).
+function applyInTab(url, titulo, decisionId, urlOferta) {
   return new Promise(resolve => {
     chrome.tabs.create({ url, active: false }, tab => {
       // Sin pestaña no hay nada que esperar: antes esto reventaba adentro del
@@ -194,7 +212,7 @@ function applyInTab(url, titulo, decisionId) {
         if (tabId !== id || info.status !== 'complete') return;
         chrome.tabs.onUpdated.removeListener(onUpdated);
         setTimeout(() => {
-          chrome.tabs.sendMessage(id, { type: 'DO_APPLY', decisionId }, res => {
+          chrome.tabs.sendMessage(id, { type: 'DO_APPLY', decisionId, url: urlOferta || url }, res => {
             if (chrome.runtime.lastError) { /* tab cerrada o sin content script */ }
             setTimeout(() => terminar(res || { success: false, expirada: false }), 3500);
           });

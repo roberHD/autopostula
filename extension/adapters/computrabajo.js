@@ -15,6 +15,30 @@ const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos, llama
         mostrarRevision, setVal, limitarTexto, esVisible, seleccionarOpcion,
         siguientePagina } = window.AP;
 
+// Abierta en un aviso puntual: el panel de un listado con "#ID" (así abre
+// background.js una aprobada de "Por decidir", ver urlParaPostular) o la
+// página suelta del aviso. Igual que en trabajando.js, esa pestaña no escanea
+// el listado sola: espera la orden de postular a ese aviso (DO_APPLY), o que se
+// lo pidan (AUTO_SCAN/FORCE_SCAN). Si no, escanearía las ofertas del listado
+// de fondo y podía postular a otras.
+const CARGADA_EN_OFERTA = /^#[A-F0-9]{32}$/i.test(location.hash) ||
+  /\/ofertas-de-trabajo\/oferta-de-trabajo-/.test(location.pathname);
+
+// Espera a que `condicion()` devuelva algo (con un observador del DOM, no con
+// pausas encadenadas que Chrome estira en las pestañas de fondo).
+function esperarA(condicion, ms) {
+  return new Promise(resolve => {
+    const ya = condicion();
+    if (ya) return resolve(ya);
+    const obs = new MutationObserver(() => {
+      const r = condicion();
+      if (r) { obs.disconnect(); clearTimeout(t); resolve(r); }
+    });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+    const t = setTimeout(() => { obs.disconnect(); resolve(condicion() || null); }, ms);
+  });
+}
+
 // El listado de Computrabajo pagina con ?p={n} (page 1 no lleva el parámetro) --
 // verificado a mano contra el sitio real (ver backend/scripts/scrape-corpus.ts).
 function urlPaginaComputrabajo(pagina) {
@@ -953,13 +977,17 @@ async function escanearMisPostulaciones() {
 // reutiliza el mismo postular() de siempre, sin pasar por evaluarTarjeta:
 // el usuario ya aprobó esta oferta puntual con el swipe en banda gris, no
 // hay nada que puntuar de nuevo.
-async function aplicarDirecto(decisionOfertaId) {
-  const id = (location.href.split('#')[0].match(/-([A-F0-9]{8,})$/i) || [])[1] || location.pathname;
-  const tituloEl = document.querySelector('h1');
-  const titulo = (tituloEl && tituloEl.textContent.trim()) || 'Oferta';
+async function aplicarDirecto(decisionOfertaId, urlOferta) {
+  const id = (location.hash.match(/^#([A-F0-9]{8,})$/i) || [])[1] ||
+    (location.href.split('#')[0].match(/-([A-F0-9]{8,})$/i) || [])[1] || location.pathname;
   AP.procesando = true;
   try {
-    return await postular(location.href, id, titulo, decisionOfertaId);
+    // El sitio carga el panel del aviso después de abrir el listado: se espera
+    // a que traiga su botón (el mismo que usa el escaneo).
+    await esperarA(() => document.querySelector('.box_detail span[offer-detail-button], [data-offers-grid-box-detail] span[offer-detail-button]'), 15000);
+    const tituloEl = document.querySelector('.box_detail p.title_offer, [data-offers-grid-box-detail] p.title_offer') || document.querySelector('h1');
+    const titulo = (tituloEl && tituloEl.textContent.trim()) || 'Oferta';
+    return await postular(urlOferta || location.href, id, titulo, decisionOfertaId);
   } finally {
     AP.procesando = false;
   }
@@ -976,6 +1004,7 @@ async function aplicarDirecto(decisionOfertaId) {
 // acabe -- la ráfaga pasaría al siguiente paso con los estados a medias.
 AP.escanear = AP.sinReentrada(function () {
   if (location.pathname.indexOf('/candidate/match') !== -1) return;
+  if (CARGADA_EN_OFERTA && !AP.escaneoPedido) return;
   return escanear();
 });
 AP.aplicarDirecto = aplicarDirecto;
@@ -983,7 +1012,7 @@ AP.onInit = function() {
   console.log('[AP-CT] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible);
   if (location.pathname.indexOf('/candidate/match') !== -1) {
     setTimeout(escanearMisPostulaciones, 1500);
-  } else if (AP.activo) {
+  } else if (AP.activo && !CARGADA_EN_OFERTA) {
     msg('Activado — escaneando…', '#16A34A');
     setTimeout(() => AP.escanear(), 1800);
   }
