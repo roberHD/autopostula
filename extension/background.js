@@ -1124,6 +1124,10 @@ async function escanearAutomatico(disparador) {
   if (plataformas.includes('Laborum')) {
     pasos.push({ tipo: 'estados', portal: 'Laborum', url: 'https://www.laborum.cl/postulantes/postulaciones' });
   }
+  // §5, paso 6 (ver adapters/trabajando.js).
+  if (plataformas.includes('Trabajando')) {
+    pasos.push({ tipo: 'estados', portal: 'Trabajando', url: 'https://www.trabajando.cl/mis-postulaciones' });
+  }
 
   // Portales conectados pero ninguno con adaptador de búsqueda automática.
   if (!pasos.length) return sinBusqueda('sin_portales');

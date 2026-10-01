@@ -879,12 +879,103 @@ async function aplicarDirecto(decisionOfertaId) {
   }
 }
 
+// ── Seguimiento de estados en "Mis postulaciones" ───────────────
+// docs/estado-real-de-postulaciones.md §5, paso 6. Verificado contra el sitio
+// real el 2026-09-30, con postulaciones de verdad:
+//
+// En la tabla de trabajando.cl/mis-postulaciones el título enlaza a "#": la
+// fila no trae el id de la oferta. La página es Nuxt y llega renderizada
+// desde el servidor con sus datos en <script id="__NUXT_DATA__">, bajo la
+// clave "mis-postulaciones-combinadas": cada postulación con `linkOferta`
+// ("/trabajo/6131422-…", el mismo id que getId() guarda al postular) y
+// `etapaCodigo`. Se lee de ahí, sin pedir nada.
+//
+// Límite: ese bloque trae las 20 más recientes; el resto la página lo pide
+// al hacer scroll a api.trabajando.com con la sesión de la persona. Son las
+// recientes las que cambian de etapa, así que se empieza por ahí.
+//
+// Los códigos salen del código de la página (el mapa de etapas de
+// "Explicación de cada etapa"), no de suponerlos. AutoPostula no tiene
+// "Contratado": queda FINALIZADO, que es el cierre del proceso.
+const MAPA_ESTADO_TRABAJANDO = {
+  'POSTULACION_ENVIADA': 'ENVIADO',
+  'CV_RECIBIDO': 'ENVIADO',
+  'CV_VISTO': 'VISTO',
+  'CV_EN_PROCESO': 'EN_PROCESO',
+  'CV_FINALISTA': 'FINALISTA',
+  'CV_CONTRATADO': 'FINALIZADO',
+  'CV_DESCARTADO': 'RECHAZADO',
+  'PROCESO_FINALIZADO_DESACTIVADO': 'FINALIZADO',
+  'PROCESO_FINALIZADO_EXPIRADO': 'FINALIZADO'
+  // SIN_INFORMACION: no dice nada, no se manda.
+};
+
+function enMisPostulaciones() {
+  return location.pathname.replace(/\/+$/, '') === '/mis-postulaciones';
+}
+
+// __NUXT_DATA__ es una lista plana donde los objetos guardan índices a sus
+// valores. Basta con encontrar los objetos de postulación (los que tienen
+// linkOferta y etapaCodigo) y leer esos dos valores, sin decodificar todo.
+function postulacionesDelPayload() {
+  const nodo = document.getElementById('__NUXT_DATA__');
+  if (!nodo) return null;
+  let datos;
+  try { datos = JSON.parse(nodo.textContent); } catch (e) { return null; }
+  if (!Array.isArray(datos)) return null;
+  const valor = (i) => (typeof i === 'number' && i >= 0 && i < datos.length ? datos[i] : undefined);
+  const vistas = new Map();
+  for (const item of datos) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    if (!('linkOferta' in item) || !('etapaCodigo' in item)) continue;
+    const link = valor(item.linkOferta);
+    const etapa = valor(item.etapaCodigo);
+    const id = typeof link === 'string' ? getId(link) : null;
+    if (id && typeof etapa === 'string') vistas.set(id, etapa);
+  }
+  return [...vistas].map(([externalId, etapa]) => ({ externalId, etapa }));
+}
+
+async function escanearMisPostulaciones() {
+  const filas = postulacionesDelPayload();
+  if (!filas) {
+    console.warn('[AP-TJ] "Mis postulaciones" sin __NUXT_DATA__: no se pudieron leer los estados');
+    AP.reportarEscaneoTerminado();
+    return;
+  }
+  msg('Revisando estados de postulaciones…', 'trabajando');
+  let actualizadas = 0;
+  const desconocidos = new Set();
+  for (const fila of filas) {
+    const estado = MAPA_ESTADO_TRABAJANDO[fila.etapa];
+    if (!estado) { if (fila.etapa !== 'SIN_INFORMACION') desconocidos.add(fila.etapa); continue; }
+    const resultado = await AP.actualizarEstadoPostulacion({
+      platformNombre: 'Trabajando',
+      externalId: fila.externalId,
+      estado: estado
+    });
+    if (resultado && !resultado.error && !resultado.sinCambios) actualizadas++;
+  }
+  // Un código nuevo de Trabajando no se adivina: se deja a la vista para sumarlo al mapa.
+  if (desconocidos.size) console.warn('[AP-TJ] etapas sin mapear:', [...desconocidos]);
+  msg(actualizadas ? '✓ ' + actualizadas + ' estado(s) actualizado(s)' : 'Estados al día', '#16A34A');
+  AP.reportarEscaneoTerminado();
+}
+
 // ── Registro en el núcleo compartido (core.js) ──────────────────
-AP.escanear = AP.sinReentrada(escanear);
+// En "Mis postulaciones" no hay tarjetas de ofertas: el escaneo de listados
+// diría "Sin tarjetas" y avisaría que terminó antes que el de estados (mismo
+// caso que Computrabajo y Laborum).
+AP.escanear = AP.sinReentrada(function () {
+  if (enMisPostulaciones()) return;
+  return escanear();
+});
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function() {
   console.log('[AP-TJ] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible, 'abierta en una oferta:', CARGADA_EN_OFERTA);
-  if (AP.activo && !CARGADA_EN_OFERTA) {
+  if (enMisPostulaciones()) {
+    setTimeout(escanearMisPostulaciones, 1500);
+  } else if (AP.activo && !CARGADA_EN_OFERTA) {
     msg('Activado — escaneando…', '#16A34A');
     setTimeout(() => AP.escanear(), 1800);
   }

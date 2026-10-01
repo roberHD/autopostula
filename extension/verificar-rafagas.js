@@ -873,12 +873,12 @@ bloque(async () => {
   const dosObjetivos = { objetivos: [{ etiqueta: 'vendedor', peso: 1 }, { etiqueta: 'cajero', peso: 0.5 }] };
   b = await nuevo(dosObjetivos);
   await pulsar(b);
-  check('el botón recorre TODOS los objetivos (2 objetivos × 1 portal = 2 pasos)', b.storageLocal.rafaga.pasos.length === 2, b.storageLocal.rafaga.pasos);
+  check('el botón recorre TODOS los objetivos (2 objetivos × 1 portal = 2 pasos de búsqueda)', b.storageLocal.rafaga.pasos.filter(p => p.tipo === 'busqueda').length === 2, b.storageLocal.rafaga.pasos);
   check('...y no consume el contador de ciclos (no descuadra la alternancia de las automáticas)', b.storageLocal.cicloBusquedaAutomatica === undefined);
   b = await nuevo(dosObjetivos);
   await b.ctx.quizasRafaga('chequeo');
   await tick();
-  check('control: la automática, en su primer ciclo, sigue visitando solo el objetivo principal (1 paso)', b.storageLocal.rafaga.pasos.length === 1 && b.storageLocal.cicloBusquedaAutomatica === 1);
+  check('control: la automática, en su primer ciclo, sigue visitando solo el objetivo principal (1 paso de búsqueda)', b.storageLocal.rafaga.pasos.filter(p => p.tipo === 'busqueda').length === 1 && b.storageLocal.cicloBusquedaAutomatica === 1);
 
   // ── Un fallo por dentro igual contesta ──
   b = await nuevo({});
@@ -1240,11 +1240,13 @@ bloque(async () => {
   await tick();
   b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: {} }, { tab: { id: b.storageLocal.rafaga.tabActual } });
   await tick();
-  // Tercer paso: con Laborum conectado, la ráfaga también revisa sus estados
-  // en "Mis postulaciones" (docs/estado-real-de-postulaciones.md §5, paso 5).
+  // Con Laborum y Trabajando conectados, la ráfaga también revisa sus estados
+  // en "Mis postulaciones" (docs/estado-real-de-postulaciones.md §5, pasos 5 y 6).
   b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: {} }, { tab: { id: b.storageLocal.rafaga.tabActual } });
   await tick();
-  check('control: la ráfaga (dos búsquedas + estados de Laborum) terminó', b.storageLocal.rafaga.estado === 'terminada');
+  b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: {} }, { tab: { id: b.storageLocal.rafaga.tabActual } });
+  await tick();
+  check('control: la ráfaga (dos búsquedas + estados de Laborum y Trabajando) terminó', b.storageLocal.rafaga.estado === 'terminada');
   await puede(b, tab);
   check('con la ráfaga TERMINADA, su pestaña vieja ya no cuenta como de la ráfaga (no lleva origen)', !/origen=/.test(ultimoPuede(b)), ultimoPuede(b));
 
@@ -1651,6 +1653,9 @@ bloque(async () => {
   check('...la ráfaga sigue con la búsqueda de ofertas nuevas (paso 2)', r.estado === 'en_curso' && r.pasoActual === 1, { estado: r.estado, paso: r.pasoActual });
   b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: { postular: 3 } }, { tab: { id: r.tabActual } });
   await tick(30);
+  // Con Trabajando conectado, después de buscar se revisan sus estados (§5, paso 6).
+  b.enviarMensaje({ type: 'ESCANEO_TERMINADO', conteos: {} }, { tab: { id: b.storageLocal.rafaga.tabActual } });
+  await tick(30);
   r = b.storageLocal.rafaga;
   check('al terminar la búsqueda, el resumen suma las aprobadas y las nuevas (2 + 3)', r.estado === 'terminada' && r.conteos.postuladas === 5, r.conteos);
   check('...y así se reporta al backend (el ícono y la tarjeta del panel no cuentan de menos)', b.reportesRafaga().slice(-1)[0].body.conteos.postuladas === 5, b.reportesRafaga().slice(-1)[0].body);
@@ -1667,7 +1672,7 @@ bloque(async () => {
   b = await nuevo({ aprobadas: [] });
   await b.ctx.quizasRafaga('chequeo');
   await tick(50);
-  check('sin aprobadas por enviar NO hay paso de aprobadas: la ráfaga abre la búsqueda directo', b.storageLocal.rafaga.pasos.length === 1 && b.storageLocal.rafaga.pasos[0].tipo === 'busqueda' && b.aplicadas.length === 0, b.storageLocal.rafaga.pasos);
+  check('sin aprobadas por enviar NO hay paso de aprobadas: la ráfaga abre la búsqueda directo', !b.storageLocal.rafaga.pasos.some(p => p.tipo === 'aprobadas') && b.storageLocal.rafaga.pasos[0].tipo === 'busqueda' && b.aplicadas.length === 0, b.storageLocal.rafaga.pasos);
 
   // ── Todos los disparadores ──
   b = await nuevo({ aprobadas: [aprobada(1)], estado: { disponibleEnPlan: false, modo: 'prueba', pruebaRestantes: 5, pruebaTotal: 5 } });
@@ -1684,11 +1689,11 @@ bloque(async () => {
   b.storageLocal.config = { soloObservar: true };
   await b.ctx.quizasRafaga('chequeo');
   await tick(50);
-  check('en solo observar no se encola nada (DO_APPLY lo rechazaría) y la ráfaga sigue con su búsqueda', b.aplicadas.length === 0 && b.storageLocal.rafaga.pasos.every(p => p.tipo === 'busqueda'), { aplicadas: b.aplicadas, pasos: b.storageLocal.rafaga.pasos });
+  check('en solo observar no se encola nada (DO_APPLY lo rechazaría) y la ráfaga sigue con su búsqueda', b.aplicadas.length === 0 && !b.storageLocal.rafaga.pasos.some(p => p.tipo === 'aprobadas'), { aplicadas: b.aplicadas, pasos: b.storageLocal.rafaga.pasos });
   b = await nuevo({ aprobadas: [aprobada(1)], perfil: { postulacionHabilitada: false } });
   await b.ctx.quizasRafaga('chequeo');
   await tick(50);
-  check('con la cuenta en modo prueba (postulacionHabilitada: false) tampoco', b.aplicadas.length === 0 && b.storageLocal.rafaga.pasos.every(p => p.tipo === 'busqueda'), b.aplicadas);
+  check('con la cuenta en modo prueba (postulacionHabilitada: false) tampoco', b.aplicadas.length === 0 && !b.storageLocal.rafaga.pasos.some(p => p.tipo === 'aprobadas'), b.aplicadas);
 
   // ── Sin nada que buscar, lo aprobado igual se envía (no depende de tener objetivo ni portales) ──
   b = await nuevo({ aprobadas: [aprobada(1)], estado: { objetivos: [], cargoObjetivo: null } });
