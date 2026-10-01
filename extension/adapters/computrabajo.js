@@ -154,6 +154,18 @@ function extraerEmpresa(tarjeta) {
   return linea ? linea.textContent.trim().replace(/^\d+(?:,\d+)?\s+/, '') : '';
 }
 
+// La búsqueda puede venir filtrada por jornada en la URL ("-jornada-part-time",
+// como la arma la ráfaga: ver URL_BUSQUEDA_POR_PORTAL en background.js). Todos
+// sus avisos dicen "Jornada part time" en la ficha (verificado el 2026-10-01
+// en la búsqueda de vendedor en la RM), pero la tarjeta no lo muestra, y acá
+// los dudosos no se abren (ver candidatosGris en escanear): sin esto, todo lo
+// que no dijera "part time" en el título terminaba en "Por decidir" por "no
+// dice la jornada". Mismo arreglo que en Laborum
+// (docs/extension-laborum-2026-10-01.md §1).
+function jornadaDelListado() {
+  return /-jornada-part-time\b/.test(location.pathname) ? 'Jornada part time' : '';
+}
+
 // ── Evaluar tarjeta (scorer local si está activo, si no el filtro viejo) ──
 // docs/rediseno-filtrado-ofertas.md §6 -- ver AP.evaluarOferta en core.js.
 function evaluarTarjeta(tarjeta) {
@@ -162,9 +174,9 @@ function evaluarTarjeta(tarjeta) {
     titulo: tituloDeTarjeta(tarjeta),
     empresa: extraerEmpresa(tarjeta),
     // El cuerpo del aviso no está disponible a nivel de tarjeta (recién se lee
-    // al abrir, en extraerTextoAviso) -- se deja vacío acá, el scorer igual
-    // funciona bien porque el título pesa x3 contra el x0.5 del cuerpo.
-    cuerpo: '',
+    // al abrir, en extraerTextoAviso): va solo la jornada, cuando la búsqueda
+    // viene filtrada por ella (jornadaDelListado).
+    cuerpo: jornadaDelListado(),
     ubicacion: extraerUbicacion(tarjeta),
   };
   return AP.evaluarOferta(campos);

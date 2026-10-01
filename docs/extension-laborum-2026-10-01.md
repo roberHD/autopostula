@@ -13,7 +13,7 @@
 
 ## 0. Lo esencial
 
-Lo que se veía en el panel de Roberto el 01-10: 31 ofertas de Laborum en "Por decidir", casi todas
+Lo que se veía en el panel de Roberto el 01-10: 31 ofertas de Laborum en "Por decidir", 22 de ellas
 con "no dice la jornada, y buscas part time"; una incompleta llamada "Oferta" con "No se encontró
 el botón para postular"; y la última ráfaga con "1 búsqueda no terminó".
 
@@ -26,6 +26,8 @@ el botón para postular"; y la última ráfaga con "1 búsqueda no terminó".
 | Aprobadas de "Por decidir" | La pestaña que abre una aprobada apunta directo al aviso, y esa página tiene enlaces a 5 avisos relacionados. La extensión los escaneaba como si fueran un listado y podía irse a postular a otro antes de la orden | §4 |
 | Lo que la IA no sabe | Casi todos los avisos de retail preguntan la "pretensión de renta". Sin "Revisar antes de enviar", la postulación quedaba incompleta sin preguntarle nada a nadie | §5 |
 | El resumen de la ráfaga | Cada aviso es una página nueva y los conteos partían de cero en cada una: las postulaciones de Laborum no llegaban al resumen | §6 |
+| Computrabajo, lo mismo | La ráfaga busca con su filtro `-jornada-part-time`, la tarjeta no muestra la jornada y en Computrabajo los dudosos no se abren: lo que no dijera "part time" en el título iba a "Por decidir" (16 de las 65 de Computrabajo que había en el panel) | §7 |
+| Las horas del título | "Vendedor/a 30 hrs", "Vendedor 20 horas" quedaban en duda; "Vendedor/a Dermocosmética 42 hrs", dentro del filtro part time, pasaba por part time | §8 |
 
 ---
 
@@ -123,13 +125,43 @@ decidir, descartadas, observadas) y `terminarEscaneo()` lo manda todo junto a la
 terminar. Antes llegaba solo lo de la última pasada por el listado. "Postuladas" cuenta solo las
 que Laborum confirmó, no las que se intentaron.
 
+## §7. Computrabajo: el mismo problema con la jornada
+
+Lo que entró el 01-10 a "Por decidir" desde Computrabajo decía, todo, "no dice la jornada":
+"Vendedora volante 30hrs pm", "Vendedor Tienda deportiva / Cerrillos Plaza", "Promo/Vendedor(as)
+Mall Plaza Oeste"… La ráfaga busca en `trabajo-de-vendedor-en-rmetropolitana-jornada-part-time`, y
+los avisos de ese listado dicen "Jornada part time" en su ficha (se abrieron 6 en el sitio real: los
+6 lo decían), pero la tarjeta no lo muestra, y en Computrabajo los dudosos van directo a "Por
+decidir" sin abrirse (se sacó la Etapa 2 el 2026-09-22).
+
+**Arreglo** (`adapters/computrabajo.js`): `jornadaDelListado()`, igual que en Laborum. Con las 20
+tarjetas reales de esa búsqueda y un perfil como el de Roberto: antes 3 para postular, 3 en "Por
+decidir" y 14 descartadas; ahora 5 para postular, ninguna en "Por decidir" y 15 descartadas (la de
+42 horas, §8). Trabajando no lo necesita: su búsqueda no trae filtro de jornada en la URL, y sus
+dudosos sí se abren y se leen con la ficha.
+
+## §8. Las horas del título
+
+En Chile la jornada parcial es de hasta 30 horas semanales (Código del Trabajo, art. 40 bis) y la
+completa, de 40 a 45. Muchos títulos lo dicen así, sin "part time": "Vendedor/a 30 hrs RayBan",
+"Vendedor 20 horas - La Dehesa", "Asistente de ventas 30 HR", "Ejecutivo de ventas 3HRS DIARIAS".
+Quedaban en duda. Y "Vendedor/a Dermocosmética 42 hrs", publicado dentro del filtro part time de
+Computrabajo, con §7 se habría postulado como part time.
+
+**Arreglo** (`core.js`, `AP_JORNADA_HORAS_TITULO`): en el título, 15 a 30 horas (sin 24) o hasta 6
+diarias es part time; 40 a 45, u 8 a 10 diarias, es jornada completa. Solo en el título: en la
+descripción "de 9 a 18 hrs" es un horario. Tampoco cuentan "24 horas" (una farmacia), "12 horas"
+(un turno) ni lo que viene después de " a ", " hasta " o un guion ("de 10 a 18 hrs"). La "a" tiene
+que ir suelta: "Vendedor/a 30 hrs" sí es una jornada. 15 comprobaciones nuevas en
+`verificar-scorer.js`.
+
 ---
 
 ## Cómo se verificó
 
 - **Los datos:** en el panel de Roberto (`/api/banda-gris`, `/api/applications`, solo lectura):
-  31 de Laborum en "Por decidir" con `detalleAviso.jornada` "Part-time" o "Full-time" y la razón
-  "no dice la jornada"; la incompleta "Oferta / No se encontró el botón para postular".
+  22 de las 31 de Laborum en "Por decidir" con la razón "no dice la jornada" y, en `detalleAviso`, la
+  jornada "Part-time" o "Full-time" (16 de 65 en Computrabajo, 2 de 30 en Trabajando); la incompleta "Oferta / No se encontró el botón para postular".
 - **El sitio sin sesión** (navegador integrado, sin la extensión): tarjetas del listado, ficha,
   `#descripcion-aviso`, enlaces a avisos relacionados en la página de un aviso, el botón vacío y
   oculto antes de pintar, y la barra `#sticky-postular-bar` con el formulario "Sueldo pretendido".
@@ -151,9 +183,11 @@ que Laborum confirmó, no las que se intentaron.
   - **Falta un dato:** con la IA diciendo que no sabe la renta, apareció "Falta información para
     postular" con las 4 preguntas y la de renta marcada; "Saltar esta oferta" no envió nada y el
     historial quedó con "Saltada: faltaban respuestas (pretensión de renta)".
-- **Suites** (`node extension/verificar-*.js`): 9 suites, 683 comprobaciones, 0 fallos. Nueva:
+- **Suites** (`node extension/verificar-*.js`): 10 suites, 704 comprobaciones, 0 fallos. Nuevas:
   `verificar-laborum.js` (26), que con la versión anterior falla en 8: el aviso de "terminado"
-  mientras postula, la búsqueda part time en duda y la aprobada que se iba a un aviso relacionado.
+  mientras postula, la búsqueda part time en duda y la aprobada que se iba a un aviso relacionado;
+  `verificar-computrabajo.js` (6) y las horas del título en `verificar-scorer.js` (15). El banco de
+  casos del servidor (`scripts/verificar-banco-de-casos.ts`) sigue pasando.
 
 ## Lo que queda
 
