@@ -31,7 +31,7 @@ export async function PUT(request: Request) {
   if (!userId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
-  const { usarScorerLocal, amplitud } = body || {};
+  const { usarScorerLocal, amplitud, calibrarUmbral } = body || {};
   const palabrasIncluir = body?.palabrasIncluir !== undefined ? listaDeTextos(body.palabrasIncluir, 50, 80) : undefined;
   const palabrasExcluir = body?.palabrasExcluir !== undefined ? listaDeTextos(body.palabrasExcluir, 50, 80) : undefined;
   const modalidad = MODALIDADES.has(body?.modalidad) ? body.modalidad : undefined;
@@ -58,6 +58,15 @@ export async function PUT(request: Request) {
       // amplitud NO recompila el perfil -- la expansión es determinista y se
       // resuelve al servir el perfil a la extensión, sin gastar IA.
       ...(esAmplitud(amplitud) ? { amplitud } : {}),
+      // docs/revision-scorer-2026-09-30.md §7: apagar el ajuste vuelve al
+      // umbral normal en la próxima revisión de la extensión. Prenderlo borra
+      // la fecha del último cálculo, para que /api/extension/perfil lo haga de
+      // inmediato en vez de esperar la semana.
+      ...(typeof calibrarUmbral === "boolean"
+        ? calibrarUmbral
+          ? { calibrarUmbral: true, umbralCalibradoEn: null }
+          : { calibrarUmbral: false, umbralPostularCalibrado: null, umbralCalibradoCon: null, umbralCalibradoEn: null }
+        : {}),
     },
   });
 

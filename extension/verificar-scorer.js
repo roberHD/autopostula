@@ -496,6 +496,148 @@ check('...y "pedro aguirre cerda", "isla de maipo"', AP.formatearRazonCorta({ ti
   check('modo objetivo: una mencion de titulo no descarta nada', rCerradoConTitulo.banda === 'postular');
 }
 
+// ── docs/revision-scorer-2026-09-30.md: compuertas, relevancia y preferencias ──
+// Escritas antes del arreglo (§8.1), con el perfil de §2. Criterios de §9.
+{
+  const perfilDoc = {
+    roles: [{ canonico: 'vendedor', sinonimos: [], peso: 1.0 }],
+    vetos: [],
+    senales: [{ patron: 'part time', delta: 25 }, { patron: 'comisiones', delta: 25 }],
+    ubicacion: { comunas: ['nunoa'], aceptaRemoto: false },
+    jornada: 'cualquiera', umbralPostular: 65, umbralGris: 45,
+  };
+
+  // §2.1 / §9.1: dos palabras del gusto convertían un aviso ajeno en postulación.
+  const r1 = AP.puntuarOferta({ titulo: 'Bodeguero Part Time con comisiones', empresa: '', cuerpo: 'El bodeguero coordina con el vendedor de turno', ubicacion: 'Ñuñoa, R.Metropolitana' }, perfilDoc);
+  check('§2.1: rol solo en el cuerpo + dos señales -> gris, no postula (antes: postular con 80)', r1.banda === 'gris', r1);
+  check('§2.1: primero va por qué no postula: el cargo no está en el título', r1.razones[0].tipo === 'rol_fuera_del_titulo' && r1.razones[0].campo === 'cuerpo', r1.razones);
+  // Lo mismo con el rol solo en el nombre de la empresa (el bug de 2026-09-04).
+  const r1b = AP.puntuarOferta({ titulo: 'Bodeguero nocturno part time con comisiones', empresa: 'Vendedores Unidos SpA', cuerpo: '', ubicacion: 'Ñuñoa' }, perfilDoc);
+  check('§4.1: rol solo en el nombre de la empresa + señales -> no postula', r1b.banda !== 'postular', r1b);
+
+  // §2.2 / §9.2: una señal tapaba el "no sé dónde queda".
+  const r2 = AP.puntuarOferta({ titulo: 'Vendedor de tienda part time', empresa: '', cuerpo: '', ubicacion: 'Gran Santiago' }, perfilDoc);
+  check('§2.2: comuna ilegible + señal -> gris, no postula (antes: postular con 85)', r2.banda === 'gris', r2);
+  check('§4.2: la duda de ubicación ya no resta 40: es un tope, y va primero', r2.score >= 65 && r2.razones[0].tipo === 'ubicacion_desconocida', r2);
+
+  // §2.3 / §9.3, con la ubicación que el documento omitía (sin ella el -40 de
+  // ubicación ya lo dejaba en gris y la prueba pasaba sin arreglar nada).
+  const perfilComision = Object.assign({}, perfilDoc, { senales: [{ patron: 'comision pura', delta: -40 }] });
+  const r3 = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Renta: comision pura sin sueldo base', ubicacion: 'Ñuñoa, R.Metropolitana' }, perfilComision);
+  check('§2.3: una señal negativa en el cuerpo pesa entera (-40, no -12) -> no postula', r3.banda !== 'postular' && r3.razones.some((x) => x.tipo === 'senal' && x.delta === -40), r3);
+
+  // §9.5: con el rol en el título y todo en orden, sigue postulando.
+  const r5 = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: '', ubicacion: 'Ñuñoa' }, perfilDoc);
+  check('§9.5: rol en el título y todo en orden -> postula', r5.banda === 'postular', r5);
+
+  // §4.2: un veto que aparece solo en la descripción ya no resta 60 (que casi
+  // siempre terminaba en descartar): la oferta pasa a "Por decidir".
+  const perfilVeto = Object.assign({}, perfilDoc, { senales: [], vetos: [{ patron: 'call center', razon: 'no quiere call center' }] });
+  const rVeto = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Apoyo ocasional al call center de la tienda', ubicacion: 'Ñuñoa' }, perfilVeto);
+  check('§4.2: veto solo en la descripción -> Por decidir (antes: descartar con 40)', rVeto.banda === 'gris' && rVeto.razones[0].tipo === 'veto' && rVeto.razones[0].donde === 'cuerpo', rVeto);
+  const rVetoTitulo = AP.puntuarOferta({ titulo: 'Vendedor call center', empresa: '', cuerpo: '', ubicacion: 'Ñuñoa' }, perfilVeto);
+  check('§4.2: veto en el título sigue descartando', rVetoTitulo.banda === 'descartar' && rVetoTitulo.score === 0);
+
+  // §4.2: ningún tope se compensa con señales.
+  const perfilJornada = Object.assign({}, perfilDoc, { jornada: 'part_time', senales: [{ patron: 'comisiones', delta: 25 }] });
+  const rJornada = AP.puntuarOferta({ titulo: 'Vendedor con comisiones', empresa: '', cuerpo: '', ubicacion: 'Ñuñoa' }, perfilJornada);
+  check('§4.2: jornada sin confirmar + señal -> sigue en gris', rJornada.banda === 'gris' && rJornada.razones[0].tipo === 'jornada_desconocida', rJornada);
+
+  // Un descarte por puntaje no se convierte en "Por decidir" por tener un tope.
+  const rBajo = AP.puntuarOferta({ titulo: 'Bodeguero', empresa: '', cuerpo: 'coordina con el vendedor', ubicacion: 'Gran Santiago' }, Object.assign({}, perfilDoc, { senales: [] }));
+  check('un puntaje bajo (30) se descarta aunque además haya duda de ubicación', rBajo.banda === 'descartar', rBajo);
+
+  // Modo "cualquier trabajo": el rol no es el eje, así que una mención en el
+  // cuerpo no pone tope.
+  const perfilAbiertoDoc = Object.assign({}, perfilDoc, { modo: 'abierto', senales: [] });
+  const rAbiertoCuerpo = AP.puntuarOferta({ titulo: 'Reponedor', empresa: '', cuerpo: 'apoya al vendedor de turno', ubicacion: 'Ñuñoa' }, perfilAbiertoDoc);
+  check('modo abierto: un rol solo en el cuerpo no pone tope', !rAbiertoCuerpo.razones.some((x) => x.tipo === 'rol_fuera_del_titulo'), rAbiertoCuerpo);
+
+  check('razón corta del rol fuera del título', AP.formatearRazonCorta(r1.razones[0]) === 'el cargo ("vendedor") no está en el título, solo en la descripción', AP.formatearRazonCorta(r1.razones[0]));
+}
+
+// Revisión del documento, §2.4: las señales se flexionaban como si fueran
+// cargos ("moda" -> mod(o|a|os|as)), y con el perfil real de Roberto "atiende
+// de modo cordial" sumaba puntos. Ahora solo aceptan el plural.
+{
+  const pSen = { roles: [{ canonico: 'vendedor', sinonimos: [], peso: 0.6 }], senales: [{ patron: 'moda', delta: 20 }, { patron: 'calzado', delta: 15 }, { patron: 'comisión', delta: 15 }], umbralPostular: 65, umbralGris: 45 };
+  const tieneSenal = (r, patron) => r.razones.some((x) => x.tipo === 'senal' && x.patron === patron);
+  const rModo = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Atiende de modo cordial a los clientes', ubicacion: '' }, pSen);
+  check('señal "moda" no calza con "modo"', !tieneSenal(rModo, 'moda'), rModo.razones);
+  check('...y una oferta en Por decidir (60) no sube a postular por "de modo"', rModo.banda === 'gris', rModo);
+  const rCalzada = AP.puntuarOferta({ titulo: 'Vendedor', empresa: '', cuerpo: 'Local en la calzada principal del mall', ubicacion: '' }, pSen);
+  check('señal "calzado" no calza con "calzada"', !tieneSenal(rCalzada, 'calzado'), rCalzada.razones);
+  const rModas = AP.puntuarOferta({ titulo: 'Vendedor de modas', empresa: '', cuerpo: '', ubicacion: '' }, pSen);
+  check('señal "moda" sí calza con "modas" (plural)', tieneSenal(rModas, 'moda'), rModas.razones);
+  const rComisiones = AP.puntuarOferta({ titulo: 'Vendedor con comisiones', empresa: '', cuerpo: '', ubicacion: '' }, pSen);
+  check('señal "comisión" sí calza con "comisiones" (plural)', tieneSenal(rComisiones, 'comisión'), rComisiones.razones);
+}
+
+// Revisión del documento, §2.5: la ubicación a nivel región. Con toda la RM
+// declarada, una oferta "Región Metropolitana" quedaba como "no sé dónde
+// queda" (-40; con §4.2 habría quedado para siempre en Por decidir).
+{
+  const comunasRM = AP.COMUNAS_CL.filter((c) => c.region === 'RM').map((c) => c.nombre);
+  const pRM = { roles: [{ canonico: 'vendedor', sinonimos: [], peso: 1 }], ubicacion: { comunas: comunasRM, aceptaRemoto: false }, umbralPostular: 65, umbralGris: 45 };
+  const pDos = Object.assign({}, pRM, { ubicacion: { comunas: ['nunoa', 'providencia'], aceptaRemoto: false } });
+  const oferta = (ubicacion) => ({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: '', ubicacion });
+  for (const u of ['Región Metropolitana', 'R.Metropolitana', 'Metropolitana de Santiago', 'Gran Santiago']) {
+    const r = AP.puntuarOferta(oferta(u), pRM);
+    check('toda la RM: "' + u + '" está dentro -> postula', r.banda === 'postular', r);
+  }
+  const rQuinta = AP.puntuarOferta(oferta('Región V'), pRM);
+  check('toda la RM: "Región V" está fuera -> descarta por ubicación', rQuinta.banda === 'descartar' && rQuinta.razones[0].tipo === 'ubicacion' && rQuinta.razones[0].ofertaEn === 'Valparaíso', rQuinta);
+  const rParcial = AP.puntuarOferta(oferta('Región Metropolitana'), pDos);
+  check('dos comunas de la RM: "Región Metropolitana" no dice cuál -> gris', rParcial.banda === 'gris' && rParcial.razones[0].tipo === 'ubicacion_desconocida', rParcial);
+  const rLagos = AP.puntuarOferta(oferta('Región de Los Lagos'), pDos);
+  check('dos comunas de la RM: una oferta en Los Lagos -> descarta', rLagos.banda === 'descartar' && rLagos.razones[0].tipo === 'ubicacion', rLagos);
+  const rRomano = AP.puntuarOferta(oferta('Región X'), pDos);
+  check('"Región X" es Los Lagos, no "Región XI" ni "XIV" -> descarta', rRomano.banda === 'descartar' && rRomano.razones[0].ofertaEn === 'Los Lagos', rRomano);
+  const rOHiggins = AP.puntuarOferta(oferta("Región del Libertador Gral. Bernardo O'Higgins"), pDos);
+  check('el nombre largo de O\'Higgins se reconoce -> descarta', rOHiggins.banda === 'descartar' && rOHiggins.razones[0].ofertaEn === "O'Higgins", rOHiggins);
+  // Reconocer una región puede descartar: una calle o una estación que se llama
+  // igual no puede bastar. Sin "región" delante, queda la duda.
+  for (const u of ["Av. Libertador Bernardo O'Higgins 1234", 'Ñuble', 'Tarapacá 1150', 'Magallanes 555']) {
+    const r = AP.puntuarOferta(oferta(u), pDos);
+    check('"' + u + '" no basta para decir la región -> gris, no descarta', r.banda === 'gris' && r.razones[0].tipo === 'ubicacion_desconocida', r);
+  }
+
+  // El aviso ofrece "Agregar <comuna> a mi perfil" cuando lo más descartado fue
+  // por comuna. Una región no es una comuna que se pueda sumar ("Los Lagos"
+  // sumaría la comuna de Los Ríos).
+  check('el descarte por región viene marcado con la región', rQuinta.razones[0].region === 'VA' && rLagos.razones[0].region === 'LL', [rQuinta.razones[0], rLagos.razones[0]]);
+  const porRegion = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 3 }, [rQuinta.razones[0], rQuinta.razones[0], { tipo: 'ubicacion', ofertaEn: 'santiago' }], false);
+  check('si lo más descartado fue una región, el aviso lo dice y no ofrece agregarla como comuna', porRegion.accion === null && porRegion.texto === '3 descartadas — la mayoría: es en la región de Valparaíso, y no buscas ahí', porRegion);
+  const porComuna = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 3 }, [{ tipo: 'ubicacion', ofertaEn: 'santiago' }, { tipo: 'ubicacion', ofertaEn: 'santiago' }, rQuinta.razones[0]], false);
+  check('...y si fue una comuna, la ofrece aunque haya algún descarte por región', porComuna.accion && porComuna.accion.comuna === 'santiago', porComuna);
+  check('la RM se nombra como tal', AP.formatearRazonCorta({ tipo: 'ubicacion', ofertaEn: 'Metropolitana de Santiago', region: 'RM' }) === 'es en la Región Metropolitana, y no buscas ahí');
+}
+
+// Revisión del documento, §6: lo que el scorer evaluó viaja con cada decisión
+// y cada descarte, para poder volver a correrlo sobre ellos (banco de casos).
+{
+  const original = AP.cfg;
+  AP.cfg = { scorer: { usarScorerLocal: true, perfilCompilado: perfil, perfilDesactualizado: false, versionPerfil: 7 } };
+  const r = AP.evaluarOferta({ titulo: 'Vendedor de tienda', empresa: 'Falabella', cuerpo: 'x'.repeat(5000), ubicacion: 'Ñuñoa' });
+  check('evaluarOferta devuelve lo que evaluó, con la versión del perfil', r.entrada && r.entrada.titulo === 'Vendedor de tienda' && r.entrada.ubicacion === 'Ñuñoa' && r.entrada.versionPerfil === 7 && r.entrada.cuerpo.length === 4000, r.entrada);
+  const enviados = [];
+  const enviarOriginal = ctx.chrome.runtime.sendMessage;
+  ctx.chrome.runtime.sendMessage = (m) => { enviados.push(m); };
+  AP.reportarDescartes([
+    { externalId: '1', titulo: 'Vendedor de tienda', empresa: 'Falabella', url: null, razon: { tipo: 'sin_rol' } },
+    { externalId: '2', titulo: 'Vendedor de tienda', empresa: 'Falabella', url: null, razon: { tipo: 'duplicado', fecha: null } },
+  ], 'Trabajando');
+  AP.reportarBandaGris({ titulo: 'Vendedor de tienda', url: 'https://x', plataforma: 'Trabajando', empresa: 'Falabella', scoreLocal: 60, razones: [] });
+  ctx.chrome.runtime.sendMessage = enviarOriginal;
+  const d = enviados[0] && enviados[0].descartes && enviados[0].descartes[0];
+  check('reportarDescartes adjunta lo evaluado y el puntaje sin tocar los adaptadores', d && d.entrada && d.entrada.versionPerfil === 7 && typeof d.score === 'number', d);
+  const dup = enviados[0] && enviados[0].descartes && enviados[0].descartes[1];
+  check('un duplicado viaja sin evaluación (no lo descartó el scorer)', dup && !dup.entrada && dup.score === undefined, dup);
+  const g = enviados[1] && enviados[1].oferta;
+  check('reportarBandaGris adjunta lo evaluado', g && g.entrada && g.entrada.titulo === 'Vendedor de tienda', g);
+  AP.cfg = original;
+}
+
 
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));
 process.exit(fallos === 0 ? 0 : 1);

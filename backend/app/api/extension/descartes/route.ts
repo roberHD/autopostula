@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { urlDePortal } from "@/lib/entrada";
+import { limpiarEntradaScorer, puntajeONull, urlDePortal } from "@/lib/entrada";
 
 async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -48,6 +48,11 @@ export async function POST(request: Request) {
         d.razon && (typeof d.razon === "object" || typeof d.razon === "string") && JSON.stringify(d.razon).length < 2_000
           ? d.razon
           : undefined,
+      // docs/revision-scorer-2026-09-30.md §6: el puntaje y lo que evaluó el
+      // scorer. Si después la persona dice "No era así", es un falso negativo
+      // que se puede volver a correr (scripts/banco-de-casos.ts).
+      scoreLocal: puntajeONull(d.score),
+      entradaScorer: limpiarEntradaScorer(d.entrada),
     }));
 
   if (!filas.length) return NextResponse.json({ ok: true, guardados: 0 });

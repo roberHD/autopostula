@@ -553,6 +553,16 @@ model SearchPreferences {
   // se hubiera recompilado, porque el límite de HORAS_MIN_ENTRE_RECOMPILACIONES
   // leía actualizadoEn en vez de esto.
   perfilCompiladoEn DateTime? @map("perfil_compilado_en")
+  // docs/revision-scorer-2026-09-30.md §7: desde qué puntaje postula sola esta
+  // cuenta, ajustado con sus propias decisiones en "Por decidir"
+  // (lib/calibracion-umbral.ts). Vive acá y no en perfilCompilado porque
+  // compilar-perfil.ts vuelve a fijar 65/45 en cada recompilación; se aplica
+  // al servir el perfil a la extensión (/api/extension/perfil). null = el
+  // valor por defecto. calibrarUmbral=false lo apaga desde Filtros.
+  umbralPostularCalibrado Int?      @map("umbral_postular_calibrado")
+  umbralCalibradoCon      Int?      @map("umbral_calibrado_con")
+  umbralCalibradoEn       DateTime? @map("umbral_calibrado_en")
+  calibrarUmbral          Boolean   @default(true) @map("calibrar_umbral")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -631,6 +641,11 @@ model DecisionOferta {
   // Json y no columnas porque cada portal expone facetas distintas y esto
   // solo se lee para pintar la tarjeta, nunca para filtrar ni agrupar.
   detalleAviso Json?         @map("detalle_aviso")
+  // docs/revision-scorer-2026-09-30.md §6: lo que evaluó el scorer -- { titulo,
+  // empresa, ubicacion, cuerpo, versionPerfil } --, para volver a correrlo
+  // sobre las decisiones de la persona (scripts/banco-de-casos.ts). Solo
+  // BANDA_GRIS; null en las filas anteriores y en las de "No era así".
+  entradaScorer Json?        @map("entrada_scorer")
   fuente      FuenteDecision
   veredicto   Veredicto      @default(PENDIENTE)
   venceEn     DateTime?      @map("vence_en")
@@ -748,6 +763,11 @@ model Descarte {
   // "No era así": la persona dijo que sí le servía. Se crea además una
   // decisión SI para que la extensión la postule y el perfil aprenda.
   corregidoEn DateTime? @map("corregido_en")
+  // docs/revision-scorer-2026-09-30.md §6: el puntaje y lo que evaluó el
+  // scorer. Un descarte corregido ("No era así") es un falso negativo: la
+  // lista que más enseña del banco de casos.
+  scoreLocal    Int?  @map("score_local")
+  entradaScorer Json? @map("entrada_scorer")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

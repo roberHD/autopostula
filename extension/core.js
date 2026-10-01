@@ -301,7 +301,10 @@ AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
 // Qué se puede arreglar desde el aviso. Hoy, solo la comuna: si lo que más se
 // descartó fue "X no está en tus comunas", se ofrece sumar X a la búsqueda.
 AP.accionDeRazon = function (r) {
-  if (r && typeof r === 'object' && r.tipo === 'ubicacion' && r.ofertaEn) {
+  // Un descarte por región (r.region, docs/revision-scorer-2026-09-30.md §2.5)
+  // no es una comuna que se pueda sumar: "Los Lagos" sumaría la comuna de Los
+  // Ríos, y "Valparaíso" la comuna, cuando las ofertas eran de toda la región.
+  if (r && typeof r === 'object' && r.tipo === 'ubicacion' && r.ofertaEn && !r.region) {
     return { tipo: 'agregar_comuna', comuna: r.ofertaEn };
   }
   return null;
@@ -337,13 +340,18 @@ AP.razonPrincipal = function (razones) {
     if (v.n > topN) { topN = v.n; top = v.ejemplo; }
   }
   if (top && typeof top === 'object' && top.tipo === 'ubicacion') {
-    const porComuna = new Map();
+    // Se devuelve la razón entera del lugar que más se repite, no la primera
+    // con el lugar cambiado: así una región sigue marcada como región.
+    const porLugar = new Map();
     for (const r of razones) {
-      if (r && r.tipo === 'ubicacion' && r.ofertaEn) porComuna.set(r.ofertaEn, (porComuna.get(r.ofertaEn) || 0) + 1);
+      if (!r || r.tipo !== 'ubicacion' || !r.ofertaEn) continue;
+      const actual = porLugar.get(r.ofertaEn) || { n: 0, razon: r };
+      actual.n++;
+      porLugar.set(r.ofertaEn, actual);
     }
-    let comuna = null, n = 0;
-    for (const [k, v] of porComuna) if (v > n) { n = v; comuna = k; }
-    if (comuna) top = Object.assign({}, top, { ofertaEn: comuna });
+    let mejor = null;
+    for (const v of porLugar.values()) if (!mejor || v.n > mejor.n) mejor = v;
+    if (mejor) top = mejor.razon;
   }
   return top;
 };
@@ -361,7 +369,9 @@ AP.formatearRazonCorta = function (r) {
     case 'rol': return 'calza con "' + r.rol + '" (' + r.termino + ')';
     case 'sin_rol': return 'no se encontró ninguno de los roles buscados';
     case 'veto': return r.razon + (r.donde === 'cuerpo' ? ' (mención en el cuerpo del aviso, no en título/empresa)' : '');
-    case 'ubicacion': return r.ofertaEn ? (nombreComuna(r.ofertaEn) + ' no está en tus comunas') : 'fuera de las comunas que buscas';
+    case 'ubicacion':
+      if (r.ofertaEn && r.region) return 'es en ' + (r.region === 'RM' ? 'la Región Metropolitana' : 'la región de ' + r.ofertaEn) + ', y no buscas ahí';
+      return r.ofertaEn ? (nombreComuna(r.ofertaEn) + ' no está en tus comunas') : 'fuera de las comunas que buscas';
     case 'ubicacion_desconocida': return 'no se pudo saber en qué comuna es';
     case 'nivel': return r.certeza === 'desconocida'
       ? 'cargo de jefatura o dirección ("' + r.termino + '"): no está claro si buscas ese nivel'
@@ -382,6 +392,8 @@ AP.formatearRazonCorta = function (r) {
       : r.que === 'licencia' ? 'una licencia de conducir profesional que no está en tu CV'
       : 'inglés, y tu CV no lo menciona');
     case 'modo_abierto': return 'cumple tus condiciones (buscas cualquier trabajo)';
+    // docs/revision-scorer-2026-09-30.md §4.1.
+    case 'rol_fuera_del_titulo': return 'el cargo ("' + r.rol + '") no está en el título, solo en ' + (r.campo === 'empresa' ? 'el nombre de la empresa' : 'la descripción');
     default: return 'sin razón';
   }
 };
@@ -512,13 +524,45 @@ AP.reportarAvistamientos = function (avistamientos, plataforma) {
   }
 };
 
+// ── Lo que evaluó el scorer (docs/revision-scorer-2026-09-30.md §6) ──
+// Viaja con cada oferta que va a "Por decidir" y con cada descarte, para poder
+// volver a correr el scorer sobre lo que la persona decidió
+// (backend/scripts/banco-de-casos.ts). Se adjunta acá, sin tocar los
+// adaptadores: se guarda la evaluación más reciente de cada título+empresa (la
+// de la segunda pasada, con el aviso completo, pisa a la de la tarjeta).
+const AP_MAX_ENTRADAS = 400;
+const apEntradas = new Map();
+function apClaveEntrada(titulo, empresa) { return AP.n(titulo || '') + '|' + AP.n(empresa || ''); }
+function apRecordarEntrada(campos, resultado, scorerCfg) {
+  const entrada = {
+    titulo: String((campos && campos.titulo) || '').slice(0, 300),
+    empresa: String((campos && campos.empresa) || '').slice(0, 200),
+    ubicacion: String((campos && campos.ubicacion) || '').slice(0, 200),
+    cuerpo: String((campos && campos.cuerpo) || '').slice(0, 4000),
+    versionPerfil: scorerCfg && scorerCfg.versionPerfil != null ? scorerCfg.versionPerfil : null,
+  };
+  const clave = apClaveEntrada(entrada.titulo, entrada.empresa);
+  apEntradas.delete(clave);
+  apEntradas.set(clave, { entrada, score: resultado.score });
+  if (apEntradas.size > AP_MAX_ENTRADAS) apEntradas.delete(apEntradas.keys().next().value);
+  return entrada;
+}
+function apEntradaGuardada(titulo, empresa) { return apEntradas.get(apClaveEntrada(titulo, empresa)) || null; }
+
 // ── Reportar descartes con su razón (docs/estrategia-y-rediseno.md §5.2) ──
 // Fire-and-forget como los avistamientos: el panel muestra cuáles dejó fuera
-// y por qué, y la persona puede corregir un descarte ("No era así").
+// y por qué, y la persona puede corregir un descarte ("No era así"). Un
+// duplicado no lo descartó el scorer (la evaluación guardada es la que lo dio
+// por bueno), así que viaja sin ella.
 AP.reportarDescartes = function (descartes, plataforma) {
   if (!descartes || !descartes.length) return;
+  const conEntrada = descartes.map((d) => {
+    if (!d || d.entrada || (d.razon && d.razon.tipo === 'duplicado')) return d;
+    const guardada = apEntradaGuardada(d.titulo, d.empresa);
+    return guardada ? Object.assign({}, d, { entrada: guardada.entrada, score: guardada.score }) : d;
+  });
   try {
-    chrome.runtime.sendMessage({ type: 'REPORTAR_DESCARTES', descartes: descartes, plataforma: plataforma });
+    chrome.runtime.sendMessage({ type: 'REPORTAR_DESCARTES', descartes: conEntrada, plataforma: plataforma });
   } catch (e) {
     console.warn('[AP] No se pudo avisar al background (descartes):', e);
   }
@@ -526,6 +570,8 @@ AP.reportarDescartes = function (descartes, plataforma) {
 
 // ── Reportar oferta en banda gris al backend (scorer local, §6) ──────────
 AP.reportarBandaGris = function (oferta) {
+  const guardada = oferta && !oferta.entrada ? apEntradaGuardada(oferta.titulo, oferta.empresa) : null;
+  if (guardada) oferta = Object.assign({}, oferta, { entrada: guardada.entrada });
   try {
     chrome.runtime.sendMessage({ type: 'REPORTAR_BANDA_GRIS', oferta: oferta });
   } catch (e) {
@@ -807,10 +853,24 @@ const AP_ENLACE_CORTO = '(?:\\s+\\w{1,4}){0,2}';
 // time, y la jornada declarada (§3b, más abajo) quedaba como "no se pudo
 // saber" en vez de confirmada -- toda la búsqueda de un rol part time
 // terminaba en banda gris.
-function apConstruirPatron(patronNormalizado) {
-  const palabras = patronNormalizado.split(/\s+/).filter(Boolean).map(apPatronPalabra);
+function apConstruirPatron(patronNormalizado, palabraAPatron) {
+  const palabras = patronNormalizado.split(/\s+/).filter(Boolean).map(palabraAPatron || apPatronPalabra);
   if (!palabras.length) return null;
   return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + AP_ENLACE_CORTO + '[\\s-]+') + '\\b');
+}
+
+// Las señales solo aceptan el plural, no el otro género
+// (docs/revision-scorer-2026-09-30.md §2.4). Un cargo cambia de género
+// ("cajero"/"cajera") y un rol o un veto lo necesitan; una señal es un
+// sustantivo del rubro, y con el otro género pasa a ser otra palabra: "moda"
+// calzaba con "modo" ("atiende de modo cordial" sumaba puntos con el perfil
+// real de Roberto) y "calzado" con "calzada".
+function apPatronPalabraSoloPlural(palabra) {
+  const escapada = apEscaparRegex(palabra);
+  if (palabra.length < 4) return escapada;
+  if (/[aeiou]$/.test(palabra)) return escapada + 's?';
+  if (/[bcdfglmnprstvz]$/.test(palabra)) return escapada + '(?:es)?';
+  return escapada;
 }
 
 // ── Comuna conocida de una oferta (docs/revision-2026-09-16.md §2.1, punto 4) ──
@@ -848,6 +908,64 @@ function apExtraerComunaConocida(ubicacionNorm, tituloNorm) {
   return null;
 }
 
+// ── Región de una oferta (docs/revision-scorer-2026-09-30.md §2.5) ──
+// Hay ofertas que dicen solo la región ("Región Metropolitana",
+// "R.Metropolitana", "Metropolitana de Santiago", "Región V"). Se mira solo
+// cuando no se reconoció ninguna comuna. Los números romanos van con límite
+// de palabra: "region x" no calza dentro de "region xi" ni "region xiv".
+// Reconocer una región puede DESCARTAR la oferta, así que los nombres que
+// también son calles o lugares (Tarapacá, O'Higgins, Ñuble, Biobío, Los Ríos,
+// Los Lagos, Magallanes) solo cuentan con "región" delante. Sin ella queda la
+// duda, que deja la oferta en "Por decidir".
+const AP_REGIONES_EN_TEXTO = [
+  ['AP', /\barica y parinacota\b|\bregion xv\b|\bxv region\b/],
+  ['TA', /\bregion (de )?tarapaca\b|\bregion i\b|\bi region\b/],
+  ['AN', /\bregion (de )?antofagasta\b|\bregion ii\b|\bii region\b/],
+  ['AT', /\bregion (de )?atacama\b|\bregion iii\b|\biii region\b/],
+  ['CO', /\bregion (de )?coquimbo\b|\bregion iv\b|\biv region\b/],
+  ['VA', /\bregion (de )?valparaiso\b|\bregion v\b|\bv region\b/],
+  ['RM', /\bmetropolitana\b|\bgran santiago\b|\bregion xiii\b|\bxiii region\b|\brm\b/],
+  ['OH', /\bregion (de |del )?(libertador )?(general |gral\.? )?(bernardo )?o'?\s?higgins\b|\bregion del libertador\b|\bregion vi\b|\bvi region\b/],
+  ['ML', /\bregion (del )?maule\b|\bregion vii\b|\bvii region\b/],
+  ['NB', /\bregion (de |del )?nuble\b|\bregion xvi\b|\bxvi region\b/],
+  ['BI', /\bregion (de |del )?bio\s?-?bio\b|\bregion viii\b|\bviii region\b/],
+  ['AR', /\baraucania\b|\bregion ix\b|\bix region\b/],
+  ['LR', /\bregion (de )?los rios\b|\bregion xiv\b|\bxiv region\b/],
+  ['LL', /\bregion (de )?los lagos\b|\bregion x\b|\bx region\b/],
+  ['AI', /\baysen\b|\baisen\b|\bregion xi\b|\bxi region\b/],
+  ['MA', /\bregion (de )?magallanes\b|\bregion xii\b|\bxii region\b/],
+];
+
+function apRegionesEnTexto(ubicacionNorm) {
+  if (!ubicacionNorm) return [];
+  return AP_REGIONES_EN_TEXTO.filter(([, rx]) => rx.test(ubicacionNorm)).map(([codigo]) => codigo);
+}
+
+// Qué regiones declaró la persona enteras (el 90% o más de sus entradas en
+// AP.COMUNAS_CL: "toda la región" trae todas, con variantes y abreviaturas) y
+// en cuáles tiene al menos una comuna. Se calcula una vez por perfil.
+const AP_COBERTURA_DECLARADA = new WeakMap();
+function apCoberturaDeclarada(ubicacionCfg) {
+  if (AP_COBERTURA_DECLARADA.has(ubicacionCfg)) return AP_COBERTURA_DECLARADA.get(ubicacionCfg);
+  const declaradas = new Set((ubicacionCfg.comunas || []).map((c) => AP.n(c)));
+  const porRegion = new Map();
+  for (const c of AP.COMUNAS_CL || []) {
+    const r = porRegion.get(c.region) || { total: 0, declaradas: 0 };
+    r.total++;
+    if (declaradas.has(AP.n(c.nombre))) r.declaradas++;
+    porRegion.set(c.region, r);
+  }
+  const enteras = new Set();
+  const conAlguna = new Set();
+  for (const [codigo, r] of porRegion) {
+    if (r.declaradas > 0) conAlguna.add(codigo);
+    if (r.total && r.declaradas / r.total >= 0.9) enteras.add(codigo);
+  }
+  const cobertura = { enteras, conAlguna };
+  AP_COBERTURA_DECLARADA.set(ubicacionCfg, cobertura);
+  return cobertura;
+}
+
 // §2.7: términos de jefatura/dirección en un título (ya normalizado, sin
 // tildes). Mismos que backend/lib/nivel-cargo.ts. "Asistente de gerente" o
 // "secretaria de gerencia" no son cargos directivos: se quita la frase antes.
@@ -865,8 +983,9 @@ AP.puntuarOferta = function (campos, perfil) {
   const ubicacion = AP.n((campos && campos.ubicacion) || '');
   const razones = [];
 
-  function buscar(patronTexto) {
-    const rx = apConstruirPatron(AP.n(patronTexto || ''));
+  // soloPlural: las señales (ver apPatronPalabraSoloPlural).
+  function buscar(patronTexto, soloPlural) {
+    const rx = apConstruirPatron(AP.n(patronTexto || ''), soloPlural ? apPatronPalabraSoloPlural : null);
     if (!rx) return { coincide: false };
     const enTitulo = rx.test(titulo);
     const enEmpresa = rx.test(empresa);
@@ -879,16 +998,22 @@ AP.puntuarOferta = function (campos, perfil) {
   // ser el rol y pasa a ser las condiciones (comuna, jornada, vetos, requisitos).
   const modoAbierto = perfil.modo === 'abierto';
 
-  // 1. Vetos -- si matchea en título o empresa, corta acá con la misma
-  // certeza de siempre. Si matchea SOLO en el cuerpo, no corta -- queda
-  // como penalización fuerte (aplicada más abajo, después de puntuar los
-  // roles) en vez de corte duro. Bug real encontrado en revisión el
-  // 2026-09-04: cortar también por el cuerpo reintroduce el problema de
-  // polaridad que este scorer vino a arreglar (§2.1) -- un veto de "call
-  // center" mataría un aviso de analista publicado por "Konecta Call
-  // Center SpA" con la misma certeza que si apareciera en el título.
+  // docs/revision-scorer-2026-09-30.md §3-§5: el puntaje responde UNA pregunta,
+  // "¿es lo que busco?" (el rol), y las señales de gusto lo mueven. "¿Puedo
+  // tomarlo?" (vetos, requisitos, nivel, comuna, jornada) son COMPUERTAS: o
+  // descartan de golpe, o ponen un TOPE -- la oferta no puede pasar de "Por
+  // decidir" -- pero nunca suman ni restan puntos. Antes la duda de ubicación
+  // restaba 40 y un veto en la descripción 60, y cualquier señal los podía
+  // devolver: "Vendedor de tienda part time" con la comuna ilegible postulaba
+  // solo. Los topes se juntan al final (paso 9).
+
+  // 1. Vetos -- si calzan en el título o la empresa, descartan con la misma
+  // certeza de siempre. Si calzan SOLO en el cuerpo, no descartan (revisión del
+  // 2026-09-04: el problema de polaridad -- una mención de pasada en la
+  // descripción mataba un aviso bueno): desde 2026-09-30 son un tope (paso 9),
+  // y la oferta queda en "Por decidir". Antes restaban 60, que casi siempre
+  // terminaba en descartar igual.
   const vetos = perfil.vetos || [];
-  let penalizacionVetoCuerpo = 0;
   let vetoCuerpo = null;
   for (const veto of vetos) {
     const resultado = buscar(veto.patron);
@@ -901,11 +1026,10 @@ AP.puntuarOferta = function (campos, perfil) {
         razones: [{ tipo: 'veto', patron: veto.patron, razon: veto.razon || ('no cumple: ' + veto.patron), donde: resultado.enTitulo ? 'titulo' : 'empresa' }],
       };
     }
-    penalizacionVetoCuerpo = 60;
-    vetoCuerpo = { patron: veto.patron, razon: veto.razon || ('posible: ' + veto.patron) };
+    if (!vetoCuerpo) vetoCuerpo = { tipo: 'veto', patron: veto.patron, razon: veto.razon || ('posible: ' + veto.patron), donde: 'cuerpo' };
   }
 
-  // 1a. Requisitos excluyentes (docs/amplitud-de-busqueda.md §5). Solo en modo
+  // 2. Requisitos excluyentes (docs/amplitud-de-busqueda.md §5). Solo en modo
   // abierto: en los otros modos el rol ya hace de filtro, y aplicarlo siempre
   // le escondería a la persona ofertas de SU rubro por una mención suelta.
   if (modoAbierto) {
@@ -915,12 +1039,11 @@ AP.puntuarOferta = function (campos, perfil) {
     }
   }
 
-  // 1b. Nivel del cargo (docs/revision-2026-09-16.md §2.7). El rol "ventas"
+  // 3. Nivel del cargo (docs/revision-2026-09-16.md §2.7). El rol "ventas"
   // calzaba con "Gerente Comercial" y "Subgerente de ventas" -- el nivel no se
   // miraba. Es solo por título, determinista: perfil.nivelDirectivo lo pone el
   // backend según el CIUO de los objetivos declarados (true = busca ese nivel,
-  // false = no, ausente/null = no se sabe). Sin certeza no se descarta ni se
-  // postula: banda gris más abajo, para que lo decida la persona.
+  // false = no, ausente/null = no se sabe). Sin certeza, tope (paso 9).
   let nivelIncierto = null;
   if (perfil.nivelDirectivo !== true) {
     const terminoNivel = apTerminoDirectivo(titulo);
@@ -932,16 +1055,91 @@ AP.puntuarOferta = function (campos, perfil) {
     }
   }
 
-  // 2. Roles -- puntaje del mejor match (canónico o sinónimo) × peso del rol,
-  // con el campo donde matcheó pesando más (título, luego empresa, luego
-  // cuerpo -- ver §6). Los multiplicadores tienen que ser FACTORES <= 1: con
-  // peso=1 en título, puntaje = 1*100*1 = 100 -- si el de título fuera >1
-  // (como ×3), el clamp de más abajo lo iguala con cualquier otro campo que
-  // también llegue a >=100, y el peso del rol deja de importar. Bug real
-  // encontrado en revisión el 2026-09-04: con el ×3 de antes, "Bodeguero
-  // nocturno" en una empresa llamada "Vendedores Unidos SpA" daba 100 y
-  // postulaba, exactamente el bug de polaridad que este scorer vino a
-  // arreglar, solo que movido del filtro viejo a acá.
+  // 4. Ubicación (docs/revision-2026-09-16.md §2.1). AP.COMUNAS_CL reconoce la
+  // comuna REAL de la oferta cuando se puede:
+  //   comuna reconocida y DENTRO de lo declarado -> pasa
+  //   comuna reconocida y FUERA de lo declarado  -> DESCARTAR (la persona ya
+  //     dijo que esa zona no le sirve)
+  //   sin comuna, pero con región (docs/revision-scorer-2026-09-30.md §2.5):
+  //     declaró esa región entera -> pasa; ninguna comuna suya está ahí ->
+  //     DESCARTAR; algunas sí -> no se sabe cuál, tope
+  //   nada reconocible -> tope ("no sé" no es "no calza"; antes restaba 40)
+  //   remoto + aceptaRemoto -> pasa
+  let ubicacionIncierta = null;
+  const ubicacionCfg = perfil.ubicacion || {};
+  const comunasDeclaradas = ubicacionCfg.comunas || [];
+  if (comunasDeclaradas.length || ubicacionCfg.aceptaRemoto) {
+    const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo) || /\bremot[oa]\b/.test(ubicacion);
+    if (!(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
+      const comunaOferta = apExtraerComunaConocida(ubicacion, titulo);
+      if (comunaOferta) {
+        const dentro = comunasDeclaradas.some((c) => AP.n(c) === comunaOferta.nombre);
+        if (!dentro) {
+          return {
+            score: 0,
+            banda: 'descartar',
+            razones: [{ tipo: 'ubicacion', ofertaEn: comunaOferta.nombre, buscadas: comunasDeclaradas }],
+          };
+        }
+      } else {
+        const regiones = apRegionesEnTexto(ubicacion);
+        const cobertura = apCoberturaDeclarada(ubicacionCfg);
+        if (regiones.some((r) => cobertura.enteras.has(r))) {
+          // Dentro: declaró esa región entera.
+        } else if (regiones.length && regiones.every((r) => !cobertura.conAlguna.has(r))) {
+          const nombres = AP.NOMBRE_REGION_CL || {};
+          return {
+            score: 0,
+            banda: 'descartar',
+            razones: [{ tipo: 'ubicacion', ofertaEn: nombres[regiones[0]] || regiones[0], region: regiones[0], buscadas: comunasDeclaradas }],
+          };
+        } else {
+          ubicacionIncierta = { tipo: 'ubicacion_desconocida', ofertaEn: (campos && campos.ubicacion) || null };
+        }
+      }
+    }
+  }
+
+  // 5. Jornada (docs/amplitud-de-busqueda.md §6). Existía en
+  // SearchPreferences.jornada y compilar-perfil.ts lo guardaba en el perfil
+  // compilado, pero el scorer nunca lo leía: alguien que declaró "solo part
+  // time" igual recibía avisos de jornada completa. AP_KEYWORDS_JORNADA (con
+  // el que trabajaba el filtro viejo) dice qué términos delatan cada jornada.
+  //   aviso dice la jornada CONTRARIA a la declarada -> DESCARTAR
+  //   aviso no dice ninguna de las dos                -> tope ("no sé" no es "no calza")
+  //   aviso confirma la jornada declarada, o "cualquiera" -> pasa
+  //
+  // El TÍTULO manda sobre el resto del aviso (2026-09-30). Sodimac publica sus
+  // ofertas part time en trabajando.com ("Vendedor/a Sodimac La Reina Jornada
+  // PT20 hrs") con la ficha "Jornada Completa" y "turnos rotativos jornada
+  // completa" en la descripción, y bastaba una mención de la contraria en
+  // cualquier parte para descartar lo que el título decía que sí calza. Ahora:
+  // si el título dice la declarada, calza (aunque diga las dos); si no, una
+  // mención de la contraria en cualquier parte descarta, y si nada dice la
+  // declarada queda la duda, como antes.
+  let jornadaIncierta = null;
+  const jornadaDeclarada = perfil.jornada;
+  if (jornadaDeclarada === 'full_time' || jornadaDeclarada === 'part_time') {
+    const contraria = jornadaDeclarada === 'full_time' ? 'part_time' : 'full_time';
+    const dice = (jornada, soloTitulo) =>
+      AP_KEYWORDS_JORNADA[jornada].some((k) => { const r = buscar(k); return soloTitulo ? r.enTitulo : r.coincide; }) ||
+      AP_JORNADA_CON_HORAS[jornada].test(soloTitulo ? titulo : titulo + ' ' + empresa + ' ' + cuerpo);
+    if (!dice(jornadaDeclarada, true)) {
+      if (dice(contraria, false)) {
+        return { score: 0, banda: 'descartar', razones: [{ tipo: 'jornada', declarada: jornadaDeclarada }] };
+      }
+      if (!dice(jornadaDeclarada, false)) jornadaIncierta = { tipo: 'jornada_desconocida', declarada: jornadaDeclarada };
+    }
+  }
+
+  // 6. Relevancia: el mejor calce de rol (canónico o sinónimo) × peso del rol,
+  // con el campo donde calzó pesando más (título, luego empresa, luego cuerpo).
+  // Los multiplicadores tienen que ser FACTORES <= 1: con peso=1 en título,
+  // puntaje = 1*100*1 = 100 -- si el de título fuera >1 (como ×3), el clamp lo
+  // iguala con cualquier otro campo que también llegue a >=100, y el peso del
+  // rol deja de importar. Bug real encontrado en revisión el 2026-09-04: con el
+  // ×3 de antes, "Bodeguero nocturno" en una empresa llamada "Vendedores
+  // Unidos SpA" daba 100 y postulaba.
   const roles = perfil.roles || [];
   let score = 0;
   let mejorRol = null;
@@ -972,95 +1170,36 @@ AP.puntuarOferta = function (campos, perfil) {
   } else if (roles.length) {
     razones.push({ tipo: 'sin_rol' });
   }
-  if (penalizacionVetoCuerpo) {
-    score = Math.max(0, score - penalizacionVetoCuerpo);
-    razones.push({ tipo: 'veto', patron: vetoCuerpo.patron, razon: vetoCuerpo.razon, donde: 'cuerpo' });
-  }
 
-  // 3. Ubicación (docs/revision-2026-09-16.md §2.1). Antes: penalización de
-  // -40 si NINGUNA comuna declarada aparecía como texto libre en cualquier
-  // campo -- un "fuera de lo declarado" y un "no se pudo saber dónde es"
-  // se trataban exactamente igual (los dos caían en gris), y llenaban "Por
-  // decidir" de ofertas de regiones que la persona nunca pidió. Ahora se
-  // usa AP.COMUNAS_CL para reconocer la comuna REAL de la oferta cuando se
-  // puede, y los dos casos se separan:
-  //   comuna reconocida y DENTRO de lo declarado -> sin penalización
-  //   comuna reconocida y FUERA de lo declarado  -> DESCARTAR de una (no
-  //     "por decidir": la persona ya dijo que esa zona no le sirve)
-  //   no se pudo reconocer ninguna comuna                -> gris, como
-  //     siempre ("no sé" no es lo mismo que "no calza")
-  //   remoto + aceptaRemoto -> sin penalización
-  const ubicacionCfg = perfil.ubicacion || {};
-  const comunasDeclaradas = ubicacionCfg.comunas || [];
-  if (comunasDeclaradas.length || ubicacionCfg.aceptaRemoto) {
-    const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo) || /\bremot[oa]\b/.test(ubicacion);
-    if (!(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
-      const comunaOferta = apExtraerComunaConocida(ubicacion, titulo);
-      if (comunaOferta) {
-        const dentro = comunasDeclaradas.some((c) => AP.n(c) === comunaOferta.nombre);
-        if (!dentro) {
-          return {
-            score: 0,
-            banda: 'descartar',
-            razones: [{ tipo: 'ubicacion', ofertaEn: comunaOferta.nombre, buscadas: comunasDeclaradas }],
-          };
-        }
-      } else {
-        score = Math.max(0, score - 40);
-        razones.push({ tipo: 'ubicacion_desconocida', ofertaEn: (campos && campos.ubicacion) || null });
-      }
-    }
-  }
+  // docs/revision-scorer-2026-09-30.md §4.1: un cargo mencionado de pasada en
+  // la descripción (o en el nombre de la empresa) es una pista, no una
+  // afirmación: sirve para no descartar, no para enviar. "Bodeguero Part Time
+  // con comisiones" con "coordina con el vendedor de turno" postulaba con 80
+  // (30 del rol + 50 de dos señales). En modo abierto el rol no es el eje, así
+  // que no aplica.
+  const rolFueraDelTitulo = !modoAbierto && mejorRol && mejorRol.campo !== 'titulo'
+    ? { tipo: 'rol_fuera_del_titulo', rol: mejorRol.rol, termino: mejorRol.termino, campo: mejorRol.campo }
+    : null;
 
-  // 3b. Jornada (docs/amplitud-de-busqueda.md §6). Existía en
-  // SearchPreferences.jornada y compilar-perfil.ts lo guardaba en el perfil
-  // compilado, pero el scorer nunca lo leía: alguien que declaró "solo part
-  // time" igual recibía avisos de jornada completa. AP_KEYWORDS_JORNADA (con
-  // el que trabajaba el filtro viejo) dice qué términos delatan cada jornada.
-  //   aviso dice la jornada CONTRARIA a la declarada -> DESCARTAR
-  //   aviso no dice ninguna de las dos                -> gris ("no sé" no es "no calza")
-  //   aviso confirma la jornada declarada, o "cualquiera" -> sin penalización
-  //
-  // El TÍTULO manda sobre el resto del aviso (2026-09-30). Sodimac publica sus
-  // ofertas part time en trabajando.com ("Vendedor/a Sodimac La Reina Jornada
-  // PT20 hrs") con la ficha "Jornada Completa" y "turnos rotativos jornada
-  // completa" en la descripción, y bastaba una mención de la contraria en
-  // cualquier parte para descartar lo que el título decía que sí calza. Ahora:
-  // si el título dice la declarada, calza (aunque diga las dos); si no, una
-  // mención de la contraria en cualquier parte descarta, y si nada dice la
-  // declarada queda la duda, como antes.
-  let jornadaIncierta = null;
-  const jornadaDeclarada = perfil.jornada;
-  if (jornadaDeclarada === 'full_time' || jornadaDeclarada === 'part_time') {
-    const contraria = jornadaDeclarada === 'full_time' ? 'part_time' : 'full_time';
-    const dice = (jornada, soloTitulo) =>
-      AP_KEYWORDS_JORNADA[jornada].some((k) => { const r = buscar(k); return soloTitulo ? r.enTitulo : r.coincide; }) ||
-      AP_JORNADA_CON_HORAS[jornada].test(soloTitulo ? titulo : titulo + ' ' + empresa + ' ' + cuerpo);
-    if (!dice(jornadaDeclarada, true)) {
-      if (dice(contraria, false)) {
-        return { score: 0, banda: 'descartar', razones: [{ tipo: 'jornada', declarada: jornadaDeclarada }] };
-      }
-      if (!dice(jornadaDeclarada, false)) jornadaIncierta = { tipo: 'jornada_desconocida', declarada: jornadaDeclarada };
-    }
-  }
-
-  // 4. Señales -- ajustes graduales, no descartan. docs/amplitud-de-busqueda.md
-  // §2.1: ahora que cada patron es un término suelto (antes nunca calzaba),
-  // un +25 que aparece en el cuerpo pesa igual que uno en el título -- con el
-  // mismo multiplicador por campo que los roles (§6 del scorer) para que un
-  // calce débil (cuerpo) empuje menos que uno fuerte (título).
+  // 7. Señales: ajustes de gusto, mueven dentro de una banda. Las positivas
+  // pesan según el campo donde calzan, igual que los roles (un +25 perdido en
+  // la descripción empuja menos que en el título). Las NEGATIVAS pesan enteras
+  // donde calcen (docs/revision-scorer-2026-09-30.md §4.3): las condiciones de
+  // renta, turnos y contrato viven siempre en la descripción, y un -40 por
+  // "comisión pura" quedaba en -12. Equivocarse hacia "no postular" es barato
+  // (la persona la rescata en Por decidir); hacia "postular", no se deshace.
   const senales = perfil.senales || [];
   for (const senal of senales) {
-    const resultado = buscar(senal.patron);
-    if (resultado.coincide) {
-      const multiplicadorCampo = resultado.enTitulo ? 1 : resultado.enEmpresa ? 0.35 : 0.3;
-      const delta = Math.round((senal.delta || 0) * multiplicadorCampo);
-      score += delta;
-      razones.push({ tipo: 'senal', patron: senal.patron, delta: delta });
-    }
+    const resultado = buscar(senal.patron, true);
+    if (!resultado.coincide) continue;
+    const base = senal.delta || 0;
+    const multiplicadorCampo = resultado.enTitulo ? 1 : resultado.enEmpresa ? 0.35 : 0.3;
+    const delta = base < 0 ? base : Math.round(base * multiplicadorCampo);
+    score += delta;
+    razones.push({ tipo: 'senal', patron: senal.patron, delta: delta });
   }
 
-  // 5. Clamp y banda.
+  // 8. Banda por umbral.
   score = Math.max(0, Math.min(100, Math.round(score)));
   const umbralPostular = perfil.umbralPostular != null ? perfil.umbralPostular : 65;
   const umbralGris = perfil.umbralGris != null ? perfil.umbralGris : 45;
@@ -1069,13 +1208,16 @@ AP.puntuarOferta = function (campos, perfil) {
   else if (score <= umbralGris) banda = 'descartar';
   else banda = 'gris';
 
-  if (nivelIncierto && banda !== 'descartar') {
-    razones.unshift(nivelIncierto);
-    banda = 'gris';
-  }
-
-  if (jornadaIncierta && banda !== 'descartar') {
-    razones.unshift(jornadaIncierta);
+  // 9. Topes, todos en un solo lugar (§5): ninguno descarta, ninguno se
+  // compensa con puntos, y con cualquiera la oferta no pasa de "Por decidir".
+  // Van primero en las razones, que es lo que la persona tiene que mirar. Si el
+  // puntaje ya la descartó, las dudas no cambian nada; solo el rol fuera del
+  // título explica por qué el puntaje fue bajo, y va primero.
+  const topes = [jornadaIncierta, nivelIncierto, ubicacionIncierta, vetoCuerpo, rolFueraDelTitulo].filter(Boolean);
+  if (banda === 'descartar') {
+    if (rolFueraDelTitulo) razones.unshift(rolFueraDelTitulo);
+  } else if (topes.length) {
+    razones.unshift(...topes);
     banda = 'gris';
   }
 
@@ -1113,7 +1255,8 @@ AP.evaluarOferta = function (campos) {
       };
     }
     const resultado = AP.puntuarOferta(campos, scorerCfg.perfilCompilado);
-    return { banda: resultado.banda, score: resultado.score, razones: resultado.razones, usoScorer: true };
+    const entrada = apRecordarEntrada(campos, resultado, scorerCfg);
+    return { banda: resultado.banda, score: resultado.score, razones: resultado.razones, usoScorer: true, entrada };
   }
   return {
     banda: 'gris',

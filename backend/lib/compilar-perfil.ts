@@ -4,6 +4,7 @@ import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { construirMensajesCV } from "@/lib/ai-messages";
 import { LISTA_LIMPIEZA_CL } from "@/scripts/limpieza/cl";
 import { normalizarVetos, normalizarSenales } from "@/lib/normalizar-patron";
+import { UMBRAL_GRIS_POR_DEFECTO, UMBRAL_POSTULAR_POR_DEFECTO } from "@/lib/calibracion-umbral";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -223,9 +224,12 @@ export async function compilarPerfil(
           },
       jornada: compilado.jornada || "cualquiera",
       modalidad: compilado.modalidad || "cualquiera",
-      // No son decisión de la IA -- son parámetros de sistema, ver §6.
-      umbralPostular: 65,
-      umbralGris: 45,
+      // No son decisión de la IA -- son parámetros de sistema, ver §6. El
+      // umbral ajustado con las decisiones de la persona no se guarda acá (se
+      // perdería en cada recompilación): vive en SearchPreferences y se aplica
+      // al servir el perfil (docs/revision-scorer-2026-09-30.md §7).
+      umbralPostular: UMBRAL_POSTULAR_POR_DEFECTO,
+      umbralGris: UMBRAL_GRIS_POR_DEFECTO,
     };
 
     const perfilCompiladoEn = new Date();
