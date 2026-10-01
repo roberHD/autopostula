@@ -127,3 +127,38 @@ export function limpiarUbicacion(valor: unknown): UbicacionDeclarada | null | un
     aceptaRemoto: v.aceptaRemoto === true,
   };
 }
+
+// ── Lo que evaluó el scorer de la extensión ─────────────────────────
+
+/**
+ * docs/revision-scorer-2026-09-30.md §6: lo que el scorer de la extensión tuvo a
+ * la vista al evaluar una oferta, para volver a correrlo sobre las decisiones de
+ * la persona (scripts/banco-de-casos.ts). Con los mismos topes que pone
+ * extension/core.js. undefined si no vino o no trae título: no se guarda.
+ */
+export type EntradaScorer = {
+  titulo: string;
+  empresa: string | null;
+  ubicacion: string | null;
+  cuerpo: string | null;
+  versionPerfil: number | null;
+};
+
+export function limpiarEntradaScorer(valor: unknown): EntradaScorer | undefined {
+  if (!valor || typeof valor !== "object" || Array.isArray(valor)) return undefined;
+  const v = valor as Record<string, unknown>;
+  const titulo = textoCorto(v.titulo, 300);
+  if (!titulo) return undefined;
+  return {
+    titulo,
+    empresa: textoCorto(v.empresa, 200),
+    ubicacion: textoCorto(v.ubicacion, 200),
+    cuerpo: textoCorto(v.cuerpo, 4000),
+    versionPerfil: Number.isInteger(v.versionPerfil) ? (v.versionPerfil as number) : null,
+  };
+}
+
+/** Un puntaje del scorer como entero, o null si no es un número. */
+export function puntajeONull(valor: unknown): number | null {
+  return typeof valor === "number" && Number.isFinite(valor) ? Math.round(valor) : null;
+}

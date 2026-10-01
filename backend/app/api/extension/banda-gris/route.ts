@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { textoCorto, urlDePortal } from "@/lib/entrada";
+import { limpiarEntradaScorer, puntajeONull, textoCorto, urlDePortal } from "@/lib/entrada";
 
 // Reporta una oferta que el scorer local (§6) dejó en banda gris -- entra a
 // la cola de decisión del usuario (§8), no se descarta ni se postula sola.
@@ -65,9 +65,12 @@ export async function POST(request: Request) {
       url: url || null,
       empresa: empresa || null,
       plataforma: plataforma || null,
-      scoreLocal: typeof scoreLocal === "number" && Number.isFinite(scoreLocal) ? Math.round(scoreLocal) : null,
+      scoreLocal: puntajeONull(scoreLocal),
       razones: Array.isArray(razones) && JSON.stringify(razones).length < 5_000 ? razones.slice(0, 20) : undefined,
       detalleAviso: detalleAvisoValido,
+      // docs/revision-scorer-2026-09-30.md §6: lo que evaluó el scorer, para
+      // volver a correrlo sobre esta decisión (scripts/banco-de-casos.ts).
+      entradaScorer: limpiarEntradaScorer(cuerpo?.entrada),
       fuente: "BANDA_GRIS",
       veredicto: "PENDIENTE",
       venceEn,

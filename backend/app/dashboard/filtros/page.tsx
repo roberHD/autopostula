@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, FlaskConical, Target, Plus, MapPin, Compass } from "lucide-react";
+import { X, FlaskConical, Target, Plus, MapPin, Compass, Gauge } from "lucide-react";
 import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 
 type PerfilCompilado = {
@@ -12,6 +12,12 @@ type PerfilCompilado = {
 };
 
 type ObjetivoItem = { ciuo: string | null; etiqueta: string; peso: number };
+
+// docs/revision-scorer-2026-09-30.md §7: el umbral ajustado con las decisiones
+// de la persona (lib/calibracion-umbral.ts). Los números se repiten acá por la
+// misma razón que Amplitud: es una página de cliente.
+type Calibracion = { calibrarUmbral: boolean; umbralPostularCalibrado: number | null };
+const UMBRAL_NORMAL = 65;
 
 // docs/amplitud-de-busqueda.md §4 y §7. El tipo se repite acá en vez de
 // importarlo de lib/amplitud.ts porque ese módulo toca la base de datos y esta
@@ -67,6 +73,9 @@ export default function FiltrosPage() {
   const [guardandoUbicacion, setGuardandoUbicacion] = useState(false);
   const [mensajeUbicacion, setMensajeUbicacion] = useState("");
 
+  const [calibracion, setCalibracion] = useState<Calibracion>({ calibrarUmbral: true, umbralPostularCalibrado: null });
+  const [mensajeCalibracion, setMensajeCalibracion] = useState("");
+
   useEffect(() => {
     async function cargar() {
       try {
@@ -85,6 +94,12 @@ export default function FiltrosPage() {
           const prefsData = await resPrefs.json();
           if (prefsData?.ubicacionDeclarada) setUbicacion({ ...ubicacionVacia(), ...prefsData.ubicacionDeclarada });
           if (prefsData?.amplitud) setAmplitud(prefsData.amplitud as Amplitud);
+          if (prefsData) {
+            setCalibracion({
+              calibrarUmbral: prefsData.calibrarUmbral !== false,
+              umbralPostularCalibrado: prefsData.umbralPostularCalibrado ?? null,
+            });
+          }
         }
 
         if (resObjetivos.ok) {
@@ -150,6 +165,33 @@ export default function FiltrosPage() {
       console.error("Error guardando amplitud:", err);
       setAmplitud(anterior);
       setMensajeAmplitud("No se pudo guardar — revisa la consola");
+    }
+  }
+
+  // §7: apagarlo vuelve al umbral normal; prenderlo lo recalcula en la próxima
+  // revisión de la extensión. Como la amplitud, se guarda al tocarlo.
+  async function guardarCalibracion(valor: boolean) {
+    const anterior = calibracion;
+    setCalibracion({ ...calibracion, calibrarUmbral: valor });
+    setMensajeCalibracion("");
+    try {
+      const res = await fetch("/api/preferencias-busqueda", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calibrarUmbral: valor }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        setCalibracion(anterior);
+        setMensajeCalibracion("No se pudo guardar");
+        return;
+      }
+      setCalibracion({ calibrarUmbral: data.calibrarUmbral !== false, umbralPostularCalibrado: data.umbralPostularCalibrado ?? null });
+      setMensajeCalibracion("Guardado. La extensión lo usa desde su próxima revisión.");
+    } catch (err) {
+      console.error("Error guardando el ajuste del umbral:", err);
+      setCalibracion(anterior);
+      setMensajeCalibracion("No se pudo guardar — revisa la consola");
     }
   }
 
@@ -456,6 +498,57 @@ export default function FiltrosPage() {
           </div>
         )}
         </div>
+
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.12s" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <Gauge size={15} />
+          <p className="ap-section-title" style={{ marginBottom: 0 }}>Cuándo postula sola</p>
+        </div>
+        <p className="ap-section-sub">
+          Cada oferta recibe un puntaje según cuánto se parece a lo que buscas. Desde {UMBRAL_NORMAL} la
+          extensión postula sola; entre 46 y {UMBRAL_NORMAL - 1} te la deja en Por decidir. Si casi siempre
+          apruebas las más parecidas, el corte baja (hasta {UMBRAL_NORMAL - 10}) para no preguntarte lo que
+          ya sabemos que dirías.
+        </p>
+
+        {mensajeCalibracion && (
+          <p style={{ fontSize: 12.5, color: mensajeCalibracion.startsWith("Guardado") ? "var(--status-finalizado)" : "var(--status-rechazado)", marginBottom: 10 }}>
+            {mensajeCalibracion}
+          </p>
+        )}
+
+        <p style={{ fontSize: 13, marginBottom: 12 }}>
+          {amplitud === "abierto" ? (
+            <>
+              Con «Cualquier trabajo que pueda hacer» no se ajusta: todo lo que cumple tus condiciones te lo
+              preguntamos en Por decidir.
+            </>
+          ) : !calibracion.calibrarUmbral ? (
+            <>Postula sola desde <strong>{UMBRAL_NORMAL}</strong>, siempre.</>
+          ) : calibracion.umbralPostularCalibrado != null ? (
+            <>
+              Ahora postula sola desde <strong>{calibracion.umbralPostularCalibrado}</strong>: de las ofertas
+              entre {calibracion.umbralPostularCalibrado} y {UMBRAL_NORMAL - 1} que te preguntamos, aprobaste
+              casi todas. Si lo apagas, vuelve a {UMBRAL_NORMAL}.
+            </>
+          ) : (
+            <>
+              Por ahora postula sola desde <strong>{UMBRAL_NORMAL}</strong>. Lo revisamos una vez por semana
+              con lo que decides en Por decidir, y solo lo bajamos si apruebas 9 de cada 10 de las más
+              parecidas a lo que buscas.
+            </>
+          )}
+        </p>
+
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={calibracion.calibrarUmbral}
+            onChange={(e) => guardarCalibracion(e.target.checked)}
+          />
+          Ajustarlo con mis decisiones en Por decidir
+        </label>
+      </div>
       </div>
     </div>
   );
