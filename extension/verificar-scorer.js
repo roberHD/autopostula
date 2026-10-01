@@ -638,6 +638,21 @@ check('...y "pedro aguirre cerda", "isla de maipo"', AP.formatearRazonCorta({ ti
   AP.cfg = original;
 }
 
+// "También acepto trabajo remoto" sin comunas elegidas: no es "solo remoto".
+// Antes, con la lista de comunas vacía, toda oferta presencial con comuna
+// reconocida se descartaba como "fuera de tus comunas".
+{
+  const p = { roles: [{ canonico: 'vendedor', sinonimos: [], peso: 1 }], umbralPostular: 65, umbralGris: 45 };
+  const oferta = { titulo: 'Vendedor de tienda', empresa: 'Falabella', cuerpo: 'Buscamos vendedor', ubicacion: 'Maipú' };
+  const sinRemoto = AP.puntuarOferta(oferta, Object.assign({}, p, { ubicacion: { comunas: [], aceptaRemoto: false } }));
+  const conRemoto = AP.puntuarOferta(oferta, Object.assign({}, p, { ubicacion: { comunas: [], aceptaRemoto: true } }));
+  check('sin comunas: una oferta presencial en Maipú pasa', sinRemoto.banda === 'postular');
+  check('sin comunas y "también acepto remoto": la misma oferta pasa igual (no queda en solo remoto)', conRemoto.banda === 'postular' && !conRemoto.razones.some((r) => r.tipo === 'ubicacion'));
+  const conComunas = AP.puntuarOferta(oferta, Object.assign({}, p, { ubicacion: { comunas: ['nunoa'], aceptaRemoto: true } }));
+  check('con comunas y remoto: una presencial fuera de ellas se sigue descartando', conComunas.banda === 'descartar' && conComunas.razones[0].tipo === 'ubicacion');
+  const remota = AP.puntuarOferta(Object.assign({}, oferta, { cuerpo: 'Trabajo 100% remoto' }), Object.assign({}, p, { ubicacion: { comunas: ['nunoa'], aceptaRemoto: true } }));
+  check('con comunas y remoto: una remota fuera de ellas pasa', remota.banda === 'postular');
+}
 
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));
 process.exit(fallos === 0 ? 0 : 1);
