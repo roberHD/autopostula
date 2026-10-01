@@ -198,6 +198,17 @@ AP.formatearRazonCorta = function (r) {
       : 'este mismo cargo de esta empresa ya apareció en este escaneo';
     case 'senal': return (r.delta >= 0 ? '+' : '') + r.delta + ' por "' + r.patron + '"';
     case 'sin_senales': return 'sin señales claras';
+    // docs/amplitud-de-busqueda.md §5 y §6, con las palabras del panel
+    // (backend/lib/formatear-razon.ts). Faltaban acá: el historial y el
+    // resumen del escaneo decían "sin razón" en cada descarte por jornada.
+    case 'jornada': return r.declarada === 'part_time'
+      ? 'es de jornada completa y buscas part time'
+      : 'es part time y buscas jornada completa';
+    case 'jornada_desconocida': return 'no dice la jornada, y buscas ' + (r.declarada === 'part_time' ? 'part time' : 'jornada completa');
+    case 'requisito': return 'pide ' + (r.que === 'titulo' ? 'un título que no está en tu CV'
+      : r.que === 'licencia' ? 'una licencia de conducir profesional que no está en tu CV'
+      : 'inglés, y tu CV no lo menciona');
+    case 'modo_abierto': return 'cumple tus condiciones (buscas cualquier trabajo)';
     default: return 'sin razón';
   }
 };
@@ -454,7 +465,19 @@ const AP_KEYWORDS_MODALIDAD = {
 };
 const AP_KEYWORDS_JORNADA = {
   full_time: ['full time', 'jornada completa', 'tiempo completo'],
-  part_time: ['part time', 'media jornada', 'jornada parcial', 'medio tiempo'],
+  // "pt" a secas: abreviatura real en avisos chilenos ("PT 20 hrs", visto en
+  // trabajando.com) -- segura acá porque apConstruirPatron exige límite de
+  // palabra completa (\bpt\b), así que no calza dentro de "septiembre" ni
+  // "aceptar".
+  part_time: ['part time', 'media jornada', 'jornada parcial', 'medio tiempo', 'pt'],
+};
+// "PT20", "PT 25 hrs", "PT30HRS" (part time de N horas) y "FT42" (full time de
+// 42 horas): así titulan sus ofertas Sodimac, Paris y otras en trabajando.com
+// (verificado en vivo el 2026-09-30). "pt" con límite de palabra no los calza:
+// va pegado al número. Se prueban sobre texto ya normalizado (AP.n).
+const AP_JORNADA_CON_HORAS = {
+  part_time: /\bpt\s*\d{1,2}(?!\d)/,
+  full_time: /\bft\s*\d{2}(?!\d)/,
 };
 
 // ── Modo "cualquier trabajo" (docs/amplitud-de-busqueda.md §5) ──
@@ -603,10 +626,18 @@ const AP_ENLACE_CORTO = '(?:\\s+\\w{1,4}){0,2}';
 // Frase completa con límites de palabra, nunca subcadena (§6, mismo bug que
 // tenía coincideFiltros con "aseo"/"paseo"). El texto de entrada ya debe venir
 // normalizado con AP.n antes de construir/usar este patrón.
+//
+// El separador entre palabras es "[\s-]+" y no solo "\s+" -- bug real
+// encontrado en vivo el 2026-09-29: avisos de trabajando.com escriben
+// "Part-Time" con guion pegado, así que un patrón de dos palabras como
+// "part time" nunca calzaba contra el título aunque la oferta SÍ fuera part
+// time, y la jornada declarada (§3b, más abajo) quedaba como "no se pudo
+// saber" en vez de confirmada -- toda la búsqueda de un rol part time
+// terminaba en banda gris.
 function apConstruirPatron(patronNormalizado) {
   const palabras = patronNormalizado.split(/\s+/).filter(Boolean).map(apPatronPalabra);
   if (!palabras.length) return null;
-  return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + AP_ENLACE_CORTO + '\\s+') + '\\b');
+  return new RegExp('\\b' + palabras.join(AP_RUIDO_GENERO + AP_ENLACE_CORTO + '[\\s-]+') + '\\b');
 }
 
 // ── Comuna conocida de una oferta (docs/revision-2026-09-16.md §2.1, punto 4) ──
@@ -816,17 +847,28 @@ AP.puntuarOferta = function (campos, perfil) {
   //   aviso dice la jornada CONTRARIA a la declarada -> DESCARTAR
   //   aviso no dice ninguna de las dos                -> gris ("no sé" no es "no calza")
   //   aviso confirma la jornada declarada, o "cualquiera" -> sin penalización
+  //
+  // El TÍTULO manda sobre el resto del aviso (2026-09-30). Sodimac publica sus
+  // ofertas part time en trabajando.com ("Vendedor/a Sodimac La Reina Jornada
+  // PT20 hrs") con la ficha "Jornada Completa" y "turnos rotativos jornada
+  // completa" en la descripción, y bastaba una mención de la contraria en
+  // cualquier parte para descartar lo que el título decía que sí calza. Ahora:
+  // si el título dice la declarada, calza (aunque diga las dos); si no, una
+  // mención de la contraria en cualquier parte descarta, y si nada dice la
+  // declarada queda la duda, como antes.
   let jornadaIncierta = null;
   const jornadaDeclarada = perfil.jornada;
   if (jornadaDeclarada === 'full_time' || jornadaDeclarada === 'part_time') {
-    const textoCompleto = titulo + ' ' + empresa + ' ' + cuerpo;
     const contraria = jornadaDeclarada === 'full_time' ? 'part_time' : 'full_time';
-    const diceContraria = AP_KEYWORDS_JORNADA[contraria].some((k) => textoCompleto.includes(AP.n(k)));
-    if (diceContraria) {
-      return { score: 0, banda: 'descartar', razones: [{ tipo: 'jornada', declarada: jornadaDeclarada }] };
+    const dice = (jornada, soloTitulo) =>
+      AP_KEYWORDS_JORNADA[jornada].some((k) => { const r = buscar(k); return soloTitulo ? r.enTitulo : r.coincide; }) ||
+      AP_JORNADA_CON_HORAS[jornada].test(soloTitulo ? titulo : titulo + ' ' + empresa + ' ' + cuerpo);
+    if (!dice(jornadaDeclarada, true)) {
+      if (dice(contraria, false)) {
+        return { score: 0, banda: 'descartar', razones: [{ tipo: 'jornada', declarada: jornadaDeclarada }] };
+      }
+      if (!dice(jornadaDeclarada, false)) jornadaIncierta = { tipo: 'jornada_desconocida', declarada: jornadaDeclarada };
     }
-    const diceDeclarada = AP_KEYWORDS_JORNADA[jornadaDeclarada].some((k) => textoCompleto.includes(AP.n(k)));
-    if (!diceDeclarada) jornadaIncierta = { tipo: 'jornada_desconocida', declarada: jornadaDeclarada };
   }
 
   // 4. Señales -- ajustes graduales, no descartan. docs/amplitud-de-busqueda.md
@@ -1030,6 +1072,18 @@ AP.esVisible = function (el) {
   } catch (e) { return false; }
 };
 
+// Elige un <option> en su <select> como lo haría una persona: los portales
+// validan con "change". Un <option> no se puede "clickear" -- seleccionarOpcion
+// lo descarta por no tener layout propio (trabajando.com pregunta con <select>).
+AP.elegirOpcion = function (opcion) {
+  const sel = opcion && opcion.closest && opcion.closest('select');
+  if (!sel) return false;
+  sel.value = opcion.value;
+  sel.dispatchEvent(new Event('input', { bubbles: true }));
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+};
+
 AP.seleccionarOpcion = function (el) {
   try {
     if (!el || !AP.esVisible(el)) return false;
@@ -1069,9 +1123,12 @@ AP.analizarYResponder = async function (contexto, preguntas) {
   if (!contexto) return { analisis: null, respuestas: {}, datosFaltantes: {}, error: null };
   const p = (AP.cfg && AP.cfg.perfil) || {};
   const info = (AP.cfg && AP.cfg.info || []).map(it => it.texto);
+  // La IA puede tardar hasta ~25 s: se avisa antes y después (ver AP.latido).
+  AP.latido();
   const data = await AP.llamarBackendIA('procesar_postulacion', {
     contexto, perfil: p, info, preguntas: preguntas || []
   });
+  AP.latido();
   if (!data || data.error) return { analisis: null, respuestas: {}, datosFaltantes: {}, error: data && data.error };
   const respuestas = {};
   const datosFaltantes = {};
@@ -1110,6 +1167,23 @@ AP.avisarRevision = function (enCurso) {
   } catch (e) { /* extensión recargada: esta pestaña quedó huérfana */ }
 };
 
+// "Sigo postulando en esta pestaña" (docs/extension-trabajando-2026-09-30.md).
+// Los seguros de tiempo del background (90 s una aprobada de "Por decidir",
+// 8 min un paso de ráfaga) vuelven a contar desde cero con cada aviso: una
+// postulación con preguntas e IA en una pestaña de fondo los pasaba, y la
+// pestaña se cerraba a la mitad del formulario.
+AP.latido = function () {
+  try {
+    chrome.runtime.sendMessage({ type: 'POSTULANDO' }, () => {
+      if (chrome.runtime.lastError) { /* el service worker se está reiniciando */ }
+    });
+  } catch (e) { /* extensión recargada: esta pestaña quedó huérfana */ }
+};
+
+// `opciones.titulo` y `opciones.limiteMs` (docs/extension-trabajando-2026-09-30.md):
+// el mismo panel sirve para pedir solo lo que le falta a la IA, con su propio
+// título y un plazo más corto. AP.revisionVencida dice si la última se cerró
+// sola, por tiempo (quien la abrió sabe así que no había nadie mirando).
 AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
   const soloConfirmar = !!(opciones && opciones.mensaje);
   return new Promise(resolve => {
@@ -1149,10 +1223,16 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
           const sel = r.elegidoEl && o.el === r.elegidoEl ? ' selected' : '';
           return '<option value="' + oi + '"' + sel + '>' + esc((o.texto || '(opción sin texto)').slice(0, 80)) + '</option>';
         }).join('');
+        // Una opción que la IA no podía elegir (licencia, disponibilidad...)
+        // también se guarda en el perfil: antes solo se podía en las de texto,
+        // y la misma pregunta de Sí/No volvía en cada oferta.
+        const guardarOpcion = r.datoFaltante
+          ? '<div class="arreglos"><button class="chip guardar ap-rev-guardar" data-idx="' + idx + '">Guardar esto en mi perfil</button></div>'
+          : '';
         return '<div class="item" data-idx="' + idx + '" data-tipo="opcion">' + cabecera +
           '<select class="ap-rev-select" data-idx="' + idx + '">' +
             '<option value="-1"' + (r.elegidoEl ? '' : ' selected') + '>Sin elegir</option>' + opts +
-          '</select></div>';
+          '</select>' + guardarOpcion + '</div>';
       }
 
       const max = (r.el && r.el.maxLength && r.el.maxLength > 0 && r.el.maxLength < 10000) ? r.el.maxLength : 500;
@@ -1250,7 +1330,7 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
           '<div class="cab" id="ap-rev-header" title="Arrastra para mover el panel">' +
             '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
             '<span style="min-width:0">' +
-              '<h2>' + (soloConfirmar ? 'Confirma antes de postular' : 'Revisa antes de enviar') + '</h2>' +
+              '<h2>' + (soloConfirmar ? 'Confirma antes de postular' : esc((opciones && opciones.titulo) || 'Revisa antes de enviar')) + '</h2>' +
               '<p>' + esc(titulo.slice(0, 80)) + '</p>' +
             '</span>' +
             '<span class="agarre" aria-hidden="true">⋮⋮</span>' +
@@ -1398,16 +1478,33 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
     raiz.querySelectorAll('.ap-rev-guardar').forEach(btn => {
       btn.addEventListener('click', () => {
         const idx = +btn.dataset.idx;
-        const ta = textareaDe(idx);
-        const texto = ta && ta.value.trim();
-        if (!texto) { estadoDe(idx, 'aviso', 'Escribe primero la respuesta y después guárdala'); return; }
+        const entry = respuestasLog[idx] || {};
+        let texto = '';
+        if (entry.tipo === 'opcion') {
+          const sel = raiz.querySelector('.ap-rev-select[data-idx="' + idx + '"]');
+          const oi = sel ? +sel.value : -1;
+          texto = oi >= 0 && entry.opciones && entry.opciones[oi] ? (entry.opciones[oi].texto || '').trim() : '';
+        } else {
+          const ta = textareaDe(idx);
+          texto = ta ? ta.value.trim() : '';
+        }
+        if (!texto) {
+          estadoDe(idx, 'aviso', entry.tipo === 'opcion' ? 'Elige primero la respuesta y después guárdala' : 'Escribe primero la respuesta y después guárdala');
+          return;
+        }
+        // Se guarda con lo que es: "Si" o "$800.000" sueltos no le dicen nada a
+        // la IA la próxima vez; "licencia clase B: Si" sí.
+        const dato = (entry.datoFaltante || '').trim();
+        const paraGuardar = dato && !AP.n(texto).includes(AP.n(dato)) ? dato + ': ' + texto : texto;
         btn.disabled = true;
-        chrome.runtime.sendMessage({ type: 'GUARDAR_DATO', texto: texto }, (r) => {
+        chrome.runtime.sendMessage({ type: 'GUARDAR_DATO', texto: paraGuardar }, (r) => {
           if (chrome.runtime.lastError || !r || !r.ok) {
             btn.disabled = false;
             estadoDe(idx, 'aviso', 'No se pudo guardar en tu perfil: la respuesta se envía igual');
             return;
           }
+          // La próxima oferta de esta misma pestaña ya responde con el dato.
+          if (Array.isArray(r.infoAdicional) && AP.cfg) AP.cfg.info = r.infoAdicional;
           btn.textContent = 'Guardado en tu perfil';
           estadoDe(idx, 'bueno', 'Queda en tu perfil: no te lo vamos a volver a preguntar');
         });
@@ -1431,11 +1528,23 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
         const oi = +sel.value;
         if (oi >= 0 && entry.opciones && entry.opciones[oi]) {
           const nueva = entry.opciones[oi];
-          if (nueva.el !== entry.elegidoEl) AP.seleccionarOpcion(nueva.el);
+          if (nueva.el !== entry.elegidoEl) {
+            if (nueva.el && nueva.el.tagName === 'OPTION') AP.elegirOpcion(nueva.el);
+            else AP.seleccionarOpcion(nueva.el);
+          }
           entry.elegidoEl = nueva.el;
           entry.respuesta = nueva.texto;
           entry.vacia = false;
         } else {
+          // "Sin elegir" en un <select>: también se vacía en la página, si no
+          // se enviaba igual la opción que había puesto la IA.
+          const selPagina = entry.elegidoEl && entry.elegidoEl.tagName === 'OPTION' && entry.elegidoEl.closest('select');
+          if (selPagina) {
+            selPagina.value = '';
+            selPagina.dispatchEvent(new Event('input', { bubbles: true }));
+            selPagina.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          entry.elegidoEl = null;
           entry.vacia = true;
           entry.respuesta = '';
         }
@@ -1445,8 +1554,9 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
     // -- Cuenta regresiva --
     // Cuenta regresiva de 3 minutos, visible; los últimos 30 segundos se
     // marcan en rojo. Al llegar a cero la oferta se salta (ver abajo).
-    const LIMITE_MS = 180000;
+    const LIMITE_MS = (opciones && opciones.limiteMs) || 180000;
     const vence = Date.now() + LIMITE_MS;
+    AP.revisionVencida = false;
     const reloj = raiz.getElementById('ap-rev-reloj');
     let tic = null;
 
@@ -1461,7 +1571,7 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
       // antes de enviar" no garantizaba revisión (te ibas a buscar un café y
       // volvías con la postulación mandada), y los Términos (§5) prometen
       // que se puede leer y editar cada respuesta ANTES de que se envíe.
-      if (restan <= 0) cerrar('skip');
+      if (restan <= 0) { AP.revisionVencida = true; cerrar('skip'); }
     }
     pintarReloj();
     tic = setInterval(pintarReloj, 1000);
@@ -1510,8 +1620,13 @@ AP.confirmarAntesDeEnviar = function (titulo, contexto, mensaje) {
 // El escaneo disparado por la búsqueda automática (background) y el
 // toggle/config no dependen del portal — solo necesitan que el adaptador
 // ya haya definido AP.escanear.
+// AP.escaneoPedido: AUTO_SCAN (la búsqueda automática, a la pestaña de la
+// búsqueda) y FORCE_SCAN (el botón Escanear) son escaneos que alguien pidió.
+// trabajando.js no escanea solo una pestaña abierta en una oferta puntual,
+// pero sí cuando se lo piden (ver CARGADA_EN_OFERTA en adapters/trabajando.js).
 chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
   if (m.type === 'AUTO_SCAN') {
+    AP.escaneoPedido = true;
     if (AP.escanear) AP.escanear();
     sendResponse({ ok: true });
   }
@@ -1533,6 +1648,7 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
     chrome.storage.local.get(['config'], function (data) {
       if (data.config) AP.cfg = data.config;
       AP.activo = true;
+      AP.escaneoPedido = true;
       AP.procesando = false;
       AP.msg('Escaneando…', '#16A34A');
       if (AP.escanear) AP.escanear();

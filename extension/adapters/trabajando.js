@@ -4,9 +4,9 @@
 //  compartido y las utilidades genéricas viven en core.js (cargado
 //  antes que este archivo — ver manifest.json) bajo el objeto AP.
 //
-//  Estructura verificada a mano contra el sitio real el 2026-09-08
-//  (sin sesión iniciada -- ver más abajo la nota sobre el formulario
-//  de postulación, que es lo único que NO se pudo verificar en vivo).
+//  Estructura verificada a mano contra el sitio real el 2026-09-08 (sin
+//  sesión iniciada), y el flujo de postulación completo el 2026-09-30, con
+//  sesión y sin enviar nada: ver "Pantallas de la postulación", más abajo.
 // ═══════════════════════════════════════════════════════════════
 (function() {
 'use strict';
@@ -24,6 +24,17 @@ const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos, llama
 // mismo patrón de "panel lateral que se reescribe" que Computrabajo, no el
 // de "una página por aviso" de Laborum.
 const SELECTOR_PANEL = '#detalleOferta';
+
+// Una pestaña que se ABRE en una oferta puntual (/trabajo/{id}-…, o la
+// dirección de una tarjeta, /trabajo-empleo/…/trabajo/{id}-…) no se escanea
+// sola (2026-09-30). Así se abren las aprobadas de "Por decidir"
+// (background.js, applyInTab), y esa página también trae el listado: el
+// escaneo automático arrancaba ~1 s antes que la orden de postular a la
+// aprobada, abría otras tarjetas (y podía postular a ellas), y la aprobada
+// terminaba enviándose a la oferta que hubiera quedado abierta. Las búsquedas
+// (/trabajo-empleo/{cargo}…) no traen /trabajo/{id}- y se escanean como
+// siempre; un escaneo pedido (AP.escaneoPedido, ver core.js) también.
+const CARGADA_EN_OFERTA = /\/trabajo\/\d+-/.test(location.pathname);
 
 // ── Texto visible real (protección contra contenido "trampa") ──────────
 // Hallazgo en vivo el 2026-09-08: el panel de detalle trae texto oculto con
@@ -169,116 +180,86 @@ function evaluarTarjeta(tarjeta) {
   return AP.evaluarOferta(campos);
 }
 
-// ── Label de un campo (mismo módulo genérico que los otros adaptadores) ──
-function getLabel(el) {
-  // Verificado en vivo el 2026-09-17: cada pregunta del formulario real vive
-  // en un <div id="pregunta_N" class="mb-3"> con DOS <label> sin `for` (no
-  // calzan con el id del campo, y el propio campo a veces comparte el mismo
-  // id que el div) -- uno .type1 con el ordinal ("Pregunta 1 de 4") y otro
-  // .type2 con el texto real de la pregunta. Sin esto, el fallback genérico
-  // de más abajo terminaba leyendo "Máximo 3.000 caracteres (ingresados: 0)"
-  // como si fuera la pregunta -- la IA respondía sin ver la pregunta real
-  // (docs/revision-2026-09-16.md §8.1). `div[id^="pregunta_"]`, no
-  // `[id^="pregunta_"]` a secas: el propio campo puede tener ese mismo id, y
-  // closest() se fija primero en el propio elemento.
-  const contenedorPregunta = el.closest('div[id^="pregunta_"]');
-  if (contenedorPregunta) {
-    const real = contenedorPregunta.querySelector('label.type2');
-    if (real && real.textContent.trim()) return real.textContent.trim();
+// ── Pantallas de la postulación (verificado en vivo el 2026-09-30) ──────
+// Se recorrió el flujo real con sesión iniciada, sin enviar nada, y se leyó el
+// código del propio sitio (su controladorPostulacion). Después de "Postula
+// fácil":
+//   - oferta SIN preguntas: el sitio la envía en ese mismo clic y cambia el
+//     panel por la pantalla "¡Has postulado al empleo!" (SELECTOR_EXITO). No
+//     hay confirmación intermedia: el modal "Confirma tu postulación"
+//     (#modalConfirmarPostulacion) sigue en la página, pero el sitio ya no lo
+//     abre.
+//   - CON preguntas: abre #modalConfirmarPreguntas ("Responde las preguntas
+//     del reclutador…"), que trae DOS botones "Comenzar", uno para celular
+//     (d-md-none) y otro para computador (d-none d-md-block). El primero del
+//     documento es el de celular, oculto en un computador: la versión anterior
+//     tomaba ese, nunca lo apretaba y la postulación quedaba ahí detenida.
+//     "Comenzar" cambia el panel por la pantalla de preguntas, "Estás
+//     postulando a…" (ver responderPreguntas).
+//   - CV incompleto, estudios de una institución, CV en archivo: otro modal
+//     que le pide algo a la persona.
+// Si la oferta se termina en el sitio de la empresa (linkPostulacionExterno),
+// la pantalla de éxito dice "Has iniciado tu inscripción al empleo".
+const SELECTOR_EXITO = '.seccion-postulacion-ok';
+const SELECTOR_FORM_PREGUNTAS = '#formularioPreguntasOferta';
+const SELECTOR_ENVIAR_PREGUNTAS = '#cabeceraPreguntasEscritorio button';
+// El sitio arma su panel de preguntas para celular (aunque se esté en un
+// computador) solo cuando la oferta tiene preguntas: así se sabe ANTES del
+// clic si "Postula fácil" va a enviar de una vez. Verificado contra los datos
+// del propio sitio en ofertas con 7, 6 y 0 preguntas.
+const SELECTOR_HAY_PREGUNTAS = '#offCanvasPreguntasMobile';
+const YA_POSTULADO = /ya (te )?postulaste|postulacion (ya )?enviada/;
+// Se pidió lo que faltaba en un formulario y el panel se cerró solo, por
+// tiempo: no hay nadie mirando esta pestaña, así que no se vuelve a preguntar
+// (ver postular()).
+let nadieContestoEnEstaPestana = false;
+
+// Espera a que condicion() devuelva algo y lo devuelve; null si vence el plazo.
+async function esperarA(condicion, ms) {
+  const hasta = Date.now() + ms;
+  for (;;) {
+    const r = condicion();
+    if (r) return r;
+    if (Date.now() >= hasta) return null;
+    await sleep(250);
   }
-  if (el.id) {
-    const lf = document.querySelector('label[for="' + el.id + '"]');
-    if (lf) return lf.textContent.trim();
-  }
-  let prev = el.previousElementSibling;
-  while (prev) {
-    const t = prev.textContent && prev.textContent.trim();
-    if (t && t.length > 3) return t;
-    prev = prev.previousElementSibling;
-  }
-  const wrap = el.closest('div,li,section');
-  if (wrap) {
-    const cl = wrap.cloneNode(true);
-    cl.querySelectorAll('input,textarea,select,button').forEach(e => e.remove());
-    const t = cl.textContent && cl.textContent.trim();
-    if (t && t.length > 3 && t.length < 300) return t;
-  }
-  return el.placeholder || el.name || el.id || '';
 }
 
-// ── Módulo opciones (compartido en espíritu con computrabajo.js -- ver ahí
-//    el porqué de cada pieza; acá solo cambia el selector del panel) ──────
-const SELECTOR_OPCIONES = ['input[type=radio]','input[type=checkbox]','[role="radio"]','[role="option"]','[aria-checked]'].join(',');
-
-function esperarOpciones(selector, opts) {
-  const timeout = (opts && opts.timeout) || 2500;
-  return new Promise(resolve => {
-    const yaHay = document.querySelectorAll(selector);
-    if (yaHay.length) return resolve([...yaHay]);
-    const obs = new MutationObserver(() => {
-      const els = document.querySelectorAll(selector);
-      if (els.length) { obs.disconnect(); clearTimeout(t); resolve([...els]); }
-    });
-    obs.observe(document.body, { childList:true, subtree:true });
-    const t = setTimeout(() => { obs.disconnect(); resolve([...document.querySelectorAll(selector)]); }, timeout);
-  });
+// El título del aviso: <h3> en el panel del listado, <h1> en la página propia
+// de la oferta (/trabajo/{id}-…, así se abren las aprobadas de "Por decidir";
+// antes se buscaba solo el <h3> y esas quedaban registradas como "Oferta").
+function tituloDelPanel() {
+  const panel = document.querySelector(SELECTOR_PANEL);
+  const h = panel && panel.querySelector('#offerHeader h3, #offerHeader h1, h3');
+  return (h && h.textContent.trim()) || '';
 }
 
-function textoDeOpcion(el) {
-  try {
-    const aria = el.getAttribute && el.getAttribute('aria-label');
-    if (aria && aria.trim()) return aria.trim();
-    if (el.id) {
-      const lf = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
-      if (lf && lf.textContent.trim()) return lf.textContent.trim();
-    }
-    const lp = el.closest && el.closest('label');
-    if (lp && lp.textContent.trim()) return lp.textContent.trim();
-    if (el.tagName === 'INPUT') {
-      const sigu = el.nextElementSibling;
-      if (sigu && sigu.textContent && sigu.textContent.trim()) return sigu.textContent.trim();
-      const prev = el.previousElementSibling;
-      if (prev && prev.textContent && prev.textContent.trim()) return prev.textContent.trim();
-      return el.value || el.getAttribute('data-value') || '';
-    }
-    const propio = (el.textContent || '').trim().replace(/\s+/g,' ');
-    if (propio) return propio;
-    return el.getAttribute('title') || el.getAttribute('data-value') || '';
-  } catch(e) { return ''; }
+function panelDiceYaPostulado() {
+  const panel = document.querySelector(SELECTOR_PANEL);
+  return !!panel && YA_POSTULADO.test(n(panel.innerText || ''));
 }
 
-function hallarContenedorPregunta(el) {
-  let nodo = el.parentElement, profundidad = 0;
-  while (nodo && profundidad < 6) {
-    if (nodo.querySelectorAll(SELECTOR_OPCIONES).length > 1) return nodo;
-    nodo = nodo.parentElement; profundidad++;
-  }
-  return el.parentElement || el;
-}
-
-function textoPreguntaContenedor(contenedor) {
-  try {
-    const clon = contenedor.cloneNode(true);
-    clon.querySelectorAll(SELECTOR_OPCIONES).forEach(e => {
-      const lbl = e.closest('label');
-      if (lbl) { lbl.remove(); return; }
-      if (e.id) {
-        const lf = clon.querySelector('label[for="' + CSS.escape(e.id) + '"]');
-        if (lf) { lf.remove(); }
-      }
-      e.remove();
-    });
-    const t = (clon.textContent || '').trim().replace(/\s+/g,' ');
-    if (t && t.length > 3 && t.length < 300) return t;
-  } catch(e) {}
-  let prev = contenedor.previousElementSibling, intentos = 0;
-  while (prev && intentos < 4) {
-    const t = (prev.textContent || '').trim();
-    if (t && t.length > 3 && t.length < 300) return t;
-    prev = prev.previousElementSibling; intentos++;
-  }
-  return '';
-}
+// ── Preguntas del reclutador (verificado en vivo el 2026-09-30) ─────────
+// La pantalla "Estás postulando a…" (componente PreguntasEscritorio del sitio)
+// reemplaza al panel de la oferta: #detalleOferta deja de existir y las
+// preguntas quedan en #formularioPreguntasOferta, cada una en un
+// div#pregunta_N con dos <label> (.type1 "Pregunta N", .type2 el texto real)
+// y un solo campo según su tipo:
+//   TEXTO    -> <textarea maxlength="3000">
+//   MULTIPLE -> <select>, con una primera opción "Selecciona" (value "")
+//   NUMERO   -> <input type="text"> que solo acepta un número (dígitos, con o
+//               sin puntos de miles) de hasta 11 caracteres
+// No hay radios ni casillas. El "Postular" de arriba
+// (#cabeceraPreguntasEscritorio) sigue deshabilitado hasta que todas las
+// respuestas son válidas, y ese clic ya envía.
+//
+// Se busca SOLO dentro de #formularioPreguntasOferta, a propósito. El sitio
+// dibuja otra copia de cada pregunta, con los mismos ids, en su panel para
+// celular (#offCanvasPreguntasMobile: escondido con visibility:hidden pero con
+// offsetParent, así que "parece" visible), y el buscador de arriba ("¿Qué
+// trabajo buscas?", "Región / Comuna") son inputs de texto visibles. La versión
+// anterior recorría todo el documento: le pedía a la IA el doble de respuestas
+// y le "respondía" también al buscador.
 
 function calcularRespuesta(preguntaTexto, opciones, perfil) {
   const p = n(preguntaTexto);
@@ -300,243 +281,131 @@ function calcularRespuesta(preguntaTexto, opciones, perfil) {
   return null;
 }
 
-async function manejarGruposDeOpciones(perfil, respuestasLog, contexto) {
-  let interacciones = 0;
-  await esperarOpciones(SELECTOR_OPCIONES, { timeout:2500 });
-  // document, no SELECTOR_PANEL: el formulario de preguntas vive en
-  // #modalConfirmarPreguntas, un modal aparte del panel de detalle.
-  const panelForm = document;
-  const pendientesIA = [];
+// La opción que calza con la respuesta de la IA: igual, después "empieza con",
+// y recién al final "contiene", que era lo único que se miraba antes: "No, sin
+// licencia" caía en "Si" por el "si" de "sin".
+function opcionQueCalza(respuesta, opciones) {
+  const r = n(respuesta || '');
+  if (!r) return null;
+  const conTexto = opciones.filter(o => n(o.texto));
+  return conTexto.find(o => n(o.texto) === r)
+    || conTexto.find(o => r.startsWith(n(o.texto)) && !/[a-z0-9]/.test(r.charAt(n(o.texto).length)))
+    || conTexto.find(o => r.includes(n(o.texto)))
+    || null;
+}
 
-  const gruposRadioVistos = new Set();
-  for (const radio of panelForm.querySelectorAll('input[type=radio]')) {
-    if (!esVisible(radio)) continue;
-    const nombre = radio.name || '';
-    const clave = nombre || radio;
-    if (gruposRadioVistos.has(clave)) continue;
-    gruposRadioVistos.add(clave);
-    const grupo = nombre
-      ? [...panelForm.querySelectorAll('input[type=radio][name="' + CSS.escape(nombre) + '"]')].filter(esVisible)
-      : [radio];
-    if (!grupo.length) continue;
-    const opciones = grupo.map(r => ({ el:r, texto:textoDeOpcion(r) }));
-    const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(radio)) || getLabel(radio);
-    const elegida = calcularRespuesta(pregunta, opciones, perfil);
-    if (elegida) {
-      if (seleccionarOpcion(elegida.el)) {
-        interacciones++;
-        respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
-      }
-    } else if (AP.iaDisponible && pregunta.length > 5) {
-      pendientesIA.push({ pregunta, opciones });
-    } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
-    }
-  }
+// NUMERO: el sitio acepta solo un número de hasta 11 caracteres; con otra cosa
+// no deja enviar. Se toma el primero de la respuesta, con "mil" y "millones"
+// ("$800.000 líquidos" -> 800000, "800 mil" -> 800000, "1,2 millones" ->
+// 1200000). Sin número queda vacía.
+function soloNumero(respuesta) {
+  const m = n(String(respuesta || '')).match(/(\d{1,3}(?:\.\d{3})+|\d+)(?:[.,](\d+))?(?:\s*(millones|millon|mil)\b)?/);
+  if (!m) return '';
+  const entero = Number(m[1].replace(/\./g, ''));
+  const escala = !m[3] ? 1 : m[3] === 'mil' ? 1e3 : 1e6;
+  const valor = escala === 1 ? entero : Math.round(Number(entero + '.' + (m[2] || '0')) * escala);
+  const texto = String(valor);
+  return texto.length <= 11 ? texto : '';
+}
 
-  const gruposCbVistos = new Set();
-  for (const cb of panelForm.querySelectorAll('input[type=checkbox]')) {
-    if (!esVisible(cb)) continue;
-    const textoCb = n(textoDeOpcion(cb) || (cb.closest('label,div') && cb.closest('label,div').textContent) || '');
-    if (textoCb.includes('acepto') || textoCb.includes('terminos') || textoCb.includes('politica') || textoCb.includes('autorizo')) {
-      if (!cb.checked && seleccionarOpcion(cb)) interacciones++;
-      continue;
-    }
-    const nombre = cb.name || '';
-    if (nombre && !gruposCbVistos.has(nombre)) {
-      gruposCbVistos.add(nombre);
-      const grupo = [...panelForm.querySelectorAll('input[type=checkbox][name="' + CSS.escape(nombre) + '"]')].filter(esVisible);
-      const opciones = grupo.map(c => ({ el:c, texto:textoDeOpcion(c) }));
-      const pregunta = textoPreguntaContenedor(hallarContenedorPregunta(cb)) || getLabel(cb);
+// Responde el formulario y devuelve { n2, respuestasLog, analisis }. Una sola
+// llamada a la IA para todas las preguntas: antes eran dos (una para las de
+// opciones y otra para las de texto), y cada una remandaba el CV y el aviso
+// completos.
+async function responderPreguntas(form, contexto) {
+  // El sitio arma las respuestas vacías al montar la pantalla: se le da un
+  // momento antes de escribir.
+  await sleep(1000);
+  if (!AP.activo) return { n2: 0, respuestasLog: [], analisis: null };
+  const perfil = (AP.cfg && AP.cfg.perfil) || {};
+  const respuestasLog = [];
+  const pendientes = [];
+  let n2 = 0;
+
+  // div, no [id^="pregunta_"] a secas: el campo de adentro repite el id.
+  for (const caja of form.querySelectorAll('div[id^="pregunta_"]')) {
+    const campo = caja.querySelector('textarea, select, input[type="text"]');
+    const etiqueta = caja.querySelector('label.type2');
+    const pregunta = ((etiqueta && etiqueta.textContent) || '').trim();
+    if (!campo || !pregunta) continue;
+    if (campo.tagName === 'SELECT') {
+      const opciones = [...campo.options].filter(o => o.value !== '').map(o => ({ el: o, texto: o.textContent.trim() }));
+      if (!opciones.length) continue;
       const elegida = calcularRespuesta(pregunta, opciones, perfil);
       if (elegida) {
-        if (!elegida.el.checked && seleccionarOpcion(elegida.el)) {
-          interacciones++;
-          respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
-        }
-      } else if (AP.iaDisponible && pregunta.length > 5) {
-        pendientesIA.push({ pregunta, opciones });
-      } else if (pregunta) {
-        respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
-      }
-    }
-  }
-
-  const widgets = [...panelForm.querySelectorAll('[role="radio"],[role="option"],[aria-checked]:not(input)')]
-    .filter(el => el.tagName !== 'INPUT' && esVisible(el));
-  const gruposWidgetVistos = new Set();
-  for (const widget of widgets) {
-    const contenedor = hallarContenedorPregunta(widget);
-    if (gruposWidgetVistos.has(contenedor)) continue;
-    gruposWidgetVistos.add(contenedor);
-    const grupo = [...contenedor.querySelectorAll('[role="radio"],[role="option"],[aria-checked]:not(input)')].filter(esVisible);
-    if (!grupo.length) continue;
-    const opciones = grupo.map(el => ({ el, texto:textoDeOpcion(el) }));
-    const pregunta = textoPreguntaContenedor(contenedor);
-    const elegida = calcularRespuesta(pregunta, opciones, perfil);
-    if (elegida) {
-      if (seleccionarOpcion(elegida.el)) {
-        interacciones++;
-        respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
-      }
-    } else if (AP.iaDisponible && pregunta.length > 5) {
-      pendientesIA.push({ pregunta, opciones });
-    } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
-    }
-  }
-
-  // Preguntas de selección simple (<select>) -- verificado en vivo el
-  // 2026-09-17: Trabajando también usa un <select> normal para preguntas de
-  // una sola respuesta (ej. "¿Tienes conocimientos en...?" con Sí/No/
-  // Selecciona), no cubierto por los tres loops de arriba (que solo miran
-  // radio/checkbox/[role]) ni por el loop de texto de rellenar() (que
-  // excluye <select> a propósito). Sin este bloque la pregunta quedaba sin
-  // tocar, y el botón de postular del panel se queda deshabilitado hasta
-  // que TODAS las preguntas requeridas tengan respuesta -- la postulación
-  // nunca llegaba a poder enviarse (docs/revision-2026-09-16.md §8.1).
-  const selects = [...panelForm.querySelectorAll('select')].filter(sel => esVisible(sel) && !sel.value);
-  for (const sel of selects) {
-    const opciones = [...sel.options].filter(o => o.value !== '').map(o => ({ el: o, texto: o.textContent.trim() }));
-    if (!opciones.length) continue;
-    // getLabel(), no hallarContenedorPregunta()/textoPreguntaContenedor():
-    // esas dos buscan contenedores con varios radio/checkbox/[role] adentro
-    // (SELECTOR_OPCIONES no incluye <select>), así que nunca encontraban el
-    // div#pregunta_N real -- getLabel() ya sabe leer ese patrón directo.
-    const pregunta = getLabel(sel);
-    const elegida = calcularRespuesta(pregunta, opciones, perfil);
-    if (elegida) {
-      sel.value = elegida.el.value;
-      sel.dispatchEvent(new Event('input', { bubbles: true }));
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-      interacciones++;
-      respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones, elegidoEl: elegida.el });
-    } else if (AP.iaDisponible && pregunta.length > 5) {
-      pendientesIA.push({ pregunta, opciones, sel });
-    } else if (pregunta) {
-      respuestasLog.push({ pregunta, respuesta: '', respuestaIa: '', vacia: true, tipo:'opcion', opciones, elegidoEl: null, errorIA: null });
-    }
-  }
-
-  let analisis = null;
-  if (pendientesIA.length) {
-    const preguntasParaIA = pendientesIA.map((pd, i) => ({ id: 'o' + i, pregunta: pd.pregunta, opciones: pd.opciones.map(o => o.texto) }));
-    msg('IA respondiendo ' + pendientesIA.length + ' pregunta(s)…', 'trabajando');
-    const resultado = await analizarYResponder(contexto, preguntasParaIA);
-    analisis = resultado.analisis;
-    for (let i = 0; i < pendientesIA.length; i++) {
-      const pd = pendientesIA[i];
-      // §8.4 (docs/revision-2026-09-16.md): la IA puede decir que esta
-      // pregunta pide un hecho verificable (licencia, renta...) que no está
-      // en el perfil, en vez de inventar una respuesta -- ver la regla 1b
-      // del prompt en procesar-postulacion/route.ts.
-      const datoFaltante = resultado.datosFaltantes && resultado.datosFaltantes['o' + i];
-      const respIA = resultado.respuestas['o' + i];
-      let elegida = null;
-      if (!datoFaltante && respIA) {
-        const rNorm = n(respIA);
-        elegida = pd.opciones.find(o => rNorm.includes(n(o.texto)) || (n(o.texto).length < 4 && rNorm.startsWith(n(o.texto))));
-      }
-      // pd.sel: viene del bloque de <select> de arriba -- seleccionarOpcion()
-      // asume un radio/checkbox/[role] clickeable, y un <option> dentro de un
-      // <select> cerrado no es clickeable ni "visible" para AP.esVisible (los
-      // navegadores no le dan layout propio). Se aplica directo sobre el
-      // <select>, igual que la rama sin IA de arriba.
-      if (elegida && pd.sel) {
-        pd.sel.value = elegida.el.value;
-        pd.sel.dispatchEvent(new Event('input', { bubbles: true }));
-        pd.sel.dispatchEvent(new Event('change', { bubbles: true }));
-        interacciones++;
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
-      } else if (elegida && seleccionarOpcion(elegida.el)) {
-        interacciones++;
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo:'opcion', opciones: pd.opciones, elegidoEl: elegida.el });
+        AP.elegirOpcion(elegida.el);
+        n2++;
+        respuestasLog.push({ pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo: 'opcion', opciones, elegidoEl: elegida.el });
       } else {
-        respuestasLog.push({ pregunta: pd.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante: datoFaltante || null, tipo:'opcion', opciones: pd.opciones, elegidoEl: null, errorIA: resultado.error });
+        pendientes.push({ campo, pregunta, opciones });
       }
-      await sleep(250);
+    } else {
+      pendientes.push({ campo, pregunta, numero: campo.tagName === 'INPUT' });
     }
   }
 
-  return { interacciones, analisis };
+  let resultado = { analisis: null, respuestas: {}, datosFaltantes: {}, error: null };
+  if (AP.iaDisponible) {
+    if (pendientes.length) msg('IA respondiendo ' + pendientes.length + ' pregunta(s)…', 'trabajando');
+    // Sin pendientes igual se llama: trae el análisis del aviso (matchScore).
+    resultado = await analizarYResponder(contexto, pendientes.map((p, i) => ({
+      id: 'p' + i,
+      pregunta: p.numero ? p.pregunta + ' (Responde solo con el número.)' : p.pregunta,
+      opciones: p.opciones ? p.opciones.map(o => o.texto) : null,
+    })));
+  }
+
+  for (let i = 0; i < pendientes.length; i++) {
+    const p = pendientes[i];
+    // §8.4 (docs/revision-2026-09-16.md): la IA puede decir que la pregunta
+    // pide un hecho verificable (licencia, renta...) que no está en el perfil,
+    // en vez de inventarlo -- ver la regla 1b de procesar-postulacion/route.ts.
+    const datoFaltante = (resultado.datosFaltantes && resultado.datosFaltantes['p' + i]) || null;
+    const respuestaIa = datoFaltante ? null : resultado.respuestas['p' + i];
+    if (p.opciones) {
+      const elegida = respuestaIa ? opcionQueCalza(respuestaIa, p.opciones) : null;
+      if (elegida) {
+        AP.elegirOpcion(elegida.el);
+        n2++;
+        respuestasLog.push({ pregunta: p.pregunta, respuesta: elegida.texto, respuestaIa: elegida.texto, tipo: 'opcion', opciones: p.opciones, elegidoEl: elegida.el });
+      } else {
+        respuestasLog.push({ pregunta: p.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante, tipo: 'opcion', opciones: p.opciones, elegidoEl: null, errorIA: resultado.error });
+      }
+    } else {
+      let valor = respuestaIa ? (p.numero ? soloNumero(respuestaIa) : limitarTexto(respuestaIa, p.campo)) : '';
+      const fueIA = !!valor;
+      // Como antes: una pregunta de discapacidad sin respuesta de la IA va con "No".
+      if (!valor && !datoFaltante && !p.numero && /\bdiscapacidad/.test(n(p.pregunta))) valor = 'No';
+      if (valor) {
+        p.campo.scrollIntoView({ block: 'nearest' });
+        setVal(p.campo, valor);
+        n2++;
+        respuestasLog.push({ pregunta: p.pregunta, respuesta: valor, respuestaIa: valor, fueIA, tipo: 'texto', el: p.campo, numero: p.numero });
+      } else {
+        respuestasLog.push({ pregunta: p.pregunta, respuesta: '', respuestaIa: '', vacia: true, datoFaltante, tipo: 'texto', el: p.campo, numero: p.numero, errorIA: resultado.error });
+      }
+    }
+    // Sin pausa entre una y otra: en una pestaña de fondo (las de las ráfagas)
+    // Chrome estira cada setTimeout a un segundo o más, y la pausa no le
+    // servía al sitio (valida en cada "input").
+  }
+
+  return { n2, respuestasLog, analisis: resultado.analisis };
 }
 
-function aplicarValorTexto(el, val, labelRaw, fueIA, respuestasLog) {
-  val = limitarTexto(val, el);
-  el.scrollIntoView({ block:'nearest' });
-  setVal(el, val);
-  respuestasLog.push({ pregunta: labelRaw, respuesta: val, respuestaIa: val, fueIA, tipo:'texto', el });
-}
-
-async function rellenar(contexto) {
-  await sleep(1000);
-  if (!AP.activo) return { n2:0, respuestasLog:[], analisis:null };
-  const p = (AP.cfg && AP.cfg.perfil) || {};
-  let n2 = 0;
-  const respuestasLog = [];
-
-  const { interacciones, analisis: analisisDeOpciones } = await manejarGruposDeOpciones(p, respuestasLog, contexto);
-  n2 += interacciones;
-
-  // document, no SELECTOR_PANEL: el formulario de preguntas vive en
-  // #modalConfirmarPreguntas, un modal aparte del panel de detalle (ver nota
-  // de más abajo en postular()).
-  const pendientesTexto = [];
-  for (const el of document.querySelectorAll('textarea:not([style*="display:none"]),input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=file]):not([type=radio]):not([type=checkbox]):not([type=password])')) {
-    if (!el.offsetParent) continue;
-    const labelRaw = getLabel(el);
-    const lbl = n(labelRaw);
-    const clave = (...terms) => terms.some(t => new RegExp('\\b' + t).test(lbl));
-
-    if (el.type === 'email' && p.email) {
-      aplicarValorTexto(el, p.email, labelRaw, false, respuestasLog);
-      n2++;
-    } else if (el.type === 'tel' && p.tel) {
-      aplicarValorTexto(el, p.tel, labelRaw, false, respuestasLog);
-      n2++;
-    } else if (clave('discapacidad') || (clave('identifica') && clave('discapacidad'))) {
-      if (AP.iaDisponible) {
-        pendientesTexto.push({ el, labelRaw, fallback: 'No' });
-      } else {
-        aplicarValorTexto(el, 'No', labelRaw, false, respuestasLog);
-        n2++;
-      }
-    } else if (AP.iaDisponible && labelRaw.length > 5) {
-      pendientesTexto.push({ el, labelRaw });
-    } else if (labelRaw.length > 5) {
-      respuestasLog.push({ pregunta: labelRaw, respuesta: '', respuestaIa: '', vacia: true, tipo:'texto', el, errorIA: null });
-    }
+// Las preguntas que el sitio todavía no da por buenas: sin responder, o con su
+// aviso rojo ("Campo requerido", "Esta pregunta solo acepta números"...).
+function preguntasSinRespuestaValida(form) {
+  const malas = [];
+  for (const caja of form.querySelectorAll('div[id^="pregunta_"]')) {
+    const campo = caja.querySelector('textarea, select, input[type="text"]');
+    if (!campo) continue;
+    const aviso = [...caja.querySelectorAll('.text-primary-red')].find(el => el.offsetParent);
+    if (campo.value && !aviso) continue;
+    const etiqueta = caja.querySelector('label.type2');
+    malas.push('"' + ((etiqueta && etiqueta.textContent) || '').trim().slice(0, 60) + '"' + (aviso ? ' (' + aviso.textContent.trim() + ')' : ''));
   }
-
-  let analisis = analisisDeOpciones;
-  if (pendientesTexto.length) {
-    const preguntasParaIA = pendientesTexto.map((pd, i) => ({ id: 't' + i, pregunta: pd.labelRaw, opciones: null }));
-    msg('IA respondiendo ' + pendientesTexto.length + ' pregunta(s)…', 'trabajando');
-    const resultado = await analizarYResponder(contexto, preguntasParaIA);
-    if (resultado.analisis) analisis = resultado.analisis;
-    for (let i = 0; i < pendientesTexto.length; i++) {
-      const pd = pendientesTexto[i];
-      const datoFaltante = resultado.datosFaltantes && resultado.datosFaltantes['t' + i];
-      const valIA = resultado.respuestas['t' + i];
-      if (datoFaltante) {
-        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', respuestaIa: '', vacia: true, datoFaltante, tipo:'texto', el: pd.el, errorIA: null });
-      } else if (valIA) {
-        n2++;
-        aplicarValorTexto(pd.el, valIA, pd.labelRaw, true, respuestasLog);
-      } else if (pd.fallback) {
-        n2++;
-        aplicarValorTexto(pd.el, pd.fallback, pd.labelRaw, false, respuestasLog);
-      } else {
-        respuestasLog.push({ pregunta: pd.labelRaw, respuesta: '', respuestaIa: '', vacia: true, tipo:'texto', el: pd.el, errorIA: resultado.error });
-      }
-      await sleep(250);
-    }
-  } else if (!analisis) {
-    const resultado = await analizarYResponder(contexto, []);
-    analisis = resultado.analisis;
-  }
-
-  return { n2, respuestasLog, analisis };
+  return malas;
 }
 
 // ── Botón de postular ────────────────────────────────────────────
@@ -550,67 +419,97 @@ async function rellenar(contexto) {
 // el panel -- confirmado en vivo que al hacerle clic sin sesión redirige
 // a /ingresa-a-tu-cuenta, el mismo comportamiento esperado del botón real
 // de postular. Por eso se busca por texto + visibilidad en vez de por id.
+//
+// Y solo dentro del panel de la oferta (2026-09-30): en la pantalla de
+// preguntas y en la de éxito el panel ya no existe, y buscar en todo el
+// documento encontraba "Mis postulaciones" (el menú de arriba y la pantalla
+// de éxito), que también dice "postul".
 function obtenerBotonPostular() {
-  const panel = document.querySelector(SELECTOR_PANEL) || document;
+  const panel = document.querySelector(SELECTOR_PANEL);
+  if (!panel) return null;
   return [...panel.querySelectorAll('button, a')]
     .find(el => n(el.textContent || '').includes('postul') && el.offsetParent && !el.disabled) || null;
 }
 
-// ── Confirmación final (docs/revision-2026-09-16.md §8.1) ────────────────
-// Verificado en vivo el 2026-09-17, con sesión real y sin llegar a confirmar
-// una postulación de verdad: después del clic en "Postular"/"Enviar" (con o
-// sin preguntas de por medio), el sitio muestra un SEGUNDO modal --
-// "Confirma tu postulación al cargo" (id="modalConfirmarPostulacion") -- con
-// su propio botón "Postular" (id="botonPostularModalConfirmacion"), ya
-// presente (oculto) en el DOM desde que carga la página. Antes de este fix
-// nada en el código sabía que este paso existía: se asumía éxito apenas se
-// hacía clic en el botón del formulario, y en el portal real quedaba
-// "Confirma tu postulación al cargo" sin resolver -- exactamente lo que
-// encontró el documento (AutoPostula decía "Enviada", trabajando.cl/
-// mis-postulaciones decía "Aún no tienes postulaciones").
-async function confirmarPostulacionFinal() {
-  await sleep(800);
-  const btnConfirmar = document.getElementById('botonPostularModalConfirmacion')
-    || [...document.querySelectorAll('.modal.show button, .modal.show a')]
-      .find(el => n(el.textContent || '') === 'postular' && el.offsetParent && !el.disabled);
-  if (btnConfirmar && btnConfirmar.offsetParent && !btnConfirmar.disabled) {
-    btnConfirmar.click();
-    await sleep(1500);
-    return true;
+// ── ¿Quedó postulada? (docs/revision-2026-09-16.md §8.1) ──────────────────
+// "El ✓ solo se muestra con evidencia del portal": un clic sin errores no
+// alcanza. La evidencia real es la pantalla de éxito del sitio
+// (SELECTOR_EXITO, "¡Has postulado al empleo!", verificada en su código el
+// 2026-09-30), y como respaldo su texto o el "Ya postulaste" del panel.
+//
+// Historia: la primera versión buscaba solo frases que el sitio no usa ("ya
+// postulaste", "postulación enviada"...) en todo el documento, o daba por
+// buena la postulación si ya no se veía un botón de postular. Lo primero
+// encontraba "Ya postulaste" en otras partes de la página (reportado en vivo
+// el 2026-09-30); lo segundo ya no sirve: en la pantalla de preguntas tampoco
+// hay panel ni botón, y eso NO es una postulación hecha. Por eso se descarta
+// el texto del listado y ya no se usa la ausencia del botón.
+function huboEvidenciaDeExito() {
+  if (document.querySelector(SELECTOR_EXITO)) return true;
+  const listado = document.querySelector('#listadoOfertas');
+  let texto = n(document.body.innerText || '');
+  if (listado) {
+    const textoListado = n(listado.innerText || '');
+    if (textoListado) texto = texto.split(textoListado).join(' ');
   }
-  return false;
+  return /has postulado|has iniciado tu inscripcion|ya (te )?postulaste|postulaci[oó]n (ya )?enviada|postulaci[oó]n (recibida|exitosa|realizada)|gracias por postular/.test(texto);
 }
 
-// §8.1 punto 2 del arreglo: "el ✓ solo se muestra con evidencia del portal".
-// Antes, un clic sin errores en el botón ya bastaba para marcar "Enviado" --
-// exactamente el hueco que dejó pasar el caso de arriba sin que nada lo
-// notara. Dos señales, cualquiera alcanza: (a) el mismo texto que ya usa
-// este archivo para detectar "ya postulaste" al reabrir un aviso, si
-// aparece en cualquier parte de la página después del clic: o (b) el botón
-// de postular original ya no está clickeable (desapareció, quedó
-// deshabilitado, o cambió de texto) -- una postulación real cambia ese
-// estado; un clic que no confirmó nada, no.
-// ⚠️ La señal (a) no se pudo confirmar palabra por palabra contra un envío
-// real (evitado a propósito para no postular de verdad durante la prueba) --
-// si en el uso real algún envío exitoso NO dispara ninguna de las dos
-// señales, va a quedar registrado como error en vez de "Enviado", nunca al
-// revés (silencioso como "Enviado" sin serlo, que es el bug que esto arregla).
-function huboEvidenciaDeExito() {
-  const texto = n(document.body.innerText || '');
-  if (/ya (te )?postulaste|postulaci[oó]n (ya )?enviada|postulaci[oó]n (recibida|exitosa|realizada)|gracias por postular/.test(texto)) return true;
-  return !obtenerBotonPostular();
+// Espera lo que haga el sitio después de "Postula fácil" (ver "Pantallas de la
+// postulación", arriba) y aprieta el "Comenzar" que se ve. Devuelve
+// 'enviada' | 'preguntas' | 'login' | { modal: texto } | null (no pasó nada).
+async function esperarTrasPostular() {
+  let modalVistoEn = 0, comenzarEn = 0;
+  return esperarA(() => {
+    if (huboEvidenciaDeExito()) return 'enviada';
+    if (document.querySelector(SELECTOR_FORM_PREGUNTAS)) return 'preguntas';
+    if (document.querySelector('input[type=password]') || /ingresa-a-tu-cuenta/.test(location.pathname)) return 'login';
+    const modal = document.querySelector('.modal.show');
+    if (!modal) return null;
+    if (modal.id !== 'modalConfirmarPreguntas') {
+      return { modal: (modal.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 140) };
+    }
+    // Se espera a que el modal termine de abrirse: con un clic durante la
+    // animación, Bootstrap no lo cierra (el sitio igual cambia de pantalla, pero
+    // el modal queda encima). Si el clic no hizo nada, se reintenta a los 2,5 s.
+    const ahora = Date.now();
+    if (!modalVistoEn) modalVistoEn = ahora;
+    if (ahora - modalVistoEn < 600 || ahora - comenzarEn < 2500) return null;
+    const comenzar = [...modal.querySelectorAll('button')]
+      .find(b => n(b.textContent || '') === 'comenzar' && b.offsetParent && !b.disabled);
+    if (comenzar) { comenzarEn = ahora; comenzar.click(); }
+    return null;
+  }, 15000);
+}
+
+// Deja constancia de una postulación que el sitio confirmó y la guarda en
+// AutoPostula. §1.3 (docs/revision-2026-09-16.md): ver el razonamiento
+// completo en computrabajo.js, es el mismo acá.
+async function registrarEnviada({ id, titulo, empresa, url, decisionOfertaId, reason, respuestas, analisis }) {
+  // Con linkPostulacionExterno el sitio solo registra una "inscripción": la
+  // postulación se termina en el sitio de la empresa, y hay que decirlo.
+  const exito = document.querySelector(SELECTOR_EXITO);
+  const externa = !!exito && /has iniciado tu inscripcion/.test(n(exito.innerText || ''));
+  addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id,
+    reason: externa ? reason + ' — la empresa pide terminarla en su sitio' : reason,
+    respuestas});
+  const reportado = await reportarPostulacion({ id, titulo, empresa, plataforma: 'Trabajando', url, matchScore: analisis && analisis.matchScore, respuestas, decisionOfertaId });
+  if (!reportado || !reportado.ok) {
+    addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
+    msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
+  } else {
+    msg('✓ ' + titulo.slice(0,40), '#16A34A');
+  }
+  return { ok: true, expirada: false };
 }
 
 // ── Postular ──────────────────────────────────────────────────
-// Devuelve { ok, expirada } -- expirada=true SOLO cuando no hay ningún botón
-// de postular (la oferta ya no existe o no acepta postulantes).
+// Devuelve { ok, expirada } -- expirada=true SOLO cuando ya no se puede enviar
+// nunca (no hay botón de postular, o ya se había postulado).
 //
-// Salvaguarda que SÍ es explícita a propósito: si después de hacer clic en
-// "Postular" aparece un input[type=password] en la página, es la pantalla
-// de login (la sesión se cerró, o nunca se inició) -- no el formulario de la
-// oferta. Cortar ahí en vez de intentar "rellenar" una pantalla de login es
-// la diferencia entre un log de error claro y escribirle datos del CV a un
-// campo de contraseña.
+// Salvaguarda que SÍ es explícita a propósito: si después de "Postula fácil"
+// aparece un input[type=password] (o la página de ingreso), la sesión se cerró
+// o nunca se inició -- no se intenta "rellenar" una pantalla de login.
 async function postular(url, id, titulo, decisionOfertaId, empresa) {
   // docs/revision-2026-09-28.md §1: la empresa viaja con la postulación (se
   // guarda en la postulación misma, no se toma de la oferta compartida).
@@ -618,9 +517,9 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
   AP.vistos.add(id);
 
   msg('Postulando: ' + titulo.slice(0,35) + '…', '#D97706');
+  AP.latido();
 
-  const panelDetalle = document.querySelector(SELECTOR_PANEL);
-  if (panelDetalle && /ya (te )?postulaste|postulaci[oó]n (ya )?enviada/i.test(n(panelDetalle.innerText || ''))) {
+  if (panelDiceYaPostulado()) {
     addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Ya postulado'});
     // docs/revision-2026-09-28.md §6: ya no se puede enviar nunca -- una
     // aprobada de "Por decidir" en este estado se cierra en vez de reintentarse.
@@ -637,150 +536,170 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
 
   const contexto = extraerTextoAviso();
 
+  // §2.10 (docs/revision-2026-09-16.md): sin preguntas, "Postula fácil" ya es
+  // el clic que envía -- con "Revisar antes de enviar" el visto bueno se pide
+  // ANTES. Con preguntas, lo que se revisa son las respuestas, antes del
+  // "Postular" final.
+  if (!document.querySelector(SELECTOR_HAY_PREGUNTAS) && AP.cfg && AP.cfg.modoRevision) {
+    msg('⏸ Revisión pendiente…', '#2563EB');
+    const decision = await AP.confirmarAntesDeEnviar(titulo, contexto,
+      'Esta oferta se postula sin preguntas: al confirmar se envía tu CV. ¿Enviar?');
+    if (decision === 'skip') {
+      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
+      return { ok: false, expirada: false };
+    }
+  }
+
   btn.scrollIntoView({behavior:'smooth', block:'center'});
   await sleep(400);
   btn.click();
-  await sleep(2000);
 
-  // Cuando el aviso trae preguntas del reclutador, antes del formulario real
-  // aparece un modal intermedio de solo "Comenzar" (data-bs-target=
-  // "#modalConfirmarPreguntas") -- las preguntas (textarea) recién se montan
-  // al hacer clic ahí. Sin este paso, hayForm nunca las encontraba, se caía
-  // a la rama de "postulación directa" y quedaba reportado como enviado con
-  // el botón Postular real todavía deshabilitado sin responder nada.
-  const btnComenzar = document.querySelector('[data-bs-target="#modalConfirmarPreguntas"]')
-    || [...document.querySelectorAll('button')].find(el => n(el.textContent || '') === 'comenzar' && el.offsetParent);
-  if (btnComenzar && btnComenzar.offsetParent) {
-    btnComenzar.click();
-    await sleep(1200);
+  const paso = await esperarTrasPostular();
+
+  if (paso === 'enviada') {
+    return registrarEnviada({ id, titulo, empresa, url, decisionOfertaId, reason: 'Postulación directa' });
   }
-
-  if (document.querySelector('input[type=password]')) {
+  if (paso === 'login') {
     addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Pide iniciar sesión en Trabajando.com -- revisa que la cuenta siga conectada'});
     return { ok: false, expirada: false };
   }
-
-  // Se busca en todo el documento, no solo en SELECTOR_PANEL: el formulario
-  // de preguntas (cuando las hay) vive en #modalConfirmarPreguntas, un modal
-  // de Bootstrap montado aparte del panel de detalle, no adentro de él.
-  const hayForm = [...document.querySelectorAll('textarea,input[type=radio]')].some(el => el.offsetParent && !el.closest('.hide'));
-
-  if (hayForm) {
-    msg('Rellenando formulario…', '#D97706');
-    const { n2, respuestasLog, analisis } = await rellenar(contexto);
-    await sleep(1000);
-
-    if (AP.cfg && AP.cfg.modoRevision) {
-      msg('⏸ Revisión pendiente…', '#2563EB');
-      const decision = await mostrarRevision(titulo, respuestasLog, contexto);
-      if (decision === 'skip') {
-        addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
-        return { ok: false, expirada: false };
-      }
-    } else {
-      // §8.4/§8.5 (docs/revision-2026-09-16.md): sin modo revisión no hay
-      // ningún humano mirando esto antes de enviar -- si la IA marcó que le
-      // falta un hecho verificable (licencia, renta...) que no está en el
-      // perfil, no se manda con eso sin responder.
-      const faltaDato = respuestasLog.find(r => r.datoFaltante);
-      if (faltaDato) {
-        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
-          reason:'Falta "' + faltaDato.datoFaltante + '" en tu perfil para responder bien -- activa "Revisar antes de enviar" o completa tu perfil',
-          respuestas: respuestasLog});
-        return { ok: false, expirada: false };
-      }
-    }
-
-    const btnEnviar = [...document.querySelectorAll('button, a, input[type=submit]')]
-      .find(el => {
-        const t = n(el.textContent || el.value || '');
-        return (t.includes('enviar') || t.includes('postular') || t.includes('confirmar')) && !el.disabled && el.offsetParent;
-      });
-
-    if (btnEnviar) {
-      btnEnviar.scrollIntoView({block:'center'});
-      await sleep(300);
-      btnEnviar.click();
-      await sleep(2000);
-      await confirmarPostulacionFinal();
-      const respuestasParaLog = respuestasLog.map(r => ({ pregunta:r.pregunta, respuestaIa:r.respuestaIa, respuesta:r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
-      if (!huboEvidenciaDeExito()) {
-        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
-          reason:'El formulario se envió pero el portal nunca confirmó la postulación',
-          respuestas: respuestasParaLog
-        });
-        msg('⚠ No se confirmó: ' + titulo.slice(0,30), '#DC2626');
-        return { ok: false, expirada: false };
-      }
-      addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id,
-        reason:'Enviado (' + n2 + ' campos)',
-        respuestas: respuestasParaLog
-      });
-      // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
-      // computrabajo.js, es el mismo acá.
-      const reportado = await reportarPostulacion({ id, titulo, empresa, plataforma: 'Trabajando', url, matchScore: analisis && analisis.matchScore, respuestas: respuestasParaLog, decisionOfertaId });
-      if (!reportado || !reportado.ok) {
-        addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
-        msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
-      } else {
-        msg('✓ ' + titulo.slice(0,40), '#16A34A');
-      }
-      return { ok: true, expirada: false };
-    } else {
-      addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Formulario detectado pero sin botón de enviar reconocible'});
-      return { ok: false, expirada: false };
-    }
-  } else {
-    // §2.10 (docs/revision-2026-09-16.md): sin preguntas, este es el clic que
-    // envía -- con "Revisar antes de enviar" el visto bueno se pide antes.
-    if (AP.cfg && AP.cfg.modoRevision) {
-      msg('⏸ Revisión pendiente…', '#2563EB');
-      const decision = await AP.confirmarAntesDeEnviar(titulo, contexto,
-        'Esta oferta se postula sin preguntas: al confirmar se envía tu CV. ¿Enviar?');
-      if (decision === 'skip') {
-        addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Saltada en revisión manual'});
-        return { ok: false, expirada: false };
-      }
-    }
-    await confirmarPostulacionFinal();
-    if (!huboEvidenciaDeExito()) {
-      addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se hizo clic en Postular pero el portal nunca confirmó la postulación'});
-      msg('⚠ No se confirmó: ' + titulo.slice(0,30), '#DC2626');
-      return { ok: false, expirada: false };
-    }
-    addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
-    const reportado = await reportarPostulacion({ id, titulo, empresa, plataforma: 'Trabajando', url, decisionOfertaId });
-    if (!reportado || !reportado.ok) {
-      addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido')});
-      msg('⚠ Enviado, no se guardó: ' + titulo.slice(0,30), '#DC2626');
-    } else {
-      msg('✓ ' + titulo.slice(0,40), '#2563EB');
-    }
-    return { ok: true, expirada: false };
+  if (paso && paso.modal) {
+    addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Trabajando.com pide algo antes de postular: "' + paso.modal + '"'});
+    msg('⚠ No se postuló: ' + titulo.slice(0,30), '#DC2626');
+    return { ok: false, expirada: false };
   }
+  if (paso !== 'preguntas') {
+    // Documentos requeridos: el sitio no abre ningún modal, solo avisa.
+    const pideDocumentos = /adjuntar los documentos|documento requerido/.test(n(document.body.innerText || ''));
+    addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
+      reason: pideDocumentos ? 'La oferta pide adjuntar documentos: hay que postular a mano' : 'Se apretó "' + btn.textContent.trim() + '" pero trabajando.com no avanzó'});
+    msg('⚠ No se postuló: ' + titulo.slice(0,30), '#DC2626');
+    return { ok: false, expirada: false };
+  }
+
+  AP.latido();
+  const form = document.querySelector(SELECTOR_FORM_PREGUNTAS);
+  msg('Rellenando formulario…', '#D97706');
+  const { n2, respuestasLog, analisis } = await responderPreguntas(form, contexto);
+  const paraLog = () => respuestasLog.map(r => ({ pregunta:r.pregunta, respuestaIa:r.respuestaIa, respuesta:r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
+
+  const conRevision = !!(AP.cfg && AP.cfg.modoRevision);
+  const sinResponder = respuestasLog.filter(r => r.vacia);
+  const faltan = sinResponder.map(r => r.datoFaltante || '"' + (r.pregunta || '').slice(0, 50) + '"').slice(0, 3).join(', ');
+  const errorIA = (sinResponder.find(r => r.errorIA) || {}).errorIA;
+
+  if (!conRevision && errorIA) {
+    // La IA no respondió (cupo del mes, red): no hay un dato puntual que
+    // pedirle a la persona. Se dice y se sigue con la próxima.
+    addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
+      reason:'La IA no pudo responder el formulario (' + errorIA + ')', respuestas: paraLog()});
+    msg('⚠ No se postuló: ' + titulo.slice(0,30), '#DC2626');
+    return { ok: false, expirada: false };
+  }
+
+  // Con "Revisar antes de enviar" se revisa todo, como siempre. Sin él, una
+  // sola pregunta sin respuesta (la licencia, la renta, un Sí/No que la IA no
+  // podía saber: §8.4, docs/revision-2026-09-16.md, nada se inventa) dejaba
+  // la postulación sin enviar, sin preguntarle nada a nadie. Ahora se pide
+  // solo lo que falta, con el mismo panel y un plazo más corto, y lo que la
+  // persona conteste lo puede guardar en su perfil para no volver a
+  // encontrárselo (docs/extension-trabajando-2026-09-30.md). Si nadie
+  // contesta a tiempo, en esta pestaña no se vuelve a preguntar: las demás
+  // ofertas con datos faltantes se saltan directo, con el dato en el historial.
+  if (conRevision || (sinResponder.length && !nadieContestoEnEstaPestana)) {
+    msg(conRevision ? '⏸ Revisión pendiente…' : '⏸ Falta información para postular…', '#2563EB');
+    const decision = await mostrarRevision(titulo, respuestasLog, contexto,
+      conRevision ? undefined : { titulo: 'Falta información para postular', limiteMs: 120000 });
+    if (decision === 'skip') {
+      if (!conRevision && AP.revisionVencida) nadieContestoEnEstaPestana = true;
+      addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id,
+        reason: conRevision ? 'Saltada en revisión manual'
+          : AP.revisionVencida ? 'Faltaban respuestas (' + faltan + ') y nadie contestó a tiempo'
+          : 'Saltada: faltaban respuestas (' + faltan + ')',
+        respuestas: paraLog()});
+      return { ok: false, expirada: false };
+    }
+    // Lo editado en el panel tiene que seguir siendo un número donde el sitio
+    // pide uno (ver soloNumero).
+    for (const r of respuestasLog) {
+      if (!r.numero || !r.el) continue;
+      const valor = soloNumero(r.el.value);
+      if (valor !== r.el.value) setVal(r.el, valor);
+      r.respuesta = valor;
+      r.vacia = !valor;
+    }
+  } else if (sinResponder.length) {
+    addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
+      reason:'Faltan datos para responder (' + faltan + '): guárdalos en tu perfil o activa "Revisar antes de enviar"',
+      respuestas: paraLog()});
+    msg('⚠ No se postuló: ' + titulo.slice(0,30), '#DC2626');
+    return { ok: false, expirada: false };
+  }
+
+  const respuestasParaLog = paraLog();
+  AP.latido();
+
+  // El "Postular" de la pantalla de preguntas se habilita recién cuando todas
+  // las respuestas son válidas.
+  const btnEnviar = await esperarA(() => {
+    const b = [...document.querySelectorAll(SELECTOR_ENVIAR_PREGUNTAS)].find(el => el.offsetParent);
+    return b && !b.disabled ? b : null;
+  }, 4000);
+  if (!btnEnviar) {
+    const malas = preguntasSinRespuestaValida(form);
+    addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
+      reason: 'Trabajando.com no deja enviar: ' + (malas.length
+        ? malas.length + ' pregunta(s) sin una respuesta válida, como ' + malas[0]
+        : 'su botón Postular sigue deshabilitado'),
+      respuestas: respuestasParaLog});
+    msg('⚠ No se postuló: ' + titulo.slice(0,30), '#DC2626');
+    return { ok: false, expirada: false };
+  }
+
+  btnEnviar.scrollIntoView({block:'center'});
+  await sleep(300);
+  btnEnviar.click();
+
+  if (!await esperarA(huboEvidenciaDeExito, 15000)) {
+    addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id,
+      reason:'Se apretó Postular pero trabajando.com nunca confirmó la postulación',
+      respuestas: respuestasParaLog});
+    msg('⚠ No se confirmó: ' + titulo.slice(0,30), '#DC2626');
+    return { ok: false, expirada: false };
+  }
+  return registrarEnviada({ id, titulo, empresa, url, decisionOfertaId, reason: 'Enviado (' + n2 + ' campos)', respuestas: respuestasParaLog, analisis });
 }
 
 // ── Activar tarjeta ───────────────────────────────────────────
 async function activar(tarjeta) {
-  // El título del panel (SELECTOR_PANEL h3) es la señal de "cambió de
-  // oferta" -- ver obtenerBotonPostular() más arriba para por qué el botón
-  // ya no se identifica por id.
-  const tituloAntes = (document.querySelector(SELECTOR_PANEL + ' h3') || {}).textContent || '';
+  // El título del panel es la señal de "cambió de oferta" -- ver
+  // obtenerBotonPostular() más arriba para por qué el botón ya no se
+  // identifica por id. También la dirección: dos avisos seguidos pueden
+  // llamarse igual, y el sitio pone el id de la oferta en la URL al abrirla.
+  const tituloAntes = tituloDelPanel();
   const a = tarjeta.querySelector('h2 a') || tarjeta.querySelector('a');
   if (!a) return null;
+  const idTarjeta = getId(a.href);
   a.click();
   for (let i = 0; i < 25; i++) {
     await sleep(350);
+    const tituloAhora = tituloDelPanel();
+    const esEsta = tituloAhora && (tituloAhora !== tituloAntes || (idTarjeta && getId(location.href) === idTarjeta));
+    if (!esEsta) continue;
     const btn = obtenerBotonPostular();
-    const tituloEl = document.querySelector(SELECTOR_PANEL + ' h3');
-    const tituloAhora = tituloEl ? tituloEl.textContent : '';
-    if (btn && tituloAhora && tituloAhora !== tituloAntes) return btn;
+    if (btn) return btn;
+    // Ya postulada: el sitio muestra "Ya postulaste" en vez del botón. No hay
+    // nada que esperar; quien llama lo distingue con panelDiceYaPostulado().
+    if (panelDiceYaPostulado()) return null;
   }
   return null;
 }
 
 // ── Escanear ──────────────────────────────────────────────────
 async function escanear() {
+  // Una pestaña abierta en una oferta puntual no se escanea sola (ver
+  // CARGADA_EN_OFERTA): espera la orden de postular a esa oferta.
+  if (CARGADA_EN_OFERTA && !AP.escaneoPedido) return;
   if (!AP.activo || AP.procesando || !AP.cfg) { AP.reportarEscaneoTerminado(); return; }
   const tarjetas = [...document.querySelectorAll('div.result-box')];
   if (!tarjetas.length) { msg('Sin tarjetas — busca ofertas en Trabajando', '#9CA3AF'); AP.reportarEscaneoTerminado(); return; }
@@ -831,6 +750,11 @@ async function escanear() {
     if (!AP.activo) break;
     msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', 'trabajando');
     const btn = await activar(cand.t);
+    // Ya postulada (a mano o antes): no es una duda para "Por decidir".
+    if (!btn && panelDiceYaPostulado()) {
+      addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:'Ya postulado'});
+      continue;
+    }
     let resultadoFinal = null;
     let detalleAviso = null;
     if (btn) {
@@ -946,8 +870,7 @@ async function escanear() {
 // id/título de la propia página y reutilizar postular().
 async function aplicarDirecto(decisionOfertaId) {
   const id = getId(location.href) || location.pathname;
-  const tituloEl = document.querySelector(SELECTOR_PANEL + ' h3');
-  const titulo = (tituloEl && tituloEl.textContent.trim()) || 'Oferta';
+  const titulo = tituloDelPanel() || 'Oferta';
   AP.procesando = true;
   try {
     return await postular(location.href, id, titulo, decisionOfertaId);
@@ -960,8 +883,8 @@ async function aplicarDirecto(decisionOfertaId) {
 AP.escanear = AP.sinReentrada(escanear);
 AP.aplicarDirecto = aplicarDirecto;
 AP.onInit = function() {
-  console.log('[AP-TJ] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible);
-  if (AP.activo) {
+  console.log('[AP-TJ] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible, 'abierta en una oferta:', CARGADA_EN_OFERTA);
+  if (AP.activo && !CARGADA_EN_OFERTA) {
     msg('Activado — escaneando…', '#16A34A');
     setTimeout(() => AP.escanear(), 1800);
   }

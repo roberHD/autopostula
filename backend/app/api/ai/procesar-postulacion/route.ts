@@ -13,6 +13,7 @@ import {
   limpiarPerfilIA,
   limpiarPreguntasIA,
 } from "@/lib/contexto-ia";
+import { bloqueBusquedaDeclarada } from "@/lib/busqueda-declarada";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -91,6 +92,17 @@ export async function POST(request: Request) {
     );
     const infoTexto = info.map((t) => "- " + t).join("\n");
     const bloqueAnteriores = await bloqueRespuestasAnteriores(user.id, styleProfile?.evitarRepetidas);
+    // docs/extension-trabajando-2026-09-30.md: lo que la persona declaró que
+    // busca. Sin esto, "¿Tiene disponibilidad para trabajar presencialmente en
+    // La Dehesa?" quedaba sin respuesta y la postulación no se enviaba. Con
+    // "Usar mi perfil" apagado no va, igual que el CV.
+    const preferencias = incluirCv
+      ? await prisma.searchPreferences.findUnique({
+          where: { userId: user.id },
+          select: { jornada: true, modalidad: true, ubicacionDeclarada: true },
+        })
+      : null;
+    const bloqueBusqueda = bloqueBusquedaDeclarada(preferencias);
 
     const bloqueEstilo =
       estilo && estilo.confirmado
@@ -137,6 +149,7 @@ export async function POST(request: Request) {
       "REGLAS para las respuestas:\n" +
       "1. Usa solo informacion real del CV, perfil o datos adicionales entregados abajo. Nunca inventes datos concretos (anios, empresas, certificaciones) que no esten ahi.\n" +
       "1b. HECHOS VERIFICABLES (licencia de conducir, tenencia de vehiculo propio, titulo/grado especifico, certificacion o curso puntual, disponibilidad de horario exacta, pretension de renta): si la pregunta pide uno de estos Y el CV/perfil/datos adicionales NO lo menciona ni a favor ni en contra, NO respondas \"si\" ni \"no\" ni ningun valor concreto -- ni siquiera como suposicion razonable. Un \"no\" inventado puede sacar al candidato de un cargo que si podria hacer, y un \"si\" inventado es una mentira con su nombre. En estos casos deja \"respuesta\":null y llena \"datoFaltante\" con una descripcion corta de 2-4 palabras del dato que falta (ej: \"licencia clase B\", \"pretension de renta\", \"titulo de contador\"). Esta regla pisa a la 2 y a la 3 cuando aplica: no se inventa ni en texto libre ni eligiendo una opcion.\n" +
+      "1c. LO QUE DECLARO QUE BUSCA no es un dato faltante: si la pregunta es si puede trabajar en cierta jornada, modalidad o lugar (ej: \"¿Tiene disponibilidad para trabajar presencialmente en Lo Barnechea?\", \"¿Busca trabajo part time?\") y eso calza con lo que el candidato declaro que busca (abajo), responde que si (o la opcion equivalente); si claramente no calza (pide jornada completa y busca solo part time), responde que no. Un horario exacto (turnos rotativos, fines de semana, de tal a tal hora) sigue siendo regla 1b, salvo que su disponibilidad lo diga.\n" +
       "2. Si la pregunta trae \"opciones\" (no null) y NO es un hecho verificable sin datos (regla 1b): responde con el texto EXACTO de una de esas opciones (copiado tal cual), o null si ninguna aplica realmente.\n" +
       "3. Si la pregunta NO trae opciones (texto libre) y NO es un hecho verificable sin datos (regla 1b): responde en primera persona, con una extension de " + (DESCRIPCION_LONGITUD[styleProfile?.longitudRespuesta || "media"] || DESCRIPCION_LONGITUD.media) + ", honesta, util y personalizada al aviso especifico (rubro, productos, tareas mencionadas -- debe notarse que leiste este aviso en particular). Si no tienes el dato exacto pero la pregunta es sobre experiencia/motivacion/habilidades (no un hecho verificable puntual), no dejes el campo en null: responde con honestidad reconociendo que no tienes esa experiencia especifica pero conectandola con la experiencia real mas cercana que si tengas. Usa null SOLO si la pregunta es completamente irrelevante para un postulante a empleo.\n" +
       "3b. Si la pregunta es una autoidentificacion voluntaria de tipo si/no (ej: discapacidad, genero, pertenencia a pueblo originario) y el candidato no menciona nada relacionado en su CV/perfil/datos adicionales, responde con el valor neutro esperado (\"No\", o el que corresponda segun la pregunta) -- NUNCA uses null en estos casos solo porque no tienes el dato explicito, esa pregunta siempre espera una respuesta. Esto NO es un hecho verificable de la regla 1b (es una autoidentificacion, no algo que se pueda verificar).\n" +
@@ -157,6 +170,7 @@ export async function POST(request: Request) {
       "Cargo buscado: " + (p.cargo || "") + "\n" +
       "Renta esperada: " + (p.renta || "") + "\n" +
       "Disponibilidad: " + (p.disp || "") + "\n" +
+      bloqueBusqueda +
       "Datos adicionales del candidato:\n" + (infoTexto || "Ninguno") + "\n\n" +
       "AVISO DE TRABAJO (leelo completo y usa sus detalles especificos):\n" + String(contexto).slice(0, 3000) + "\n\n" +
       "Preguntas del formulario a responder (array JSON, respeta el mismo \"id\" en tu respuesta):\n" +

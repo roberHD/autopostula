@@ -124,6 +124,10 @@ function cargarBackgroundJs(opts) {
       },
     },
   };
+  // background.js carga la tabla de comunas con importScripts, como en Chrome
+  // (el service worker no tiene window: la tabla queda en self.AP).
+  ctx.self = ctx;
+  ctx.importScripts = (...archivos) => archivos.forEach(a => vm.runInContext(fs.readFileSync(path.join(__dirname, a), 'utf8'), ctx, { filename: a }));
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'background.js'), 'utf8'), ctx, { filename: 'background.js' });
 
@@ -1516,7 +1520,15 @@ bloque(async () => {
   check('lo que sigue después de la prueba dice lo mismo', constante('TEXTO_DESPUES_DE_LA_PRUEBA') && constante('TEXTO_DESPUES_DE_LA_PRUEBA') === p.leer('TEXTO_DESPUES_DE_LA_PRUEBA'));
   check('"Pasar a Premium" dice lo mismo', constante('TEXTO_PASAR_A_PREMIUM') && constante('TEXTO_PASAR_A_PREMIUM') === p.leer('TEXTO_PASAR_A_PREMIUM'));
   check('"Ver las 5" lleva a la misma ruta del historial', constante('RUTA_VER_LAS_DE_PRUEBA') && constante('RUTA_VER_LAS_DE_PRUEBA') === p.leer('RUTA_VER_LAS_DE_PRUEBA'));
-  const historial = fs.readFileSync(path.join(__dirname, '..', 'backend', 'app', 'dashboard', 'historial', 'page.tsx'), 'utf8');
+  // Se lee la carpeta entera y no un archivo puntual: quien lee ?filtro=prueba
+  // ya se movió una vez de page.tsx a Postulaciones.tsx (al pasar la lista al
+  // servidor), y el test falló por eso sin que la función estuviera rota.
+  const dirHistorial = path.join(__dirname, '..', 'backend', 'app', 'dashboard', 'historial');
+  const historial = fs
+    .readdirSync(dirHistorial)
+    .filter((f) => f.endsWith('.tsx'))
+    .map((f) => fs.readFileSync(path.join(dirHistorial, f), 'utf8'))
+    .join('\n');
   check('y esa ruta (?filtro=prueba) es la que el historial del panel sabe leer', /get\("filtro"\)\s*===\s*"prueba"/.test(historial));
 
   // ── El HTML ──
@@ -1802,6 +1814,28 @@ bloque(async () => {
   const antes = b.tabsActualizados.length;
   await b.enviarMensajeAsync({ type: 'REVISION_EN_CURSO' }, { tab: { id: 99, active: false, windowId: 1 } });
   check('una pestaña que abrió la persona no se toca (ya la está mirando)', b.tabsActualizados.length === antes);
+});
+
+// ── docs/extension-trabajando-2026-09-30.md: el latido mientras se postula ──
+// Una postulación con preguntas e IA en una pestaña de fondo pasaba los
+// seguros de tiempo (90 s una aprobada, 8 min un paso de ráfaga) y la pestaña
+// se cerraba a la mitad del formulario.
+bloque(async () => {
+  const b = cargarBackgroundJs({});
+  await tick();
+  b.storageLocal.rafaga = { estado: 'en_curso', tabActual: 5, latido: 0, pasos: [], pasoActual: 0, conteos: {} };
+  b.alarmsStore.delete('autopostula-rafaga-seguro');
+  await b.enviarMensajeAsync({ type: 'POSTULANDO' }, { tab: { id: 5 } });
+  check('un latido de la pestaña de la ráfaga vuelve a armar el seguro del paso (8 min desde ahora)', (b.alarmsStore.get('autopostula-rafaga-seguro') || {}).delayInMinutes === 8, b.alarmsStore.get('autopostula-rafaga-seguro'));
+  check('...y renueva el latido de la ráfaga', b.storageLocal.rafaga.latido > 0);
+
+  b.alarmsStore.delete('autopostula-rafaga-seguro');
+  await b.enviarMensajeAsync({ type: 'POSTULANDO' }, { tab: { id: 99 } });
+  check('el latido de otra pestaña no toca el seguro de la ráfaga', !b.alarmsStore.has('autopostula-rafaga-seguro'));
+
+  vm.runInContext('pestanasDeAprobadas.set(42, { alargar: (ms) => { globalThis.__alargadoA = ms; } })', b.ctx);
+  await b.enviarMensajeAsync({ type: 'POSTULANDO' }, { tab: { id: 42 } });
+  check('el latido de la pestaña de una aprobada alarga su seguro (90 s desde ahora)', b.ctx.__alargadoA === 90000, b.ctx.__alargadoA);
 });
 
 const tope = setTimeout(() => {

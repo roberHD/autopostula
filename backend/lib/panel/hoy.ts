@@ -5,6 +5,7 @@ import { datosDeLaOferta } from "@/lib/datos-postulacion";
 import { formatearRazon, esRazonPositiva } from "@/lib/formatear-razon";
 import { filtroSinNoticias } from "@/lib/estado-real";
 import { diaEnChile, inicioDelMesChile, inicioDeOtroDiaChile } from "@/lib/tiempo";
+import { JORNADA, MODALIDAD, lugaresDeclarados, type UbicacionDeclarada } from "@/lib/busqueda-declarada";
 
 /**
  * Todo lo que necesita la página Hoy (docs/estrategia-y-rediseno.md §5.2).
@@ -20,17 +21,6 @@ import { diaEnChile, inicioDelMesChile, inicioDeOtroDiaChile } from "@/lib/tiemp
 // Una pregunta respondida a mano en un formulario de portal toma unos 3
 // minutos (leerla, pensar, escribir). Es una estimación y se dice como tal.
 const MINUTOS_POR_PREGUNTA = 3;
-
-const JORNADA: Record<string, string> = { full_time: "Jornada completa", part_time: "Part time" };
-const MODALIDAD: Record<string, string> = { remoto: "Remoto", hibrido: "Híbrido", presencial: "Presencial" };
-
-type UbicacionDeclarada = { regiones?: string[]; comunas?: string[]; todaLaRegion?: boolean; aceptaRemoto?: boolean };
-
-const NOMBRE_REGION: Record<string, string> = {
-  AP: "Arica y Parinacota", TA: "Tarapacá", AN: "Antofagasta", AT: "Atacama", CO: "Coquimbo",
-  VA: "Valparaíso", RM: "Región Metropolitana", OH: "O'Higgins", ML: "Maule", NB: "Ñuble",
-  BI: "Biobío", AR: "La Araucanía", LR: "Los Ríos", LL: "Los Lagos", AI: "Aysén", MA: "Magallanes",
-};
 
 export type HechoReciente = {
   tipo: "postulo" | "no_envio" | "por_decidir" | "descarto";
@@ -265,9 +255,7 @@ export async function armarResumenHoy(userId: string) {
 
   // ── Lo que buscas ─────────────────────────────────────────────────
   const ubicacion = (preferencias?.ubicacionDeclarada ?? null) as UbicacionDeclarada | null;
-  const lugares = ubicacion?.todaLaRegion
-    ? (ubicacion.regiones ?? []).map((r) => NOMBRE_REGION[r] ?? r)
-    : ubicacion?.comunas ?? [];
+  const lugares = lugaresDeclarados(ubicacion);
   const busqueda = {
     objetivos: objetivos.map((o) => o.etiqueta),
     lugares,

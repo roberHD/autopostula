@@ -42,10 +42,13 @@ function main() {
     "//  GENERADO -- no editar a mano. Fuente: backend/scripts/limpieza/cl.ts\n" +
     "//  Regenerar con: npx tsx scripts/generar-comunas-extension.ts (desde backend/)\n" +
     "//  Se carga ANTES que core.js (ver manifest.json) -- expone AP.COMUNAS_CL.\n" +
+    "//  background.js también la carga (importScripts), para armar las búsquedas.\n" +
     "// ═══════════════════════════════════════════════════════════════\n" +
     "(function() {\n" +
     "'use strict';\n" +
-    "const AP = window.AP = window.AP || {};\n" +
+    "// En las páginas es window; en el service worker (background.js) no hay window.\n" +
+    "const raiz = typeof window !== 'undefined' ? window : self;\n" +
+    "const AP = raiz.AP = raiz.AP || {};\n" +
     "// Array de {nombre, region} -- nombre ya normalizado (minúsculas, sin tildes).\n" +
     "AP.COMUNAS_CL = " + JSON.stringify(comunas) + ";\n" +
     "AP.NOMBRE_REGION_CL = " + JSON.stringify(NOMBRE_REGION) + ";\n" +
