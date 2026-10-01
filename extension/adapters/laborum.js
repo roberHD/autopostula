@@ -19,6 +19,10 @@ const { msg, sleep, n, addLog, reportarPostulacion, reportarTitulosVistos,
         analizarYResponder, mostrarRevision, setVal, limitarTexto, seleccionarOpcion,
         siguientePagina } = window.AP;
 
+// true desde que esta página empieza a irse a otra (ver irA): de ahí en
+// adelante no escanea ni le avisa nada a la ráfaga.
+AP.navegando = false;
+
 // El listado de Laborum pagina con ?page={n} (page 1 no lleva el parámetro) --
 // verificado a mano contra el sitio real (ver backend/scripts/scrape-corpus.ts).
 function urlPaginaLaborum(pagina) {
@@ -42,6 +46,84 @@ function esperar(selector, timeout = 4000) {
     obs.observe(document.body, { childList: true, subtree: true });
     const t = setTimeout(() => { obs.disconnect(); resolve([...document.querySelectorAll(selector)]); }, timeout);
   });
+}
+
+// Igual que esperar(), para cuando no alcanza con un selector.
+function esperarQue(condicion, timeout) {
+  return new Promise(resolve => {
+    if (condicion()) return resolve(true);
+    const obs = new MutationObserver(() => {
+      if (condicion()) { obs.disconnect(); clearTimeout(t); resolve(true); }
+    });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+    const t = setTimeout(() => { obs.disconnect(); resolve(!!condicion()); }, timeout);
+  });
+}
+
+// ── La página de un aviso ─────────────────────────────────────────
+function esPaginaDeAviso() {
+  return /\/empleos\/.+-\d+\.html/.test(location.pathname);
+}
+
+function idDeAviso() {
+  return (location.pathname.match(/-(\d+)\.html/) || [])[1] || location.pathname;
+}
+
+// Antes de que la SPA pinte el aviso ya hay un <button> vacío y oculto en la
+// página: esperar "algún botón", como se hacía, seguía de largo con la página
+// en blanco. El título salía "Oferta" y el botón de postular "no existía", y
+// la oferta quedaba incompleta o, si venía de "Por decidir", vencida (visto en
+// producción el 2026-10-01). Se espera el título y la ficha.
+function avisoCargado() {
+  return !!(document.querySelector('h1') && document.getElementById('ficha-detalle'));
+}
+
+function esperarAviso() {
+  return esperarQue(avisoCargado, 15000);
+}
+
+function tituloDelAviso() {
+  const h1 = document.querySelector('h1');
+  return (h1 && h1.textContent.trim()) || 'Oferta';
+}
+
+// La empresa enlaza a su perfil ("/perfiles/empresa_..."). Un aviso
+// confidencial no tiene ese enlace, y los avisos relacionados de la página
+// tampoco lo usan (verificado el 2026-10-01).
+function empresaDelAviso() {
+  const a = document.querySelector('a[href*="/perfiles/empresa_"]');
+  return (a && a.textContent.trim()) || '';
+}
+
+// Mismo ícono que en la tarjeta (getUbicacionDeTarjeta), dentro de la ficha.
+function ubicacionDelAviso() {
+  const ficha = document.getElementById('ficha-detalle') || document;
+  const icono = ficha.querySelector('i[name="icon-light-location-pin"]');
+  const contenedor = icono && icono.closest('div');
+  return (contenedor && contenedor.textContent.trim()) || '';
+}
+
+// El botón que postula: "Postulación rápida" en las de un clic, "Postularme"
+// en las que abren las preguntas. Vive en una barra pegajosa que la SPA pinta
+// un poco después que el resto del aviso.
+function botonPostular() {
+  return [...document.querySelectorAll('button')].find(b => {
+    const t = n(b.textContent);
+    return (t.includes('postulacion rapida') || t === 'postularme' || t.includes('postular')) && AP.esVisible(b);
+  }) || null;
+}
+
+// La búsqueda puede venir filtrada por jornada en la URL
+// ("empleos-part-time-busqueda-vendedor.html", como la arma la ráfaga: ver
+// URL_BUSQUEDA_POR_PORTAL en background.js). Entonces todas sus tarjetas son
+// de esa jornada según el propio Laborum, aunque la tarjeta no lo diga: se le
+// pasa al scorer como texto del aviso. Sin esto, toda la búsqueda part time
+// quedaba en "no dice la jornada" (2026-10-01). Al abrir el aviso se vuelve a
+// puntuar con su ficha real (extraerTextoAviso).
+function jornadaDelListado() {
+  const m = location.pathname.match(/empleos-(part-time|full-time)-/);
+  if (!m) return '';
+  return m[1] === 'part-time' ? 'Part-time' : 'Full-time';
 }
 
 // ── Tarjetas del listado ──────────────────────────────────────────
@@ -100,9 +182,9 @@ function evaluarTarjeta(a) {
   const campos = {
     titulo: getTituloDeTarjeta(a),
     empresa: getEmpresaDeTarjeta(a),
-    // El cuerpo del aviso no está disponible a nivel de tarjeta -- se deja
-    // vacío, el título (peso x3) sigue siendo la señal dominante.
-    cuerpo: '',
+    // El cuerpo del aviso no está disponible a nivel de tarjeta: va solo la
+    // jornada, cuando la búsqueda viene filtrada por ella (jornadaDelListado).
+    cuerpo: jornadaDelListado(),
     ubicacion: getUbicacionDeTarjeta(a),
   };
   return AP.evaluarOferta(campos);
@@ -116,20 +198,28 @@ function yaPostulado() {
   return [...document.querySelectorAll('h1,h2,h3')].some(el => /^Postulado el /.test((el.textContent || '').trim()));
 }
 
-async function esperarConfirmacion(timeout = 8000) {
-  const inicio = Date.now();
-  while (Date.now() - inicio < timeout) {
-    if (yaPostulado()) return true;
-    await sleep(300);
-  }
-  return false;
+// Con un observador del DOM y no con una espera en bucle: en una pestaña de
+// fondo Chrome espacia los temporizadores encadenados.
+function esperarConfirmacion(timeout = 8000) {
+  return esperarQue(yaPostulado, timeout);
 }
 
-// ── Texto del aviso (para el análisis de la IA) ────────────────────
+// ── Texto del aviso (para el scorer y para la IA) ──────────────────
+// La ficha va primero ("Presencial · Ventas · Part-time, Indeterminado ·
+// Junior"): en Laborum la jornada casi nunca está en la descripción, solo ahí.
+// Sin ella el scorer no veía la jornada de ningún aviso y toda la búsqueda
+// part time quedaba en "Por decidir" (2026-10-01); la IA tampoco sabía que el
+// cargo era part time. Computrabajo y Trabajando ya leían su ficha completa.
+function textoFichaAviso() {
+  const ficha = document.getElementById('ficha-detalle') || document.body;
+  const ul = ficha.querySelector('ul[aria-label="Información adicional del aviso"]');
+  return ul ? [...ul.querySelectorAll('li')].map(li => li.textContent.trim()).filter(Boolean).join(' · ') : '';
+}
+
 function extraerTextoAviso() {
   const desc = document.querySelector('#descripcion-aviso');
   const beneficios = document.querySelector('#beneficios-aviso');
-  let texto = (desc ? desc.innerText : '') + '\n\n' + (beneficios ? beneficios.innerText : '');
+  let texto = textoFichaAviso() + '\n\n' + (desc ? desc.innerText : '') + '\n\n' + (beneficios ? beneficios.innerText : '');
   texto = texto.replace(/\n{3,}/g, '\n\n').trim();
   return texto.slice(0, 4000) || (document.body.innerText || '').slice(0, 4000);
 }
@@ -212,6 +302,10 @@ function yaProcesada(id) {
 function getModalPreguntas() {
   return document.querySelector('#form-preguntas');
 }
+
+// Se le pidió a la persona lo que faltaba y nadie contestó a tiempo: en esta
+// pestaña no se vuelve a preguntar (ver rellenarYEnviarPreguntas).
+const CLAVE_NADIE_CONTESTO = 'ap_nadie_contesto_laborum';
 
 function getTituloPregunta(form, textarea) {
   const etiqueta = form.querySelector('[for="' + CSS.escape(textarea.id) + '"]');
@@ -338,20 +432,43 @@ async function rellenarYEnviarPreguntas(contexto) {
     await sleep(300);
   }
 
-  if (AP.cfg && AP.cfg.modoRevision) {
-    msg('⏸ Revisión pendiente…', '#2563EB');
-    const decision = await mostrarRevision(document.querySelector('h1')?.textContent || 'Oferta', respuestasLog, contexto);
-    if (decision === 'skip') return { respuestasLog, saltada: true };
-  } else {
-    // §8.4 (docs/revision-2026-09-16.md): sin modo revisión no hay ningún
-    // humano mirando esto antes de enviar. El botón deshabilitado de Laborum
-    // ya frena la mayoría de los casos (§ más abajo), pero si el campo no
-    // era estrictamente obligatorio para el sitio, un dato faltante igual
-    // podría colarse vacío -- se corta acá explícito, sin depender de eso.
-    const faltaDato = respuestasLog.find(r => r.datoFaltante);
-    if (faltaDato) {
-      return { respuestasLog, errorEnvio: 'Falta "' + faltaDato.datoFaltante + '" en tu perfil para responder bien -- activa "Revisar antes de enviar" o completa tu perfil' };
+  const conRevision = !!(AP.cfg && AP.cfg.modoRevision);
+  const sinResponder = respuestasLog.filter(r => r.vacia);
+  const faltan = sinResponder.map(r => r.datoFaltante || '"' + (r.pregunta || '').slice(0, 50) + '"').slice(0, 3).join(', ');
+  const errorIA = (sinResponder.find(r => r.errorIA) || {}).errorIA;
+
+  if (!conRevision && errorIA) {
+    // La IA no respondió (cupo del mes, red): no hay un dato puntual que
+    // pedirle a la persona.
+    return { respuestasLog, errorEnvio: 'La IA no pudo responder el formulario (' + errorIA + ')' };
+  }
+
+  // Con "Revisar antes de enviar" se revisa todo, como siempre. Sin él, un
+  // dato que la IA no puede saber (la renta, una disponibilidad: §8.4,
+  // docs/revision-2026-09-16.md, nada se inventa) dejaba la postulación
+  // incompleta sin preguntarle nada a nadie: en Laborum casi todos los avisos
+  // de retail piden la "pretensión de renta". Ahora se pide solo lo que falta,
+  // con el mismo panel y un plazo más corto, y lo que la persona conteste lo
+  // puede guardar en su perfil -- igual que en trabajando.com
+  // (docs/extension-trabajando-2026-09-30.md §7). Si nadie contesta a tiempo,
+  // esta pestaña no vuelve a preguntar: cada aviso es una página nueva, así
+  // que eso queda en sessionStorage.
+  const nadieContesto = sessionStorage.getItem(CLAVE_NADIE_CONTESTO) === '1';
+  if (conRevision || (sinResponder.length && !nadieContesto)) {
+    msg(conRevision ? '⏸ Revisión pendiente…' : '⏸ Falta información para postular…', '#2563EB');
+    const decision = await mostrarRevision(tituloDelAviso(), respuestasLog, contexto,
+      conRevision ? undefined : { titulo: 'Falta información para postular', limiteMs: 120000 });
+    if (decision === 'skip') {
+      if (!conRevision && AP.revisionVencida) sessionStorage.setItem(CLAVE_NADIE_CONTESTO, '1');
+      return {
+        respuestasLog, saltada: true,
+        razon: conRevision ? 'Saltada en revisión manual'
+          : AP.revisionVencida ? 'Faltaban respuestas (' + faltan + ') y nadie contestó a tiempo'
+          : 'Saltada: faltaban respuestas (' + faltan + ')',
+      };
     }
+  } else if (sinResponder.length) {
+    return { respuestasLog, errorEnvio: 'Faltan datos para responder (' + faltan + '): guárdalos en tu perfil o activa "Revisar antes de enviar"' };
   }
 
   // El botón "Responder" está fuera del <form> en el DOM (es un elemento
@@ -375,9 +492,9 @@ async function rellenarYEnviarPreguntas(contexto) {
 // Un 'err' de verdad (no un 'skip' esperable como "ya estaba postulada") también
 // se reporta al backend como postulación incompleta, para que quede visible en
 // el dashboard con la razón — antes esto se perdía en el log local nomás.
-function marcarIncompleta(id, titulo, url, razon, respuestas, decisionOfertaId) {
+function marcarIncompleta(id, titulo, url, razon, respuestas, decisionOfertaId, empresa) {
   addLog({ ts: Date.now(), status: 'err', title: titulo, url, uid: id, reason: razon, respuestas });
-  reportarPostulacion({ id, titulo, plataforma: 'Laborum', url, incompleta: true, nota: razon, respuestas: respuestas || [], decisionOfertaId });
+  reportarPostulacion({ id, titulo, empresa, plataforma: 'Laborum', url, incompleta: true, nota: razon, respuestas: respuestas || [], decisionOfertaId });
 }
 
 // ── Postular a una oferta ya abierta ──────────────────────────────
@@ -389,6 +506,10 @@ function marcarIncompleta(id, titulo, url, razon, respuestas, decisionOfertaId) 
 async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
   // docs/revision-2026-09-28.md §1: la empresa viaja con la postulación (se
   // guarda en la postulación misma, no se toma de la oferta compartida).
+  //
+  // La barra con el botón la pinta la SPA un poco después que el resto del
+  // aviso: se espera a que aparezca, o a que diga que ya se postuló.
+  await esperarQue(() => yaPostulado() || !!botonPostular(), 8000);
   if (yaPostulado()) {
     addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: 'Ya estaba postulada' });
     return { ok: false, expirada: true };
@@ -401,19 +522,14 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
   // botón ni se envía nada.
   if (AP.soloObservarEfectivo()) {
     addLog({ ts: Date.now(), status: 'observado', title: titulo, url, uid: id, reason: 'Habría postulado — modo solo observar' });
-    return { ok: false, expirada: false };
+    return { ok: false, expirada: false, observado: true };
   }
 
-  // El texto del botón cambia según el tipo de oferta: "Postulación rápida"
-  // para las de un clic, "Postularme" para las que abren el modal de preguntas.
-  const btn = [...document.querySelectorAll('button')]
-    .find(b => {
-      const t = n(b.textContent);
-      return (t.includes('postulacion rapida') || t === 'postularme' || t.includes('postular')) && b.offsetParent;
-    });
+  // El texto del botón cambia según el tipo de oferta (ver botonPostular).
+  const btn = botonPostular();
 
   if (!btn) {
-    marcarIncompleta(id, titulo, url, 'No se encontró el botón para postular', null, decisionOfertaId);
+    marcarIncompleta(id, titulo, url, 'No se encontró el botón para postular', null, decisionOfertaId, empresa);
     return { ok: false, expirada: true };
   }
 
@@ -436,7 +552,10 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
   btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
   await sleep(400);
   btn.click();
-  await sleep(1200);
+  // El modal de preguntas puede tardar más que un segundo en una pestaña de
+  // fondo: si se miraba antes de que apareciera, la postulación se daba por
+  // directa y quedaba sin responder.
+  await esperarQue(() => !!getModalPreguntas() || yaPostulado(), 8000);
 
   // ¿Se abrió el modal de preguntas, o fue postulación directa?
   const form = getModalPreguntas();
@@ -445,11 +564,11 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
     const resultado = await rellenarYEnviarPreguntas(contexto);
 
     if (!resultado) {
-      marcarIncompleta(id, titulo, url, 'El modal de preguntas desapareció antes de poder llenarlo', null, decisionOfertaId);
+      marcarIncompleta(id, titulo, url, 'El modal de preguntas desapareció antes de poder llenarlo', null, decisionOfertaId, empresa);
       return { ok: false, expirada: false };
     }
     if (resultado.saltada) {
-      addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: 'Saltada en revisión manual' });
+      addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: id, reason: resultado.razon || 'Saltada en revisión manual' });
       return { ok: false, expirada: false };
     }
     // respuestaIa/fueEditada (docs/banco-de-preguntas.md §3): sin esto el
@@ -460,7 +579,7 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
 
     if (resultado.errorEnvio) {
       const respuestasParaLog = resultado.respuestasLog.map(paraLog);
-      marcarIncompleta(id, titulo, url, resultado.errorEnvio, respuestasParaLog, decisionOfertaId);
+      marcarIncompleta(id, titulo, url, resultado.errorEnvio, respuestasParaLog, decisionOfertaId, empresa);
       return { ok: false, expirada: false };
     }
 
@@ -479,7 +598,7 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
       }
       return { ok: true, expirada: false };
     }
-    marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(paraLog), decisionOfertaId);
+    marcarIncompleta(id, titulo, url, 'Se envió el formulario pero no se detectó confirmación', resultado.respuestasLog.map(paraLog), decisionOfertaId, empresa);
     return { ok: false, expirada: false };
   }
 
@@ -497,146 +616,221 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
     return { ok: true, expirada: false };
   }
 
-  marcarIncompleta(id, titulo, url, 'Se hizo clic pero no se detectó confirmación — puede que haya redirigido a un portal externo', null, decisionOfertaId);
+  marcarIncompleta(id, titulo, url, 'Se hizo clic pero no se detectó confirmación — puede que haya redirigido a un portal externo', null, decisionOfertaId, empresa);
   return { ok: false, expirada: false };
 }
 
-// ── Etapa 2 para banda gris (§B) ─────────────────────────────────────────
-// Laborum no tiene un panel lateral como Computrabajo -- cada aviso es su
-// propia página, así que "abrir el aviso" significa navegar ahí y volver.
-// sessionStorage sobrevive esa navegación (misma pestaña) y se pierde sola
-// si se cierra, así que sirve para pasarse la posta entre las dos pasadas:
-// qué oferta se fue a revisar, y qué resultado trajo al volver.
-const CLAVE_ETAPA2_PENDIENTE = 'ap_etapa2_pendiente';
-const CLAVE_ETAPA2_RESULTADO = 'ap_etapa2_resultado';
+// ── Abrir un aviso desde el listado ──────────────────────────────
+// Laborum no tiene un panel lateral como Computrabajo: cada aviso es su
+// propia página, así que "abrir el aviso" es navegar ahí y volver.
+// sessionStorage sobrevive esa navegación (misma pestaña) y se pierde sola si
+// se cierra: ahí queda qué aviso se fue a abrir, lo que decía su tarjeta y el
+// listado al que hay que volver.
+//
+// Se abre un aviso para postular a uno que la tarjeta dio por bueno, o para
+// revisar uno que quedó en duda (Etapa 2, §B). En los dos casos se vuelve a
+// puntuar con el aviso completo antes de hacer nada: la tarjeta no trae la
+// descripción ni la jornada (ver extraerTextoAviso). Hasta el 2026-10-01 las
+// buenas se postulaban sin mirar el aviso.
+const CLAVE_AVISO_PENDIENTE = 'ap_aviso_pendiente';
 
-// Ya estamos en la página del aviso que se fue a revisar -- se vuelve a
-// puntuar con el cuerpo y las facetas reales. Si ahora resuelve a postular,
-// se postula directo acá mismo (ya está abierto, no tiene sentido volver al
-// listado para reabrirlo); si no, el resultado se guarda para que la vuelta
-// al listado lo procese (banda gris con más datos, o descarte con razón real).
-async function resolverEtapa2Gris(pendiente) {
-  try {
-    await esperar('button');
-    const cuerpo = extraerTextoAviso();
-    const detalleAviso = extraerFacetasAviso();
-    AP.vistos.add(pendiente.id);
-    const resultadoFinal = AP.evaluarOferta({
-      titulo: pendiente.titulo, empresa: pendiente.empresa, cuerpo, ubicacion: pendiente.ubicacion || '',
-    });
+function leerAvisoPendiente() {
+  try { return JSON.parse(sessionStorage.getItem(CLAVE_AVISO_PENDIENTE) || 'null'); } catch (e) { return null; }
+}
 
-    // §2.8: la revisión de una gris que resuelve a postular tampoco puede
-    // repetir un cargo que ya se postuló con otro id.
-    if (resultadoFinal.banda === 'postular') {
-      let razonDuplicado = null;
-      const unicas = await AP.quitarDuplicados('Laborum', [pendiente], (p, razon) => { razonDuplicado = razon; });
-      if (!unicas.length) {
-        resultadoFinal.banda = 'descartar';
-        resultadoFinal.razones = [razonDuplicado];
+// Lo que se hizo en esta pestaña, sumado entre páginas: cada navegación vuelve
+// a cargar la extensión con los conteos en cero, y la ráfaga recibía solo los
+// de la última pasada por el listado (las postulaciones de Laborum no
+// llegaban a su resumen).
+const CLAVE_CONTEOS = 'ap_conteos_laborum';
+
+function conteosAcumulados() {
+  try { return JSON.parse(sessionStorage.getItem(CLAVE_CONTEOS) || '{}') || {}; } catch (e) { return {}; }
+}
+
+function sumarConteos(parcial) {
+  const c = conteosAcumulados();
+  for (const k of Object.keys(parcial)) if (parcial[k]) c[k] = (c[k] || 0) + parcial[k];
+  sessionStorage.setItem(CLAVE_CONTEOS, JSON.stringify(c));
+  return c;
+}
+
+function terminarEscaneo() {
+  const c = conteosAcumulados();
+  sessionStorage.removeItem(CLAVE_CONTEOS);
+  AP.reportarEscaneoTerminado(c);
+}
+
+// Desde que la pestaña empieza a irse a otra página hasta que esa carga, esta
+// no hace nada más (ver el comienzo de escanear()).
+function irA(url) {
+  AP.navegando = true;
+  location.href = url;
+}
+
+// El listado lee el log al cargar para no volver a abrir lo que se resolvió
+// acá: se espera a que quede guardado antes de irse. Se vuelve navegando al
+// listado y no con "atrás": un "atrás" que se queda en la misma página (la SPA
+// suma entradas propias al historial) dejaba el escaneo parado.
+async function volverA(url) {
+  AP.navegando = true;
+  await new Promise(r => { try { chrome.storage.local.set({ log: AP.log }, () => r()); } catch (e) { r(); } });
+  if (url) location.href = url;
+  else history.back();
+}
+
+function abrirAviso(oferta, texto) {
+  AP.vistos.add(oferta.id);
+  sessionStorage.setItem(CLAVE_AVISO_PENDIENTE, JSON.stringify({
+    id: oferta.id, titulo: oferta.titulo, url: oferta.url, empresa: oferta.empresa,
+    ubicacion: oferta.ubicacion, desde: location.href,
+  }));
+  msg(texto, 'trabajando');
+  irA(oferta.url);
+}
+
+// Puntúa el aviso abierto con todo lo que muestra y hace lo que corresponda:
+// postular, dejarlo en "Por decidir" o descartarlo con su razón. `datos` trae
+// lo de la tarjeta si se llegó desde el listado; lo que falte se lee de la
+// página. Devuelve false si hay que dejar de escanear (sin cupo, o el portal
+// fuera del plan).
+async function resolverAviso(datos) {
+  const url = datos.url || location.href;
+  if (!(await esperarAviso())) {
+    addLog({ ts: Date.now(), status: 'err', title: datos.titulo || 'Oferta', url, uid: datos.id, reason: 'La página del aviso no terminó de cargar' });
+    return true;
+  }
+  const titulo = datos.titulo || tituloDelAviso();
+  const empresa = datos.empresa || empresaDelAviso() || null;
+  let resultado = AP.evaluarOferta({
+    titulo, empresa: empresa || '', cuerpo: extraerTextoAviso(), ubicacion: datos.ubicacion || ubicacionDelAviso(),
+  });
+
+  // §2.8: tampoco se repite un cargo que ya se postuló con otro id.
+  if (resultado.banda === 'postular') {
+    let razonDuplicado = null;
+    const unicas = await AP.quitarDuplicados('Laborum', [{ titulo, empresa }], (p, razon) => { razonDuplicado = razon; });
+    if (!unicas.length) resultado = { banda: 'descartar', score: resultado.score, razones: [razonDuplicado] };
+  }
+
+  if (resultado.banda === 'postular') {
+    // §1.3: el tope del mes y el portal conectado, antes de cada clic (en
+    // solo observar no hay clic).
+    if (!AP.soloObservarEfectivo()) {
+      const verificacion = await AP.puedePostular('Laborum');
+      if (!verificacion.permitido) {
+        msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
+        return false;
       }
     }
-
-    if (resultadoFinal.banda === 'postular') {
-      AP.procesando = true;
-      await postularEnPagina(pendiente.id, pendiente.titulo, location.href, undefined, pendiente.empresa);
-      await sleep(DELAY);
-      AP.procesando = false;
-    } else {
-      sessionStorage.setItem(CLAVE_ETAPA2_RESULTADO, JSON.stringify({
-        id: pendiente.id, titulo: pendiente.titulo, url: pendiente.url, empresa: pendiente.empresa,
-        banda: resultadoFinal.banda, score: resultadoFinal.score, razones: resultadoFinal.razones, detalleAviso,
-      }));
-    }
-  } finally {
-    // Pase lo que pase (una excepción acá no debe dejar la bandera pegada --
-    // si quedara puesta, la próxima vez que esta pestaña llegue a CUALQUIER
-    // aviso, por la razón que sea, se procesaría como si fuera la revisión
-    // de ESTA oferta vieja).
-    AP.procesando = false;
-    sessionStorage.removeItem(CLAVE_ETAPA2_PENDIENTE);
+    const r = await postularEnPagina(datos.id, titulo, url, undefined, empresa || undefined);
+    if (r.ok) sumarConteos({ postular: 1 });
+    else if (r.observado) sumarConteos({ observado: 1 });
+    await sleep(DELAY);
+    return true;
   }
 
-  if (history.length > 1) {
-    history.back();
-    setTimeout(() => { if (AP.activo) escanear(); }, 1800);
+  if (resultado.banda === 'descartar') {
+    const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
+    addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: datos.id, reason: AP.formatearRazonCorta(razon) });
+    AP.reportarDescartes([{ externalId: datos.id, titulo, empresa, url, razon }], 'Laborum');
+    sumarConteos({ descartar: 1 });
+    msg('Descartada: ' + AP.formatearRazonCorta(razon), 'neutral');
   } else {
-    // No hay a dónde volver (caso raro: pestaña abierta directo en el
-    // detalle) -- sin esto el paso de la ráfaga se queda esperando un
-    // ESCANEO_TERMINADO que nunca llega hasta que vence el seguro de tiempo.
-    AP.reportarEscaneoTerminado();
+    addLog({ ts: Date.now(), status: 'skip', title: titulo, url, uid: datos.id, reason: 'En banda gris — revisar en el dashboard' });
+    AP.reportarBandaGris({
+      titulo, url, plataforma: 'Laborum', empresa,
+      scoreLocal: resultado.score, razones: resultado.razones, detalleAviso: extraerFacetasAviso(),
+    });
+    sumarConteos({ gris: 1 });
+    msg('Queda por decidir: ' + titulo.slice(0, 35), 'pendiente');
   }
+  return true;
+}
+
+// Un aviso que se abrió desde el listado: se resuelve y se vuelve a ese
+// listado, que sigue con el resto.
+async function revisarAvisoAbierto(pendiente) {
+  sessionStorage.removeItem(CLAVE_AVISO_PENDIENTE);
+  AP.vistos.add(pendiente.id);
+  AP.latido();
+  AP.procesando = true;
+  let seguir = true;
+  try {
+    seguir = await resolverAviso(pendiente);
+  } catch (e) {
+    // Un error acá no puede dejar la pestaña parada en el aviso hasta que
+    // venza el seguro de la ráfaga: se anota y se sigue con el resto.
+    console.warn('[AP-Laborum] no se pudo resolver el aviso:', e);
+    addLog({ ts: Date.now(), status: 'err', title: pendiente.titulo, url: pendiente.url, uid: pendiente.id, reason: 'Error al revisar el aviso: ' + ((e && e.message) || e) });
+  } finally {
+    AP.procesando = false;
+  }
+  if (!seguir) { terminarEscaneo(); return; }
+  await volverA(pendiente.desde);
 }
 
 // ── Escanear el listado ────────────────────────────────────────────
 async function escanear() {
-  if (!AP.activo || AP.procesando || !AP.cfg) { AP.reportarEscaneoTerminado(); return; }
+  // Mientras la pestaña se va a otra página (un aviso, el listado, la página
+  // siguiente) o está postulando, no se escanea ni se avisa nada: el flujo
+  // sigue por su cuenta. Antes, un escaneo que llegaba justo entonces (el
+  // observador de cambios del DOM, o la orden de la ráfaga) veía "procesando"
+  // y le avisaba a la ráfaga que el portal había terminado: la ráfaga cerraba
+  // la pestaña con el aviso recién abierto, sin postular (2026-10-01).
+  if (AP.navegando || AP.procesando) return;
+  if (!AP.activo || !AP.cfg) { terminarEscaneo(); return; }
 
-  // ¿Esta página de detalle es la vuelta de haber ido a revisar una gris
-  // (Etapa 2), y no una navegación normal a postular? Se revisa antes que
-  // nada porque cambia a qué función se delega.
-  const etapa2Pendiente = sessionStorage.getItem(CLAVE_ETAPA2_PENDIENTE);
-  if (etapa2Pendiente && /\/empleos\/.+-\d+\.html/.test(location.pathname)) {
-    return resolverEtapa2Gris(JSON.parse(etapa2Pendiente));
+  if (esPaginaDeAviso()) {
+    const pendiente = leerAvisoPendiente();
+    if (pendiente && pendiente.id === idDeAviso()) return revisarAvisoAbierto(pendiente);
+    if (pendiente) {
+      // Se fue a abrir un aviso y Laborum mostró otro (el pedido ya no está):
+      // se anota, para no reintentarlo, y se vuelve al listado.
+      sessionStorage.removeItem(CLAVE_AVISO_PENDIENTE);
+      addLog({ ts: Date.now(), status: 'err', title: pendiente.titulo, url: pendiente.url, uid: pendiente.id, reason: 'El aviso ya no está disponible' });
+      return volverA(pendiente.desde);
+    }
+    // Abierta directo en un aviso, sin venir del listado: una aprobada de "Por
+    // decidir" (la postula DO_APPLY, que trae su decisión) o la persona que
+    // abrió el aviso por su cuenta. Los enlaces de la ficha a avisos
+    // relacionados no son un listado: antes se escaneaban como si lo fueran, y
+    // la pestaña de una aprobada podía irse a otro aviso antes de que llegara
+    // la orden de postular (2026-10-01).
+    if (history.length > 1 || AP.escaneoPedido) return escanearPaginaDeOferta();
+    return;
   }
 
-  // En una página de detalle (no listado), postular directo si corresponde
-  // -- pero solo si se llegó navegando desde un listado (history real: la
-  // propia escanear() de más abajo navega con location.href, así que la
-  // pestaña ya trae al menos una entrada previa). Una pestaña NUEVA abierta
-  // directo en la URL de una oferta (§8.6, banda gris aprobada -- ver
-  // AP.aplicarDirecto) siempre arranca con history.length === 1: si acá se
-  // disparara igual, competiría con el DO_APPLY explícito que trae el
-  // decisionOfertaId para enlazar la postulación, y esta postularía primero
-  // sin ese enlace (sin duplicar el envío -- postularEnPagina ya empieza
-  // chequeando yaPostulado() -- pero la decisión quedaría "pendiente" para
-  // siempre aunque ya se haya postulado).
-  if (/\/empleos\/.+-\d+\.html/.test(location.pathname) && history.length > 1) {
-    return escanearPaginaDeOferta();
+  // Un aviso que se fue a abrir y no cargó (Laborum mandó a otra página): se
+  // anota, para no volver a intentarlo en cada pasada.
+  const sinAbrir = leerAvisoPendiente();
+  if (sinAbrir) {
+    sessionStorage.removeItem(CLAVE_AVISO_PENDIENTE);
+    addLog({ ts: Date.now(), status: 'err', title: sinAbrir.titulo, url: sinAbrir.url, uid: sinAbrir.id, reason: 'El aviso no se pudo abrir' });
   }
 
-  const candidatas = (await esperar('a[href^="/empleos/"]')).filter(a => /-\d+\.html/.test(a.href));
-  if (!candidatas.length) { msg('Sin tarjetas — busca ofertas en Laborum', '#9CA3AF'); AP.reportarEscaneoTerminado(); return; }
+  // La SPA pinta el listado después de cargar, y en una pestaña de fondo puede
+  // tardar: con 4 s no alcanzaba, "Sin tarjetas" le decía a la ráfaga que
+  // Laborum había terminado y la pestaña se cerraba a la mitad.
+  await esperarQue(() => getTarjetas().length > 0, 15000);
+  if (AP.navegando || AP.procesando) return;
+  const candidatas = getTarjetas();
+  if (!candidatas.length) { msg('Sin tarjetas — busca ofertas en Laborum', '#9CA3AF'); terminarEscaneo(); return; }
+  AP.latido();
 
   let pendientes = [];
   const titulosVistos = [];
   const avistamientos = [];
-  // Desglose del escaneo (§A): se cuentan las tres bandas y se junta la razón
-  // de cada descarte, para poder mostrar cuál fue la más frecuente al final.
-  const conteos = { postular: 0, gris: 0, descartar: 0 };
+  // Desglose de esta pasada (§A). El resumen suma además lo que se resolvió
+  // abriendo avisos (sumarConteos).
+  const conteos = { descartar: 0, observado: 0 };
   const razonesDescartadas = [];
   // Cada descarte con su razón va al panel (docs/estrategia-y-rediseno.md
   // §5.2): "Lo último que hizo" dice cuál y por qué, y se puede corregir.
   const descartes = [];
-  // Candidatas a banda gris de la Etapa 1 (solo tarjeta) -- no se reportan
-  // todavía: primero pasan por la Etapa 2 (§B) si no hay nada más urgente
-  // que hacer en esta pasada (ver el final de la función).
+  // Las que la tarjeta deja en duda se abren después de las buenas (Etapa 2,
+  // §B): recién con el aviso completo se sabe si van.
   const candidatosGris = [];
-
-  // Si esta pasada es la vuelta de haber ido a revisar una gris, se procesa
-  // el resultado que dejó guardado ANTES del forEach -- así el addLog() de
-  // acá abajo actualiza AP.log a tiempo para que yaProcesada() la excluya
-  // cuando el forEach la vuelva a encontrar en el listado.
-  const etapa2Resultado = sessionStorage.getItem(CLAVE_ETAPA2_RESULTADO);
-  if (etapa2Resultado) {
-    sessionStorage.removeItem(CLAVE_ETAPA2_RESULTADO);
-    try {
-      const r = JSON.parse(etapa2Resultado);
-      if (r.banda === 'descartar') {
-        conteos.descartar++;
-        const razon = (r.razones && r.razones[0]) || 'No calza con tus filtros';
-        razonesDescartadas.push(razon);
-        descartes.push({ externalId: r.id, titulo: r.titulo, empresa: r.empresa || null, url: r.url, razon });
-        addLog({ ts: Date.now(), status: 'skip', title: r.titulo, url: r.url, uid: r.id, reason: AP.formatearRazonCorta(razon) });
-      } else {
-        conteos.gris++;
-        addLog({ ts: Date.now(), status: 'skip', title: r.titulo, url: r.url, uid: r.id, reason: 'En banda gris — revisar en el dashboard' });
-        AP.reportarBandaGris({
-          titulo: r.titulo, url: r.url, plataforma: 'Laborum', empresa: r.empresa,
-          scoreLocal: r.score, razones: r.razones, detalleAviso: r.detalleAviso,
-        });
-      }
-    } catch (e) { /* sessionStorage corrupto -- se ignora, no bloquea el resto del escaneo */ }
-  }
 
   candidatas.forEach(a => {
     const id = getIdDeTarjeta(a);
@@ -652,10 +846,11 @@ async function escanear() {
     avistamientos.push({ externalId: id, titulo, empresa, url: a.href });
 
     const resultado = evaluarTarjeta(a);
+    const oferta = { id, titulo, empresa, url: a.href, ubicacion: getUbicacionDeTarjeta(a) };
     if (resultado.banda === 'postular') {
-      pendientes.push({ a, id, titulo, empresa, url: a.href });
+      pendientes.push(oferta);
     } else if (resultado.banda === 'gris') {
-      candidatosGris.push({ id, titulo, url: a.href, empresa, ubicacion: getUbicacionDeTarjeta(a), resultado });
+      candidatosGris.push(oferta);
     } else {
       // §C: la razón del scorer es un objeto estructurado -- se guarda tal
       // cual para el desglose del overlay (agrupa por tipo) y se formatea
@@ -683,122 +878,95 @@ async function escanear() {
   });
 
   // docs/modo-solo-observar.md §3.2: estas son ofertas que SE HABRÍAN
-  // postulado -- se cuentan aparte para que el mensaje no mienta.
+  // postulado. A diferencia de Computrabajo, acá "abrir el aviso para
+  // postular" es navegar a la página completa: en vez de eso no se navega, se
+  // deja constancia de cada una con su propio status y se sigue con las
+  // grises (más abajo), que sí se abren igual (§4.1).
   const soloObservar = AP.soloObservarEfectivo();
-  if (soloObservar) conteos.observado = pendientes.length;
-  else conteos.postular = pendientes.length;
-  {
-    AP.reportarDescartes(descartes, 'Laborum');
-    const resumen = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
-    msg(resumen.texto, resumen.estado, resumen.accion);
-  }
-
-  if (pendientes.length && soloObservar) {
-    // A diferencia de Computrabajo, acá "abrir el aviso para postular" es
-    // navegar a la página completa -- en vez de eso, directamente no se
-    // navega: se deja constancia de las tres con su propio status y se
-    // sigue de largo a la Etapa 2 de las grises (más abajo), que sí corre
-    // igual (§4.1).
+  if (soloObservar) {
     pendientes.forEach(p => {
       AP.vistos.add(p.id);
       addLog({ ts: Date.now(), status: 'observado', title: p.titulo, url: p.url, uid: p.id, reason: 'Habría postulado — modo solo observar' });
     });
-  } else if (pendientes.length) {
+    conteos.observado = pendientes.length;
+    pendientes = [];
+  }
+  AP.reportarDescartes(descartes, 'Laborum');
+  {
+    const resumen = AP.mensajeEscaneo(sumarConteos(conteos), razonesDescartadas, soloObservar);
+    msg(resumen.texto, resumen.estado, resumen.accion);
+  }
+
+  if (pendientes.length) {
     // §1.3 (docs/revision-2026-09-16.md): ver el razonamiento completo en
     // computrabajo.js, es el mismo acá.
     const verificacion = await AP.puedePostular('Laborum');
     if (!verificacion.permitido) {
       msg(AP.motivoPuedePostular(verificacion.motivo), '#DC2626');
-      AP.reportarEscaneoTerminado(conteos);
+      terminarEscaneo();
       return;
     }
-
-    AP.procesando = true;
+    // Una por pasada, en la misma pestaña: al volver al listado, la pasada
+    // siguiente sigue con la próxima.
     const primera = pendientes[0];
-    AP.vistos.add(primera.id);
-    msg('Abriendo: ' + primera.titulo.slice(0, 35) + '…', '#D97706');
-    // Se abre en la misma pestaña — más simple y confiable que coordinar
-    // pestañas nuevas entre content scripts independientes. El resto de
-    // pendientes se procesa en las siguientes pasadas de escanear(), que
-    // el propio flujo re-dispara al volver al listado (ver más abajo).
-    location.href = primera.url;
+    abrirAviso(primera, 'Abriendo: ' + primera.titulo.slice(0, 35) + '…');
     return;
   }
 
-  // Nada que postular en esta pasada -- si quedó alguna gris de la Etapa 1
-  // sin revisar, se va a revisar antes de dar el escaneo por terminado
-  // (§B: "las de postular se abren igual para postular, así que ahí es
-  // gratis; el costo neto son solo las grises").
+  // Nada que postular en esta pasada: si quedó alguna gris sin revisar, se
+  // abre antes de dar el escaneo por terminado (§B: "las de postular se abren
+  // igual para postular, así que ahí es gratis; el costo neto son solo las
+  // grises").
   if (candidatosGris.length) {
     const cand = candidatosGris[0];
-    AP.vistos.add(cand.id);
-    sessionStorage.setItem(CLAVE_ETAPA2_PENDIENTE, JSON.stringify({
-      id: cand.id, titulo: cand.titulo, url: cand.url, empresa: cand.empresa, ubicacion: cand.ubicacion,
-    }));
-    msg('Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…', 'trabajando');
-    location.href = cand.url;
+    abrirAviso(cand, 'Revisando oferta ambigua: ' + cand.titulo.slice(0, 30) + '…');
     return;
   }
 
   // Nada más que hacer en esta página -- si es una búsqueda automática
   // (pestaña oculta), sigue a la próxima página del listado en vez de
   // quedarse pegada acá para siempre (los listados no son infinitos).
-  if (!siguientePagina(candidatas.length, urlPaginaLaborum)) {
-    AP.reportarEscaneoTerminado(conteos);
-  }
+  if (siguientePagina(candidatas.length, urlPaginaLaborum)) AP.navegando = true;
+  else terminarEscaneo();
 }
 
-// Cuando escanear() navega a una oferta puntual, este es el flujo que sigue
-// una vez que la página de detalle carga.
+// La persona llegó a un aviso por su cuenta (o pidió "Escanear" estando en
+// uno): se resuelve igual que uno abierto desde el listado, pero la pestaña se
+// queda donde está. Antes volvía "atrás" sola, a donde fuera.
 async function escanearPaginaDeOferta() {
-  const id = (location.pathname.match(/-(\d+)\.html/) || [])[1] || location.pathname;
+  const id = idDeAviso();
+  if (AP.vistos.has(id)) return;
   AP.vistos.add(id);
-
-  // Red de seguridad extra: si por lo que sea llegamos acá con una oferta que
-  // el log ya tiene registrada, no la reprocesamos — solo volvemos al listado.
-  if (yaProcesada(id) && (AP.log || []).some(e => e.uid === id)) {
-    if (history.length > 1) {
-      history.back();
-      setTimeout(() => { if (AP.activo) escanear(); }, 1800);
-    } else {
-      AP.reportarEscaneoTerminado();
-    }
+  if ((AP.log || []).some(e => e.uid === id)) {
+    msg('Este aviso ya lo revisamos', 'neutral');
+    terminarEscaneo();
     return;
   }
-
-  await esperar('button');
-  const tituloEl = document.querySelector('h1');
-  const titulo = (tituloEl && tituloEl.textContent.trim()) || 'Oferta';
-
   AP.procesando = true;
-  await postularEnPagina(id, titulo, location.href);
-  await sleep(DELAY);
-  AP.procesando = false;
-
-  // Volver al listado para seguir con las siguientes ofertas pendientes.
-  if (history.length > 1) {
-    history.back();
-    setTimeout(() => { if (AP.activo) escanear(); }, 1800);
-  } else {
-    AP.reportarEscaneoTerminado();
+  try {
+    await resolverAviso({ id, url: location.href });
+  } catch (e) {
+    console.warn('[AP-Laborum] no se pudo resolver el aviso:', e);
+  } finally {
+    AP.procesando = false;
   }
+  terminarEscaneo();
 }
 
 // ── Postular directo a UNA oferta ya aprobada en banda gris (§8.6) ──────
-// La pestaña la abrió background.js apuntando directo a la URL de la
-// oferta (no a un listado). A diferencia de escanearPaginaDeOferta (el
-// mismo flujo pero disparado por la continuación normal de un escaneo),
-// esta no vuelve atrás con history.back() al terminar -- no hay a dónde
-// volver, background.js cierra la pestaña sola con el resultado.
+// La pestaña la abrió background.js apuntando directo a la URL de la oferta
+// (no a un listado), y la cierra él mismo con el resultado: acá no se navega
+// a ninguna parte. No se vuelve a puntuar: la persona ya dijo que sí.
 async function aplicarDirecto(decisionOfertaId) {
-  const id = (location.pathname.match(/-(\d+)\.html/) || [])[1] || location.pathname;
-  await esperar('button');
-  const tituloEl = document.querySelector('h1');
-  const titulo = (tituloEl && tituloEl.textContent.trim()) || 'Oferta';
-
+  const id = idDeAviso();
+  // Que el escaneo de esta misma pestaña no la tome además como visita.
+  AP.vistos.add(id);
   AP.procesando = true;
   try {
-    return await postularEnPagina(id, titulo, location.href, decisionOfertaId);
+    // Sin el aviso pintado no se decide nada: queda para el próximo ciclo (a
+    // los tres intentos background.js la da por vencida).
+    if (!(await esperarAviso())) return { ok: false, expirada: false };
+    return await postularEnPagina(id, tituloDelAviso(), location.href, decisionOfertaId, empresaDelAviso() || undefined);
   } finally {
     AP.procesando = false;
   }
@@ -891,6 +1059,20 @@ AP.escanear = AP.sinReentrada(function () {
   return escanear();
 });
 AP.aplicarDirecto = aplicarDirecto;
+// Si el navegador restaura el listado desde su caché de páginas (atrás o
+// adelante), la extensión vuelve con el estado de cuando se fue: navegando y
+// con un log viejo. Se pone al día y sigue.
+if (typeof window.addEventListener === 'function') {
+  window.addEventListener('pageshow', (e) => {
+    if (!e.persisted) return;
+    AP.navegando = false;
+    AP.procesando = false;
+    chrome.storage.local.get(['log'], (d) => {
+      AP.log = (d && d.log) || [];
+      if (AP.activo) setTimeout(() => AP.escanear(), 1500);
+    });
+  });
+}
 AP.onInit = function () {
   console.log('[AP-Laborum] listo — activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length);
   if (enMisPostulaciones()) {

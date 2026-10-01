@@ -13,6 +13,7 @@ import {
   limpiarInfoIA,
   limpiarPerfilIA,
 } from "@/lib/contexto-ia";
+import { preguntaPideRenta, rentaDeclarada } from "@/lib/renta-ia";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -60,6 +61,12 @@ export async function POST(request: Request) {
       : null;
     if (!pregunta) {
       return NextResponse.json({ error: "Falta pregunta" }, { status: 400 });
+    }
+
+    // La renta no se adivina (lib/renta-ia.ts): si la persona no la declaró,
+    // queda en blanco, sin gastar una llamada.
+    if (preguntaPideRenta(pregunta) && !rentaDeclarada(limpiarPerfilIA(cuerpo?.perfil).renta, limpiarInfoIA(cuerpo?.info))) {
+      return NextResponse.json({ respuesta: null });
     }
 
     const uso = await checkAndLogAiUsage(user.id, "responder_pregunta");

@@ -449,6 +449,29 @@ check('...y "pedro aguirre cerda", "isla de maipo"', AP.formatearRazonCorta({ ti
   check('quien busca jornada completa: "FT42" en el título -> postula', AP.puntuarOferta({ titulo: 'Vendedor/a Sodimac HC Tobalaba Jornada FT42 hrs', empresa: 'Sodimac', cuerpo: '', ubicacion: '' }, perfilFullTime).banda === 'postular');
   check('quien busca jornada completa: "PT20" en el título -> descarta, aunque la ficha diga "Jornada Completa"', AP.puntuarOferta({ titulo: 'Vendedor/a Sodimac La Reina Jornada PT20 hrs', empresa: 'Sodimac', cuerpo: cuerpoSodimac, ubicacion: '' }, perfilFullTime).banda === 'descartar');
 
+  // Las horas a secas en el título (2026-10-01, títulos reales de Laborum y
+  // Computrabajo): hasta 30 semanales es parcial, de 40 a 45 es completa.
+  const perfilHoras = Object.assign({}, perfilPartTime, { roles: [
+    { canonico: 'vendedor', sinonimos: [], peso: 1 },
+    { canonico: 'asistente de ventas', sinonimos: [], peso: 1 },
+    { canonico: 'ejecutivo de ventas', sinonimos: [], peso: 1 },
+  ] });
+  for (const titulo of ['Vendedor/a 30 hrs RayBan Mall Parque Arauco', 'Vendedor 20 horas - La Dehesa', 'Vendedora volante 30hrs pm', 'Asistente de ventas 30 HR', 'Ejecutivo de ventas 3HRS DIARIAS']) {
+    const r = AP.puntuarOferta({ titulo, empresa: '', cuerpo: '', ubicacion: '' }, perfilHoras);
+    check('"' + titulo + '" es part time -> postula, sin la duda de la jornada', r.banda === 'postular', r);
+  }
+  for (const titulo of ['Vendedor/a Dermocosmética 42 hrs / Skincare', 'Vendedor/a 40 hrs Mall Los Dominicos', 'Vendedor 45 horas semanales', 'Vendedor 8 horas diarias']) {
+    const r = AP.puntuarOferta({ titulo, empresa: '', cuerpo: 'Part-time', ubicacion: '' }, perfilHoras);
+    check('"' + titulo + '" es jornada completa -> descarta aunque el listado diga part time', r.banda === 'descartar' && r.razones[0].tipo === 'jornada', r);
+  }
+  // Lo que no es una jornada no decide nada: queda la duda, como antes.
+  for (const titulo of ['Vendedor horario de 10 a 18 hrs', 'Vendedor 10-18 hrs', 'Vendedor farmacia 24 horas', 'Vendedor turno 7x7 12 horas', 'Vendedor 180 horas mensuales']) {
+    const r = AP.puntuarOferta({ titulo, empresa: '', cuerpo: '', ubicacion: '' }, perfilHoras);
+    check('"' + titulo + '" no dice la jornada -> sigue en duda', r.banda === 'gris' && r.razones.some((x) => x.tipo === 'jornada_desconocida'), r);
+  }
+  const rHorarioCuerpo = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Horario de lunes a viernes de 9 a 18 hrs', ubicacion: '' }, perfilPartTime);
+  check('las horas de la descripción no cuentan ("de 9 a 18 hrs" es un horario)', rHorarioCuerpo.banda === 'gris', rHorarioCuerpo);
+
   // El historial y el resumen del escaneo decían "sin razón" en cada descarte
   // por jornada: formatearRazonCorta no conocía estas razones.
   check('razón corta de jornada contraria', AP.formatearRazonCorta(rFt42.razones[0]) === 'es de jornada completa y buscas part time', AP.formatearRazonCorta(rFt42.razones[0]));

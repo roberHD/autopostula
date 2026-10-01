@@ -698,6 +698,19 @@ const AP_JORNADA_CON_HORAS = {
   part_time: /\bpt\s*\d{1,2}(?!\d)/,
   full_time: /\bft\s*\d{2}(?!\d)/,
 };
+// Las horas a secas, solo en el TÍTULO (2026-10-01): "Vendedor/a 30 hrs
+// RayBan", "Vendedor 20 horas - La Dehesa", "Vendedora volante 30hrs pm" y,
+// dentro del filtro part time de Computrabajo, "Vendedor/a Dermocosmética 42
+// hrs". En Chile la jornada parcial es de hasta 30 horas semanales (Código del
+// Trabajo, art. 40 bis) y la completa, de 40 a 45; "3HRS DIARIAS" es parcial y
+// "8 horas diarias", completa. En la descripción no: "de 9 a 18 hrs" es un
+// horario. Tampoco cuenta 24 ("farmacia 24 horas") ni lo que viene después de
+// " a ", " hasta " o un guion ("de 10 a 18 hrs", "10-18 hrs"); la "a" tiene que
+// ir suelta, porque "Vendedor/a 30 hrs" sí es una jornada.
+const AP_JORNADA_HORAS_TITULO = {
+  part_time: /(?<!\sa\s|\shasta\s|[-–]\s?)\b(?:1[5-9]|2[0-35-9]|30)\s*(?:hrs?|horas|hs)\b(?!\.?\s*diari)|\b[1-6]\s*(?:hrs?|horas|hs)\.?\s*diari/,
+  full_time: /\b4[0-5]\s*(?:hrs?|horas|hs)\b(?!\.?\s*diari)|\b(?:8|9|10)\s*(?:hrs?|horas|hs)\.?\s*diari/,
+};
 
 // ── Modo "cualquier trabajo" (docs/amplitud-de-busqueda.md §5) ──
 // Sin rol que filtre, el puntaje partiría en 0 y todo se descartaría. La base
@@ -1128,7 +1141,8 @@ AP.puntuarOferta = function (campos, perfil) {
     const contraria = jornadaDeclarada === 'full_time' ? 'part_time' : 'full_time';
     const dice = (jornada, soloTitulo) =>
       AP_KEYWORDS_JORNADA[jornada].some((k) => { const r = buscar(k); return soloTitulo ? r.enTitulo : r.coincide; }) ||
-      AP_JORNADA_CON_HORAS[jornada].test(soloTitulo ? titulo : titulo + ' ' + empresa + ' ' + cuerpo);
+      AP_JORNADA_CON_HORAS[jornada].test(soloTitulo ? titulo : titulo + ' ' + empresa + ' ' + cuerpo) ||
+      AP_JORNADA_HORAS_TITULO[jornada].test(titulo);
     if (!dice(jornadaDeclarada, true)) {
       if (dice(contraria, false)) {
         return { score: 0, banda: 'descartar', razones: [{ tipo: 'jornada', declarada: jornadaDeclarada }] };
