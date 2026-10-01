@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { esAmplitud } from "@/lib/amplitud";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { limpiarUbicacion, listaDeTextos } from "@/lib/entrada";
+import { expandirUbicacionDeclarada } from "@/lib/compilar-perfil";
 
 // docs/revision-2026-09-28.md §25: solo valores conocidos. Antes se guardaba lo
 // que llegara (un objeto en vez de lista, una modalidad inventada).
@@ -38,7 +39,20 @@ export async function PUT(request: Request) {
   const jornada = JORNADAS.has(body?.jornada) ? body.jornada : undefined;
   const ubicacionDeclarada = limpiarUbicacion(body?.ubicacionDeclarada);
 
-  await getOrCreatePreferencias(userId);
+  const actuales = await getOrCreatePreferencias(userId);
+
+  // La ubicación vive dos veces: la declarada (lo que muestra esta página) y la
+  // copia dentro de perfilCompilado (lo que lee el scorer). Antes guardar aquí
+  // solo tocaba la primera y pedía "Actualizar mi búsqueda", que recompila con
+  // IA, gasta cupo y está bloqueada 24 h desde la última compilación: recién
+  // salido del onboarding, corregir las comunas no llegaba a la extensión hasta
+  // el día siguiente. La copia es una expansión determinista (la misma de
+  // compilarPerfil), así que se recalcula acá, sin IA.
+  const compilado = (actuales.perfilCompilado as Record<string, unknown> | null) || null;
+  const perfilConUbicacion =
+    ubicacionDeclarada && compilado
+      ? ({ ...compilado, ubicacion: expandirUbicacionDeclarada(ubicacionDeclarada) } as Prisma.InputJsonValue)
+      : undefined;
 
   const actualizado = await prisma.searchPreferences.update({
     where: { userId },
@@ -53,6 +67,7 @@ export async function PUT(request: Request) {
       // §2.1 (docs/revision-2026-09-16.md): Filtros edita la ubicación
       // declarada con el mismo selector del onboarding.
       ...(ubicacionDeclarada !== undefined ? { ubicacionDeclarada: ubicacionDeclarada ?? Prisma.DbNull } : {}),
+      ...(perfilConUbicacion ? { perfilCompilado: perfilConUbicacion } : {}),
       // docs/amplitud-de-busqueda.md §4. Se valida contra la lista cerrada:
       // un valor cualquiera dejaría al scorer sin saber qué hacer. Cambiar la
       // amplitud NO recompila el perfil -- la expansión es determinista y se

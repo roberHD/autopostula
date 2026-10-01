@@ -1078,10 +1078,15 @@ AP.puntuarOferta = function (campos, perfil) {
   //     DESCARTAR; algunas sí -> no se sabe cuál, tope
   //   nada reconocible -> tope ("no sé" no es "no calza"; antes restaba 40)
   //   remoto + aceptaRemoto -> pasa
+  //
+  // Sin comunas declaradas no hay filtro de lugar, aunque acepte remoto: el
+  // panel dice "TAMBIÉN acepto trabajo remoto". Antes aceptaRemoto solo bastaba
+  // para entrar acá, y con la lista vacía toda oferta presencial con comuna
+  // reconocida quedaba "fuera de tus comunas": marcar remoto era "solo remoto".
   let ubicacionIncierta = null;
   const ubicacionCfg = perfil.ubicacion || {};
   const comunasDeclaradas = ubicacionCfg.comunas || [];
-  if (comunasDeclaradas.length || ubicacionCfg.aceptaRemoto) {
+  if (comunasDeclaradas.length) {
     const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo) || /\bremot[oa]\b/.test(ubicacion);
     if (!(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
       const comunaOferta = apExtraerComunaConocida(ubicacion, titulo);

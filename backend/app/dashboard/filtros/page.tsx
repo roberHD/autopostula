@@ -206,7 +206,7 @@ export default function FiltrosPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setMensajeUbicacion(data.error ?? "No se pudo guardar"); return; }
-      setMensajeUbicacion("Guardado. Actualiza tu búsqueda (más abajo) para que la extensión la use.");
+      setMensajeUbicacion("Guardado. La extensión la usa desde su próxima revisión.");
     } catch (err) {
       console.error("Error guardando ubicación:", err);
       setMensajeUbicacion("No se pudo guardar — revisa la consola");
