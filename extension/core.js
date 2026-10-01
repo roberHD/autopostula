@@ -301,7 +301,10 @@ AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
 // Qué se puede arreglar desde el aviso. Hoy, solo la comuna: si lo que más se
 // descartó fue "X no está en tus comunas", se ofrece sumar X a la búsqueda.
 AP.accionDeRazon = function (r) {
-  if (r && typeof r === 'object' && r.tipo === 'ubicacion' && r.ofertaEn) {
+  // Un descarte por región (r.region, docs/revision-scorer-2026-09-30.md §2.5)
+  // no es una comuna que se pueda sumar: "Los Lagos" sumaría la comuna de Los
+  // Ríos, y "Valparaíso" la comuna, cuando las ofertas eran de toda la región.
+  if (r && typeof r === 'object' && r.tipo === 'ubicacion' && r.ofertaEn && !r.region) {
     return { tipo: 'agregar_comuna', comuna: r.ofertaEn };
   }
   return null;
@@ -337,13 +340,18 @@ AP.razonPrincipal = function (razones) {
     if (v.n > topN) { topN = v.n; top = v.ejemplo; }
   }
   if (top && typeof top === 'object' && top.tipo === 'ubicacion') {
-    const porComuna = new Map();
+    // Se devuelve la razón entera del lugar que más se repite, no la primera
+    // con el lugar cambiado: así una región sigue marcada como región.
+    const porLugar = new Map();
     for (const r of razones) {
-      if (r && r.tipo === 'ubicacion' && r.ofertaEn) porComuna.set(r.ofertaEn, (porComuna.get(r.ofertaEn) || 0) + 1);
+      if (!r || r.tipo !== 'ubicacion' || !r.ofertaEn) continue;
+      const actual = porLugar.get(r.ofertaEn) || { n: 0, razon: r };
+      actual.n++;
+      porLugar.set(r.ofertaEn, actual);
     }
-    let comuna = null, n = 0;
-    for (const [k, v] of porComuna) if (v > n) { n = v; comuna = k; }
-    if (comuna) top = Object.assign({}, top, { ofertaEn: comuna });
+    let mejor = null;
+    for (const v of porLugar.values()) if (!mejor || v.n > mejor.n) mejor = v;
+    if (mejor) top = mejor.razon;
   }
   return top;
 };
@@ -361,7 +369,9 @@ AP.formatearRazonCorta = function (r) {
     case 'rol': return 'calza con "' + r.rol + '" (' + r.termino + ')';
     case 'sin_rol': return 'no se encontró ninguno de los roles buscados';
     case 'veto': return r.razon + (r.donde === 'cuerpo' ? ' (mención en el cuerpo del aviso, no en título/empresa)' : '');
-    case 'ubicacion': return r.ofertaEn ? (nombreComuna(r.ofertaEn) + ' no está en tus comunas') : 'fuera de las comunas que buscas';
+    case 'ubicacion':
+      if (r.ofertaEn && r.region) return 'es en ' + (r.region === 'RM' ? 'la Región Metropolitana' : 'la región de ' + r.ofertaEn) + ', y no buscas ahí';
+      return r.ofertaEn ? (nombreComuna(r.ofertaEn) + ' no está en tus comunas') : 'fuera de las comunas que buscas';
     case 'ubicacion_desconocida': return 'no se pudo saber en qué comuna es';
     case 'nivel': return r.certeza === 'desconocida'
       ? 'cargo de jefatura o dirección ("' + r.termino + '"): no está claro si buscas ese nivel'
@@ -1081,7 +1091,7 @@ AP.puntuarOferta = function (campos, perfil) {
           return {
             score: 0,
             banda: 'descartar',
-            razones: [{ tipo: 'ubicacion', ofertaEn: nombres[regiones[0]] || regiones[0], buscadas: comunasDeclaradas }],
+            razones: [{ tipo: 'ubicacion', ofertaEn: nombres[regiones[0]] || regiones[0], region: regiones[0], buscadas: comunasDeclaradas }],
           };
         } else {
           ubicacionIncierta = { tipo: 'ubicacion_desconocida', ofertaEn: (campos && campos.ubicacion) || null };

@@ -8,7 +8,9 @@ export type RazonEstructurada =
   | { tipo: "rol"; rol: string; termino: string; campo?: string }
   | { tipo: "sin_rol" }
   | { tipo: "veto"; patron: string; razon: string; donde: "titulo" | "empresa" | "cuerpo" }
-  | { tipo: "ubicacion"; ofertaEn: string | null; buscadas: string[] }
+  // region: el código ("VA") cuando el aviso solo decía la región y ninguna
+  // comuna tuya está ahí (docs/revision-scorer-2026-09-30.md §2.5).
+  | { tipo: "ubicacion"; ofertaEn: string | null; buscadas: string[]; region?: string }
   // ofertaEn: lo que dice el aviso, tal cual ("Gran Santiago", "Región Metropolitana").
   | { tipo: "ubicacion_desconocida"; ofertaEn: string | null }
   // docs/revision-scorer-2026-09-30.md §4.1: el cargo que buscas aparece, pero
@@ -65,6 +67,9 @@ export function formatearRazon(r: unknown): string {
     case "veto":
       return razon.donde === "cuerpo" ? `${razon.razon} (lo dice el aviso)` : razon.razon;
     case "ubicacion":
+      if (razon.ofertaEn && razon.region) {
+        return `Es en ${razon.region === "RM" ? "la Región Metropolitana" : `la región de ${razon.ofertaEn}`}, y no buscas ahí`;
+      }
       return razon.ofertaEn ? `Queda en ${razon.ofertaEn}, fuera de tus comunas` : "Queda fuera de tus comunas";
     case "ubicacion_desconocida":
       return razon.ofertaEn

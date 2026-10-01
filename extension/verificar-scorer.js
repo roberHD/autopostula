@@ -601,6 +601,16 @@ check('...y "pedro aguirre cerda", "isla de maipo"', AP.formatearRazonCorta({ ti
     const r = AP.puntuarOferta(oferta(u), pDos);
     check('"' + u + '" no basta para decir la región -> gris, no descarta', r.banda === 'gris' && r.razones[0].tipo === 'ubicacion_desconocida', r);
   }
+
+  // El aviso ofrece "Agregar <comuna> a mi perfil" cuando lo más descartado fue
+  // por comuna. Una región no es una comuna que se pueda sumar ("Los Lagos"
+  // sumaría la comuna de Los Ríos).
+  check('el descarte por región viene marcado con la región', rQuinta.razones[0].region === 'VA' && rLagos.razones[0].region === 'LL', [rQuinta.razones[0], rLagos.razones[0]]);
+  const porRegion = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 3 }, [rQuinta.razones[0], rQuinta.razones[0], { tipo: 'ubicacion', ofertaEn: 'santiago' }], false);
+  check('si lo más descartado fue una región, el aviso lo dice y no ofrece agregarla como comuna', porRegion.accion === null && porRegion.texto === '3 descartadas — la mayoría: es en la región de Valparaíso, y no buscas ahí', porRegion);
+  const porComuna = AP.mensajeEscaneo({ postular: 0, gris: 0, descartar: 3 }, [{ tipo: 'ubicacion', ofertaEn: 'santiago' }, { tipo: 'ubicacion', ofertaEn: 'santiago' }, rQuinta.razones[0]], false);
+  check('...y si fue una comuna, la ofrece aunque haya algún descarte por región', porComuna.accion && porComuna.accion.comuna === 'santiago', porComuna);
+  check('la RM se nombra como tal', AP.formatearRazonCorta({ tipo: 'ubicacion', ofertaEn: 'Metropolitana de Santiago', region: 'RM' }) === 'es en la Región Metropolitana, y no buscas ahí');
 }
 
 // Revisión del documento, §6: lo que el scorer evaluó viaja con cada decisión

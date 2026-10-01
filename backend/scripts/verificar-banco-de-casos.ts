@@ -205,6 +205,12 @@ console.log("\n── Lo que llega de la extensión ──");
   check('el rol que calzó en la descripción no dice "Es de vendedor"', formatearRazon({ tipo: "rol", rol: "vendedor", termino: "vendedor", campo: "cuerpo" }) === "La descripción habla de vendedor, lo que buscas");
   check("la comuna ilegible va en contra y cita lo que dice el aviso", esRazonPositiva({ tipo: "ubicacion_desconocida", ofertaEn: "Gran Santiago" }) === false && formatearRazon({ tipo: "ubicacion_desconocida", ofertaEn: "Gran Santiago" }).includes('"Gran Santiago"'));
   check("sin perfil: ni a favor ni en contra, pero con texto", esRazonPositiva({ tipo: "sin_perfil" }) === null && formatearRazon({ tipo: "sin_perfil" }) !== "Sin razón registrada");
+  check(
+    "un descarte por región dice que es una región",
+    formatearRazon({ tipo: "ubicacion", ofertaEn: "Valparaíso", region: "VA", buscadas: [] }) === "Es en la región de Valparaíso, y no buscas ahí" &&
+      formatearRazon({ tipo: "ubicacion", ofertaEn: "Metropolitana de Santiago", region: "RM", buscadas: [] }) === "Es en la Región Metropolitana, y no buscas ahí"
+  );
+  check("y uno por comuna sigue igual", formatearRazon({ tipo: "ubicacion", ofertaEn: "Lampa", buscadas: [] }) === "Queda en Lampa, fuera de tus comunas");
 }
 
 console.log("\n" + (fallos === 0 ? "Todo OK (0 fallos)." : `${fallos} fallo(s).`));

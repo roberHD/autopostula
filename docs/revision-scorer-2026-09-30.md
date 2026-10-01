@@ -229,7 +229,9 @@ no se puede deshacer.** Es el mismo criterio del principio 3.
   como duda. Con la región reconocida:
   - si la persona declaró **la región entera** (el 90 % o más de sus comunas), la oferta **pasa**;
   - si no declaró **ninguna** comuna de esa región, se **descarta** y la razón nombra la región
-    (*"Queda en Valparaíso, fuera de tus comunas"*);
+    (*"Es en la región de Valparaíso, y no buscas ahí"*). La razón lleva el código de la región
+    (`region: 'VA'`): el aviso de la extensión que ofrece *"Agregar \<comuna\> a mi perfil"* (de
+    `main`, glukagonn) no la ofrece para una región, porque "Los Lagos" sumaría la comuna de Los Ríos;
   - si declaró algunas, es **tope gris**: puede ser en una de las suyas o no.
 
 ---
@@ -400,7 +402,7 @@ Y los que tienen que seguir pasando igual:
 6. El caso real de `amplitud-de-busqueda.md` §1 (*"Vendedor de Retail vestuario Rotativo Part
    Time"*) sigue dando **postular**. ✅
 7. Una oferta con el rol en el título y todo en orden sigue dando **postular**. ✅
-8. Los casos que ya tenía `verificar-scorer.js` siguen en verde. ✅ (134 en total.)
+8. Los casos que ya tenía `verificar-scorer.js` siguen en verde. ✅ (144 en total, con los de `main`.)
 
 ---
 
@@ -448,7 +450,7 @@ valor por defecto): `decisiones_oferta.entrada_scorer`, `descartes.score_local` 
 **Cómo se prueba:**
 
 ```
-cd extension && node verificar-scorer.js                      # 134 casos
+cd extension && node verificar-scorer.js                      # 144 casos
 cd backend && npx tsx scripts/verificar-banco-de-casos.ts      # calibración, banco, entrada, textos
 cd backend && npx tsx scripts/banco-de-casos.ts correo@x.cl    # contra una base de verdad (solo lee)
 ```
