@@ -68,7 +68,9 @@ const AP_ESTADOS = {
 // el archivo y no vale la pena tocarlas todas.
 const AP_HEX_A_ESTADO = { '#16A34A': 'ok', '#DC2626': 'error', '#D97706': 'trabajando', '#7C3AED': 'trabajando', '#9CA3AF': 'neutral' };
 
-AP.msg = function (texto, estado) {
+let ovAccion = null;
+
+AP.msg = function (texto, estado, accion) {
   const clave = AP_ESTADOS[estado] ? estado : (AP_HEX_A_ESTADO[estado] || 'ok');
   const cfg = AP_ESTADOS[clave];
 
@@ -95,17 +97,54 @@ AP.msg = function (texto, estado) {
       '.punto{width:6px;height:6px;border-radius:50%;flex:none}' +
       '.punto.late{animation:late 1.6s ease-out infinite}' +
       '@keyframes late{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}' +
-      '.texto{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-      '@media (prefers-reduced-motion:reduce){.chip,.punto.late{animation:none}}' +
+      '.texto{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      // Un resumen largo ("15 descartadas — la mayoría: …") quedaba cortado
+      // con "…" sin forma de leerlo. El botón solo aparece cuando el texto no
+      // cabe; abierto, el aviso crece hacia arriba y a la izquierda (está
+      // anclado abajo a la derecha) y el texto pasa a varias líneas.
+      '.chip{overflow:hidden}' +
+      '.chip.abierto{align-items:flex-start;width:400px;max-width:calc(100vw - 32px);min-height:104px;padding:14px 14px 16px 14px;gap:12px}' +
+      '.chip.abierto .quien{margin-bottom:6px}' +
+      '.chip.abierto .texto{white-space:normal;overflow:visible;font-size:13.5px;line-height:1.55;font-weight:500;overflow-wrap:anywhere}' +
+      '.ampliar{all:unset;box-sizing:border-box;flex:none;width:26px;height:26px;margin-left:2px;border-radius:7px;display:grid;place-items:center;cursor:pointer;color:#8E9599;transition:background .15s,color .15s}' +
+      '.ampliar:hover{background:#26292D;color:#E9EBEA}' +
+      '.ampliar:focus-visible{outline:2px solid #D6F24B;outline-offset:1px}' +
+      '.ampliar[hidden]{display:none}' +
+      '.ampliar svg{width:14px;height:14px;display:block;transition:transform .3s cubic-bezier(.2,.8,.3,1)}' +
+      '.ampliar path{fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}' +
+      '.chip.abierto .ampliar svg{transform:rotate(180deg)}' +
+      // "Agregar a mi perfil": solo con el aviso abierto y cuando el resumen
+      // trae algo que se puede sumar a la búsqueda (AP.accionDeRazon).
+      '.accion{display:none;margin-top:12px}' +
+      '.chip.abierto .accion.hay{display:flex;flex-direction:column;align-items:flex-start;gap:6px}' +
+      '.agregar{all:unset;box-sizing:border-box;cursor:pointer;padding:7px 12px;border-radius:8px;background:#D6F24B;color:#16181A;font-size:12.5px;font-weight:700;line-height:1.2;transition:filter .15s,opacity .15s}' +
+      '.agregar:hover{filter:brightness(1.07)}' +
+      '.agregar:focus-visible{outline:2px solid #E9EBEA;outline-offset:2px}' +
+      '.agregar[disabled]{cursor:default;opacity:.6}' +
+      '.agregar[hidden]{display:none}' +
+      '.resultado{font-size:12px;line-height:1.45;color:#C9CDCF}' +
+      '.resultado.ok{color:#5BD59B}' +
+      '.resultado.error{color:#FF8A9B}' +
+      '.resultado:empty{display:none}' +
+      '@media (prefers-reduced-motion:reduce){.chip,.punto.late{animation:none}.ampliar svg{transition:none}}' +
       '</style>' +
-      '<div class="chip">' +
+      '<div class="chip" id="ap-ov-chip">' +
         '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
         '<span class="cuerpo">' +
           '<span class="quien"><i class="punto" id="ap-ov-punto"></i>AutoPostula</span>' +
           '<span class="texto" id="ap-ov-texto"></span>' +
+          '<span class="accion" id="ap-ov-accion">' +
+            '<button class="agregar" id="ap-ov-agregar" type="button"></button>' +
+            '<span class="resultado" id="ap-ov-resultado" role="status"></span>' +
+          '</span>' +
         '</span>' +
+        '<button class="ampliar" id="ap-ov-ampliar" type="button" hidden aria-expanded="false" aria-label="Ver el mensaje completo" title="Ver el mensaje completo">' +
+          '<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>' +
+        '</button>' +
       '</div>';
     document.body.appendChild(ov);
+    ovRaiz.getElementById('ap-ov-ampliar').addEventListener('click', alternarOverlayAbierto);
+    ovRaiz.getElementById('ap-ov-agregar').addEventListener('click', ejecutarAccionOverlay);
   }
 
   const punto = ovRaiz.getElementById('ap-ov-punto');
@@ -116,7 +155,105 @@ AP.msg = function (texto, estado) {
   const nodo = ovRaiz.getElementById('ap-ov-texto');
   nodo.textContent = texto;
   nodo.title = texto;
+
+  // Cada mensaje trae (o no) su propia acción: "Revisando…" después de un
+  // resumen no debe dejar colgado el botón del resumen anterior.
+  ovAccion = accion && accion.tipo === 'agregar_comuna' && accion.comuna ? accion : null;
+  const cajaAccion = ovRaiz.getElementById('ap-ov-accion');
+  const agregar = ovRaiz.getElementById('ap-ov-agregar');
+  cajaAccion.classList.toggle('hay', !!ovAccion);
+  agregar.hidden = false;
+  agregar.disabled = false;
+  agregar.textContent = ovAccion ? 'Agregar ' + nombreComuna(ovAccion.comuna) + ' a mi perfil' : '';
+  ovRaiz.getElementById('ap-ov-resultado').textContent = '';
+  ovRaiz.getElementById('ap-ov-resultado').className = 'resultado';
+  actualizarBotonAmpliar();
 };
+
+// Las comunas del scorer vienen normalizadas ("estacion central"): para el
+// botón alcanza con mayúscula inicial; el nombre con tildes lo devuelve el
+// servidor al confirmar.
+const AP_PARTICULAS = new Set(['de', 'del', 'la', 'las', 'los', 'el', 'y']);
+function nombreComuna(c) {
+  return String(c).split(' ')
+    .map((p, i) => (i > 0 && AP_PARTICULAS.has(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)))
+    .join(' ');
+}
+
+function ejecutarAccionOverlay() {
+  if (!ovAccion || !ovRaiz) return;
+  const accion = ovAccion;
+  const agregar = ovRaiz.getElementById('ap-ov-agregar');
+  const resultado = ovRaiz.getElementById('ap-ov-resultado');
+  agregar.disabled = true;
+  agregar.textContent = 'Agregando…';
+  resultado.textContent = '';
+  resultado.className = 'resultado';
+  const terminar = (r) => {
+    if (!ovRaiz || ovAccion !== accion) return; // llegó otro mensaje mientras tanto
+    if (r && r.ok) {
+      agregar.hidden = true;
+      resultado.className = 'resultado ok';
+      resultado.textContent = '✓ ' + (r.comuna || nombreComuna(accion.comuna)) +
+        (r.yaEstaba ? ' ya estaba en tu búsqueda.' : ' quedó en tu búsqueda. Desde la próxima búsqueda, sus ofertas ya no se descartan por la comuna.');
+      if (r.config) { AP.cfg = r.config; }
+    } else {
+      agregar.disabled = false;
+      agregar.textContent = 'Agregar ' + nombreComuna(accion.comuna) + ' a mi perfil';
+      resultado.className = 'resultado error';
+      resultado.textContent = (r && r.error) || 'No se pudo agregar. Puedes hacerlo en Filtros, en el panel.';
+    }
+  };
+  try {
+    chrome.runtime.sendMessage({ type: 'AGREGAR_COMUNA', comuna: accion.comuna }, (r) => {
+      void chrome.runtime.lastError;
+      terminar(r);
+    });
+  } catch (e) {
+    terminar(null);
+  }
+}
+
+// El botón se muestra si el texto, en el aviso cerrado, no cabe. Abierto se
+// queda visible para poder cerrarlo; si el texto nuevo ya cabe, se cierra solo.
+function actualizarBotonAmpliar() {
+  const chip = ovRaiz.getElementById('ap-ov-chip');
+  const boton = ovRaiz.getElementById('ap-ov-ampliar');
+  const nodo = ovRaiz.getElementById('ap-ov-texto');
+  const abierto = chip.classList.contains('abierto');
+  if (abierto) chip.classList.remove('abierto');
+  boton.hidden = false; // el botón ocupa lugar: se mide con él puesto
+  // Con una acción para ofrecer también hay que poder abrirlo, aunque el texto quepa.
+  const noCabe = nodo.scrollWidth > nodo.clientWidth + 1 || !!ovAccion;
+  if (abierto && noCabe) chip.classList.add('abierto');
+  boton.hidden = !noCabe;
+  boton.setAttribute('aria-expanded', abierto && noCabe ? 'true' : 'false');
+  boton.setAttribute('aria-label', abierto && noCabe ? 'Achicar el mensaje' : 'Ver el mensaje completo');
+  boton.title = boton.getAttribute('aria-label');
+}
+
+// Crece de su tamaño actual al nuevo (y al revés) midiendo antes y después:
+// width/height "auto" no se pueden animar con CSS.
+function alternarOverlayAbierto() {
+  const chip = ovRaiz.getElementById('ap-ov-chip');
+  const boton = ovRaiz.getElementById('ap-ov-ampliar');
+  const antes = chip.getBoundingClientRect();
+  const abrir = !chip.classList.contains('abierto');
+  chip.classList.toggle('abierto', abrir);
+  boton.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+  boton.setAttribute('aria-label', abrir ? 'Achicar el mensaje' : 'Ver el mensaje completo');
+  boton.title = boton.getAttribute('aria-label');
+  const despues = chip.getBoundingClientRect();
+  if (!chip.animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  chip.animate(
+    [{ width: antes.width + 'px', height: antes.height + 'px' }, { width: despues.width + 'px', height: despues.height + 'px' }],
+    { duration: 320, easing: 'cubic-bezier(.2,.8,.3,1)' }
+  );
+  ovRaiz.getElementById('ap-ov-texto').animate(
+    [{ opacity: 0.35 }, { opacity: 1 }],
+    { duration: 260, delay: 60, easing: 'ease-out', fill: 'backwards' }
+  );
+}
 
 AP.limpiarOverlay = function () { if (ov) { ov.remove(); ov = null; ovRaiz = null; } };
 
@@ -130,7 +267,17 @@ AP.limpiarOverlay = function () { if (ov) { ov.remove(); ov = null; ovRaiz = nul
 // postula de verdad, así que el mensaje tiene que decirlo explícito -- la
 // persona nunca puede quedar en duda sobre si la extensión está enviando
 // postulaciones o no. c.observado reemplaza a c.postular en el desglose.
+//
+// razonTop puede venir ya en texto, o como la lista de razones de descarte:
+// con la lista, además del texto, el resumen trae `accion` cuando la razón
+// principal se arregla desde el propio aviso ("Agregar Santiago a mi búsqueda").
 AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
+  let accion = null;
+  if (Array.isArray(razonTop)) {
+    const principal = AP.razonPrincipal(razonTop);
+    accion = AP.accionDeRazon(principal);
+    razonTop = principal ? AP.formatearRazonCorta(principal) : null;
+  }
   const c = conteos || {};
   const partes = [];
   if (soloObservar) {
@@ -148,13 +295,30 @@ AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
   const estado = soloObservar
     ? (c.observado > 0 || c.gris > 0 ? 'pendiente' : 'neutral')
     : (c.postular > 0 ? 'ok' : c.gris > 0 ? 'pendiente' : 'neutral');
-  return { texto: texto, estado: estado };
+  return { texto: texto, estado: estado, accion: accion };
+};
+
+// Qué se puede arreglar desde el aviso. Hoy, solo la comuna: si lo que más se
+// descartó fue "X no está en tus comunas", se ofrece sumar X a la búsqueda.
+AP.accionDeRazon = function (r) {
+  if (r && typeof r === 'object' && r.tipo === 'ubicacion' && r.ofertaEn) {
+    return { tipo: 'agregar_comuna', comuna: r.ofertaEn };
+  }
+  return null;
 };
 
 // Cuenta la razón más frecuente de una lista (las de descarte, típicamente).
 // Toma solo la PRIMERA razón de cada oferta -- razones[] puede traer varias
 // (§C), pero para "la razón más frecuente" alcanza con la principal.
 AP.razonMasFrecuente = function (razones) {
+  const top = AP.razonPrincipal(razones);
+  return top ? AP.formatearRazonCorta(top) : null;
+};
+
+// La razón más frecuente, sin formatear. En los descartes por ubicación, la
+// comuna que muestra es la que más se repite entre ellos -- no la de la
+// primera oferta --, porque es la que se ofrece agregar a la búsqueda.
+AP.razonPrincipal = function (razones) {
   // §C: las razones ahora son objetos estructurados (`{tipo, ...}`), no
   // strings ya formateados -- agrupar por tipo en vez de por texto exacto es
   // lo que tiene sentido acá (dos descartes por ubicación en comunas
@@ -172,7 +336,16 @@ AP.razonMasFrecuente = function (razones) {
   for (const v of conteo.values()) {
     if (v.n > topN) { topN = v.n; top = v.ejemplo; }
   }
-  return top ? AP.formatearRazonCorta(top) : null;
+  if (top && typeof top === 'object' && top.tipo === 'ubicacion') {
+    const porComuna = new Map();
+    for (const r of razones) {
+      if (r && r.tipo === 'ubicacion' && r.ofertaEn) porComuna.set(r.ofertaEn, (porComuna.get(r.ofertaEn) || 0) + 1);
+    }
+    let comuna = null, n = 0;
+    for (const [k, v] of porComuna) if (v > n) { n = v; comuna = k; }
+    if (comuna) top = Object.assign({}, top, { ofertaEn: comuna });
+  }
+  return top;
 };
 
 // Formatea una razón (string legacy, u objeto estructurado nuevo del scorer
@@ -188,7 +361,7 @@ AP.formatearRazonCorta = function (r) {
     case 'rol': return 'calza con "' + r.rol + '" (' + r.termino + ')';
     case 'sin_rol': return 'no se encontró ninguno de los roles buscados';
     case 'veto': return r.razon + (r.donde === 'cuerpo' ? ' (mención en el cuerpo del aviso, no en título/empresa)' : '');
-    case 'ubicacion': return r.ofertaEn ? (r.ofertaEn + ' no está en tus comunas') : 'fuera de las comunas que buscas';
+    case 'ubicacion': return r.ofertaEn ? (nombreComuna(r.ofertaEn) + ' no está en tus comunas') : 'fuera de las comunas que buscas';
     case 'ubicacion_desconocida': return 'no se pudo saber en qué comuna es';
     case 'nivel': return r.certeza === 'desconocida'
       ? 'cargo de jefatura o dirección ("' + r.termino + '"): no está claro si buscas ese nivel'

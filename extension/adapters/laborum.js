@@ -689,8 +689,8 @@ async function escanear() {
   else conteos.postular = pendientes.length;
   {
     AP.reportarDescartes(descartes, 'Laborum');
-    const resumen = AP.mensajeEscaneo(conteos, AP.razonMasFrecuente(razonesDescartadas), soloObservar);
-    msg(resumen.texto, resumen.estado);
+    const resumen = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
+    msg(resumen.texto, resumen.estado, resumen.accion);
   }
 
   if (pendientes.length && soloObservar) {

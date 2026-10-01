@@ -18,7 +18,7 @@ type UbicacionDeclarada = { regiones?: string[]; comunas?: string[]; todaLaRegio
 // las comunas reales de esa región usando la misma lista que ya usa el
 // parser de títulos (scripts/limpieza/cl.ts) -- una sola fuente para las 346
 // comunas, no una copia aparte que se pueda desincronizar.
-function expandirUbicacionDeclarada(decl: UbicacionDeclarada): { comunas: string[]; aceptaRemoto: boolean } {
+export function expandirUbicacionDeclarada(decl: UbicacionDeclarada): { comunas: string[]; aceptaRemoto: boolean } {
   const regiones = Array.isArray(decl.regiones) ? decl.regiones : [];
   const comunas = new Set(
     (Array.isArray(decl.comunas) ? decl.comunas : []).map((c) => c.toLowerCase().trim()).filter(Boolean)

@@ -819,6 +819,29 @@ async function guardarDatoBackend(texto) {
   }
 }
 
+// "Agregar a mi perfil" desde el aviso del escaneo: suma la comuna a la
+// búsqueda en la cuenta (/api/extension/ubicacion) y baja el perfil de nuevo,
+// así el scorer de esta misma sesión ya no descarta esa comuna. La config
+// fresca vuelve en la respuesta para la pestaña que lo pidió.
+async function agregarComunaBackend(comuna) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return { ok: false, error: 'Conecta la extensión con tu cuenta para guardar esto.' };
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/ubicacion', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agregarComuna: comuna }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) return { ok: false };
+    await actualizarFiltrosDesdeBackend(autopostulaToken);
+    const { config } = await chrome.storage.local.get('config');
+    return { ok: true, comuna: data.comuna, yaEstaba: !!data.yaEstaba, config: config || null };
+  } catch (e) {
+    return { ok: false };
+  }
+}
+
 // Deja la config local igual a lo que dice la cuenta y avisa a las pestañas de
 // los portales que estén abiertas, para que el cambio se note sin recargar.
 async function aplicarEstadoLocal(estado) {
@@ -1100,6 +1123,10 @@ async function escanearAutomatico(disparador) {
   // docs/estado-real-de-postulaciones.md §5, paso 5 (ver adapters/laborum.js).
   if (plataformas.includes('Laborum')) {
     pasos.push({ tipo: 'estados', portal: 'Laborum', url: 'https://www.laborum.cl/postulantes/postulaciones' });
+  }
+  // §5, paso 6 (ver adapters/trabajando.js).
+  if (plataformas.includes('Trabajando')) {
+    pasos.push({ tipo: 'estados', portal: 'Trabajando', url: 'https://www.trabajando.cl/mis-postulaciones' });
   }
 
   // Portales conectados pero ninguno con adaptador de búsqueda automática.
@@ -1822,6 +1849,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'GUARDAR_DATO') {
     guardarDatoBackend(msg.texto).then(sendResponse);
+    return true;
+  }
+  if (msg.type === 'AGREGAR_COMUNA') {
+    agregarComunaBackend(String(msg.comuna || '')).then(sendResponse);
     return true;
   }
   if (msg.type === 'SESION_PORTAL') {
