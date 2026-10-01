@@ -405,6 +405,32 @@ const perfil = {
   check('"PT" (abreviatura) confirma la jornada declarada -> postula', rAbreviatura.banda === 'postular');
   const rFalsoPositivoPt = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Contratación directa desde septiembre, se acepta cambio de turno', ubicacion: '' }, perfilPartTime);
   check('"pt" no calza dentro de "septiembre" ni "acepta" (limite de palabra)', rFalsoPositivoPt.banda === 'gris' && rFalsoPositivoPt.razones.some((x) => x.tipo === 'jornada_desconocida'));
+
+  // Caso real del 2026-09-30 (trabajando.com): Sodimac titula sus part time
+  // "Jornada PT20 hrs" pero les pone la ficha "Jornada Completa" y "turnos
+  // rotativos jornada completa" en la descripción. Todas se descartaban.
+  const cuerpoSodimac = 'Jornada Completa Vendedor Región Metropolitana La Reina ... disponibilidad para trabajar en sistema de turnos rotativos jornada completa';
+  const rSodimac = AP.puntuarOferta({ titulo: 'Vendedor/a Sodimac La Reina Jornada PT20 hrs', empresa: 'Sodimac', cuerpo: cuerpoSodimac, ubicacion: '' }, perfilPartTime);
+  check('el título dice "PT20" y la ficha dice "Jornada Completa": manda el título -> postula', rSodimac.banda === 'postular', rSodimac);
+  const rPt30 = AP.puntuarOferta({ titulo: 'Vendedor Pulcro/Hunter/Pulcro PT30HRS - Alto las Condes', empresa: 'Paris', cuerpo: '', ubicacion: '' }, perfilPartTime);
+  check('"PT30HRS" (pegado al número) es part time -> postula', rPt30.banda === 'postular', rPt30);
+  const rFt42 = AP.puntuarOferta({ titulo: 'Vendedor/a Sodimac HC Tobalaba Jornada FT42 hrs', empresa: 'Sodimac', cuerpo: cuerpoSodimac, ubicacion: '' }, perfilPartTime);
+  check('"FT42" es jornada completa -> descarta a quien busca part time', rFt42.banda === 'descartar' && rFt42.razones[0].tipo === 'jornada', rFt42);
+  const rAmbas = AP.puntuarOferta({ titulo: 'Vendedor part time o full time', empresa: '', cuerpo: '', ubicacion: '' }, perfilPartTime);
+  check('el título ofrece las dos jornadas -> calza con la declarada', rAmbas.banda === 'postular', rAmbas);
+  const rTituloContrario = AP.puntuarOferta({ titulo: 'Vendedor jornada completa', empresa: '', cuerpo: 'también hay turnos part time los fines de semana', ubicacion: '' }, perfilPartTime);
+  check('el título dice solo la contraria -> descarta aunque el cuerpo nombre la declarada', rTituloContrario.banda === 'descartar', rTituloContrario);
+  const rSoloCuerpo = AP.puntuarOferta({ titulo: 'Vendedor de tienda', empresa: '', cuerpo: 'Jornada Completa, lunes a sábado', ubicacion: '' }, perfilPartTime);
+  check('el título no dice jornada y el cuerpo dice la contraria -> descarta, como antes', rSoloCuerpo.banda === 'descartar' && rSoloCuerpo.razones[0].tipo === 'jornada', rSoloCuerpo);
+  const perfilFullTime = Object.assign({}, perfilPartTime, { jornada: 'full_time' });
+  check('quien busca jornada completa: "FT42" en el título -> postula', AP.puntuarOferta({ titulo: 'Vendedor/a Sodimac HC Tobalaba Jornada FT42 hrs', empresa: 'Sodimac', cuerpo: '', ubicacion: '' }, perfilFullTime).banda === 'postular');
+  check('quien busca jornada completa: "PT20" en el título -> descarta, aunque la ficha diga "Jornada Completa"', AP.puntuarOferta({ titulo: 'Vendedor/a Sodimac La Reina Jornada PT20 hrs', empresa: 'Sodimac', cuerpo: cuerpoSodimac, ubicacion: '' }, perfilFullTime).banda === 'descartar');
+
+  // El historial y el resumen del escaneo decían "sin razón" en cada descarte
+  // por jornada: formatearRazonCorta no conocía estas razones.
+  check('razón corta de jornada contraria', AP.formatearRazonCorta(rFt42.razones[0]) === 'es de jornada completa y buscas part time', AP.formatearRazonCorta(rFt42.razones[0]));
+  check('razón corta de jornada desconocida', AP.formatearRazonCorta(rSinDecir.razones.find((x) => x.tipo === 'jornada_desconocida')) === 'no dice la jornada, y buscas part time');
+  check('razón corta de requisito y de modo abierto', AP.formatearRazonCorta({ tipo: 'requisito', que: 'licencia' }) === 'pide una licencia de conducir profesional que no está en tu CV' && AP.formatearRazonCorta({ tipo: 'modo_abierto' }) === 'cumple tus condiciones (buscas cualquier trabajo)');
 }
 
 // ── Modo "cualquier trabajo" (docs/amplitud-de-busqueda.md §5) ──

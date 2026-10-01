@@ -3,6 +3,11 @@
 // ═══════════════════════════════════════════════════════════════
 'use strict';
 
+// Las comunas de Chile con su región (la misma tabla que usa el scorer en las
+// páginas): la búsqueda automática la necesita para saber si la persona busca
+// en una comuna o en toda una región (ver ubicacionDeBusqueda).
+importScripts('data/comunas-cl.js');
+
 console.log('[AP] background.js cargado', new Date().toLocaleTimeString());
 
 // Mismo dominio que host_permissions/content_scripts en manifest.json --
@@ -256,6 +261,30 @@ async function atenderRevision(sender, enCurso) {
   }
 }
 
+// ── Latido mientras se postula (docs/extension-trabajando-2026-09-30.md) ──
+// Una postulación con preguntas (abrir el formulario, la IA, rellenar,
+// enviar) en una pestaña de fondo puede pasar del minuto y medio, y los
+// seguros de tiempo cerraban la pestaña a la mitad: 90 s la de una aprobada de
+// "Por decidir", 8 min el paso de una ráfaga (que ahora encuentra cientos de
+// ofertas y postula a varias). El content script avisa en cada etapa
+// (AP.latido, core.js) y acá el seguro vuelve a contar desde cero. Si la
+// pestaña se cuelga, deja de avisar y el seguro la cierra igual.
+async function atenderLatido(sender) {
+  const tab = sender && sender.tab;
+  if (!tab || tab.id == null) return;
+  const aprobada = pestanasDeAprobadas.get(tab.id);
+  if (aprobada) aprobada.alargar(TOPE_APROBADA_MS);
+  const { rafaga } = await chrome.storage.local.get('rafaga');
+  if (!(rafaga && rafaga.estado === 'en_curso' && rafaga.tabActual === tab.id)) return;
+  // Nunca acorta un seguro más largo (el de una revisión abierta, 4 min).
+  const alarma = await chrome.alarms.get(NOMBRE_ALARMA_SEGURO_RAFAGA);
+  if (!alarma || !alarma.scheduledTime || alarma.scheduledTime - Date.now() < SEGURO_MINUTOS_POR_PASO * 60000) {
+    chrome.alarms.create(NOMBRE_ALARMA_SEGURO_RAFAGA, { delayInMinutes: SEGURO_MINUTOS_POR_PASO });
+  }
+  rafaga.latido = Date.now();
+  await chrome.storage.local.set({ rafaga });
+}
+
 // ── Llamadas a la IA del backend (con nuestra key, no la del usuario) ──
 // Mismo motivo que reportarPostulacionBackend: corre acá porque el background
 // tiene privilegios de extensión y no lo bloquea CORS.
@@ -507,12 +536,10 @@ function normalizarParaUrl(texto) {
 // Comunas de la Región Metropolitana (verificado en vivo el 2026-09-04 contra
 // Laborum). Computrabajo acepta el slug de cualquier comuna directo, sin
 // necesitar la región (probado con nunoa, chillan y providencia). Laborum en
-// cambio SÍ exige el prefijo de región para poder filtrar por comuna -- por
-// eso esta lista solo cubre RM: fuera de ella no hay una tabla comuna→región
-// disponible del lado de la extensión (el backend sí la tiene, en
-// scripts/limpieza/cl.ts). Si el uso real pide más regiones, conviene que el
-// backend resuelva la región y la mande ya lista en el perfil compilado, en
-// vez de duplicar las 346 comunas de Chile acá.
+// cambio SÍ exige el prefijo de región para poder filtrar por comuna, y el
+// único prefijo verificado es el de la RM -- por eso esta lista solo cubre RM
+// (la región de cada comuna sí está en la tabla de data/comunas-cl.js, que
+// usa ubicacionDeBusqueda más abajo).
 const COMUNAS_RM = new Set([
   'santiago centro', 'las condes', 'providencia', 'maipu', 'quilicura',
   'huechuraba', 'la florida', 'pudahuel', 'san bernardo', 'nunoa', 'colina',
@@ -529,6 +556,93 @@ const COMUNAS_RM = new Set([
 function comunaParaUrl(comuna) {
   return comuna.trim().replace(/\s+/g, '-');
 }
+
+function sinTildes(texto) {
+  return (texto || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+
+// ── Dónde buscar en cada portal (verificado en vivo el 2026-09-30) ──────────
+// Antes los tres portales buscaban en filtros.comunas[0] y nada más. Con
+// "toda la región", el perfil compilado trae todas las comunas de la región
+// (más sus variantes sin tilde y abreviaturas) en orden alfabético, así que
+// la búsqueda automática pedía, por ejemplo, "vendedor en Alhué": 0 ofertas en
+// los tres portales, contra 431 (Trabajando), 1.274 (Computrabajo, part time)
+// y 328 (Laborum, part time) en toda la Región Metropolitana. Y con varias
+// comunas elegidas a mano, solo se buscaba en la primera. Ahora:
+//   una sola comuna              -> esa comuna, como antes
+//   varias comunas de una región -> la región, en el portal que la tiene
+//   comunas de varias regiones   -> sin ubicación (el scorer igual descarta
+//                                   las comunas que no se pidieron)
+// Las variantes de una misma comuna cuentan como una: sin tilde ("estación
+// central"/"estacion central") y las abreviaturas que la tabla trae como
+// entradas propias ("e. central", "pac", "stgo"; ver esAbreviaturaDe). Remoto
+// no tiene comuna: sin ubicación, como antes.
+// Devuelve { comuna, region } (comuna sin tildes), { region } o null.
+function ubicacionDeBusqueda(filtros) {
+  if (!filtros || filtros.modalidad === 'remoto') return null;
+  const tabla = (self.AP && self.AP.COMUNAS_CL) || [];
+  // Un mismo nombre puede estar en dos regiones ("pinto": O'Higgins y Ñuble).
+  const regionesDe = new Map();
+  for (const c of tabla) {
+    const clave = sinTildes(c.nombre);
+    if (!regionesDe.has(clave)) regionesDe.set(clave, new Set());
+    regionesDe.get(clave).add(c.region);
+  }
+  const claves = new Set();
+  for (const nombre of filtros.comunas || []) {
+    const clave = sinTildes(nombre);
+    if (regionesDe.has(clave)) claves.add(clave);
+  }
+  const comunas = [...claves].filter(c => ![...claves].some(otra => otra !== c && esAbreviaturaDe(c, otra)));
+  if (!comunas.length) return null;
+  // La región que tienen todas en común (si hay una sola).
+  const comunes = [...regionesDe.get(comunas[0])].filter(r => comunas.every(c => regionesDe.get(c).has(r)));
+  const region = comunes.length === 1 ? comunes[0] : null;
+  if (comunas.length === 1) return { comuna: comunas[0], region };
+  return region ? { region } : null;
+}
+
+// La tabla de comunas trae abreviaturas como entradas propias, sin decir de
+// cuál son ("stgo" es santiago, "pac" pedro aguirre cerda, "e. central"
+// estación central, "pto montt" puerto montt). Una abreviatura tiene un punto
+// o una palabra corta (hasta 4 letras) que el nombre completo no tiene, empieza
+// con la misma letra que él y todas sus letras aparecen, en orden, dentro de
+// él. Sin la primera condición, "lanco" pasaba por abreviatura de "lago ranco"
+// (son dos comunas de Los Ríos); y el comienzo palabra por palabra tampoco es
+// abreviatura: "chillan" y "chillan viejo" son comunas distintas.
+function esAbreviaturaDe(corta, larga) {
+  if (larga.startsWith(corta + ' ')) return false;
+  const palabrasLarga = larga.split(/\s+/);
+  const pareceAbreviatura = corta.includes('.') ||
+    corta.split(/[\s.]+/).some(p => p && p.length <= 4 && !palabrasLarga.includes(p));
+  if (!pareceAbreviatura) return false;
+  const a = corta.replace(/[^a-z]/g, '');
+  const b = larga.replace(/[^a-z]/g, '');
+  if (!a || a.length >= b.length || a[0] !== b[0]) return false;
+  let i = 0;
+  for (const letra of b) if (letra === a[i]) i++;
+  return i === a.length;
+}
+
+// La región como la escribe cada portal, sacada de sus propios filtros.
+// Trabajando: el parámetro ?region= usa su id interno (API de ubicaciones
+// del sitio; RM = 1 da las mismas 431 ofertas que "Metropolitana de
+// Santiago", Valparaíso = 6 da 81).
+const REGION_TRABAJANDO = {
+  AP: 473, TA: 2, AN: 3, AT: 4, CO: 5, VA: 6, RM: 1, OH: 7,
+  ML: 8, NB: 556, BI: 9, AR: 10, LR: 472, LL: 11, AI: 12, MA: 13,
+};
+// Computrabajo: los enlaces de su filtro "Región". No tiene Ñuble: las
+// ofertas de Chillán las pone en Bíobío.
+const REGION_COMPUTRABAJO = {
+  AP: 'arica-y-parinacota', TA: 'tarapaca', AN: 'antofagasta', AT: 'atacama',
+  CO: 'coquimbo', VA: 'valparaiso', RM: 'rmetropolitana', OH: 'libertador-b-o-higgins',
+  ML: 'maule', NB: 'biobio', BI: 'biobio', AR: 'araucania', LR: 'los-rios',
+  LL: 'los-lagos', AI: 'aisen-del-gral-c-ibanez-del-campo', MA: 'magallanes-y-antartica-chilena',
+};
+// Laborum: solo la RM está verificada (en-region-metropolitana/). Los nombres
+// simples de las demás ("en-valparaiso", "en-araucania", "en-nuble") dan 0
+// ofertas, así que fuera de la RM se busca sin ubicación.
 
 // Un builder de URL por portal — mismo cargoObjetivo, distinta forma de armar
 // la búsqueda en cada sitio. Si sumas un portal nuevo más adelante, agrégalo
@@ -555,9 +669,11 @@ function comunaParaUrl(comuna) {
 const URL_BUSQUEDA_POR_PORTAL = {
   'Computrabajo': (slug, filtros) => {
     let url = 'https://cl.computrabajo.com/trabajo-de-' + slug;
-    const comuna = filtros && filtros.comunas && filtros.comunas[0];
-    // Remoto no tiene una comuna real asociada -- no combinar ambos facets.
-    if (comuna && (!filtros || filtros.modalidad !== 'remoto')) url += '-en-' + comunaParaUrl(comuna);
+    // Remoto no tiene una comuna real asociada -- ubicacionDeBusqueda no
+    // devuelve ninguna y no se combinan ambos facets.
+    const donde = ubicacionDeBusqueda(filtros);
+    if (donde && donde.comuna) url += '-en-' + comunaParaUrl(donde.comuna);
+    else if (donde && REGION_COMPUTRABAJO[donde.region]) url += '-en-' + REGION_COMPUTRABAJO[donde.region];
     if (filtros) {
       if (filtros.modalidad === 'remoto') url += '-en-remoto';
       else if (filtros.modalidad === 'hibrido') url += '-hibrido';
@@ -567,9 +683,11 @@ const URL_BUSQUEDA_POR_PORTAL = {
   },
   'Laborum': (slug, filtros) => {
     let prefijo = '';
-    const comuna = filtros && filtros.comunas && filtros.comunas[0];
-    if (comuna && (!filtros || filtros.modalidad !== 'remoto') && COMUNAS_RM.has(comuna)) {
-      prefijo = 'en-region-metropolitana/' + comunaParaUrl(comuna) + '/';
+    const donde = ubicacionDeBusqueda(filtros);
+    if (donde && donde.comuna && COMUNAS_RM.has(donde.comuna)) {
+      prefijo = 'en-region-metropolitana/' + comunaParaUrl(donde.comuna) + '/';
+    } else if (donde && donde.region === 'RM') {
+      prefijo = 'en-region-metropolitana/';
     }
     let archivo = 'empleos-';
     if (filtros && filtros.jornada === 'part_time') archivo += 'part-time-';
@@ -579,18 +697,17 @@ const URL_BUSQUEDA_POR_PORTAL = {
     archivo += 'busqueda-' + slug + '.html';
     return 'https://www.laborum.cl/' + prefijo + archivo;
   },
-  // Verificado en vivo el 2026-09-08: el único facet de portal que Trabajando
-  // expone como parámetro de URL navegable es la comuna (?ubicacion={slug},
-  // funciona igual para cualquier comuna de Chile, no solo RM). El filtro de
-  // "Jornadas" del sitio (que ahí mezcla jornada y modalidad en una sola
+  // Verificado en vivo el 2026-09-08: la comuna va como ?ubicacion={slug}
+  // (funciona igual para cualquier comuna de Chile, no solo RM), y el
+  // 2026-09-30: la región como ?region={id} (ver REGION_TRABAJANDO). El filtro
+  // de "Jornadas" del sitio (que ahí mezcla jornada y modalidad en una sola
   // lista) corre contra su propia API interna sin reflejarse en la URL --
   // no se inventa un parámetro que no existe, se deja sin ese facet acá.
   'Trabajando': (slug, filtros) => {
     let url = 'https://www.trabajando.cl/trabajo-empleo/' + slug;
-    const comuna = filtros && filtros.comunas && filtros.comunas[0];
-    if (comuna && (!filtros || filtros.modalidad !== 'remoto')) {
-      url += '?ubicacion=' + comunaParaUrl(comuna);
-    }
+    const donde = ubicacionDeBusqueda(filtros);
+    if (donde && donde.comuna) url += '?ubicacion=' + comunaParaUrl(donde.comuna);
+    else if (donde && REGION_TRABAJANDO[donde.region]) url += '?region=' + REGION_TRABAJANDO[donde.region];
     return url;
   },
 };
@@ -694,7 +811,9 @@ async function guardarDatoBackend(texto) {
       const { config } = await chrome.storage.local.get('config');
       await chrome.storage.local.set({ config: { ...(config || {}), info: data.infoAdicional } });
     }
-    return { ok: true };
+    // Y a la pestaña que lo guardó: su copia de la config se cargó al abrir y
+    // no se entera sola. Así la próxima oferta de la misma página ya lo usa.
+    return { ok: true, infoAdicional: Array.isArray(data.infoAdicional) ? data.infoAdicional : null };
   } catch (e) {
     return { ok: false };
   }
@@ -1654,6 +1773,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     atenderRevision(sender, msg.type === 'REVISION_EN_CURSO')
       .then(() => sendResponse({ ok: true }))
       .catch((e) => { console.warn('[AP] Falló atender la revisión:', e); sendResponse({ ok: false }); });
+    return true;
+  }
+  if (msg.type === 'POSTULANDO') {
+    atenderLatido(sender)
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => { console.warn('[AP] Falló atender el latido:', e); sendResponse({ ok: false }); });
     return true;
   }
   // Las 4 de acá abajo hacían fire-and-forget (sin return true) -- en MV3 eso

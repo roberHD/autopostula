@@ -85,6 +85,9 @@ function cargarBackground({ configInicial } = {}) {
       power: { requestKeepAwake(){}, releaseKeepAwake(){} },
     },
   };
+  // background.js carga la tabla de comunas con importScripts, como en Chrome.
+  ctx.self = ctx;
+  ctx.importScripts = (...archivos) => archivos.forEach(a => vm.runInContext(fs.readFileSync(path.join(__dirname, a), 'utf8'), ctx, { filename: a }));
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'background.js'), 'utf8'), ctx, { filename: 'background.js' });
 
