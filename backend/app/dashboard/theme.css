@@ -2475,6 +2475,42 @@
   .ap-tarea__acc { grid-column: 2; justify-content: flex-start; }
 }
 
+/* ── Hoy: la primera búsqueda, "Probemos" (docs/primera-busqueda-guiada.md §10) ── */
+.ap-mision { padding: 20px 22px 14px; }
+.ap-mision__t { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.ap-mision__s { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.ap-mision__pasos { list-style: none; margin: 14px 0 0; padding: 0; }
+.ap-mision__paso {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.ap-mision__n {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);
+}
+.ap-mision__paso[data-estado="hecho"] .ap-mision__n { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.ap-mision__paso[data-estado="ahora"] .ap-mision__n { background: var(--accent); color: var(--accent-contrast); border-color: transparent; }
+.ap-mision__pt { font-size: 14.5px; font-weight: 600; line-height: 28px; }
+.ap-mision__paso[data-estado="despues"] .ap-mision__pt { color: var(--text-muted); font-weight: 500; }
+.ap-mision__paso[data-estado="hecho"] .ap-mision__pt { font-weight: 500; }
+.ap-mision__pd { font-size: 13px; color: var(--text-muted); line-height: 1.55; max-width: 66ch; }
+.ap-mision__pd b { color: var(--text); font-weight: 600; }
+.ap-mision__acc { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.ap-mision__acc .ap-button, .ap-mision__acc .ap-button-ghost { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.ap-mision__aviso { flex-basis: 100%; font-size: 12.5px; color: var(--err); }
+.ap-mision__enlace {
+  background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px;
+  color: var(--text-muted); cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.ap-mision__enlace:hover { color: var(--text); }
+.ap-mision__pie { display: flex; justify-content: flex-end; padding-top: 12px; border-top: 1px solid var(--border); }
+
 .ap-bloque-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .ap-bloque-t { font-size: 14px; font-weight: 600; }
 .ap-bloque-s { font-size: 12px; color: var(--text-muted); }

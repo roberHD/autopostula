@@ -21,7 +21,7 @@ export async function armarEstadoPanel(userId: string) {
   const [user, subscripcion, cupo, ultima, portalesActivos, rafaga, estimadoRafagaMs] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { rol: true, busquedaAutomaticaActiva: true, ultimaRafagaEn: true, pruebaAutomaticaRestantes: true },
+      select: { rol: true, busquedaAutomaticaActiva: true, ultimaRafagaEn: true, pruebaAutomaticaRestantes: true, extensionConectada: true },
     }),
     obtenerSubscripcionVigente(userId),
     obtenerEstadoPostulaciones(userId),
@@ -76,6 +76,9 @@ export async function armarEstadoPanel(userId: string) {
     pruebaTotal: PRUEBA_TOTAL,
     pausadaPorTi,
     portalesActivos,
+    // Para que la barra no le pida "abre Chrome" a quien todavía no conecta la
+    // extensión (docs/primera-busqueda-guiada.md §10).
+    extensionConectada: !!user?.extensionConectada,
     cupo: { usadas, limite: cupo.limite, restantes: cupo.restantes, delMes: cupo.delMes, extras: cupo.extras },
     // Cuándo se puso al día por última vez (hora del servidor) y qué encontró
     // -- lo lee la tarjeta del Inicio. `resumen` es null si la fila ya se purgó

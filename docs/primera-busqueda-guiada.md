@@ -1,7 +1,8 @@
 # La primera búsqueda, guiada — y el video de 60 segundos
 
 > **Estado:** propuesta, 2026-09-29. Nace de una pregunta de Roberto: *"¿qué tan bueno sería hacer
-> una parte de la extensión como tutorial?"*.
+> una parte de la extensión como tutorial?"*. **El 2026-10-01 se hizo la parte del panel (§10)**;
+> la del portal (§3.2, §3.3) espera la extensión 2.17.
 > **Para:** el chat de producción.
 > **Relacionado:** `estrategia-y-rediseno.md` §5.2 ("En el portal · primera búsqueda", tarea 9 del
 > orden) y §5.3 (el popup semáforo), `modo-solo-observar.md` (el modo ya está construido),
@@ -68,6 +69,11 @@ verdad, sin enviar nada"**, con un botón que abre Computrabajo con la búsqueda
 
 La cuenta ya está en modo prueba; acá se le agrega la condición de que **la primera búsqueda nunca
 envía**, aunque la persona tenga plan de pago.
+
+> **Cambió el 2026-10-01 (§10):** el último paso del onboarding lleva a la tarjeta «Probemos» de
+> Hoy, y el botón que abre el portal está ahí, con la búsqueda armada igual que la arma la
+> extensión (comuna o región y jornada). Desde el onboarding se abría sin esos filtros, y después
+> no había cómo saber qué había pasado.
 
 ### 3.2 En el listado: etiquetas sobre las ofertas reales
 
@@ -215,3 +221,114 @@ El 1 y el 2 se pueden hacer esta semana y son independientes de todo lo demás.
 - **Un video de 3 minutos.** Si no se entiende en 60 segundos, el problema es el producto.
 - **Prometer resultados** ("consigue trabajo en 2 semanas").
 - **Mostrar en el video pantallas que todavía no existen.**
+
+---
+
+## 10. El panel: la tarjeta «Probemos» (hecho el 2026-10-01)
+
+> **Estado:** implementado en `rama-roberto`, sin desplegar. Es la mitad del panel; la mitad del
+> portal (§3.2 y §3.3: la marca en cada oferta y la tarjeta de cierre) sigue pendiente y necesita
+> la extensión 2.17.
+
+### 10.1 Qué veía una cuenta nueva
+
+Un amigo de Roberto terminó el onboarding, entró al panel y se quedó pegado. Revisado contra el
+código, una cuenta nueva veía:
+
+- **Un tablero en cero**: 0 enviadas, 0 min ahorrados, dos gráficos vacíos y "Todavía no hay actividad".
+- **Cuatro mensajes que no calzaban entre sí**, y ninguno era un botón claro:
+
+| Dónde | Decía | El problema |
+|---|---|---|
+| El saludo | "Por ahora solo mira: activa la postulación cuando confíes en lo que elige." | No decía cómo "mirar" |
+| El aviso del layout | "…Revisa qué habría postulado y actívala cuando confíes en el resultado." | No había ninguna pantalla donde verlo: el servidor solo guarda cuántas (`Rafaga.observadas`), no cuáles |
+| La tarea de la prueba | "Prueba automática: 0 de 5 · Postula sola hasta completar las 5, sin que entres a ningún portal." | Falso mientras no se active: no envía nada |
+| La barra de arriba | "Sin ponerse al día · Abre Chrome en tu computador y se pone al día sola." | Sonaba a falla, y se lo decía a alguien con Chrome abierto en su computador |
+
+- **Y conectar la extensión no hacía nada visible**: solo guarda el token. La primera ráfaga parte
+  con la alarma (cada 60 min, `background.js`), en pestañas de fondo que la persona no ve.
+- El único botón que llevaba a un portal estaba en el último paso del onboarding, salía solo si
+  todo había quedado listo, y abría la búsqueda **sin comuna ni jornada** (todo Chile).
+
+### 10.2 Lo que se hizo
+
+**La tarjeta «Probemos» reemplaza al tablero** mientras la cuenta no active la postulación
+(`app/dashboard/PrimeraBusqueda.tsx`, lógica pura en `lib/primera-busqueda.ts`). Cada paso es la
+acción de verdad y se marca solo; uno solo está "ahora" a la vez:
+
+| # | En el computador | Se marca cuando |
+|---|---|---|
+| 1 | Instala la extensión en Chrome | `bridge.js` la anuncia en esta pestaña, o la cuenta ya está conectada |
+| 2 | Conéctala con tu cuenta (un clic) | `User.extensionConectada` |
+| 3 | Mira qué haría en {portal}: abre el portal con su búsqueda | Hay rastro de que miró (ver abajo) |
+| 4 | Tú decides si empieza a postular: lo que encontró, qué pasa al activarla y el botón | Al activar, la tarjeta desaparece |
+
+En el celular los pasos 1 a 3 son "Sigue en tu computador" (con "Copiar el enlace"), "Mira qué
+haría" y "Tú decides".
+
+- **La búsqueda es la misma que la de la extensión.** `lib/busqueda-en-portal.ts` copia
+  `URL_BUSQUEDA_POR_PORTAL` y `ubicacionDeBusqueda` de `background.js` (comuna o región, jornada,
+  modalidad), y `scripts/verificar-busqueda-en-portal.ts` corre las dos versiones con los mismos
+  casos: si dejan de armar la misma dirección, falla. Sin portal conectado ofrece los tres, y el
+  que elija queda conectado.
+- **"Ya miró"** = hay un descarte, una oferta que alguna vez quedó para decidir, una ráfaga
+  terminada o una postulación (`primeraVez` en `lib/panel/hoy.ts`). Al volver a la pestaña del
+  panel se vuelve a pedir el día; si todavía no llega nada, lo dice y ofrece activarla igual (si
+  todas las de la página calzaban, la extensión no deja rastro en el servidor: ver §10.4).
+- **Al volver de la tienda de Chrome la página se recarga sola**, en la tarjeta y en el paso de la
+  extensión del onboarding: las extensiones no se meten en pestañas que ya estaban abiertas, y
+  antes había que apretar "Ya la instalé, verificar".
+- **Mientras está la tarjeta no hay tareas, cifras ni gráficos.** Quedan "Lo último que hizo" (con
+  lo que miró, cada cosa con su razón), "Lo que buscas" y "Tus portales".
+- **"Ya sé cómo funciona, ocultar"** la esconde con una cookie (`ap_mision_oculta`), que lee el
+  servidor para que la página llegue sin ella. Con la tarjeta oculta y la postulación sin activar,
+  Hoy muestra la tarea "Todavía no activas la postulación" con "Activar postulación" y "Probarla
+  primero", que la trae de vuelta.
+- **Los cuatro mensajes:** el saludo dice "Antes de que postule por ti, mira qué haría con ofertas
+  reales"; el aviso del layout ya no aparece en Hoy y en las otras páginas dice "La extensión mira
+  tus ofertas y te dice qué haría con cada una, pero no envía ninguna hasta que la actives"; la
+  tarea de la prueba sale recién con la postulación activada; y la barra, antes de la primera
+  ráfaga, dice "Por empezar" con "Falta conectar la extensión", "Primera búsqueda · sola, dentro de
+  la próxima hora, con Chrome abierto" (conectada y en este navegador) o lo de siempre.
+- **El servidor anota que la extensión quedó conectada** cuando esta pide su perfil
+  (`/api/extension/perfil`), y Portales también lo avisa al conectar. Antes solo lo anotaba el
+  onboarding: quien la conectaba desde Portales seguía viendo "Falta conectar la extensión".
+- **El onboarding termina en la tarjeta**: "¡Todo listo!" + "Probarla con ofertas reales", en vez
+  de abrir el portal desde ahí.
+- La barra de arriba vive en el layout: cuando la tarjeta conecta un portal o la extensión, o se
+  activa la postulación, se le avisa para que vuelva a pedir su estado.
+
+### 10.3 Cómo se verificó
+
+En local, con una base aparte (`autopostula_mision`) y una cuenta de prueba nueva, en el navegador
+integrado (que no tiene la extensión; `bridge.js` se simuló con sus mismos eventos):
+
+- Sin extensión: paso 1 con "Instalar en Chrome". Al volver de la "tienda", la página se recargó
+  una sola vez. Con la extensión "presente", el paso 1 se marcó solo; "Conectar" generó el token,
+  la extensión "contestó" y el servidor quedó con `extension_conectada`.
+- Paso 3 sin portal: los tres botones, con `trabajo-de-vendedora-en-nunoa-jornada-part-time`,
+  `en-region-metropolitana/nunoa/empleos-part-time-busqueda-vendedora.html` y
+  `vendedora?ubicacion=nunoa`. Elegir Computrabajo lo conectó.
+- Al volver sin datos: "Revisando lo que miró…" y luego el aviso con "Activar postulación" y "Ya
+  terminó, revisar de nuevo". Con 3 descartes y 2 para decidir en la base: "Ya revisó ofertas para
+  ti: te dejó 2 ofertas para que decidas y descartó 3 que no calzaban, cada una con su razón. Al
+  activarla envía sola tus primeras 5 postulaciones de prueba, sin que entres a ningún portal."
+- "Activar postulación": la tarjeta desapareció, volvió el Hoy de siempre y salió el aviso
+  "Postulación activada".
+- Ocultar → tarea de activar; recargando, la página llegó sin la tarjeta; "Probarla primero" la
+  trajo de vuelta. En el celular (375 px): la versión de tres pasos, sin desborde y sin el aviso
+  repetido del layout. El onboarding: el paso de la extensión se recarga solo y vuelve al mismo
+  paso; el último lleva a la tarjeta.
+- `tsc` limpio; `verificar-busqueda-en-portal.ts`, `verificar-primera-busqueda.ts` y
+  `verificar-texto-rafaga.ts` (con los textos nuevos de la barra) pasan, igual que los demás
+  scripts sin base de datos.
+
+### 10.4 Lo que queda
+
+1. **La extensión 2.17** (§3.2 y §3.3): la marca en cada oferta del listado y la tarjeta de cierre
+   con "Empezar a postular" / "Todavía no".
+2. **Mandar al servidor las que habría postulado** al mirar un portal a mano. Hoy solo se saben
+   cuántas de una ráfaga (`Rafaga.observadas`); por eso el paso 4 cuenta las que dejó para decidir
+   y las descartadas, y si todas las de la página calzaban no queda rastro (la tarjeta ofrece
+   activarla igual).
+3. **En el celular, mandarse el enlace por correo** en vez de copiarlo (`celular-y-escritorio.md`).

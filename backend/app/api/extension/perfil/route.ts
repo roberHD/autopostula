@@ -73,6 +73,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Token inválido o ausente" }, { status: 401 });
   }
 
+  // docs/primera-busqueda-guiada.md §10: si la extensión pide el perfil con este
+  // token, quedó conectada, venga de donde venga la conexión (el onboarding,
+  // Portales o el token pegado a mano). Antes solo lo anotaba el onboarding: quien
+  // la conectaba desde Portales seguía viendo "Falta conectar la extensión".
+  if (!user.extensionConectada) {
+    await prisma.user
+      .updateMany({
+        where: { id: user.id, extensionConectada: false },
+        data: { extensionConectada: true, extensionConectadaEn: new Date() },
+      })
+      .catch((e) => console.error("No se pudo anotar que la extensión quedó conectada:", e));
+  }
+
   const [perfil, filtros, aprobadas, objetivos] = await Promise.all([
     prisma.cvProfile.findUnique({ where: { userId: user.id } }),
     prisma.searchPreferences.findUnique({ where: { userId: user.id } }),

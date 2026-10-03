@@ -1,5 +1,8 @@
 import { Suspense } from "react";
+import { cookies, headers } from "next/headers";
 import Hoy, { HoyCargando, type InicialHoy } from "./Hoy";
+import { sinSoporteExtensionSegunCabeceras } from "@/lib/dispositivo";
+import { COOKIE_MISION_OCULTA } from "@/lib/primera-busqueda";
 import { idDeLaSesion, comoLoDevuelveLaApi } from "@/lib/panel/sesion";
 import { armarResumenHoy } from "@/lib/panel/hoy";
 import { estadoDelPanel } from "@/lib/panel/estado";
@@ -21,8 +24,15 @@ export default function PaginaHoy() {
 }
 
 async function HoyConDatos() {
-  const userId = await idDeLaSesion();
-  if (!userId) return <Hoy />;
+  const [userId, galletas, cabeceras] = await Promise.all([idDeLaSesion(), cookies(), headers()]);
+  // La tarjeta "Probemos" (docs/primera-busqueda-guiada.md §10) llega ya
+  // decidida: oculta si la persona la ocultó, y en su versión de celular si el
+  // pedido viene de uno -- en vez de aparecer o cambiar al cargar.
+  const vista = {
+    misionOcultaInicial: galletas.get(COOKIE_MISION_OCULTA)?.value === "1",
+    enMovilSegunServidor: sinSoporteExtensionSegunCabeceras(cabeceras),
+  };
+  if (!userId) return <Hoy {...vista} />;
   try {
     const [resumen, estado] = await Promise.all([
       armarResumenHoy(userId),
@@ -31,10 +41,10 @@ async function HoyConDatos() {
       estadoDelPanel(userId).catch(() => null),
     ]);
     const inicial = comoLoDevuelveLaApi<InicialHoy>({ resumen, estado, ahora: new Date() });
-    return <Hoy inicial={inicial} />;
+    return <Hoy inicial={inicial} {...vista} />;
   } catch (e) {
     // Mejor que una página de error: que el navegador lo pida, como antes.
     console.error("[hoy] no se pudo armar en el servidor; lo pide el navegador:", e);
-    return <Hoy />;
+    return <Hoy {...vista} />;
   }
 }

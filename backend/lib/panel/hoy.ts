@@ -6,6 +6,7 @@ import { formatearRazon, esRazonPositiva } from "@/lib/formatear-razon";
 import { filtroSinNoticias } from "@/lib/estado-real";
 import { diaEnChile, inicioDelMesChile, inicioDeOtroDiaChile } from "@/lib/tiempo";
 import { JORNADA, MODALIDAD, lugaresDeclarados, type UbicacionDeclarada } from "@/lib/busqueda-declarada";
+import { filtrosDeLaCuenta, urlDeBusqueda } from "@/lib/busqueda-en-portal";
 
 /**
  * Todo lo que necesita la página Hoy (docs/estrategia-y-rediseno.md §5.2).
@@ -56,10 +57,13 @@ export async function armarResumenHoy(userId: string) {
     hayDescartes,
     descartesRecientes,
     sinNoticias,
+    grisAlgunaVez,
+    descartadasTotal,
+    plataformas,
   ] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { nombre: true, emailVerificado: true, extensionConectada: true, postulacionHabilitada: true },
+      select: { nombre: true, emailVerificado: true, extensionConectada: true, postulacionHabilitada: true, ultimaRafagaEn: true },
     }),
     prisma.application.findMany({
       where: { userId },
@@ -78,7 +82,7 @@ export async function armarResumenHoy(userId: string) {
     prisma.styleProfile.findFirst({ where: { userId }, orderBy: { creadoEn: "desc" } }),
     prisma.platformAccount.findMany({
       where: { userId },
-      select: { activa: true, platform: { select: { nombre: true } } },
+      select: { activa: true, platformId: true, platform: { select: { nombre: true } } },
       orderBy: { platform: { nombre: "asc" } },
     }),
     prisma.application.findMany({
@@ -109,9 +113,9 @@ export async function armarResumenHoy(userId: string) {
     prisma.objetivoLaboral.findMany({ where: { userId }, orderBy: { orden: "asc" }, select: { etiqueta: true } }),
     prisma.searchPreferences.findUnique({
       where: { userId },
-      select: { jornada: true, modalidad: true, ubicacionDeclarada: true },
+      select: { jornada: true, modalidad: true, ubicacionDeclarada: true, perfilCompilado: true },
     }),
-    prisma.cvProfile.findUnique({ where: { userId }, select: { nombre: true, expectativaRenta: true } }),
+    prisma.cvProfile.findUnique({ where: { userId }, select: { nombre: true, expectativaRenta: true, cargoObjetivo: true } }),
     prisma.descarte.count({ where: { userId, vistoEn: { gte: inicioMes } } }),
     // Sin ningún descarte guardado, la extensión todavía no los manda (versión
     // vieja): la cifra se muestra como "—", no como un 0 que no es cierto.
@@ -123,6 +127,11 @@ export async function armarResumenHoy(userId: string) {
       select: { id: true, titulo: true, empresa: true, plataforma: true, razon: true, vistoEn: true, corregidoEn: true },
     }),
     prisma.application.count({ where: filtroSinNoticias(userId, hoy) }),
+    // La primera búsqueda (docs/primera-busqueda-guiada.md §10): si la extensión
+    // ya miró ofertas alguna vez, aunque la persona ya haya decidido todas.
+    prisma.decisionOferta.findFirst({ where: { userId, fuente: "BANDA_GRIS" }, select: { id: true } }),
+    prisma.descarte.count({ where: { userId } }),
+    prisma.jobPlatform.findMany({ select: { id: true, nombre: true }, orderBy: { nombre: "asc" } }),
   ]);
 
   // ── Tareas ────────────────────────────────────────────────────────
@@ -284,6 +293,28 @@ export async function armarResumenHoy(userId: string) {
     porPortalMap.set(nombre, (porPortalMap.get(nombre) ?? 0) + 1);
   });
 
+  // ── La primera búsqueda (docs/primera-busqueda-guiada.md §10) ─────────
+  // Lo que necesita la tarjeta "Probemos" del panel: si la extensión ya miró
+  // ofertas (cualquier rastro: un descarte, una oferta para decidir, una ráfaga
+  // terminada o una postulación), y la búsqueda de cada portal armada igual que
+  // la arma la extensión -- el mismo objetivo principal (o el cargo del CV si no
+  // declaró ninguno, como /api/account/estado-automatico) y los mismos filtros.
+  const objetivo = objetivos[0]?.etiqueta ?? cvProfile?.cargoObjetivo ?? null;
+  const filtros = filtrosDeLaCuenta(preferencias);
+  const activos = new Set(cuentas.filter((c) => c.activa).map((c) => c.platformId));
+  const busquedas = objetivo
+    ? plataformas.flatMap((p) => {
+        const url = urlDeBusqueda(p.nombre, objetivo, filtros);
+        return url ? [{ platformId: p.id, portal: p.nombre, url, conectado: activos.has(p.id) }] : [];
+      })
+    : [];
+  const primeraVez = {
+    yaMiro: !!hayDescartes || !!grisAlgunaVez || !!user?.ultimaRafagaEn || todas.length > 0,
+    descartadas: descartadasTotal,
+    objetivo,
+    busquedas,
+  };
+
   const nombreCompleto = user?.nombre || cvProfile?.nombre || "";
 
   return {
@@ -297,6 +328,7 @@ export async function armarResumenHoy(userId: string) {
       postulacionHabilitada: !!user?.postulacionHabilitada,
       portalesActivos: cuentas.filter((c) => c.activa).length,
     },
+    primeraVez,
     tareas: {
       porDecidir: porDecidir.length,
       vencenManana,
