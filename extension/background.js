@@ -790,6 +790,33 @@ async function cambiarEstadoBackend(cambio) {
   }
 }
 
+// "Empezar a postular", en la tarjeta del final de la página
+// (docs/primera-busqueda-guiada.md §11): activa la postulación en la cuenta, con
+// las mismas reglas que el panel (objetivo confirmado y perfil compilado), y
+// deja la config local y las pestañas de los portales con el estado nuevo. Si
+// la cuenta no cumple, devuelve el motivo para mostrarlo en la tarjeta.
+async function empezarAPostularBackend() {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return { ok: false, error: 'Conecta la extensión con tu cuenta desde tu panel.' };
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/estado', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empezarAPostular: true }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.estado) {
+      return { ok: false, error: data.error || 'No se pudo activar ahora. Puedes hacerlo desde tu panel.' };
+    }
+    await aplicarEstadoLocal(data.estado);
+    const { config } = await chrome.storage.local.get('config');
+    return { ok: true, config: config || null, recienActivada: !!data.recienActivada };
+  } catch (e) {
+    console.warn('[AP] No se pudo activar la postulación desde el portal:', e);
+    return { ok: false, error: 'No pudimos conectar con AutoPostula. Revisa tu conexión e inténtalo de nuevo.' };
+  }
+}
+
 // Arregla una respuesta desde el panel de revisión (más corta / más formal /
 // más cercana). El content script no puede llamar al backend con el token: lo
 // guarda el service worker.
@@ -1676,6 +1703,30 @@ async function reportarAvistamientosBackend(avistamientos, plataforma) {
 // ── Reportar descartes con su razón (docs/estrategia-y-rediseno.md §5.2) ──
 // Best-effort, mismo criterio que los avistamientos: si falla, el escaneo
 // sigue igual; solo se pierde el detalle de esa pasada en el panel.
+// Las que habría postulado en modo "solo mirar" (docs/primera-busqueda-guiada.md
+// §11), para que el panel diga cuáles y cuántas. Fire-and-forget como los descartes.
+async function reportarObservadasBackend(ofertas, plataforma) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return;
+
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/observadas', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + autopostulaToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ plataforma: plataforma || 'Computrabajo', ofertas: ofertas })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('[AP] Backend rechazó las observadas:', data.error || res.status);
+    }
+  } catch (e) {
+    console.warn('[AP] Error de red reportando las observadas:', e);
+  }
+}
+
 async function reportarDescartesBackend(descartes, plataforma) {
   const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
   if (!autopostulaToken) return;
@@ -1892,6 +1943,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'REPORTAR_DESCARTES') {
     reportarDescartesBackend(msg.descartes, msg.plataforma).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'REPORTAR_OBSERVADAS') {
+    reportarObservadasBackend(msg.ofertas, msg.plataforma).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'EMPEZAR_A_POSTULAR') {
+    empezarAPostularBackend().then(sendResponse).catch(() => sendResponse({ ok: false }));
     return true;
   }
   if (msg.type === 'REPORTAR_AVISTAMIENTOS') {

@@ -246,6 +246,7 @@ model User {
   objetivosLaborales ObjetivoLaboral[]
   rafagas           Rafaga[]
   descartes         Descarte[]
+  observadas        OfertaObservada[]
   extras            PostulacionExtra[]
   invitadoPor       User?   @relation("Invitaciones", fields: [invitadoPorId], references: [id], onDelete: SetNull)
   invitados         User[]  @relation("Invitaciones")
@@ -774,6 +775,33 @@ model Descarte {
   @@unique([userId, plataforma, externalId])
   @@index([userId, vistoEn])
   @@map("descartes")
+}
+
+// Lo que la extensión habría postulado al mirar un portal en modo "solo mirar"
+// (docs/primera-busqueda-guiada.md §11). Antes quedaba solo en el historial del
+// navegador: el panel no podía decir cuáles ni cuántas, y si todas las ofertas
+// de la página calzaban no quedaba ningún rastro de que la extensión había
+// mirado. Una fila por oferta y cuenta; se borran a los 90 días, como los
+// descartes (lib/purgar-avistamientos.ts).
+model OfertaObservada {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  plataforma String
+  externalId String   @map("external_id")
+  titulo     String
+  empresa    String?
+  url        String?
+  // La razón a favor que dio el scorer, como objeto estructurado (ver
+  // lib/formatear-razon.ts), y su puntaje.
+  razon      Json?
+  scoreLocal Int?     @map("score_local")
+  vistoEn    DateTime @default(now()) @map("visto_en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, plataforma, externalId])
+  @@index([userId, vistoEn])
+  @@map("ofertas_observadas")
 }
 
 model Rafaga {

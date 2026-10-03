@@ -268,6 +268,53 @@ const LISTADO_PT = '/en-region-metropolitana/empleos-part-time-busqueda-vendedor
     check('...anota el pedido para no reintentarlo y vuelve al listado', t.local.log.some(e => e.uid === '51' && e.status === 'err') && t.navegaciones[0] === pendiente.desde, t.navegaciones);
   }
 
+  // ── La primera búsqueda (docs/primera-busqueda-guiada.md §11) ──
+  // En "solo mirar", con la persona mirando, las dudosas no se abren una por
+  // una (la pestaña saltaba sola de aviso en aviso): van a "Por decidir" con lo
+  // que dice la tarjeta. En la pestaña de una ráfaga se siguen abriendo.
+  {
+    const listado = '/en-region-metropolitana/empleos-busqueda-vendedor.html';
+    const pagina = () => ({ sel: { 'a[href^="/empleos/"]': [tarjeta({ id: 71, titulo: 'Vendedor de tienda' })] } });
+    const t = crear({ pathname: listado, historia: 1, pagina: pagina(), perfil: PERFIL, cfgExtra: { postulacionHabilitada: false } });
+    let cierres = 0;
+    t.AP.cierreDePagina = () => { cierres++; return true; };
+    await t.AP.escanear();
+    await esperarTodo();
+    check('solo mirar, con la persona mirando: la dudosa no se abre (no navega)', t.navegaciones.length === 0, t.navegaciones);
+    const gris = t.mensajes.find(m => m.type === 'REPORTAR_BANDA_GRIS');
+    check('...va a "Por decidir" con lo que dice la tarjeta', gris && gris.oferta && gris.oferta.plataforma === 'Laborum' && /-71\.html$/.test(gris.oferta.url), gris);
+    const marcas = JSON.parse(t.sesion.ap_marcas || '{}');
+    check('...queda marcada en su tarjeta', marcas['71'] && marcas['71'].b === 'gris' && marcas['71'].r.tipo === 'jornada_desconocida', marcas);
+    check('...y al terminar la página pide la tarjeta del final', cierres === 1 && t.terminados().length === 1, { cierres, terminados: t.terminados().length });
+
+    const r = crear({ pathname: listado, historia: 1, pagina: pagina(), perfil: PERFIL, cfgExtra: { postulacionHabilitada: false }, sesion: { ap_pestana_de_rafaga: '1' } });
+    await r.AP.escanear();
+    await esperarTodo();
+    check('en la pestaña de una ráfaga la dudosa se sigue abriendo (Etapa 2)', /-71\.html$/.test(r.navegaciones[0] || '') && !r.mensajes.some(m => m.type === 'REPORTAR_BANDA_GRIS'), r.navegaciones);
+  }
+  {
+    const pagina = () => ({ sel: { 'a[href^="/empleos/"]': [tarjeta({ id: 72, titulo: 'Vendedor de tienda' })] } });
+    const t = crear({ pathname: LISTADO_PT, historia: 1, pagina: pagina(), perfil: PERFIL, cfgExtra: { postulacionHabilitada: false } });
+    t.AP.cierreDePagina = () => true;
+    await t.AP.escanear();
+    await esperarTodo();
+    const obs = t.mensajes.find(m => m.type === 'REPORTAR_OBSERVADAS');
+    check('solo mirar: la que habría postulado va al panel, con su razón a favor', obs && obs.plataforma === 'Laborum' && obs.ofertas.length === 1 && obs.ofertas[0].externalId === '72' && obs.ofertas[0].razon.tipo === 'rol' && t.navegaciones.length === 0, obs);
+
+    // Después de "Empezar a postular", lo que solo se miró ya no cuenta como hecho.
+    const despues = crear({ pathname: LISTADO_PT, historia: 1, pagina: pagina(), perfil: PERFIL });
+    despues.AP.log = [{ ts: 1, status: 'observado', title: 'Vendedor de tienda', uid: '72', reason: 'Habría postulado — modo solo observar' }];
+    await despues.AP.escanear();
+    await esperarTodo();
+    check('ya postulando, la que solo se miró se abre para postularla', /-72\.html$/.test(despues.navegaciones[0] || ''), despues.navegaciones);
+    const mirando = crear({ pathname: LISTADO_PT, historia: 1, pagina: pagina(), perfil: PERFIL, cfgExtra: { postulacionHabilitada: false } });
+    mirando.AP.log = [{ ts: 1, status: 'observado', title: 'Vendedor de tienda', uid: '72', reason: 'Habría postulado — modo solo observar' }];
+    mirando.AP.cierreDePagina = () => true;
+    await mirando.AP.escanear();
+    await esperarTodo();
+    check('...y mientras sigue mirando, no se vuelve a revisar', mirando.evaluadas.length === 0 && mirando.navegaciones.length === 0, mirando.evaluadas.length);
+  }
+
   console.log(fallos ? `\n${fallos} fallo(s)` : '\nTodo OK');
   process.exit(fallos ? 1 : 0);
 })();

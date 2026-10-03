@@ -25,6 +25,9 @@ export type Busqueda = { platformId: string; portal: string; url: string; conect
 export type PrimeraVez = {
   yaMiro: boolean;
   descartadas: number;
+  // A cuántas habría postulado al mirar un portal (extensión 2.17 en adelante;
+  // null si todavía no llega ninguna).
+  habriaPostulado?: number | null;
   objetivo: string | null;
   busquedas: Busqueda[];
 };
@@ -40,6 +43,13 @@ function marcar(clave: string) {
   } catch {
     // Sin sessionStorage, la persona usa "Ya la instalé" o recarga a mano.
   }
+}
+
+// "2.17.0" >= [2, 17]. Sin versión (no está la extensión) es false.
+function versionAlMenos(version: string | undefined, minima: [number, number]): boolean {
+  const [mayor, menor] = (version || "").split(".").map((p) => Number(p) || 0);
+  if (!version) return false;
+  return mayor > minima[0] || (mayor === minima[0] && menor >= minima[1]);
 }
 
 function tomar(clave: string): boolean {
@@ -99,11 +109,15 @@ export default function PrimeraBusqueda({
   // Volvió del portal y todavía no llega nada: se le dice qué esperar.
   const [esperandoPortal, setEsperandoPortal] = useState<"no" | "revisando" | "nada">("no");
   const [copiado, setCopiado] = useState(false);
+  // La marca en cada oferta y la tarjeta del final son de la extensión 2.17
+  // (docs/primera-busqueda-guiada.md §11); bridge.js deja su versión en el DOM.
+  const [marcaCadaOferta, setMarcaCadaOferta] = useState(false);
   const conexion = usarConectarExtension(alConectar);
   const activacion = usarActivarPostulacion(alActivar);
 
   useEffect(() => {
     setEnMovil(sinSoporteExtension());
+    setMarcaCadaOferta(versionAlMenos(document.documentElement.dataset.autopostulaExtension, [2, 17]));
     let vigente = true;
     extensionPresente().then((hay) => {
       if (vigente) setExtensionAqui(hay);
@@ -268,8 +282,10 @@ export default function PrimeraBusqueda({
       ? "Todavía no llega nada del portal. Deja que la extensión termine de revisar la página (el resumen aparece abajo a la derecha) y vuelve acá. Si ya lo viste y te convenció, también puedes activarla ahora."
       : (
         <>
-          Se abre {unSoloPortal ?? "el portal que elijas"} con tu búsqueda: {busquedaEnPalabras}. La extensión revisa cada
-          oferta y te muestra abajo a la derecha a cuántas postularía y por qué descarta las demás.{" "}
+          Se abre {unSoloPortal ?? "el portal que elijas"} con tu búsqueda: {busquedaEnPalabras}.{" "}
+          {marcaCadaOferta
+            ? "La extensión marca cada oferta con lo que haría y por qué, y al terminar te pregunta si empieza a postular."
+            : "La extensión revisa cada oferta y te muestra abajo a la derecha a cuántas postularía y por qué descarta las demás."}{" "}
           <b>No envía nada.</b>
           {extensionAqui === false && " Hazlo en el navegador donde la instalaste."}
         </>
@@ -292,9 +308,9 @@ export default function PrimeraBusqueda({
         ))}
         {esperandoPortal === "nada" && (
           <>
-            {/* Si todas las de la página calzaban, la extensión no deja ningún
-                rastro en el servidor (lo que habría postulado no lo manda hasta
-                la 2.17): que eso no deje a la persona sin salida. */}
+            {/* Con una extensión anterior a la 2.17, si todas las de la página
+                calzaban no queda ningún rastro en el servidor (lo que habría
+                postulado no se mandaba): que eso no deje a la persona sin salida. */}
             <button type="button" className="ap-button-ghost" onClick={() => void activacion.activar()} disabled={activacion.activando}>
               {activacion.activando ? "Activando…" : "Activar postulación"}
             </button>
@@ -322,7 +338,7 @@ export default function PrimeraBusqueda({
     "Tú decides si empieza a postular",
     estadoDe("decidir") === "ahora" ? (
       <>
-        {textoLoQueMiro({ porDecidir, descartadas: primeraVez.descartadas, habriaPostulado })}{" "}
+        {textoLoQueMiro({ porDecidir, descartadas: primeraVez.descartadas, habriaPostulado: primeraVez.habriaPostulado ?? habriaPostulado })}{" "}
         {textoAlActivar(modo, pruebaTotal)}
       </>
     ) : (

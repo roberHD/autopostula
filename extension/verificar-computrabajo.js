@@ -47,9 +47,14 @@ async function esperarTodo() { for (let i = 0; i < 40; i++) await new Promise(r 
 
 // `selectores`: lo que devuelve document.querySelector(All) para cada selector
 // (además de las tarjetas del listado).
-function crear({ pathname, hash, tarjetas, selectores }) {
+// `sesion`: un objeto donde guardar el sessionStorage de la pestaña (sin él,
+// como siempre: no guarda nada).
+function crear({ pathname, hash, tarjetas, selectores, sesion }) {
   const mensajes = [];
   const sel = selectores || {};
+  const almacen = sesion
+    ? { getItem: (k) => (k in sesion ? sesion[k] : null), setItem: (k, v) => { sesion[k] = String(v); }, removeItem: (k) => { delete sesion[k]; } }
+    : { getItem: () => null, setItem() {}, removeItem() {} };
   const ctx = {
     document: {
       documentElement: {}, body: {}, hidden: false,
@@ -58,7 +63,7 @@ function crear({ pathname, hash, tarjetas, selectores }) {
       getElementById: () => null, addEventListener() {},
     },
     location: { pathname, hash: hash || '', href: 'https://cl.computrabajo.com' + pathname + (hash || ''), hostname: 'cl.computrabajo.com' },
-    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    sessionStorage: almacen,
     chrome: {
       runtime: {
         lastError: null, onMessage: { addListener() {} },
@@ -173,6 +178,21 @@ const URL_AVISO = 'https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trab
     check('aprobada ya postulada: la reconoce en el panel y la da por vencida', r && r.ok === false && r.expirada === true, r);
     check('...con el código del aviso (del "#") y el título del panel, no el del listado', entrada.uid === ID && entrada.title === 'Vendedora volante 30hrs pm', entrada);
     check('...y la dirección del aviso, no la del listado', entrada.url === URL_AVISO, entrada.url);
+  }
+
+  // ── 5. La primera búsqueda (docs/primera-busqueda-guiada.md §11) ──
+  {
+    const guardado = {};
+    const t = crear({ pathname: '/trabajo-de-vendedor-en-rmetropolitan-jornada-part-time', tarjetas: tarjetas(), sesion: guardado });
+    let cierres = 0;
+    t.AP.cierreDePagina = () => { cierres++; return true; };
+    await t.AP.escanear();
+    await esperarTodo();
+    const marcas = JSON.parse(guardado.ap_marcas || '{}');
+    check('cada tarjeta queda marcada con su decisión y su razón', marcas.A1B2C3D4E5F6 && marcas.A1B2C3D4E5F6.b === 'postular' && marcas.A1B2C3D4E5F6.r.tipo === 'rol' && marcas.B1B2C3D4E5F6 && marcas.B1B2C3D4E5F6.b === 'descartar' && marcas.B1B2C3D4E5F6.r.tipo === 'jornada', marcas);
+    const obs = t.mensajes.find(m => m.type === 'REPORTAR_OBSERVADAS');
+    check('las que habría postulado van al panel, con su razón a favor', obs && obs.plataforma === 'Computrabajo' && obs.ofertas.length === 1 && obs.ofertas[0].externalId === 'A1B2C3D4E5F6' && obs.ofertas[0].razon && obs.ofertas[0].razon.tipo === 'rol', obs);
+    check('al terminar la página pide la tarjeta del final', cierres === 1, cierres);
   }
 
   console.log(fallos ? `\n${fallos} fallo(s)` : '\nTodo OK');

@@ -52,10 +52,10 @@ function cantidad(n: number, singular: string, plural: string): string {
   return `${n} ${n === 1 ? singular : plural}`;
 }
 
-// Lo que encontró la primera vez, con las cifras que tiene el servidor. Cuántas
-// habría postulado solo se sabe si miró en una ráfaga (Rafaga.observadas): al
-// abrir un portal a mano, la extensión lo muestra ahí y no lo manda (falta en
-// la 2.17, docs/primera-busqueda-guiada.md §10).
+// Lo que encontró la primera vez, con las cifras que tiene el servidor. Desde la
+// extensión 2.17, las que habría postulado al mirar un portal llegan al servidor
+// (OfertaObservada, docs/primera-busqueda-guiada.md §11); con una versión
+// anterior solo se sabe si miró en una ráfaga (Rafaga.observadas).
 export function textoLoQueMiro(c: { porDecidir: number; descartadas: number; habriaPostulado: number | null }): string {
   const partes: string[] = [];
   if (c.habriaPostulado) partes.push(`habría postulado a ${c.habriaPostulado}`);

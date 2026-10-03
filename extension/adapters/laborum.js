@@ -290,7 +290,9 @@ function extraerFacetasAviso() {
 // acá la memoria de "esto ya se procesó" tiene que salir del log persistente
 // (chrome.storage, sobrevive a la recarga), no del Set en memoria.
 function yaProcesada(id) {
-  return AP.vistos.has(id) || (AP.log || []).some(e => e.uid === id);
+  if (AP.vistos.has(id)) return true;
+  const postula = !AP.soloObservarEfectivo();
+  return (AP.log || []).some(e => e.uid === id && !(postula && e.status === 'observado'));
 }
 
 // ── Modal "Responde las preguntas" ──────────────────────────────────
@@ -432,7 +434,7 @@ async function rellenarYEnviarPreguntas(contexto) {
     await sleep(300);
   }
 
-  const conRevision = !!(AP.cfg && AP.cfg.modoRevision);
+  const conRevision = AP.conRevision();
   const sinResponder = respuestasLog.filter(r => r.vacia);
   const faltan = sinResponder.map(r => r.datoFaltante || '"' + (r.pregunta || '').slice(0, 50) + '"').slice(0, 3).join(', ');
   const errorIA = (sinResponder.find(r => r.errorIA) || {}).errorIA;
@@ -539,7 +541,7 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
   // este mismo clic y no pasa por ningún formulario, así que con "Revisar
   // antes de enviar" el visto bueno se pide ANTES. Las que abren el modal de
   // preguntas ("Postularme") ya tienen su propia revisión más abajo.
-  if (AP.cfg && AP.cfg.modoRevision && n(btn.textContent).includes('postulacion rapida')) {
+  if (AP.conRevision() && n(btn.textContent).includes('postulacion rapida')) {
     msg('⏸ Revisión pendiente…', '#2563EB');
     const decision = await AP.confirmarAntesDeEnviar(titulo, extraerTextoAviso(),
       'Esta oferta se postula con un clic, sin preguntas: al confirmar se envía tu CV. ¿Enviar?');
@@ -713,6 +715,11 @@ async function resolverAviso(datos) {
     if (!unicas.length) resultado = { banda: 'descartar', score: resultado.score, razones: [razonDuplicado] };
   }
 
+  // La marca de la tarjeta, para cuando se vuelva al listado
+  // (docs/primera-busqueda-guiada.md §11).
+  if (resultado.banda === 'descartar') AP.marcar(datos.id, 'descartar', resultado.razones && resultado.razones.slice(0, 1));
+  else AP.marcar(datos.id, resultado.banda, resultado.razones);
+
   if (resultado.banda === 'postular') {
     // §1.3: el tope del mes y el portal conectado, antes de cada clic (en
     // solo observar no hay clic).
@@ -724,8 +731,12 @@ async function resolverAviso(datos) {
       }
     }
     const r = await postularEnPagina(datos.id, titulo, url, undefined, empresa || undefined);
+    AP.gastarRevisionPrimera();
     if (r.ok) sumarConteos({ postular: 1 });
-    else if (r.observado) sumarConteos({ observado: 1 });
+    else if (r.observado) {
+      sumarConteos({ observado: 1 });
+      AP.reportarObservadas([{ externalId: datos.id, titulo, empresa, url, razon: AP.razonDeLaMarca('postular', resultado.razones), score: resultado.score }], 'Laborum');
+    }
     await sleep(DELAY);
     return true;
   }
@@ -846,7 +857,10 @@ async function escanear() {
     avistamientos.push({ externalId: id, titulo, empresa, url: a.href });
 
     const resultado = evaluarTarjeta(a);
-    const oferta = { id, titulo, empresa, url: a.href, ubicacion: getUbicacionDeTarjeta(a) };
+    const oferta = { id, titulo, empresa, url: a.href, ubicacion: getUbicacionDeTarjeta(a), razones: resultado.razones, score: resultado.score };
+    // Cada decisión queda marcada en su tarjeta, con su razón
+    // (docs/primera-busqueda-guiada.md §11).
+    if (resultado.banda !== 'descartar') AP.marcar(id, resultado.banda, resultado.razones);
     if (resultado.banda === 'postular') {
       pendientes.push(oferta);
     } else if (resultado.banda === 'gris') {
@@ -859,6 +873,7 @@ async function escanear() {
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
       descartes.push({ externalId: id, titulo, empresa, url: a.href, razon });
+      AP.marcar(id, 'descartar', [razon]);
       AP.vistos.add(id);
       addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: AP.formatearRazonCorta(razon) });
     }
@@ -873,6 +888,7 @@ async function escanear() {
     conteos.descartar++;
     razonesDescartadas.push(razon);
     descartes.push({ externalId: p.id, titulo: p.titulo, empresa: p.empresa, url: p.url, razon });
+    AP.marcar(p.id, 'descartar', [razon]);
     AP.vistos.add(p.id);
     addLog({ ts: Date.now(), status: 'skip', title: p.titulo, url: p.url, uid: p.id, reason: AP.formatearRazonCorta(razon) });
   });
@@ -888,8 +904,29 @@ async function escanear() {
       AP.vistos.add(p.id);
       addLog({ ts: Date.now(), status: 'observado', title: p.titulo, url: p.url, uid: p.id, reason: 'Habría postulado — modo solo observar' });
     });
+    AP.reportarObservadas(pendientes.map(p => ({
+      externalId: p.id, titulo: p.titulo, empresa: p.empresa, url: p.url,
+      razon: AP.razonDeLaMarca('postular', p.razones), score: p.score,
+    })), 'Laborum');
     conteos.observado = pendientes.length;
     pendientes = [];
+  }
+  // docs/primera-busqueda-guiada.md §11: con la persona mirando (no en una
+  // ráfaga) y en "solo mirar", las dudosas no se abren una por una -- la
+  // pestaña saltaba sola de aviso en aviso justo mientras la persona miraba qué
+  // hacía la extensión. Van a "Por decidir" con lo que dice la tarjeta, como en
+  // Computrabajo. En las ráfagas, que nadie mira, se siguen abriendo (§B).
+  if (soloObservar && candidatosGris.length && !AP.esPestanaDeRafaga()) {
+    for (const cand of candidatosGris) {
+      AP.vistos.add(cand.id);
+      addLog({ ts: Date.now(), status: 'skip', title: cand.titulo, url: cand.url, uid: cand.id, reason: 'En banda gris — revisar en el dashboard' });
+      AP.reportarBandaGris({
+        titulo: cand.titulo, url: cand.url, plataforma: 'Laborum', empresa: cand.empresa,
+        scoreLocal: cand.score, razones: cand.razones, detalleAviso: null,
+      });
+    }
+    conteos.gris = (conteos.gris || 0) + candidatosGris.length;
+    candidatosGris.splice(0);
   }
   AP.reportarDescartes(descartes, 'Laborum');
   {
@@ -927,7 +964,10 @@ async function escanear() {
   // (pestaña oculta), sigue a la próxima página del listado en vez de
   // quedarse pegada acá para siempre (los listados no son infinitos).
   if (siguientePagina(candidatas.length, urlPaginaLaborum)) AP.navegando = true;
-  else terminarEscaneo();
+  else {
+    terminarEscaneo();
+    AP.cierreDePagina();
+  }
 }
 
 // La persona llegó a un aviso por su cuenta (o pidió "Escanear" estando en
@@ -1059,6 +1099,12 @@ AP.escanear = AP.sinReentrada(function () {
   return escanear();
 });
 AP.aplicarDirecto = aplicarDirecto;
+// Las tarjetas del listado, para pintar la marca de cada una (core.js).
+AP.tarjetasDeLaPagina = function () {
+  if (esPaginaDeAviso()) return [];
+  const vistas = new Set();
+  return getTarjetas().map(a => ({ el: a, id: getIdDeTarjeta(a) })).filter(t => !vistas.has(t.id) && vistas.add(t.id));
+};
 // Si el navegador restaura el listado desde su caché de páginas (atrás o
 // adelante), la extensión vuelve con el estado de cuando se fue: navegando y
 // con un log viejo. Se pone al día y sigue.

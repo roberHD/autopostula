@@ -1,8 +1,8 @@
 # La primera búsqueda, guiada — y el video de 60 segundos
 
 > **Estado:** propuesta, 2026-09-29. Nace de una pregunta de Roberto: *"¿qué tan bueno sería hacer
-> una parte de la extensión como tutorial?"*. **El 2026-10-01 se hizo la parte del panel (§10)**;
-> la del portal (§3.2, §3.3) espera la extensión 2.17.
+> una parte de la extensión como tutorial?"*. **El 2026-10-01 se hizo la parte del panel (§10)**
+> y el 2026-10-02 la del portal (§11, extensión 2.17.0).
 > **Para:** el chat de producción.
 > **Relacionado:** `estrategia-y-rediseno.md` §5.2 ("En el portal · primera búsqueda", tarea 9 del
 > orden) y §5.3 (el popup semáforo), `modo-solo-observar.md` (el modo ya está construido),
@@ -226,9 +226,8 @@ El 1 y el 2 se pueden hacer esta semana y son independientes de todo lo demás.
 
 ## 10. El panel: la tarjeta «Probemos» (hecho el 2026-10-01)
 
-> **Estado:** implementado en `rama-roberto`, sin desplegar. Es la mitad del panel; la mitad del
-> portal (§3.2 y §3.3: la marca en cada oferta y la tarjeta de cierre) sigue pendiente y necesita
-> la extensión 2.17.
+> **Estado:** desplegado el 2026-10-01 (PR #31). Es la mitad del panel; la del portal (§3.2 y §3.3:
+> la marca en cada oferta y la tarjeta de cierre) se hizo el 2026-10-02, en §11.
 
 ### 10.1 Qué veía una cuenta nueva
 
@@ -332,3 +331,99 @@ integrado (que no tiene la extensión; `bridge.js` se simuló con sus mismos eve
    y las descartadas, y si todas las de la página calzaban no queda rastro (la tarjeta ofrece
    activarla igual).
 3. **En el celular, mandarse el enlace por correo** en vez de copiarlo (`celular-y-escritorio.md`).
+
+---
+
+## 11. El portal: la marca en cada oferta y la tarjeta del final (hecho el 2026-10-02, extensión 2.17.0)
+
+> **Estado:** implementado en `rama-roberto`, sin desplegar. Es la mitad del portal que faltaba en
+> §10.4: con esto la primera búsqueda queda como la describen §3.2 y §3.3.
+
+### 11.1 Lo que se hizo
+
+**La marca en cada oferta del listado (§3.2).** Cada tarjeta lleva *Te sirve*, *Para que decidas* o
+*No calza*, con su razón y con las mismas palabras del panel: `AP.razonComoEnElPanel` (`core.js`)
+es una copia de `formatearRazon` (`backend/lib/formatear-razon.ts`), y
+`backend/scripts/verificar-razones-marca.ts` corre las dos con una razón de cada tipo. Qué razón
+dice: en una que sirve, la primera a favor; en una que queda en duda, la primera en contra (lo que
+la dejó ahí, igual que "Lo último que hizo"); en un descarte, la que lo descartó.
+
+- Las decisiones se guardan en la pestaña (`sessionStorage`, `ap_marcas`), no en memoria: Laborum va
+  y vuelve entre el listado y los avisos, y cada vuelta recarga la extensión.
+- Cada adaptador dice dónde pintarlas (`AP.tarjetasDeLaPagina`). En Trabajando va dentro de la
+  columna del texto: como tercera columna angostaba el título (visto en el sitio real).
+- Va en un shadow root, con el texto puesto como texto (la razón puede traer palabras del aviso);
+  un clic en la marca no abre la oferta, y lo que pinta la extensión ya no dispara otro escaneo.
+
+**La tarjeta del final de la página (§3.3).** En "solo mirar", cuando termina de revisar la página
+que la persona está mirando, sale arriba del aviso de siempre:
+
+> *De las 20 ofertas de esta página: postularía a 5 y descartaría 15.*
+> *La razón más repetida para descartar: el cargo no se parece a lo que buscas.*
+> **[ Empezar a postular ]** [ Todavía no, quiero mirar ]
+
+- No sale en las pestañas de las ráfagas (se marcan al llegar la orden `AUTO_SCAN`, y la marca
+  sobrevive a las navegaciones de esa pestaña), ni otra vez en la pestaña después de contestar.
+- **Empezar a postular** activa la postulación en la cuenta desde el portal
+  (`/api/extension/estado` con `{ empezarAPostular: true }`), con las mismas reglas que el panel:
+  `lib/habilitar-postulacion.ts` las comparte con `/api/account/habilitar-postulacion`. Si la
+  persona había pedido "solo observar", lo apaga. Después sigue con esa misma página: las que
+  sirven se postulan ahí, y **la primera se muestra antes de enviarla** aunque no tenga "Revisar
+  antes de enviar" (`AP.conRevision`; se gasta al terminar esa postulación, no al cerrar la primera
+  revisión, porque en Computrabajo una misma postulación pide el visto bueno antes del clic y
+  después muestra las respuestas). Si la cuenta no cumple, la tarjeta dice el motivo del servidor.
+- **Todavía no, quiero mirar** cierra la tarjeta; nada cambia.
+- Sin sesión iniciada en el portal (§3.5), lo dice ahí mismo y el botón lleva al ingreso del propio
+  portal (aunque esté en otro subdominio; un enlace de otro sitio no se sigue).
+
+**Las que habría postulado llegan al panel** (§10.4, punto 2). Tabla nueva `OfertaObservada`
+(migración `20261002120000_ofertas_observadas`, solo agrega), `/api/extension/observadas`, y se
+borran a los 90 días como los descartes. El panel las usa en tres lugares: el paso 4 de la tarjeta
+"Probemos" ("habría postulado a 5"), "Lo último que hizo" ("Postularía a…", solo mientras la cuenta
+no postula) y el rastro de "ya miró" (antes, si todas las de la página calzaban, no quedaba ninguno).
+
+**Lo demás:**
+
+- **Laborum, con la persona mirando:** en "solo mirar" las dudosas ya no se abren una por una (la
+  pestaña saltaba sola de aviso en aviso justo mientras la persona miraba): van a "Por decidir" con
+  lo que dice la tarjeta, como en Computrabajo. En las ráfagas, que nadie mira, se siguen abriendo.
+- **El resumen del aviso** ya no se pisa con "Sin ofertas nuevas" cuando cualquier cambio de la
+  página dispara otra pasada sin novedades.
+- **El paso 3 de la tarjeta "Probemos"** dice "la extensión marca cada oferta con lo que haría y por
+  qué, y al terminar te pregunta si empieza a postular" cuando la extensión es 2.17 o más nueva
+  (`bridge.js` deja la versión en la página); con una anterior, lo de antes.
+
+### 11.2 Cómo se verificó
+
+**En los tres portales reales**, en el Chrome de Roberto, con el código nuevo corriendo dentro de un
+marco del propio portal (donde la extensión instalada no actúa), la cuenta en "solo mirar", el
+servidor falso diciendo "no se puede postular" y los clics de envío cortados:
+
+| Portal | Búsqueda | Resultado |
+|---|---|---|
+| Computrabajo | vendedora en Ñuñoa, part time | 20 ofertas: 5 *Te sirve* y 15 *No calza*, cada una marcada; la tarjeta con las cifras y la razón más repetida |
+| Laborum | vendedora en Ñuñoa, part time | 9 ofertas: 5 y 4; ninguna navegación a los avisos |
+| Trabajando.com | vendedora en Ñuñoa | 7 ofertas: 2 y 5 (las dudosas se abrieron en el panel lateral y se resolvieron); la marca ya dentro de la columna del texto |
+
+"Empezar a postular" con un error del servidor mostró el motivo y dejó el botón listo; con éxito
+dejó puestas la "primera con revisión" y la marca de "ya contestó", y volvió a revisar la página sin
+enviar nada. Ningún clic de envío llegó a intentarse, y no hubo errores.
+
+**En local**, con una base aparte y una cuenta nueva: `/api/extension/observadas` guardó 2, no
+duplicó al repetir y rechazó sin token; "Empezar a postular" sin objetivo confirmado respondió 400
+con el motivo y no activó nada, y con todo listo activó (`recienActivada` solo la primera vez). El
+panel mostró "Ya revisó ofertas para ti: habría postulado a 2" y las dos "Postularía a…", y al
+activarse la tarjeta desapareció.
+
+**Pruebas:** `extension/verificar-primera-busqueda.js` (nueva, 67 comprobaciones), casos nuevos en
+`verificar-computrabajo.js`, `verificar-laborum.js` y `verificar-rafagas.js`;
+`backend/scripts/verificar-razones-marca.ts` (68). Pasan las 11 pruebas de la extensión y los
+scripts sin base de datos; `tsc` limpio, y la migración calza exacto con el esquema
+(`prisma migrate diff` vacío).
+
+### 11.3 Lo que queda
+
+1. **Subir la 2.17.0 a la tienda** y **desplegar el panel** (trae la migración).
+2. Las tres frases del popup (§4), el video (§5) y, en el celular, mandarse el enlace por correo.
+3. **Para el abogado:** las ofertas a las que la extensión habría postulado se guardan 90 días, como
+   los descartes. Revisar que la política de privacidad lo cubra.

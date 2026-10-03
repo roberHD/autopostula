@@ -1571,6 +1571,10 @@ bloque(async () => {
           puedePostular: async (p) => { llamadas.portal = p; return llamadas.puede++ < permitidos ? { permitido: true, motivo: null } : { permitido: false, motivo: 'prueba_terminada' }; },
           motivoPuedePostular: (m) => 'motivo:' + m,
           reportarEscaneoTerminado: (c) => { llamadas.terminado = { ...c }; },
+          // docs/primera-busqueda-guiada.md §11.
+          razonDeLaMarca: () => null,
+          gastarRevisionPrimera: () => { llamadas.gastadas = (llamadas.gastadas || 0) + 1; },
+          reportarObservadas: (ofertas, p) => { llamadas.observadas = { ofertas, portal: p }; },
         },
         soloObservar: !!soloObservar,
         pendientes: Array.from({ length: cantidad }, (_, i) => ({ t: { querySelector: () => ({ href: 'https://portal/oferta-' + (i + 1) + '#x' }) }, id: 'id' + (i + 1), titulo: 'Titulo ' + (i + 1) })),
@@ -1598,9 +1602,11 @@ bloque(async () => {
     x = await correr({ permitidos: 99, cantidad: 5 });
     check(archivo + ': con cupo para todas: postula las 5 y sigue de largo (a paginar), sin reportar terminado todavía', x.salida === 'sigue' && x.llamadas.postular.length === 5 && x.llamadas.terminado === null && x.llamadas.puede === 5, x.llamadas);
     check(archivo + ': ...una consulta por oferta (5), no una por página', x.llamadas.puede === 5);
+    check(archivo + ': ...y la "primera con revisión" se gasta una vez por postulación (docs/primera-busqueda-guiada.md §11)', x.llamadas.gastadas === 5, x.llamadas.gastadas);
 
     x = await correr({ permitidos: 99, cantidad: 5, soloObservar: true });
     check(archivo + ': en solo observar no pregunta nada ni postula (no hay nada que limitar), y deja constancia de las 5', x.llamadas.puede === 0 && x.llamadas.postular.length === 0 && x.llamadas.logs.length === 5 && x.llamadas.logs.every(l => l.status === 'observado') && x.salida === 'sigue', x.llamadas);
+    check(archivo + ': ...y manda al panel las 5 que habría postulado, con su portal (docs/primera-busqueda-guiada.md §11)', x.llamadas.observadas && x.llamadas.observadas.ofertas.length === 5 && x.llamadas.observadas.portal === portal && x.llamadas.observadas.ofertas[0].externalId === 'id1', x.llamadas.observadas);
 
     x = await correr({ permitidos: 99, cantidad: 4, sinPanelEn: 2 });
     check(archivo + ': si el panel del aviso no cargó, esa oferta no se postuló ni cuenta', x.llamadas.postular.join() === 'id1,id3,id4' && x.llamadas.logs.some(l => l.reason === 'Panel no cargó'), x.llamadas);
