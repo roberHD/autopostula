@@ -421,7 +421,7 @@ function apMostrarCierre(resumen) {
   // §4 y §3.5: sin sesión en el portal no puede postular. Se dice acá, donde se
   // le pide permiso, y el botón lleva a iniciarla.
   const portal = AP.portalDelHost(location.hostname) || 'el portal';
-  const sinSesion = AP.mirarSesion() === false;
+  const sinSesion = AP.mirarSesion(document, portal) === false;
   ovRaiz.getElementById('ap-ov-cierre-sesion').textContent = sinSesion ? 'Para postular necesitas tu sesión iniciada en ' + portal + '.' : '';
   const si = ovRaiz.getElementById('ap-ov-cierre-si');
   si.disabled = false;
@@ -434,13 +434,13 @@ function apMostrarCierre(resumen) {
   apCierreEstado = 'inicial';
 }
 
-// El enlace de ingreso del propio portal (puede estar en otro subdominio).
+// La página para entrar al propio portal (SESION_POR_PORTAL), aunque esté en
+// otro subdominio. Antes se seguía el enlace de la página, y en Computrabajo el
+// botón para entrar no es un enlace: nunca se sigue uno de la página.
 function apIrAIniciarSesion() {
-  const a = document.querySelector(SEL_SIN_SESION);
-  let destino = null;
-  try { destino = a && new URL(a.href, location.href); } catch (e) { destino = null; }
-  if (destino && destino.protocol === 'https:' && AP.portalDelHost(destino.hostname) === AP.portalDelHost(location.hostname)) {
-    location.href = destino.href;
+  const destino = AP.ingresoDelPortal(AP.portalDelHost(location.hostname));
+  if (destino) {
+    location.href = destino;
     return;
   }
   apResultadoCierre('Inicia sesión en el portal y vuelve a esta página.', 'error');
@@ -2450,6 +2450,9 @@ new MutationObserver(function (registros) {
   if (!delPortal) return;
   // Si el portal volvió a dibujar las tarjetas, sus marcas se perdieron.
   AP.pintarMarcas();
+  // El encabezado de Laborum y Trabajando llega después de cargar.
+  clearTimeout(window._apSesionT);
+  window._apSesionT = setTimeout(() => AP.reportarSesion(), 1500);
   if (AP.activo && !AP.procesando) {
     clearTimeout(window._apT);
     window._apT = setTimeout(() => AP.escanear && AP.escanear(), 2500);
@@ -2461,9 +2464,9 @@ new MutationObserver(function (registros) {
 // El popup muestra una línea por portal conectado. La cuenta sabe cuáles
 // conectó la persona, pero no si la sesión de ESE navegador sigue viva -- y
 // una sesión caída es la causa más común de "no postuló nada y no dijo por
-// qué". Acá se mira lo único que no existe sin sesión: un enlace para
-// cerrarla. Si no aparece ninguno de los dos indicios no se inventa un
-// veredicto: se manda null y el popup dice "Sin revisar".
+// qué". Acá se mira lo que cada portal muestra solo con sesión o solo sin
+// ella. Si no aparece ningún indicio no se inventa un veredicto: no se manda
+// nada y el popup dice "Sin revisar".
 const PORTAL_POR_HOST = [
   [/computrabajo\.(cl|com)$/i, 'Computrabajo'],
   [/laborum\.cl$/i, 'Laborum'],
@@ -2472,26 +2475,71 @@ const PORTAL_POR_HOST = [
 const SEL_CON_SESION = 'a[href*="logout" i], a[href*="cerrar-sesion" i], a[href*="cerrarsesion" i], a[href*="signout" i], form[action*="logout" i]';
 const SEL_SIN_SESION = 'a[href*="/login" i], a[href*="iniciar-sesion" i], a[href*="iniciarsesion" i], a[href*="signin" i]';
 
+// Los dos de arriba solo decían algo en Laborum, y solo cuando faltaba la
+// sesión (docs/primera-busqueda-guiada.md §12). Mirado en los tres sitios el
+// 2026-10-03, con y sin sesión: ninguno tiene en el listado un enlace para
+// cerrarla, y Computrabajo y Trabajando no entran por "/login". Lo que sí
+// distingue los dos casos:
+//   Computrabajo: con sesión, el menú de la persona (data-info-user) y su
+//     <span id="logout">; sin sesión, el botón "Login". Sus enlaces a
+//     /acceso/ están en los dos casos: no sirven.
+//   Laborum: con sesión, el acceso a los mensajes; sin sesión, "Ingresar".
+//   Trabajando: con sesión, "Mis postulaciones" y "Actualizar mi CV"; sin
+//     sesión, "Ingresa".
+// `ingreso` es la página para entrar: ahí llevan la tarjeta del final y el
+// popup. popup.js la copia, y verificar-estado-extension.js compara las dos.
+const SESION_POR_PORTAL = {
+  Computrabajo: {
+    con: '[data-info-user], #logout',
+    sin: '[data-login-button-desktop]',
+    ingreso: 'https://candidato.cl.computrabajo.com/acceso/',
+  },
+  Laborum: {
+    con: 'a[href*="/postulantes/mensajes" i]',
+    sin: 'a[href*="/login" i]',
+    ingreso: 'https://www.laborum.cl/login',
+  },
+  Trabajando: {
+    con: 'a[href$="/mis-postulaciones" i], a[href$="/mi-curriculum" i]',
+    sin: 'a[href*="/ingresa-a-tu-cuenta" i]',
+    ingreso: 'https://www.trabajando.cl/ingresa-a-tu-cuenta',
+  },
+};
+
 AP.portalDelHost = function (host) {
   const par = PORTAL_POR_HOST.find(([re]) => re.test(host));
   return par ? par[1] : null;
 };
 
+AP.ingresoDelPortal = function (portal) {
+  const p = SESION_POR_PORTAL[portal];
+  return p ? p.ingreso : null;
+};
+
 // true = hay sesión, false = no hay, null = no se pudo saber en esta página.
-AP.mirarSesion = function (doc) {
+// Lo de "con sesión" se mira primero: los portales dejan escondidos sus
+// enlaces para entrar aunque la persona ya haya entrado.
+AP.mirarSesion = function (doc, portal) {
   const d = doc || document;
-  if (d.querySelector(SEL_CON_SESION)) return true;
-  if (d.querySelector(SEL_SIN_SESION)) return false;
+  const propio = SESION_POR_PORTAL[portal] || {};
+  if (d.querySelector(SEL_CON_SESION) || (propio.con && d.querySelector(propio.con))) return true;
+  if (d.querySelector(SEL_SIN_SESION) || (propio.sin && d.querySelector(propio.sin))) return false;
   return null;
 };
 
+// Se mira al cargar y otra vez cuando el portal cambia la página (el
+// MutationObserver de arriba): Laborum y Trabajando dibujan el encabezado
+// después de cargar, y la sesión se puede abrir o cerrar sin recargar. Solo
+// se avisa cuando el veredicto cambia.
+let apSesionAvisada = null;
 AP.reportarSesion = function () {
   const portal = AP.portalDelHost(location.hostname);
   if (!portal) return;
-  const hay = AP.mirarSesion();
-  if (hay === null) return; // esta página no dice nada: no se pisa lo anterior
+  const hay = AP.mirarSesion(document, portal);
+  if (hay === null || hay === apSesionAvisada) return; // esta página no dice nada nuevo: no se pisa lo anterior
   try {
     chrome.runtime.sendMessage({ type: 'SESION_PORTAL', portal: portal, hay: hay });
+    apSesionAvisada = hay;
   } catch (e) { /* el service worker se está reiniciando: se reporta la próxima */ }
 };
 

@@ -1,8 +1,9 @@
 # La primera búsqueda, guiada — y el video de 60 segundos
 
 > **Estado:** propuesta, 2026-09-29. Nace de una pregunta de Roberto: *"¿qué tan bueno sería hacer
-> una parte de la extensión como tutorial?"*. **El 2026-10-01 se hizo la parte del panel (§10)**
-> y el 2026-10-02 la del portal (§11, extensión 2.17.0).
+> una parte de la extensión como tutorial?"*. **El 2026-10-01 se hizo la parte del panel (§10)**,
+> el 2026-10-02 la del portal (§11, extensión 2.17.0) y el 2026-10-04 las tres frases del popup
+> (§12, extensión 2.17.1).
 > **Para:** el chat de producción.
 > **Relacionado:** `estrategia-y-rediseno.md` §5.2 ("En el portal · primera búsqueda", tarea 9 del
 > orden) y §5.3 (el popup semáforo), `modo-solo-observar.md` (el modo ya está construido),
@@ -424,6 +425,90 @@ scripts sin base de datos; `tsc` limpio, y la migración calza exacto con el esq
 ### 11.3 Lo que queda
 
 1. **Subir la 2.17.0 a la tienda** y **desplegar el panel** (trae la migración).
-2. Las tres frases del popup (§4), el video (§5) y, en el celular, mandarse el enlace por correo.
+2. Las tres frases del popup (§4; hechas el 2026-10-04, en §12), el video (§5) y, en el celular,
+   mandarse el enlace por correo.
 3. **Para el abogado:** las ofertas a las que la extensión habría postulado se guardan 90 días, como
    los descartes. Revisar que la política de privacidad lo cubra.
+
+---
+
+## 12. Las tres frases del popup (hecho el 2026-10-04, extensión 2.17.1)
+
+> **Estado:** implementado en `rama-roberto`, sin desplegar. Es la tarea 2 de §7.
+
+### 12.1 Lo que se hizo
+
+Las tres van dentro del semáforo del popup, debajo de "en qué está", en una sola línea de **qué
+necesita de ti**: de a una, cada una cuando aplica y mientras aplique (`avisoParaTi` en
+`extension/popup.js`).
+
+| # | Lo que dice | Cuándo sale | Cuándo se va |
+|---|---|---|---|
+| 1 | *"Necesitas tener tu sesión iniciada en Laborum. Sin ella, la extensión no puede postular ahí."* y el enlace **Iniciar sesión en Laborum ↗** | Un portal conectado avisó que no hay sesión | Cuando ese portal avisa que sí la hay |
+| 2 | *"La extensión trabaja mientras Chrome está abierto, y se pone al día sola cuando lo abres."* | La primera vez que una puesta al día queda cortada (se cerró Chrome o se suspendió el computador a la mitad), y solo si de verdad se pone al día sola: Premium o la prueba, sin pausa y con cupo | Cuando la siguiente puesta al día corre o termina. Con otra cortada después, ya no vuelve |
+| 3 | Lo del plan gratis | Ya estaba: al acabarse las 5 de la prueba, la fila de la prueba dice *"Con el plan gratis, entra a Computrabajo, Laborum o Trabajando y la extensión postula por ti"*, con las mismas palabras del panel y del correo (`rafagas-y-ponerse-al-dia.md` §4.1). No se repite en la línea | Al pasar a Premium |
+
+- **Nunca las tres juntas** (criterio 5 de §8): la 1 va antes que la 2, porque sin sesión no postula
+  ahí, y la 2 no aplica con la prueba terminada, que es cuando sale la 3. Lo más que se ve son dos:
+  la 1 y la 3.
+- La sesión que falta va en ámbar, con un enlace a la página para entrar de cada portal que la
+  necesite; lo de Chrome es un dato y va en gris.
+- Para saber si "se pone al día sola" es verdad, el popup usa lo que dice el servidor
+  (`busquedaAutomatica`, que ya descuenta plan, prueba, pausa y cupo): `background.js` lo pasa como
+  `automatica`, junto con el estado del botón "Ponerme al día ahora".
+- "La primera vez" se anota en el navegador (`avisoChromeVisto`, con la puesta al día con que se
+  dijo) recién cuando se muestra: si la persona no abrió el popup mientras estaba cortada, no cuenta.
+
+**Lo que hubo que arreglar antes: la extensión casi nunca sabía si había sesión.** Buscaba un enlace
+para cerrar sesión (con sesión) o uno a `/login` (sin sesión). Mirado en los tres sitios el
+2026-10-03, con y sin sesión: ninguno tiene en el listado un enlace para cerrarla, y Computrabajo y
+Trabajando no entran por `/login`.
+
+| Portal | Sin sesión: antes → ahora | Con sesión: antes → ahora |
+|---|---|---|
+| Computrabajo | no sabía → **sin sesión** | no sabía → **con sesión** |
+| Laborum | sin sesión → sin sesión | no sabía → **con sesión** |
+| Trabajando | no sabía → **sin sesión** | no sabía → **con sesión** |
+
+Por eso el popup decía "Sin revisar" en casi todo, y la tarjeta del final (§11) nunca podía decir
+"Para postular necesitas tu sesión iniciada en Computrabajo": su prueba usaba un enlace de ingreso
+inventado. Ahora `SESION_POR_PORTAL` (`core.js`) tiene lo que distingue los dos casos en cada uno:
+
+- **Computrabajo:** con sesión, el menú de la persona (`data-info-user`) y su "Cerrar sesión", que es
+  un `<span id="logout">` y no un enlace; sin sesión, el botón "Login". Sus enlaces a `/acceso/` están
+  en los dos casos.
+- **Laborum:** con sesión, el acceso a los mensajes; sin sesión, "Ingresar".
+- **Trabajando:** con sesión, "Mis postulaciones" y "Actualizar mi CV"; sin sesión, "Ingresa".
+
+Y la página para entrar a cada uno, adonde llevan el popup y la tarjeta del final:
+`candidato.cl.computrabajo.com/acceso/`, `www.laborum.cl/login` y
+`www.trabajando.cl/ingresa-a-tu-cuenta`. La tarjeta ya no sigue un enlace de la página. Además, la
+sesión se vuelve a mirar cuando el portal termina de cambiar la página (Laborum y Trabajando dibujan
+el encabezado después de cargar, y se puede entrar sin recargar), y solo se avisa cuando cambia.
+
+### 12.2 Cómo se verificó
+
+- **En los sitios reales, con el código nuevo tal cual:** sin sesión, en el navegador integrado (que
+  no tiene la extensión); con sesión, en el Chrome de Roberto, dentro de un marco sobre `robots.txt`
+  donde la extensión instalada no actúa. Solo lectura, sin un clic. El listado y la portada de cada
+  portal dieron lo de la tabla de arriba, y las tres páginas para entrar son las del ingreso.
+- **El popup real**, con un chrome y un servidor falsos, en tres casos: falta la sesión en Laborum
+  (ámbar, con el enlace); la última puesta al día quedó cortada (gris); y una cuenta gratis con la
+  prueba terminada, sin sesión en Laborum y con una cortada vieja (se ven la 1 y la 3, no la 2).
+- **Pruebas:** `verificar-primera-busqueda.js` (113 comprobaciones: la tarjeta con lo de cada
+  portal, el aviso de la sesión al popup y la línea del popup), casos nuevos en
+  `verificar-estado-extension.js` (lo de cada portal, y que `popup.js` tenga las mismas páginas para
+  entrar que `core.js`) y en `verificar-rafagas.js` (`automatica`). Pasan las 11. Además se rompió a
+  propósito cada regla nueva en una copia (la pausa, "la primera vez", el orden, mirar primero lo de
+  sin sesión, las páginas para entrar, volver a mirar la sesión…) y las pruebas lo detectaron todo.
+
+### 12.3 Lo que queda
+
+1. **Subir la 2.17.1 a la tienda en vez de la 2.17.0** (la trae entera), después de mergear el PR
+   (§11.3, punto 1). No necesita nada nuevo del servidor.
+2. El video de 60 segundos (§5) y, en el celular, mandarse el enlace por correo.
+3. **No se tocó:** en una cuenta gratis con la prueba terminada, el semáforo sigue diciendo
+   "Postulando por ti · Revisa las ofertas nuevas de tus portales y envía las que calzan"
+   (`TEXTO_MODO`, igual que el panel), aunque ya no lo hace sola. La fila de la prueba lo aclara justo
+   debajo, pero ese texto podría decir "cuando entras a un portal". Habría que cambiarlo en los dos
+   lados (`backend/lib/estado-extension.ts`).

@@ -1299,6 +1299,7 @@ bloque(async () => {
   r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
   check('el popup no muestra el botón durante la prueba (mostrar: false)…', r.mostrar === false, r);
   check('…pero sí cuántas lleva: en_curso, 3 restantes de 5', !!r.prueba && r.prueba.estado === 'en_curso' && r.prueba.restantes === 3 && r.prueba.total === 5, r);
+  check('…y que hoy se pone al día sola (automatica): el popup puede decir lo de Chrome abierto (primera-busqueda-guiada §12)', r.automatica === true, r);
 
   // ── Prueba gastada: nada corre solo ──
   for (const disparador of ['inicio_chrome', 'despertar', 'chequeo']) {
@@ -1310,6 +1311,7 @@ bloque(async () => {
   b = await nuevo(gastada);
   r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
   check('prueba gastada: el popup no muestra el botón, y sí el mensaje de fin de prueba', r.mostrar === false && !!r.prueba && r.prueba.estado === 'terminada' && r.prueba.total === 5, r);
+  check('prueba gastada: ya no se pone al día sola (automatica: false), así que el popup no lo promete', r.automatica === false, r);
   r = await b.enviarMensajeAsync({ type: 'PONERSE_AL_DIA' });
   check('prueba gastada: "Ponerme al día" tampoco (sin_plan)', r.ok === false && r.motivo === 'sin_plan' && b.tabsCreados.length === 0, r);
 
@@ -1317,6 +1319,10 @@ bloque(async () => {
   b = await nuevo({ disponibleEnPlan: true, modo: 'premium', pruebaRestantes: null });
   r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
   check('Premium: el botón sí, y NADA de la prueba (prueba: null) -- criterio 5 de §4.1', r.mostrar === true && r.prueba === null, r);
+  check('Premium: se pone al día sola (automatica: true)', r.automatica === true, r);
+  b = await nuevo({ disponibleEnPlan: true, modo: 'premium', pruebaRestantes: null, busquedaAutomatica: false, motivo: 'pausada' });
+  r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
+  check('Premium en pausa: el botón se dibuja bloqueado, pero no se pone al día sola (automatica: false)', r.mostrar === true && r.bloqueo === 'pausada' && r.automatica === false, r);
   b = await nuevo({ disponibleEnPlan: true, modo: undefined, pruebaRestantes: undefined, pruebaTotal: undefined });
   r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
   check('un servidor anterior a la prueba (sin `modo`): no inventa nada (prueba: null)', r.prueba === null, r);

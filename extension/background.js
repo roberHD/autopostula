@@ -1534,7 +1534,7 @@ function pruebaDeEstado(estado) {
   return null;
 }
 
-// Para dibujar el botón sin apretarlo: { mostrar, bloqueo, estimadoMs, prueba }.
+// Para dibujar el botón sin apretarlo: { mostrar, bloqueo, estimadoMs, prueba, automatica }.
 // "Gratis: el botón no aparece" (§3.6) -- se decide por disponibleEnPlan, que
 // es del plan, no de si hoy está corriendo. Sin respuesta del servidor no se
 // sabe si el plan lo permite, y es mejor no ofrecer un botón que quizás no
@@ -1548,7 +1548,11 @@ async function estadoPonerseAlDia() {
   // La prueba (§4.1) se muestra aunque el botón no: es lo único automático que
   // tiene una cuenta gratis, y el botón es de Premium.
   const prueba = pruebaDeEstado(estado);
-  if (!estado.disponibleEnPlan) return { mostrar: false, prueba };
+  // Si hoy se pone al día sola (plan o prueba, sin pausa y con cupo): el popup
+  // solo dice "se pone al día sola cuando abres Chrome" si es verdad
+  // (docs/primera-busqueda-guiada.md §12).
+  const automatica = estado.busquedaAutomatica === true;
+  if (!estado.disponibleEnPlan) return { mostrar: false, prueba, automatica };
 
   let bloqueo;
   if (!estado.busquedaAutomatica) bloqueo = motivoDeEstado(estado);
@@ -1556,7 +1560,7 @@ async function estadoPonerseAlDia() {
   else if (!(estado.plataformasConectadas || []).length) bloqueo = 'sin_portales';
   else bloqueo = await bloqueoLocalManual();
 
-  return { mostrar: true, bloqueo, estimadoMs: await estimadoRafagaMs(), prueba };
+  return { mostrar: true, bloqueo, estimadoMs: await estimadoRafagaMs(), prueba, automatica };
 }
 
 // docs/rafagas-y-ponerse-al-dia.md §3.1, disparador "el computador despierta":

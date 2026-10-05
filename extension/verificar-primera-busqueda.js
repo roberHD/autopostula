@@ -6,6 +6,8 @@
 //   3. Lo demás que la acompaña: la primera postulación con revisión, el resumen
 //      que no se borra con una pasada sin novedades, las pestañas de las ráfagas
 //      y el filtro de lo que pinta la propia extensión.
+//   4. Las tres frases de §4 (§12): la sesión, mirada con lo que muestra cada
+//      portal real, y la línea de "qué necesita de ti" del popup.
 // Carga core.js REAL en un vm de Node con un DOM falso mínimo: cada shadow root
 // devuelve un elemento por id o selector (no parsea el HTML), lo justo para leer
 // los textos y apretar los botones.
@@ -306,18 +308,29 @@ const LUGAR = { tipo: 'ubicacion', ofertaEn: 'maipu', buscadas: ['ñuñoa'] };
   }
 
   // ── 8. Sin sesión en el portal ─────────────────────────────────
+  // Con lo que muestra cada portal real sin sesión (core.js, SESION_POR_PORTAL;
+  // mirado en los tres sitios el 2026-10-03). Antes solo Laborum decía algo.
   const SEL_SIN = 'a[href*="/login" i], a[href*="iniciar-sesion" i], a[href*="iniciarsesion" i], a[href*="signin" i]';
-  {
-    const ingreso = crearElemento('a');
-    ingreso.href = 'https://candidato.cl.computrabajo.com/acceso/login';
-    const t = crear({ docSel: { [SEL_SIN]: [ingreso] } });
+  for (const [host, portal, indicio, ingreso] of [
+    ['cl.computrabajo.com', 'Computrabajo', '[data-login-button-desktop]', 'https://candidato.cl.computrabajo.com/acceso/'],
+    ['www.laborum.cl', 'Laborum', SEL_SIN, 'https://www.laborum.cl/login'],
+    ['www.trabajando.cl', 'Trabajando', 'a[href*="/ingresa-a-tu-cuenta" i]', 'https://www.trabajando.cl/ingresa-a-tu-cuenta'],
+  ]) {
+    const t = crear({ host, docSel: { [indicio]: [crearElemento('span')] } });
     conMarcas(t);
     t.AP.cierreDePagina();
     const r = t.raiz();
-    check('sin sesión: lo dice donde se pide el permiso', r.getElementById('ap-ov-cierre-sesion').textContent === 'Para postular necesitas tu sesión iniciada en Computrabajo.');
-    check('...y el botón lleva a iniciarla', r.getElementById('ap-ov-cierre-si').textContent === 'Iniciar sesión en Computrabajo');
+    check(portal + ' sin sesión: lo dice donde se pide el permiso', r.getElementById('ap-ov-cierre-sesion').textContent === 'Para postular necesitas tu sesión iniciada en ' + portal + '.', r.getElementById('ap-ov-cierre-sesion').textContent);
+    check('...y el botón lleva a iniciarla', r.getElementById('ap-ov-cierre-si').textContent === 'Iniciar sesión en ' + portal);
     r.getElementById('ap-ov-cierre-si').onclick();
-    check('...al ingreso del propio portal (aunque sea otro subdominio)', t.navegaciones[0] === 'https://candidato.cl.computrabajo.com/acceso/login' && !t.mensajes.some(m => m.type === 'EMPEZAR_A_POSTULAR'), t.navegaciones);
+    check('...a la página para entrar del propio portal', t.navegaciones.length === 1 && t.navegaciones[0] === ingreso && !t.mensajes.some(m => m.type === 'EMPEZAR_A_POSTULAR'), t.navegaciones);
+  }
+  {
+    const t = crear({ docSel: { '[data-info-user], #logout': [crearElemento('div')], [SEL_SIN]: [crearElemento('a')] } });
+    conMarcas(t);
+    t.AP.cierreDePagina();
+    const r = t.raiz();
+    check('con sesión, aunque quede escondido un enlace para entrar: los botones de siempre', r.getElementById('ap-ov-cierre-sesion').textContent === '' && r.getElementById('ap-ov-cierre-si').textContent === 'Empezar a postular');
   }
   {
     const ajeno = crearElemento('a');
@@ -325,9 +338,8 @@ const LUGAR = { tipo: 'ubicacion', ofertaEn: 'maipu', buscadas: ['ñuñoa'] };
     const t = crear({ docSel: { [SEL_SIN]: [ajeno] } });
     conMarcas(t);
     t.AP.cierreDePagina();
-    const r = t.raiz();
-    r.getElementById('ap-ov-cierre-si').onclick();
-    check('un enlace de ingreso de otro sitio no se sigue', t.navegaciones.length === 0 && /Inicia sesión/.test(r.getElementById('ap-ov-cierre-resultado').textContent));
+    t.raiz().getElementById('ap-ov-cierre-si').onclick();
+    check('un enlace de la página nunca se sigue: va a la página del propio portal', t.navegaciones.length === 1 && t.navegaciones[0] === 'https://candidato.cl.computrabajo.com/acceso/', t.navegaciones);
   }
 
   // ── 9. La primera postulación con revisión ─────────────────────
@@ -370,6 +382,147 @@ const LUGAR = { tipo: 'ubicacion', ofertaEn: 'maipu', buscadas: ['ñuñoa'] };
     check('pintar marcas o el aviso no dispara otro escaneo', t.timers.length === 0, t.timers.map(x => x.ms));
     observador([{ addedNodes: [crearElemento('article')], removedNodes: [] }]);
     check('un cambio del portal sí: repinta las marcas y vuelve a escanear', t.timers.some(x => x.ms === 120) && t.timers.some(x => x.ms === 2500), t.timers.map(x => x.ms));
+  }
+
+  // ── 12. La sesión se le avisa al popup, y se vuelve a mirar ────
+  {
+    const sel = {};
+    const t = crear({ docSel: sel });
+    const avisos = () => t.mensajes.filter(m => m.type === 'SESION_PORTAL');
+    check('una página que no dice nada: no se avisa (no se pisa lo anterior)', avisos().length === 0);
+    sel['[data-login-button-desktop]'] = [crearElemento('span')];
+    t.AP.reportarSesion();
+    check('sin sesión en Computrabajo: se avisa', avisos().length === 1 && avisos()[0].portal === 'Computrabajo' && avisos()[0].hay === false, avisos());
+    t.AP.reportarSesion();
+    check('...una sola vez mientras no cambie', avisos().length === 1);
+    delete sel['[data-login-button-desktop]'];
+    sel['[data-info-user], #logout'] = [crearElemento('div')];
+    t.AP.reportarSesion();
+    check('entró sin recargar la página: se avisa que ahora hay', avisos().length === 2 && avisos()[1].hay === true, avisos());
+    t.timers.length = 0;
+    t.observadores[0]([{ addedNodes: [crearElemento('header')], removedNodes: [] }]);
+    check('cuando el portal cambia la página, la sesión se vuelve a mirar (el encabezado llega tarde)', t.timers.some(x => x.ms === 1500), t.timers.map(x => x.ms));
+  }
+
+  // ── 13. El popup: "qué necesita de ti" (§4 y §12) ──────────────
+  // Se extrae el bloque REAL de popup.js (el mismo que prueban las ráfagas) y se
+  // corre con un DOM y un chrome mínimos.
+  {
+    const fuente = fs.readFileSync(path.join(__dirname, 'popup.js'), 'utf8');
+    const html = fs.readFileSync(path.join(__dirname, 'popup.html'), 'utf8');
+    const desde = fuente.indexOf('function haceCuanto(');
+    const hasta = fuente.indexOf('// ── Cargar estado');
+    function elementoPopup(tag) {
+      const clases = new Set();
+      const el = {
+        tagName: String(tag || 'div').toUpperCase(), children: [], href: '', target: '', rel: '', disabled: false,
+        classList: { toggle: (c, f) => { if (f) clases.add(c); else clases.delete(c); }, contains: (c) => clases.has(c) },
+        appendChild: (h) => { el.children.push(h); return h; },
+      };
+      let texto = '';
+      Object.defineProperty(el, 'textContent', {
+        get: () => texto + el.children.map(h => h.textContent).join(''),
+        set: (v) => { texto = String(v); el.children = []; },
+      });
+      return el;
+    }
+    function cargarPopup() {
+      const elementos = {};
+      ['aviso', 'aviso-texto', 'aviso-links', 'rafaga-row', 'rafaga-titulo', 'rafaga-detalle', 'prueba-row', 'prueba-titulo',
+        'prueba-detalle', 'prueba-links', 'prueba-ver', 'prueba-premium', 'ponerse-row', 'ponerse-btn', 'ponerse-hint']
+        .forEach((id) => { elementos[id] = elementoPopup(); elementos[id].classList.toggle('hidden', true); });
+      const guardados = [];
+      const ctx = {
+        Date, BACKEND_URL: 'https://autopostula.cl',
+        document: { getElementById: (id) => elementos[id] || null, createElement: elementoPopup },
+        chrome: {
+          runtime: { sendMessage: () => {}, lastError: null },
+          storage: { local: { set: (o) => guardados.push(o) }, onChanged: { addListener: () => {} } },
+          action: { setBadgeText: () => {} },
+        },
+      };
+      vm.createContext(ctx);
+      vm.runInContext(fuente.slice(desde, hasta), ctx, { filename: 'popup.js (bloque de ráfaga)' });
+      return { ctx, elementos, guardados, oculto: (id) => elementos[id].classList.contains('hidden'), leer: (n) => vm.runInContext(n, ctx) };
+    }
+
+    const p = cargarPopup();
+    const ahora = Date.now();
+    const conectados = [{ nombre: 'Computrabajo', conectado: true }, { nombre: 'Laborum', conectado: true }, { nombre: 'Trabajando', conectado: true }];
+    const cortada = { id: 'r_1', estado: 'interrumpida', inicio: ahora - 3600e3, latido: ahora - 3500e3, fin: ahora - 3500e3, conteos: { postuladas: 2 } };
+    const aviso = (d) => p.ctx.avisoParaTi(Object.assign({ portales: null, sesiones: {}, rafaga: null, automatica: null, pausada: false, chromeVisto: null }, d), ahora);
+    const CHROME = p.leer('TEXTO_CHROME_ABIERTO');
+
+    // La 1: la sesión en el portal
+    let x = aviso({ portales: conectados, sesiones: { Laborum: { hay: false } } });
+    check('a un portal conectado le falta la sesión: la frase de §4', x && x.tipo === 'sesion' && x.texto === 'Necesitas tener tu sesión iniciada en Laborum. Sin ella, la extensión no puede postular ahí.', x);
+    check('...con el enlace a la página para entrar', x.enlaces.length === 1 && x.enlaces[0].texto === 'Iniciar sesión en Laborum' && x.enlaces[0].url === 'https://www.laborum.cl/login', x.enlaces);
+    x = aviso({ portales: conectados, sesiones: { Laborum: { hay: false }, Trabajando: { hay: false }, Computrabajo: { hay: true } } });
+    check('dos portales: "en Laborum y Trabajando", con un enlace para cada uno', x.texto.startsWith('Necesitas tener tu sesión iniciada en Laborum y Trabajando.') && x.enlaces.map(e => e.url).join(' ') === 'https://www.laborum.cl/login https://www.trabajando.cl/ingresa-a-tu-cuenta', x);
+    x = aviso({ portales: conectados, sesiones: { Laborum: { hay: false }, Trabajando: { hay: false }, Computrabajo: { hay: false } } });
+    check('los tres: "en Computrabajo, Laborum y Trabajando"', x.texto.startsWith('Necesitas tener tu sesión iniciada en Computrabajo, Laborum y Trabajando.'), x.texto);
+    check('si ningún portal avisó, no se dice nada (no se sabe)', aviso({ portales: conectados, sesiones: {} }) === null);
+    check('con la sesión iniciada, tampoco', aviso({ portales: conectados, sesiones: { Laborum: { hay: true } } }) === null);
+    check('a un portal que la persona no conectó no se le pide', aviso({ portales: [{ nombre: 'Laborum', conectado: false }], sesiones: { Laborum: { hay: false } } }) === null);
+    check('si la cuenta no contestó (no se sabe qué conectó), tampoco', aviso({ portales: null, sesiones: { Laborum: { hay: false } } }) === null);
+
+    // La 2: que trabaja con Chrome abierto
+    x = aviso({ rafaga: cortada, automatica: true });
+    check('una puesta al día cortada, y se pone al día sola: la frase de §4', x && x.tipo === 'chrome' && x.texto === 'La extensión trabaja mientras Chrome está abierto, y se pone al día sola cuando lo abres.' && x.enlaces.length === 0 && x.rafagaId === 'r_1', x);
+    check('"en curso" sin latido en 10 minutos también cuenta como cortada', aviso({ rafaga: { id: 'r_2', estado: 'en_curso', inicio: ahora - 30 * 60000, latido: ahora - 11 * 60000 }, automatica: true }) !== null);
+    check('una que está corriendo, no', aviso({ rafaga: { id: 'r_3', estado: 'en_curso', inicio: ahora - 60000, latido: ahora - 30000 }, automatica: true }) === null);
+    check('una que terminó bien, no', aviso({ rafaga: Object.assign({}, cortada, { estado: 'terminada' }), automatica: true }) === null);
+    check('si hoy no se pone al día sola (gratis sin prueba, sin cupo, en pausa en la cuenta), no lo promete', aviso({ rafaga: cortada, automatica: false }) === null && aviso({ rafaga: cortada, automatica: null }) === null);
+    check('en pausa desde el popup, tampoco', aviso({ rafaga: cortada, automatica: true, pausada: true }) === null);
+    check('la primera vez: con la misma cortada sigue saliendo', aviso({ rafaga: cortada, automatica: true, chromeVisto: 'r_1' }) !== null);
+    check('...con otra cortada después, ya no', aviso({ rafaga: Object.assign({}, cortada, { id: 'r_9' }), automatica: true, chromeVisto: 'r_1' }) === null);
+    for (const r of [cortada, { id: 'a', estado: 'en_curso', inicio: ahora - 3e6, latido: ahora - 11 * 60000 },
+      { id: 'b', estado: 'en_curso', inicio: ahora - 60000, latido: ahora - 9 * 60000 }, Object.assign({}, cortada, { estado: 'terminada' })]) {
+      const dice = ((p.ctx.textoRafaga(r, ahora) || {}).titulo || '');
+      check('"cortada" es lo mismo que la línea de la ráfaga llama "se cortó" (' + dice + ')', p.ctx.rafagaCortada(r, ahora) === /se cortó/.test(dice));
+    }
+
+    // De a una, y nunca las tres
+    x = aviso({ portales: conectados, sesiones: { Laborum: { hay: false } }, rafaga: cortada, automatica: true });
+    check('si faltan la sesión y lo de Chrome, va la sesión (sin ella no postula ahí)', x.tipo === 'sesion');
+    check('la 3 (lo del plan gratis) la dice la fila de la prueba cuando se acaba', p.ctx.textoPrueba({ estado: 'terminada', total: 5 }).detalle === p.leer('TEXTO_DESPUES_DE_LA_PRUEBA') && /Con el plan gratis, entra a/.test(p.leer('TEXTO_DESPUES_DE_LA_PRUEBA')));
+
+    // El render
+    const q = cargarPopup();
+    q.ctx.renderPonerse({ mostrar: true, bloqueo: null, estimadoMs: null, prueba: null, automatica: true });
+    q.ctx.renderRafaga(cortada);
+    check('render: lo de Chrome abierto sale en el semáforo, en gris (es un dato)', !q.oculto('aviso') && !q.elementos.aviso.classList.contains('falta') && q.elementos['aviso-texto'].textContent === CHROME && q.oculto('aviso-links'));
+    check('...y se anota con qué puesta al día se dijo', q.guardados.length === 1 && q.guardados[0].avisoChromeVisto === 'r_1', q.guardados);
+    q.ctx.renderRafaga(cortada);
+    check('...una sola vez', q.guardados.length === 1);
+    q.ctx.actualizarAviso({ portales: conectados, sesiones: { Computrabajo: { hay: false } } });
+    check('render: falta la sesión: la frase va en ámbar, con su enlace', !q.oculto('aviso') && q.elementos.aviso.classList.contains('falta') && q.elementos['aviso-texto'].textContent.startsWith('Necesitas tener tu sesión iniciada en Computrabajo.'));
+    const enlace = q.elementos['aviso-links'].children[0];
+    check('...el enlace abre la página para entrar, en otra pestaña', !q.oculto('aviso-links') && q.elementos['aviso-links'].children.length === 1 && enlace.href === 'https://candidato.cl.computrabajo.com/acceso/' && enlace.target === '_blank' && enlace.rel === 'noreferrer' && enlace.textContent === 'Iniciar sesión en Computrabajo ↗', enlace);
+    q.ctx.actualizarAviso({ sesiones: { Computrabajo: { hay: true } } });
+    check('inició sesión: vuelve lo de Chrome (la misma cortada), sin enlaces', !q.oculto('aviso') && q.elementos['aviso-texto'].textContent === CHROME && q.elementos['aviso-links'].children.length === 0 && q.oculto('aviso-links') && !q.elementos.aviso.classList.contains('falta'));
+    q.ctx.renderRafaga(Object.assign({}, cortada, { estado: 'terminada' }));
+    check('se puso al día: la línea se va', q.oculto('aviso'));
+    q.ctx.renderRafaga(Object.assign({}, cortada, { id: 'r_9' }));
+    check('otra cortada después: ya no se repite', q.oculto('aviso'));
+
+    const g = cargarPopup();
+    g.ctx.renderPonerse({ mostrar: false, prueba: { estado: 'terminada', total: 5 }, automatica: false });
+    g.ctx.renderRafaga(cortada);
+    g.ctx.actualizarAviso({ portales: conectados, sesiones: { Laborum: { hay: false } } });
+    const textoAviso = g.oculto('aviso') ? '' : g.elementos['aviso-texto'].textContent;
+    const visibles = [
+      !g.oculto('prueba-row') && g.elementos['prueba-detalle'].textContent === p.leer('TEXTO_DESPUES_DE_LA_PRUEBA') && 'plan gratis',
+      textoAviso.startsWith('Necesitas') && 'sesión',
+      textoAviso === CHROME && 'chrome',
+    ].filter(Boolean);
+    check('gratis con la prueba terminada, sin sesión y con una cortada: dos de las tres, nunca las tres (criterio 5)', visibles.join(',') === 'plan gratis,sesión', visibles);
+
+    // Las piezas están donde se esperan
+    const semaforo = html.slice(html.indexOf('<div class="estado-row">'), html.indexOf('<!-- ÚLTIMA PUESTA AL DÍA -->'));
+    check('popup.html: la línea va dentro del semáforo, con sus tres ids', semaforo.length > 0 && ['aviso', 'aviso-texto', 'aviso-links'].every(id => semaforo.includes('id="' + id + '"')));
+    check('popup.js: con qué puesta al día ya se dijo lo de Chrome se lee antes de pintar la ráfaga', /avisoChromeVisto[\s\S]{0,300}renderRafaga\(data\.rafaga\)/.test(fuente.slice(fuente.indexOf('function loadState()'))));
+    check('popup.js: los portales y su sesión alimentan la línea', /function renderPortales[\s\S]{0,600}actualizarAviso\(/.test(fuente));
   }
 
   console.log(fallos ? `\n${fallos} fallo(s)` : '\nTodo OK');
