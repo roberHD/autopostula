@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { usuarioTienePerfilDinamico } from "@/lib/plan-beneficios";
 import { claveLimite, LIMITES, permitirIntento } from "@/lib/limite-tasa";
+import { premiarConversacion, saldoMonedas } from "@/lib/monedas";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -236,13 +237,24 @@ export async function POST(request: Request) {
     data: { conversacion },
   });
 
+  // El saludo con el que la IA abre una conversación vacía no lo escribió la
+  // persona: va con otro tipo para que no cuente como un minuto de conversación
+  // en las monedas (lib/monedas.ts). Igual queda fuera del cupo mensual de IA
+  // (TIPOS_CONVERSACION en lib/ai-usage.ts).
   await prisma.aiUsageLog.create({
-    data: { userId, tipo: "conversacion_estilo" },
+    data: { userId, tipo: mensaje ? "conversacion_estilo" : "conversacion_estilo_inicio" },
   });
+
+  // 1 moneda al día por 10 minutos de conversación. Si falla, la respuesta de
+  // la IA sale igual: la moneda no puede costarle el mensaje a la persona.
+  const premio = mensaje ? await premiarConversacion(userId).catch(() => null) : null;
 
   return NextResponse.json({
     pregunta: textoIA,
     totalMensajes: conversacion.length,
     sugerenciaFinalizar: listo,
+    monedas: premio
+      ? { minutosHoy: premio.minutos, ganada: premio.ganada, saldo: premio.ganada ? await saldoMonedas(userId) : undefined }
+      : undefined,
   });
 }

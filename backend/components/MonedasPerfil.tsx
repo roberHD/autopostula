@@ -1,21 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Coins } from "lucide-react";
+import Link from "next/link";
+import { Coins, MessageSquare } from "lucide-react";
 import { Skel } from "@/components/Esqueleto";
 import { EVENTO_MONEDAS } from "@/app/dashboard/LatidoUso";
 
 type Canje = { id: string; monedas: number; postulaciones: number };
+type ConversacionHoy = { minutos: number; ganada: boolean; meta: number };
 
 /**
  * Tus monedas (lib/monedas.ts): cuántas llevas y en qué se podrán canjear.
  * Se ganan solas, 1 por cada hora con el panel a la vista o la extensión
- * encendida. El canje todavía no existe: se muestra lo que viene, con cuánto
+ * encendida, y 1 al día por conversar 10 minutos con la IA. El canje todavía no existe: se muestra lo que viene, con cuánto
  * falta para cada uno, y "Próximamente".
  */
 export default function MonedasPerfil() {
   const [saldo, setSaldo] = useState<number | null>(null);
   const [canjes, setCanjes] = useState<Canje[]>([]);
+  const [conversacion, setConversacion] = useState<ConversacionHoy | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -24,6 +27,7 @@ export default function MonedasPerfil() {
       .then((d) => {
         setSaldo(typeof d.saldo === "number" ? d.saldo : 0);
         setCanjes(Array.isArray(d.canjes) ? d.canjes : []);
+        if (d.conversacionHoy) setConversacion(d.conversacionHoy);
       })
       .catch(() => setError(true));
 
@@ -56,6 +60,26 @@ export default function MonedasPerfil() {
         )}
       </div>
       {error && <p className="ap-bloque-s">No pudimos cargar tus monedas. Recarga la página para intentar de nuevo.</p>}
+
+      {/* 1 moneda al día por conversar 10 minutos con la IA (lib/monedas.ts). */}
+      {conversacion && (
+        <div className="ap-monedas__extra">
+          <MessageSquare size={15} aria-hidden="true" />
+          <p>
+            {conversacion.ganada ? (
+              <>Ya ganaste la moneda de hoy por conversar con la IA. Mañana hay otra.</>
+            ) : (
+              <>
+                +1 moneda al día por conversar {conversacion.meta} minutos con la IA en{" "}
+                <Link href="/dashboard/perfil/conversacion">Entrenar IA</Link>.{" "}
+                <span style={{ color: "var(--text-muted)" }}>
+                  Hoy llevas {conversacion.minutos} de {conversacion.meta}.
+                </span>
+              </>
+            )}
+          </p>
+        </div>
+      )}
 
       <div className="ap-monedas__canje">
         <div className="ap-monedas__canje-cab">

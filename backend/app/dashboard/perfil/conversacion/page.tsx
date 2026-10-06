@@ -5,6 +5,8 @@ import { Sparkles, Send, Check, MessageSquare, PenLine, Target, Heart, Lock, Mic
 import { quitarMarkdown } from "@/lib/text";
 import { usarDictado } from "@/lib/usar-dictado";
 import PestanasEntrenar from "../PestanasEntrenar";
+import { useAvisos } from "@/components/Avisos";
+import { EVENTO_MONEDAS } from "../../LatidoUso";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
 
@@ -32,6 +34,7 @@ const ETIQUETAS_ESTILO: { key: string; label: string }[] = [
 ];
 
 export default function ConversacionPage() {
+  const { exito } = useAvisos();
   const [conversacion, setConversacion] = useState<Mensaje[]>([]);
   const [confirmado, setConfirmado] = useState(false);
   const [input, setInput] = useState("");
@@ -113,6 +116,13 @@ export default function ConversacionPage() {
       }
       setConversacion((prev) => [...prev, { role: "assistant", content: quitarMarkdown(data.pregunta) }]);
       if (data.sugerenciaFinalizar) setSugerenciaFinalizar(true);
+      // 1 moneda al día por conversar 10 minutos (lib/monedas.ts).
+      if (data.monedas?.ganada) {
+        exito("Ganaste 1 moneda", "Por conversar 10 minutos con la IA hoy. Mañana puedes ganar otra.");
+        if (typeof data.monedas.saldo === "number") {
+          window.dispatchEvent(new CustomEvent(EVENTO_MONEDAS, { detail: { saldo: data.monedas.saldo } }));
+        }
+      }
     } catch (err) {
       console.error("Error enviando mensaje:", err);
       setMensaje("No se pudo enviar — revisa la consola");

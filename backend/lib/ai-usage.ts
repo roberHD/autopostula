@@ -7,7 +7,10 @@ import { inicioDelMesChile } from "@/lib/tiempo";
 // duro de mensajes en fase 1, beneficio perfilDinamico en fase 2). Sin este
 // filtro, loguearlas igual las metería de vuelta al mismo balde compartido que
 // se separó a propósito.
-const TIPOS_CONVERSACION = new Set(["conversacion_estilo", "finalizar_conversacion_estilo"]);
+// "conversacion_estilo_inicio" es el saludo con el que la IA abre una
+// conversación vacía: se separó para que no cuente como un minuto de la
+// persona en las monedas (lib/monedas.ts), y sigue fuera de este cupo.
+const TIPOS_CONVERSACION = new Set(["conversacion_estilo", "conversacion_estilo_inicio", "finalizar_conversacion_estilo"]);
 
 /**
  * Revisa si el usuario puede hacer una llamada más de IA este mes, según su plan.

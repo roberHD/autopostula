@@ -2587,6 +2587,14 @@
   font-variant-numeric: tabular-nums;
 }
 .ap-monedas__unidad { margin-left: 7px; font-size: 13px; color: var(--text-muted); }
+.ap-monedas__extra {
+  display: flex; align-items: flex-start; gap: 9px; margin-top: 12px;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--bg-elevated-2); border: 1px solid var(--border);
+  font-size: 12.5px; line-height: 1.5;
+}
+.ap-monedas__extra svg { flex: none; margin-top: 2px; color: var(--text-muted); }
+.ap-monedas__extra a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .ap-monedas__canje { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); display: grid; gap: 8px; }
 .ap-monedas__canje-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ap-monedas__pronto { padding: 3px 10px; font-size: 11.5px; color: var(--text-muted); }

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { diaEnChile, inicioDelDiaChile } from "@/lib/tiempo";
 
 /**
  * Monedas: se ganan usando AutoPostula y más adelante se canjean por
@@ -9,6 +10,9 @@ import { prisma } from "@/lib/prisma";
  * un "latido"; el que llega primero en esa hora la gana y el resto choca con la
  * clave única. Como mucho 24 al día, y la hora la pone el servidor, nunca el
  * navegador: adelantar el reloj del computador no da monedas.
+ *
+ * Además, 1 moneda al día por conversar 10 minutos con la IA de estilo
+ * (Entrenar IA): ver premiarConversacion(), más abajo.
  *
  * El saldo es la suma del libro mayor, como en las postulaciones extra.
  */
@@ -62,6 +66,61 @@ export async function anotarHoraDeUso(
   } catch (err) {
     // P2002: esa hora ya tenía su moneda. Es lo esperado, no un error.
     if ((err as { code?: string })?.code === "P2002") return false;
+    throw err;
+  }
+}
+
+// ── Conversación con la IA de estilo ─────────────────────────────
+// 1 moneda al día (día de Chile) por conversar 10 minutos. Un minuto cuenta si
+// la persona mandó un mensaje en él: dejar el chat abierto no suma, y diez
+// mensajes en el mismo minuto son un minuto. Los minutos salen de AiUsageLog,
+// que ya anota cada mensaje con su hora (tipo "conversacion_estilo"); el saludo
+// con el que la IA abre una conversación vacía se anota con otro tipo
+// ("conversacion_estilo_inicio") para que no cuente como un minuto de la persona.
+export const MINUTOS_CONVERSACION_PARA_MONEDA = 10;
+const TIPO_MENSAJE_CONVERSACION = "conversacion_estilo";
+
+const claveConversacion = (userId: string, ahora: Date) => `conversacion:${userId}:${diaEnChile(ahora)}`;
+
+/** Minutos distintos de hoy (en Chile) con al menos un mensaje de la persona. */
+export async function minutosDeConversacionHoy(userId: string, ahora: Date = new Date()): Promise<number> {
+  const mensajes = await prisma.aiUsageLog.findMany({
+    where: { userId, tipo: TIPO_MENSAJE_CONVERSACION, creadoEn: { gte: inicioDelDiaChile(ahora) } },
+    select: { creadoEn: true },
+  });
+  return new Set(mensajes.map((m) => m.creadoEn.toISOString().slice(0, 16))).size;
+}
+
+/** Cómo va la conversación de hoy, para el widget de Perfil. */
+export async function conversacionDeHoy(userId: string, ahora: Date = new Date()) {
+  const [minutos, premio] = await Promise.all([
+    minutosDeConversacionHoy(userId, ahora),
+    prisma.movimientoMoneda.findUnique({ where: { clave: claveConversacion(userId, ahora) }, select: { id: true } }),
+  ]);
+  return { minutos: Math.min(minutos, MINUTOS_CONVERSACION_PARA_MONEDA), ganada: !!premio };
+}
+
+/**
+ * Se llama después de anotar cada mensaje de la persona. Al llegar a los 10
+ * minutos del día anota la moneda, una sola vez por día: la clave lleva el día.
+ */
+export async function premiarConversacion(userId: string, ahora: Date = new Date()) {
+  const minutos = await minutosDeConversacionHoy(userId, ahora);
+  if (minutos < MINUTOS_CONVERSACION_PARA_MONEDA) return { minutos, ganada: false };
+  try {
+    await prisma.movimientoMoneda.create({
+      data: {
+        userId,
+        cantidad: 1,
+        motivo: "USO",
+        clave: claveConversacion(userId, ahora),
+        detalle: "10 minutos conversando con la IA",
+      },
+    });
+    return { minutos: MINUTOS_CONVERSACION_PARA_MONEDA, ganada: true };
+  } catch (err) {
+    // P2002: la de hoy ya estaba ganada.
+    if ((err as { code?: string })?.code === "P2002") return { minutos: MINUTOS_CONVERSACION_PARA_MONEDA, ganada: false };
     throw err;
   }
 }
