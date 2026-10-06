@@ -1299,6 +1299,7 @@ bloque(async () => {
   r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
   check('el popup no muestra el botón durante la prueba (mostrar: false)…', r.mostrar === false, r);
   check('…pero sí cuántas lleva: en_curso, 3 restantes de 5', !!r.prueba && r.prueba.estado === 'en_curso' && r.prueba.restantes === 3 && r.prueba.total === 5, r);
+  check('…y que hoy se pone al día sola (automatica): el popup puede decir lo de Chrome abierto (primera-busqueda-guiada §12)', r.automatica === true, r);
 
   // ── Prueba gastada: nada corre solo ──
   for (const disparador of ['inicio_chrome', 'despertar', 'chequeo']) {
@@ -1310,6 +1311,7 @@ bloque(async () => {
   b = await nuevo(gastada);
   r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
   check('prueba gastada: el popup no muestra el botón, y sí el mensaje de fin de prueba', r.mostrar === false && !!r.prueba && r.prueba.estado === 'terminada' && r.prueba.total === 5, r);
+  check('prueba gastada: ya no se pone al día sola (automatica: false), así que el popup no lo promete', r.automatica === false, r);
   r = await b.enviarMensajeAsync({ type: 'PONERSE_AL_DIA' });
   check('prueba gastada: "Ponerme al día" tampoco (sin_plan)', r.ok === false && r.motivo === 'sin_plan' && b.tabsCreados.length === 0, r);
 
@@ -1317,6 +1319,10 @@ bloque(async () => {
   b = await nuevo({ disponibleEnPlan: true, modo: 'premium', pruebaRestantes: null });
   r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
   check('Premium: el botón sí, y NADA de la prueba (prueba: null) -- criterio 5 de §4.1', r.mostrar === true && r.prueba === null, r);
+  check('Premium: se pone al día sola (automatica: true)', r.automatica === true, r);
+  b = await nuevo({ disponibleEnPlan: true, modo: 'premium', pruebaRestantes: null, busquedaAutomatica: false, motivo: 'pausada' });
+  r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
+  check('Premium en pausa: el botón se dibuja bloqueado, pero no se pone al día sola (automatica: false)', r.mostrar === true && r.bloqueo === 'pausada' && r.automatica === false, r);
   b = await nuevo({ disponibleEnPlan: true, modo: undefined, pruebaRestantes: undefined, pruebaTotal: undefined });
   r = await b.enviarMensajeAsync({ type: 'ESTADO_PONERSE_AL_DIA' });
   check('un servidor anterior a la prueba (sin `modo`): no inventa nada (prueba: null)', r.prueba === null, r);
@@ -1571,6 +1577,10 @@ bloque(async () => {
           puedePostular: async (p) => { llamadas.portal = p; return llamadas.puede++ < permitidos ? { permitido: true, motivo: null } : { permitido: false, motivo: 'prueba_terminada' }; },
           motivoPuedePostular: (m) => 'motivo:' + m,
           reportarEscaneoTerminado: (c) => { llamadas.terminado = { ...c }; },
+          // docs/primera-busqueda-guiada.md §11.
+          razonDeLaMarca: () => null,
+          gastarRevisionPrimera: () => { llamadas.gastadas = (llamadas.gastadas || 0) + 1; },
+          reportarObservadas: (ofertas, p) => { llamadas.observadas = { ofertas, portal: p }; },
         },
         soloObservar: !!soloObservar,
         pendientes: Array.from({ length: cantidad }, (_, i) => ({ t: { querySelector: () => ({ href: 'https://portal/oferta-' + (i + 1) + '#x' }) }, id: 'id' + (i + 1), titulo: 'Titulo ' + (i + 1) })),
@@ -1598,9 +1608,11 @@ bloque(async () => {
     x = await correr({ permitidos: 99, cantidad: 5 });
     check(archivo + ': con cupo para todas: postula las 5 y sigue de largo (a paginar), sin reportar terminado todavía', x.salida === 'sigue' && x.llamadas.postular.length === 5 && x.llamadas.terminado === null && x.llamadas.puede === 5, x.llamadas);
     check(archivo + ': ...una consulta por oferta (5), no una por página', x.llamadas.puede === 5);
+    check(archivo + ': ...y la "primera con revisión" se gasta una vez por postulación (docs/primera-busqueda-guiada.md §11)', x.llamadas.gastadas === 5, x.llamadas.gastadas);
 
     x = await correr({ permitidos: 99, cantidad: 5, soloObservar: true });
     check(archivo + ': en solo observar no pregunta nada ni postula (no hay nada que limitar), y deja constancia de las 5', x.llamadas.puede === 0 && x.llamadas.postular.length === 0 && x.llamadas.logs.length === 5 && x.llamadas.logs.every(l => l.status === 'observado') && x.salida === 'sigue', x.llamadas);
+    check(archivo + ': ...y manda al panel las 5 que habría postulado, con su portal (docs/primera-busqueda-guiada.md §11)', x.llamadas.observadas && x.llamadas.observadas.ofertas.length === 5 && x.llamadas.observadas.portal === portal && x.llamadas.observadas.ofertas[0].externalId === 'id1', x.llamadas.observadas);
 
     x = await correr({ permitidos: 99, cantidad: 4, sinPanelEn: 2 });
     check(archivo + ': si el panel del aviso no cargó, esa oferta no se postuló ni cuenta', x.llamadas.postular.join() === 'id1,id3,id4' && x.llamadas.logs.some(l => l.reason === 'Panel no cargó'), x.llamadas);

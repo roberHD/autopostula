@@ -95,6 +95,30 @@ const backend = fs.readFileSync(
   check('con un enlace para cerrar sesión: hay sesión', ctx.AP.mirarSesion(doc((s) => s.includes('logout'))) === true);
   check('con un enlace para iniciar sesión: no hay', ctx.AP.mirarSesion(doc((s) => s.includes('/login'))) === false);
   check('sin ninguno de los dos indicios: no se inventa un veredicto', ctx.AP.mirarSesion(doc(() => false)) === null);
+
+  // Con lo que muestra cada portal real (SESION_POR_PORTAL): mirado en los tres
+  // sitios el 2026-10-03, con y sin sesión. Los de arriba solo servían en
+  // Laborum, y solo para decir que faltaba (docs/primera-busqueda-guiada.md §12).
+  const con = (...partes) => doc((s) => partes.some((p) => s.includes(p)));
+  check('Computrabajo con sesión: el menú de la persona', ctx.AP.mirarSesion(con('[data-info-user]'), 'Computrabajo') === true);
+  check('...o su "Cerrar sesión", que es un <span id="logout"> y no un enlace', ctx.AP.mirarSesion(con('#logout'), 'Computrabajo') === true);
+  check('Computrabajo sin sesión: el botón "Login"', ctx.AP.mirarSesion(con('[data-login-button-desktop]'), 'Computrabajo') === false);
+  check('...que los selectores de siempre no veían', ctx.AP.mirarSesion(con('[data-login-button-desktop]')) === null && ctx.AP.mirarSesion(con('[data-info-user]')) === null);
+  check('Laborum con sesión: el acceso a los mensajes', ctx.AP.mirarSesion(con('/postulantes/mensajes'), 'Laborum') === true);
+  check('Laborum sin sesión: "Ingresar" (/login)', ctx.AP.mirarSesion(con('/login'), 'Laborum') === false);
+  check('Trabajando con sesión: "Mis postulaciones" o "Actualizar mi CV"', ctx.AP.mirarSesion(con('/mis-postulaciones'), 'Trabajando') === true && ctx.AP.mirarSesion(con('/mi-curriculum'), 'Trabajando') === true);
+  check('Trabajando sin sesión: "Ingresa" (/ingresa-a-tu-cuenta)', ctx.AP.mirarSesion(con('/ingresa-a-tu-cuenta'), 'Trabajando') === false);
+  check('con sesión y un enlace para entrar escondido: hay sesión', ctx.AP.mirarSesion(con('[data-info-user]', '[data-login-button-desktop]'), 'Computrabajo') === true);
+  check('lo de un portal no cuenta en otro', ctx.AP.mirarSesion(con('/ingresa-a-tu-cuenta'), 'Computrabajo') === null && ctx.AP.mirarSesion(con('[data-info-user]'), 'Trabajando') === null);
+
+  // La página para entrar está en core.js (la tarjeta del final) y en popup.js
+  // (la línea de "qué necesita de ti"): tienen que decir lo mismo.
+  const i = popup.indexOf('const INGRESO_POR_PORTAL = {');
+  const ingresoPopup = i === -1 ? {} : vm.runInNewContext('(' + popup.slice(popup.indexOf('{', i), popup.indexOf('};', i) + 1) + ')');
+  const portales = ['Computrabajo', 'Laborum', 'Trabajando'];
+  check('popup.js tiene las mismas páginas para entrar que core.js', Object.keys(ingresoPopup).length === 3 && portales.every((n) => ingresoPopup[n] && ingresoPopup[n] === ctx.AP.ingresoDelPortal(n)), ingresoPopup);
+  check('...todas https y del propio portal', portales.every((n) => { const u = new URL(ctx.AP.ingresoDelPortal(n)); return u.protocol === 'https:' && u.hostname.includes(n.toLowerCase()); }));
+  check('un portal desconocido no tiene página para entrar', ctx.AP.ingresoDelPortal('Otro') === null);
 }
 
 console.log('\n' + (fallos === 0 ? 'Todo OK (0 fallos).' : fallos + ' fallo(s).'));

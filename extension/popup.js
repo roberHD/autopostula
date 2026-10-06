@@ -141,6 +141,7 @@ function renderResumen() {
     sub.classList.toggle('hidden', !d.vencenManana);
   }
 
+  actualizarAviso({ pausada: !!(estadoActual && estadoActual.pausada) });
   renderPortales();
 }
 
@@ -150,10 +151,14 @@ function renderResumen() {
 // inventa nada: el portal se muestra sin veredicto.
 function renderPortales(sesiones) {
   const portales = (resumen && resumen.portales) || [];
-  portalesSec.classList.toggle('hidden', !portales.length);
-  if (!portales.length) return;
+  // Se guarda antes de mirar si hay portales: lo que llega con el popup
+  // abierto y la cuenta todavía sin contestar no se pierde.
   const s = sesiones || renderPortales._sesiones || {};
   renderPortales._sesiones = s;
+  // Si a un portal conectado le falta la sesión, el semáforo lo dice.
+  actualizarAviso({ portales: resumen ? portales : null, sesiones: s });
+  portalesSec.classList.toggle('hidden', !portales.length);
+  if (!portales.length) return;
   portalesLista.innerHTML = '';
   portales.forEach((p) => {
     const fila = document.createElement('div');
@@ -236,6 +241,7 @@ pausarBtn.addEventListener('click', () => {
     }
     estadoActual = r.estado;
     renderEstado();
+    actualizarAviso({ pausada: !!estadoActual.pausada });
     toast(pausada ? '⏸ En pausa' : '▶ Reanudada');
   });
 });
@@ -406,6 +412,7 @@ function textoRafaga(rafaga, ahora) {
 }
 
 function renderRafaga(rafaga) {
+  actualizarAviso({ rafaga: rafaga || null });
   const fila = document.getElementById('rafaga-row');
   if (!fila) return;
   const texto = textoRafaga(rafaga, Date.now());
@@ -541,6 +548,9 @@ function renderPonerse(estado) {
   // La prueba viene en la misma respuesta (una sola consulta al servidor) y se
   // muestra aunque el botón no: es lo único automático de una cuenta gratis.
   renderPrueba(estado && estado.prueba);
+  // Y si hoy se pone al día sola: el semáforo solo dice "se pone al día sola
+  // cuando lo abres" si es verdad.
+  actualizarAviso({ automatica: !!(estado && estado.automatica) });
   const fila = document.getElementById('ponerse-row');
   if (!fila) return;
   const e = estadoBotonPonerse(estado);
@@ -600,17 +610,131 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+// ── Qué necesita de ti (docs/primera-busqueda-guiada.md §4 y §12) ─────────
+// Tres cosas que no se deducen mirando y sin las cuales parece rota. Van en
+// el semáforo, de a una, cada una cuando aplica y mientras aplique:
+//   1. La sesión en el portal: cuando un portal conectado avisó que no la
+//      hay (core.js, SESION_PORTAL). Sin ella no postula ahí: va primero.
+//   2. Que trabaja con Chrome abierto: la primera vez que una puesta al día
+//      quedó cortada (se cerró Chrome o se suspendió el computador a la
+//      mitad), mientras esa siga siendo la última. Solo si hoy de verdad se
+//      pone al día sola: Premium o la prueba, sin pausa y con cupo.
+//   3. Lo del plan gratis: lo dice la fila de la prueba cuando se acaba
+//      (textoPrueba, con las palabras del panel y del correo), así que acá
+//      no se repite. Con la prueba terminada la 2 no aplica: las tres nunca
+//      salen juntas.
+// avisoParaTi es pura (sin DOM ni chrome.*): verificar-primera-busqueda.js
+// la extrae de este archivo y la prueba tal cual.
+
+// Dónde se entra a cada portal. Copia de SESION_POR_PORTAL (core.js):
+// verificar-estado-extension.js compara las dos.
+const INGRESO_POR_PORTAL = {
+  Computrabajo: 'https://candidato.cl.computrabajo.com/acceso/',
+  Laborum: 'https://www.laborum.cl/login',
+  Trabajando: 'https://www.trabajando.cl/ingresa-a-tu-cuenta',
+};
+
+const TEXTO_CHROME_ABIERTO =
+  'La extensión trabaja mientras Chrome está abierto, y se pone al día sola cuando lo abres.';
+
+// "Laborum", "Laborum y Trabajando", "Computrabajo, Laborum y Trabajando".
+function enumerarPortales(nombres) {
+  if (nombres.length < 2) return nombres.join('');
+  return nombres.slice(0, -1).join(', ') + ' y ' + nombres[nombres.length - 1];
+}
+
+function textoSinSesion(nombres) {
+  return 'Necesitas tener tu sesión iniciada en ' + enumerarPortales(nombres) +
+    '. Sin ella, la extensión no puede postular ahí.';
+}
+
+// Mismo criterio que textoRafaga: "interrumpida", o "en_curso" sin latido en
+// 10 minutos (el service worker la perdió sin alcanzar a marcarla).
+function rafagaCortada(rafaga, ahora) {
+  if (!rafaga) return false;
+  if (rafaga.estado === 'interrumpida') return true;
+  return rafaga.estado === 'en_curso' && ahora - (rafaga.latido || rafaga.inicio) >= 10 * 60000;
+}
+
+// null, o { tipo: 'sesion' | 'chrome', texto, enlaces: [{ texto, url }], rafagaId? }.
+// `d` junta lo que llega de a poco:
+//   portales     lo que la cuenta tiene conectado ([{ nombre, conectado }]); null si no contestó
+//   sesiones     lo último que avisó cada portal ({ Laborum: { hay: false } })
+//   rafaga       la última puesta al día (chrome.storage.local)
+//   automatica   el servidor dice que hoy se pone al día sola (busquedaAutomatica)
+//   pausada      la persona la pausó desde el popup
+//   chromeVisto  la puesta al día con la que ya se mostró la 2
+function avisoParaTi(d, ahora) {
+  const sesiones = d.sesiones || {};
+  const sinSesion = (d.portales || [])
+    .filter((p) => p.conectado && sesiones[p.nombre] && sesiones[p.nombre].hay === false)
+    .map((p) => p.nombre);
+  if (sinSesion.length) {
+    return {
+      tipo: 'sesion',
+      texto: textoSinSesion(sinSesion),
+      enlaces: sinSesion
+        .filter((n) => INGRESO_POR_PORTAL[n])
+        .map((n) => ({ texto: 'Iniciar sesión en ' + n, url: INGRESO_POR_PORTAL[n] })),
+    };
+  }
+  const r = d.rafaga;
+  const id = r ? r.id || String(r.inicio || '') : '';
+  if (d.automatica === true && !d.pausada && rafagaCortada(r, ahora) && id && (!d.chromeVisto || d.chromeVisto === id)) {
+    return { tipo: 'chrome', texto: TEXTO_CHROME_ABIERTO, enlaces: [], rafagaId: id };
+  }
+  return null;
+}
+
+const avisoDatos = { portales: null, sesiones: {}, rafaga: null, automatica: null, pausada: false, chromeVisto: null };
+
+function pintarAviso(aviso) {
+  const caja = document.getElementById('aviso');
+  if (!caja) return;
+  caja.classList.toggle('hidden', !aviso);
+  if (!aviso) return;
+  caja.classList.toggle('falta', aviso.tipo === 'sesion');
+  document.getElementById('aviso-texto').textContent = aviso.texto;
+  const enlaces = document.getElementById('aviso-links');
+  enlaces.textContent = '';
+  aviso.enlaces.forEach((e) => {
+    const a = document.createElement('a');
+    a.href = e.url;
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    a.textContent = e.texto + ' ↗';
+    enlaces.appendChild(a);
+  });
+  enlaces.classList.toggle('hidden', !aviso.enlaces.length);
+}
+
+// Cada fuente avisa lo suyo (la cuenta, storage, el service worker) y se
+// vuelve a pintar. La 2 se anota la primera vez que se muestra: con la
+// próxima puesta al día cortada ya no sale.
+function actualizarAviso(cambios) {
+  Object.assign(avisoDatos, cambios);
+  const aviso = avisoParaTi(avisoDatos, Date.now());
+  pintarAviso(aviso);
+  if (aviso && aviso.tipo === 'chrome' && avisoDatos.chromeVisto !== aviso.rafagaId) {
+    avisoDatos.chromeVisto = aviso.rafagaId;
+    try { chrome.storage.local.set({ avisoChromeVisto: aviso.rafagaId }); } catch (e) { /* sin storage: sale otra vez la próxima */ }
+  }
+}
+
 // ── Cargar estado ──────────────────────────────────────────────
 document.getElementById('ponerse-btn')?.addEventListener('click', apretarPonerse);
 
 function loadState() {
-  chrome.storage.local.get(['config', 'rafaga', 'sesionesPortales'], data => {
+  chrome.storage.local.get(['config', 'rafaga', 'sesionesPortales', 'avisoChromeVisto'], data => {
+    // Antes que la ráfaga: con qué puesta al día ya se dijo lo de Chrome abierto.
+    avisoDatos.chromeVisto = data.avisoChromeVisto || null;
     renderRafaga(data.rafaga);
     limpiarInsigniaRafaga();
     cargarEstadoPonerse();
     // Lo guardado se dibuja de inmediato y cargarResumen() lo corrige apenas
     // conteste el servidor: abrir el popup no debería mostrar un vacío.
     estadoActual = estadoDesdeConfig(data.config);
+    avisoDatos.pausada = !!(estadoActual && estadoActual.pausada);
     if (data.config && data.config.perfil && data.config.perfil.nombre) {
       headerSub.textContent = data.config.perfil.nombre;
     }

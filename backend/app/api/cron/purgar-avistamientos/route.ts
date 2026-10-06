@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { purgarAvistamientos, purgarDescartes, purgarRafagas } from "@/lib/purgar-avistamientos";
+import { purgarAvistamientos, purgarDescartes, purgarObservadas, purgarRafagas } from "@/lib/purgar-avistamientos";
 import { purgarLimites } from "@/lib/limite-tasa";
 
 // La corre el cron de Vercel una vez al día (vercel.json). Vercel manda el
@@ -22,11 +22,12 @@ export async function GET(request: Request) {
   const borrados = await purgarAvistamientos();
   const rafagasBorradas = await purgarRafagas();
   const descartesBorrados = await purgarDescartes();
+  const observadasBorradas = await purgarObservadas();
   // docs/revision-2026-09-28.md §17: los intentos de login, registro, etc. solo
   // sirven mientras dura su ventana (a lo más un día).
   const intentosBorrados = await purgarLimites();
   console.log(
-    `Purgados ${borrados} avistamiento(s), ${rafagasBorradas} ráfaga(s), ${descartesBorrados} descarte(s) vencidos y ${intentosBorrados} intento(s) viejos.`,
+    `Purgados ${borrados} avistamiento(s), ${rafagasBorradas} ráfaga(s), ${descartesBorrados} descarte(s), ${observadasBorradas} oferta(s) observada(s) vencidos y ${intentosBorrados} intento(s) viejos.`,
   );
-  return NextResponse.json({ borrados, rafagasBorradas, descartesBorrados, intentosBorrados });
+  return NextResponse.json({ borrados, rafagasBorradas, descartesBorrados, observadasBorradas, intentosBorrados });
 }

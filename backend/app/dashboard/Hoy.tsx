@@ -21,7 +21,7 @@ import { PRUEBA_TOTAL, type ModoAutomatico } from "@/lib/estado-automatico";
 import { haceCuanto } from "@/lib/tiempo";
 
 type Hecho = {
-  tipo: "postulo" | "no_envio" | "por_decidir" | "descarto";
+  tipo: "postulo" | "no_envio" | "por_decidir" | "descarto" | "postularia";
   id: string;
   titulo: string;
   detalle: string;
@@ -668,7 +668,10 @@ export default function Hoy({
                       ? { c: "var(--err)", icono: <TriangleAlert />, verbo: "No pudo enviar", accion: "Ver qué faltó", href: `/dashboard/historial?ver=${h.id}`, aviso: true }
                       : h.tipo === "descarto"
                         ? { c: "var(--text-muted)", icono: <Ban />, verbo: "Descartó", accion: "", href: "", aviso: false }
-                        : { c: "var(--warn)", icono: <Inbox />, verbo: "Te dejó para decidir", accion: "Decidir", href: "/dashboard/por-decidir", aviso: false };
+                        : h.tipo === "postularia"
+                          // docs/primera-busqueda-guiada.md §11: mientras solo mira.
+                          ? { c: "var(--ok)", icono: <Sparkles />, verbo: "Postularía a", accion: "", href: "", aviso: false }
+                          : { c: "var(--warn)", icono: <Inbox />, verbo: "Te dejó para decidir", accion: "Decidir", href: "/dashboard/por-decidir", aviso: false };
                 return (
                   <div className="ap-hecho" key={`${h.tipo}-${h.id}`} style={{ "--c": conf.c } as React.CSSProperties}>
                     <span className="ap-hecho__ico">{conf.icono}</span>
@@ -680,6 +683,10 @@ export default function Hoy({
                     </div>
                     {h.tipo === "descarto" ? (
                       <NoEraAsi id={h.id} corregido={h.corregido} />
+                    ) : h.tipo === "postularia" ? (
+                      // Sin acción: se postula sola cuando se active. El hueco
+                      // mantiene la hora en su columna.
+                      <span />
                     ) : (
                       <Link className={`ap-hecho__a${conf.aviso ? " ap-hecho__a--aviso" : ""}`} href={conf.href}>
                         {conf.accion}

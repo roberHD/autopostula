@@ -41,6 +41,33 @@ AP.soloObservarEfectivo = function () {
   return !!(AP.cfg && AP.cfg.soloObservar) || !!(AP.cfg && AP.cfg.postulacionHabilitada === false);
 };
 
+// Las pestañas que abre una ráfaga (background.js, con active:false): nadie las
+// está mirando. Se marca en la propia pestaña cuando llega la orden de la
+// ráfaga (AUTO_SCAN), y la marca sobrevive a las navegaciones de esa pestaña
+// (Laborum va y vuelve entre el listado y los avisos): AUTO_SCAN llega una sola
+// vez, en la primera carga.
+const AP_CLAVE_PESTANA_RAFAGA = 'ap_pestana_de_rafaga';
+AP.esPestanaDeRafaga = function () {
+  try { return sessionStorage.getItem(AP_CLAVE_PESTANA_RAFAGA) === '1'; } catch (e) { return false; }
+};
+
+// "Revisar antes de enviar" (AP.cfg.modoRevision), o la primera postulación
+// después de "Empezar a postular" en la tarjeta del portal
+// (docs/primera-busqueda-guiada.md §11): esa se muestra antes de enviarla
+// aunque la persona no tenga la revisión puesta -- ver a la IA contestar con su
+// propia experiencia es lo que da confianza. Se gasta cuando termina esa
+// postulación (AP.gastarRevisionPrimera, que llama cada adaptador), no al
+// cerrar la primera revisión: en Computrabajo una misma postulación pide el
+// visto bueno antes del clic y después muestra las respuestas.
+const AP_CLAVE_REVISAR_PRIMERA = 'ap_revisar_primera';
+AP.conRevision = function () {
+  if (AP.cfg && AP.cfg.modoRevision) return true;
+  try { return sessionStorage.getItem(AP_CLAVE_REVISAR_PRIMERA) === '1'; } catch (e) { return false; }
+};
+AP.gastarRevisionPrimera = function () {
+  try { sessionStorage.removeItem(AP_CLAVE_REVISAR_PRIMERA); } catch (e) {}
+};
+
 // ── Overlay: la máquina hablando dentro del portal ────────────────
 //
 // Vive dentro del sitio de Computrabajo/Laborum, así que tiene dos
@@ -70,82 +97,131 @@ const AP_HEX_A_ESTADO = { '#16A34A': 'ok', '#DC2626': 'error', '#D97706': 'traba
 
 let ovAccion = null;
 
+// La tarjeta del final de la página (AP.cierreDePagina): mismo lenguaje que el
+// aviso, más ancha, con dos botones.
+const AP_ESTILO_CIERRE =
+  '.pila{display:flex;flex-direction:column;align-items:flex-end;gap:8px}' +
+  '.cierre{box-sizing:border-box;width:356px;max-width:calc(100vw - 32px);padding:14px 16px 16px;border-radius:12px;' +
+    'background:#16181A;color:#E9EBEA;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;line-height:1.5;' +
+    'box-shadow:0 12px 30px -10px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.1);animation:entra .28s cubic-bezier(.2,.8,.3,1)}' +
+  '.cierre[hidden]{display:none}' +
+  '.cierre .quien{display:flex;align-items:center;gap:7px;font-size:11px;color:#8E9599;margin-bottom:8px}' +
+  '.cierre .marca{width:18px;height:18px;border-radius:5px;border-width:1px}' +
+  '.cierre .marca svg{width:11px;height:11px}' +
+  '.cierre p{margin:0}' +
+  '.cierre .principal{font-size:14px;font-weight:600;line-height:1.45}' +
+  '.cierre .razon,.cierre .sesion{margin-top:6px;color:#C9CDCF;font-size:12.5px}' +
+  '.cierre .razon:empty,.cierre .sesion:empty{display:none}' +
+  '.cierre .botones{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}' +
+  '.cierre .botones[hidden]{display:none}' +
+  '.cierre button{all:unset;box-sizing:border-box;cursor:pointer;border-radius:8px;font-size:13px;line-height:1.2;padding:8px 13px;transition:filter .15s,background .15s,color .15s}' +
+  '.cierre .si{background:#D6F24B;color:#16181A;font-weight:700}' +
+  '.cierre .si:hover{filter:brightness(1.07)}' +
+  '.cierre .si[disabled]{cursor:default;opacity:.6}' +
+  '.cierre .no{color:#C9CDCF;border:1px solid #3C4145}' +
+  '.cierre .no:hover{background:#26292D;color:#E9EBEA}' +
+  '.cierre button:focus-visible{outline:2px solid #E9EBEA;outline-offset:2px}' +
+  '.cierre .resultado{margin-top:10px;font-size:12.5px;line-height:1.45}' +
+  '.cierre .resultado:empty{display:none}' +
+  '.cierre .resultado.ok{color:#5BD59B}' +
+  '.cierre .resultado.error{color:#FF8A9B}';
+
+const AP_HTML_CIERRE =
+  '<div class="cierre" id="ap-ov-cierre" hidden role="dialog" aria-labelledby="ap-ov-cierre-t">' +
+    '<span class="quien"><span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>AutoPostula · todavía no envió nada</span>' +
+    '<p class="principal" id="ap-ov-cierre-t"></p>' +
+    '<p class="razon" id="ap-ov-cierre-razon"></p>' +
+    '<p class="sesion" id="ap-ov-cierre-sesion"></p>' +
+    '<div class="botones" id="ap-ov-cierre-botones">' +
+      '<button class="si" id="ap-ov-cierre-si" type="button"></button>' +
+      '<button class="no" id="ap-ov-cierre-no" type="button">Todavía no, quiero mirar</button>' +
+    '</div>' +
+    '<p class="resultado" id="ap-ov-cierre-resultado" role="status"></p>' +
+  '</div>';
+
+function apAsegurarOverlay() {
+  if (ov) return;
+  ov = document.createElement('div');
+  ov.id = 'ap-ov';
+  // Reset propio: que el portal no nos empuje ni nos herede nada.
+  ov.style.cssText = 'all:initial;position:fixed;bottom:16px;right:16px;z-index:2147483647';
+  ovRaiz = ov.attachShadow({ mode: 'open' });
+  ovRaiz.innerHTML =
+    '<style>' +
+    ':host,*{box-sizing:border-box}' +
+    '.chip{display:flex;align-items:center;gap:10px;min-width:216px;max-width:320px;' +
+      'padding:10px 14px 10px 11px;border-radius:12px;background:#16181A;color:#E9EBEA;' +
+      'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12.5px;line-height:1.4;' +
+      'box-shadow:0 12px 30px -10px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.1);' +
+      'animation:entra .28s cubic-bezier(.2,.8,.3,1)}' +
+    '@keyframes entra{from{opacity:0;transform:translateY(8px)}}' +
+    '.marca{width:26px;height:26px;flex:none;border-radius:7px;background:#26292D;border:1.5px solid #3C4145;display:grid;place-items:center}' +
+    '.marca svg{width:15px;height:15px;display:block}' +
+    '.marca path{fill:none;stroke:#D6F24B;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}' +
+    '.cuerpo{min-width:0;flex:1}' +
+    '.quien{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#8E9599;margin-bottom:1px}' +
+    '.punto{width:6px;height:6px;border-radius:50%;flex:none}' +
+    '.punto.late{animation:late 1.6s ease-out infinite}' +
+    '@keyframes late{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}' +
+    '.texto{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    // Un resumen largo ("15 descartadas — la mayoría: …") quedaba cortado
+    // con "…" sin forma de leerlo. El botón solo aparece cuando el texto no
+    // cabe; abierto, el aviso crece hacia arriba y a la izquierda (está
+    // anclado abajo a la derecha) y el texto pasa a varias líneas.
+    '.chip{overflow:hidden}' +
+    '.chip.abierto{align-items:flex-start;width:400px;max-width:calc(100vw - 32px);min-height:104px;padding:14px 14px 16px 14px;gap:12px}' +
+    '.chip.abierto .quien{margin-bottom:6px}' +
+    '.chip.abierto .texto{white-space:normal;overflow:visible;font-size:13.5px;line-height:1.55;font-weight:500;overflow-wrap:anywhere}' +
+    '.ampliar{all:unset;box-sizing:border-box;flex:none;width:26px;height:26px;margin-left:2px;border-radius:7px;display:grid;place-items:center;cursor:pointer;color:#8E9599;transition:background .15s,color .15s}' +
+    '.ampliar:hover{background:#26292D;color:#E9EBEA}' +
+    '.ampliar:focus-visible{outline:2px solid #D6F24B;outline-offset:1px}' +
+    '.ampliar[hidden]{display:none}' +
+    '.ampliar svg{width:14px;height:14px;display:block;transition:transform .3s cubic-bezier(.2,.8,.3,1)}' +
+    '.ampliar path{fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}' +
+    '.chip.abierto .ampliar svg{transform:rotate(180deg)}' +
+    // "Agregar a mi perfil": solo con el aviso abierto y cuando el resumen
+    // trae algo que se puede sumar a la búsqueda (AP.accionDeRazon).
+    '.accion{display:none;margin-top:12px}' +
+    '.chip.abierto .accion.hay{display:flex;flex-direction:column;align-items:flex-start;gap:6px}' +
+    '.agregar{all:unset;box-sizing:border-box;cursor:pointer;padding:7px 12px;border-radius:8px;background:#D6F24B;color:#16181A;font-size:12.5px;font-weight:700;line-height:1.2;transition:filter .15s,opacity .15s}' +
+    '.agregar:hover{filter:brightness(1.07)}' +
+    '.agregar:focus-visible{outline:2px solid #E9EBEA;outline-offset:2px}' +
+    '.agregar[disabled]{cursor:default;opacity:.6}' +
+    '.agregar[hidden]{display:none}' +
+    '.resultado{font-size:12px;line-height:1.45;color:#C9CDCF}' +
+    '.resultado.ok{color:#5BD59B}' +
+    '.resultado.error{color:#FF8A9B}' +
+    '.resultado:empty{display:none}' +
+    AP_ESTILO_CIERRE +
+    '@media (prefers-reduced-motion:reduce){.chip,.cierre,.punto.late{animation:none}.ampliar svg{transition:none}}' +
+    '</style>' +
+    // La tarjeta del final va arriba del aviso de siempre (ver AP.cierreDePagina).
+    '<div class="pila">' + AP_HTML_CIERRE +
+    '<div class="chip" id="ap-ov-chip">' +
+      '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
+      '<span class="cuerpo">' +
+        '<span class="quien"><i class="punto" id="ap-ov-punto"></i>AutoPostula</span>' +
+        '<span class="texto" id="ap-ov-texto"></span>' +
+        '<span class="accion" id="ap-ov-accion">' +
+          '<button class="agregar" id="ap-ov-agregar" type="button"></button>' +
+          '<span class="resultado" id="ap-ov-resultado" role="status"></span>' +
+        '</span>' +
+      '</span>' +
+      '<button class="ampliar" id="ap-ov-ampliar" type="button" hidden aria-expanded="false" aria-label="Ver el mensaje completo" title="Ver el mensaje completo">' +
+        '<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  ovRaiz.getElementById('ap-ov-ampliar').addEventListener('click', alternarOverlayAbierto);
+  ovRaiz.getElementById('ap-ov-agregar').addEventListener('click', ejecutarAccionOverlay);
+}
+
 AP.msg = function (texto, estado, accion) {
   const clave = AP_ESTADOS[estado] ? estado : (AP_HEX_A_ESTADO[estado] || 'ok');
   const cfg = AP_ESTADOS[clave];
 
-  if (!ov) {
-    ov = document.createElement('div');
-    ov.id = 'ap-ov';
-    // Reset propio: que el portal no nos empuje ni nos herede nada.
-    ov.style.cssText = 'all:initial;position:fixed;bottom:16px;right:16px;z-index:2147483647';
-    ovRaiz = ov.attachShadow({ mode: 'open' });
-    ovRaiz.innerHTML =
-      '<style>' +
-      ':host,*{box-sizing:border-box}' +
-      '.chip{display:flex;align-items:center;gap:10px;min-width:216px;max-width:320px;' +
-        'padding:10px 14px 10px 11px;border-radius:12px;background:#16181A;color:#E9EBEA;' +
-        'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12.5px;line-height:1.4;' +
-        'box-shadow:0 12px 30px -10px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.1);' +
-        'animation:entra .28s cubic-bezier(.2,.8,.3,1)}' +
-      '@keyframes entra{from{opacity:0;transform:translateY(8px)}}' +
-      '.marca{width:26px;height:26px;flex:none;border-radius:7px;background:#26292D;border:1.5px solid #3C4145;display:grid;place-items:center}' +
-      '.marca svg{width:15px;height:15px;display:block}' +
-      '.marca path{fill:none;stroke:#D6F24B;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}' +
-      '.cuerpo{min-width:0;flex:1}' +
-      '.quien{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#8E9599;margin-bottom:1px}' +
-      '.punto{width:6px;height:6px;border-radius:50%;flex:none}' +
-      '.punto.late{animation:late 1.6s ease-out infinite}' +
-      '@keyframes late{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}' +
-      '.texto{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-      // Un resumen largo ("15 descartadas — la mayoría: …") quedaba cortado
-      // con "…" sin forma de leerlo. El botón solo aparece cuando el texto no
-      // cabe; abierto, el aviso crece hacia arriba y a la izquierda (está
-      // anclado abajo a la derecha) y el texto pasa a varias líneas.
-      '.chip{overflow:hidden}' +
-      '.chip.abierto{align-items:flex-start;width:400px;max-width:calc(100vw - 32px);min-height:104px;padding:14px 14px 16px 14px;gap:12px}' +
-      '.chip.abierto .quien{margin-bottom:6px}' +
-      '.chip.abierto .texto{white-space:normal;overflow:visible;font-size:13.5px;line-height:1.55;font-weight:500;overflow-wrap:anywhere}' +
-      '.ampliar{all:unset;box-sizing:border-box;flex:none;width:26px;height:26px;margin-left:2px;border-radius:7px;display:grid;place-items:center;cursor:pointer;color:#8E9599;transition:background .15s,color .15s}' +
-      '.ampliar:hover{background:#26292D;color:#E9EBEA}' +
-      '.ampliar:focus-visible{outline:2px solid #D6F24B;outline-offset:1px}' +
-      '.ampliar[hidden]{display:none}' +
-      '.ampliar svg{width:14px;height:14px;display:block;transition:transform .3s cubic-bezier(.2,.8,.3,1)}' +
-      '.ampliar path{fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}' +
-      '.chip.abierto .ampliar svg{transform:rotate(180deg)}' +
-      // "Agregar a mi perfil": solo con el aviso abierto y cuando el resumen
-      // trae algo que se puede sumar a la búsqueda (AP.accionDeRazon).
-      '.accion{display:none;margin-top:12px}' +
-      '.chip.abierto .accion.hay{display:flex;flex-direction:column;align-items:flex-start;gap:6px}' +
-      '.agregar{all:unset;box-sizing:border-box;cursor:pointer;padding:7px 12px;border-radius:8px;background:#D6F24B;color:#16181A;font-size:12.5px;font-weight:700;line-height:1.2;transition:filter .15s,opacity .15s}' +
-      '.agregar:hover{filter:brightness(1.07)}' +
-      '.agregar:focus-visible{outline:2px solid #E9EBEA;outline-offset:2px}' +
-      '.agregar[disabled]{cursor:default;opacity:.6}' +
-      '.agregar[hidden]{display:none}' +
-      '.resultado{font-size:12px;line-height:1.45;color:#C9CDCF}' +
-      '.resultado.ok{color:#5BD59B}' +
-      '.resultado.error{color:#FF8A9B}' +
-      '.resultado:empty{display:none}' +
-      '@media (prefers-reduced-motion:reduce){.chip,.punto.late{animation:none}.ampliar svg{transition:none}}' +
-      '</style>' +
-      '<div class="chip" id="ap-ov-chip">' +
-        '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
-        '<span class="cuerpo">' +
-          '<span class="quien"><i class="punto" id="ap-ov-punto"></i>AutoPostula</span>' +
-          '<span class="texto" id="ap-ov-texto"></span>' +
-          '<span class="accion" id="ap-ov-accion">' +
-            '<button class="agregar" id="ap-ov-agregar" type="button"></button>' +
-            '<span class="resultado" id="ap-ov-resultado" role="status"></span>' +
-          '</span>' +
-        '</span>' +
-        '<button class="ampliar" id="ap-ov-ampliar" type="button" hidden aria-expanded="false" aria-label="Ver el mensaje completo" title="Ver el mensaje completo">' +
-          '<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>' +
-        '</button>' +
-      '</div>';
-    document.body.appendChild(ov);
-    ovRaiz.getElementById('ap-ov-ampliar').addEventListener('click', alternarOverlayAbierto);
-    ovRaiz.getElementById('ap-ov-agregar').addEventListener('click', ejecutarAccionOverlay);
-  }
+  apAsegurarOverlay();
 
   const punto = ovRaiz.getElementById('ap-ov-punto');
   punto.style.color = cfg.punto;
@@ -257,6 +333,169 @@ function alternarOverlayAbierto() {
 
 AP.limpiarOverlay = function () { if (ov) { ov.remove(); ov = null; ovRaiz = null; } };
 
+// ── La tarjeta del final de la página (docs/primera-busqueda-guiada.md §3.3 y §11) ──
+//
+// En modo "solo mirar", cuando la extensión termina de revisar las ofertas de la
+// página que la persona está mirando, el aviso deja de ser una línea: dice qué
+// haría con ellas, con dos botones, "Empezar a postular" y "Todavía no, quiero
+// mirar". Es el único lugar donde la persona da permiso mirando el resultado
+// concreto. No sale en las pestañas de las ráfagas (nadie las mira) ni otra vez
+// en esta pestaña después de que la persona contestó.
+const AP_CLAVE_CIERRE_LISTO = 'ap_cierre_listo';
+let apCierreEstado = null; // null | 'inicial' | 'activando' | 'listo'
+
+function apUnir(partes) {
+  return partes.length < 2 ? (partes[0] || '') : partes.slice(0, -1).join(', ') + ' y ' + partes[partes.length - 1];
+}
+function apMinuscula(t) { return t ? t.charAt(0).toLowerCase() + t.slice(1) : t; }
+
+// Lo que dice la tarjeta, con las cifras de las marcas de esta página
+// (AP.resumenDeMarcas): { total, postular, gris, descartar, razonTop }.
+AP.textoCierre = function (c) {
+  const resto = [];
+  if (c.gris) resto.push('te dejaría ' + c.gris + ' para que decidas');
+  if (c.descartar) resto.push('descartaría ' + c.descartar);
+  let principal;
+  if (c.total === 1) {
+    principal = c.postular ? 'En esta página hay una sola oferta, y te sirve: postularía a esa.'
+      : c.gris ? 'En esta página hay una sola oferta, y queda para que decidas.'
+      : 'En esta página hay una sola oferta, y no calza.';
+  } else if (c.postular) {
+    principal = 'De las ' + c.total + ' ofertas de esta página: ' + apUnir(['postularía a ' + c.postular].concat(resto)) + '.';
+  } else {
+    principal = 'De las ' + c.total + ' ofertas de esta página no postularía a ninguna' + (resto.length ? ': ' + apUnir(resto) : '') + '.';
+  }
+  const razon = c.descartar && c.razonTop
+    ? (c.descartar === 1 ? 'Por qué se descarta: ' : 'La razón más repetida para descartar: ') + apMinuscula(AP.razonComoEnElPanel(c.razonTop)) + '.'
+    : '';
+  const listo = c.postular === 1
+    ? 'Listo: empieza por la que te sirve. Te la muestra antes de enviarla.'
+    : c.postular
+      ? 'Listo: empieza por las ' + c.postular + ' que te sirven. La primera te la muestra antes de enviarla.'
+      : 'Listo: desde ahora postula a las que calcen contigo.';
+  return { principal: principal, razon: razon, boton: c.postular ? 'Empezar a postular' : 'Activar la postulación', listo: listo };
+};
+
+// Cuenta las marcas de las ofertas que hay en esta página (una vez cada una).
+AP.resumenDeMarcas = function (ids, marcas) {
+  const c = { total: 0, postular: 0, gris: 0, descartar: 0, razonTop: null };
+  const razones = [];
+  const contadas = new Set();
+  for (const id of ids) {
+    if (contadas.has(id)) continue;
+    contadas.add(id);
+    const m = marcas[id];
+    if (!m || (m.b !== 'postular' && m.b !== 'gris' && m.b !== 'descartar')) continue;
+    c.total++;
+    c[m.b]++;
+    if (m.b === 'descartar' && m.r) razones.push(m.r);
+  }
+  if (razones.length) c.razonTop = AP.razonPrincipal(razones);
+  return c;
+};
+
+// Lo llama cada adaptador cuando termina de revisar una página del listado.
+AP.cierreDePagina = function () {
+  if (!AP.soloObservarEfectivo() || AP.esPestanaDeRafaga()) return false;
+  if (typeof AP.tarjetasDeLaPagina !== 'function') return false;
+  try { if (sessionStorage.getItem(AP_CLAVE_CIERRE_LISTO)) return false; } catch (e) { return false; }
+  if (apCierreEstado === 'activando' || apCierreEstado === 'listo') return false;
+  const resumen = AP.resumenDeMarcas(AP.tarjetasDeLaPagina().map(t => t.id), apLeerMarcas());
+  if (!resumen.total) return false;
+  apMostrarCierre(resumen);
+  return true;
+};
+
+function apResultadoCierre(texto, clase) {
+  if (!ovRaiz) return;
+  const r = ovRaiz.getElementById('ap-ov-cierre-resultado');
+  r.textContent = texto;
+  r.className = 'resultado' + (clase ? ' ' + clase : '');
+}
+
+function apMostrarCierre(resumen) {
+  apAsegurarOverlay();
+  const texto = AP.textoCierre(resumen);
+  ovRaiz.getElementById('ap-ov-cierre-t').textContent = texto.principal;
+  ovRaiz.getElementById('ap-ov-cierre-razon').textContent = texto.razon;
+  // §4 y §3.5: sin sesión en el portal no puede postular. Se dice acá, donde se
+  // le pide permiso, y el botón lleva a iniciarla.
+  const portal = AP.portalDelHost(location.hostname) || 'el portal';
+  const sinSesion = AP.mirarSesion(document, portal) === false;
+  ovRaiz.getElementById('ap-ov-cierre-sesion').textContent = sinSesion ? 'Para postular necesitas tu sesión iniciada en ' + portal + '.' : '';
+  const si = ovRaiz.getElementById('ap-ov-cierre-si');
+  si.disabled = false;
+  si.textContent = sinSesion ? 'Iniciar sesión en ' + portal : texto.boton;
+  si.onclick = sinSesion ? apIrAIniciarSesion : () => apEmpezarAPostular(resumen);
+  ovRaiz.getElementById('ap-ov-cierre-no').onclick = apTodaviaNo;
+  ovRaiz.getElementById('ap-ov-cierre-botones').hidden = false;
+  apResultadoCierre('', '');
+  ovRaiz.getElementById('ap-ov-cierre').hidden = false;
+  apCierreEstado = 'inicial';
+}
+
+// La página para entrar al propio portal (SESION_POR_PORTAL), aunque esté en
+// otro subdominio. Antes se seguía el enlace de la página, y en Computrabajo el
+// botón para entrar no es un enlace: nunca se sigue uno de la página.
+function apIrAIniciarSesion() {
+  const destino = AP.ingresoDelPortal(AP.portalDelHost(location.hostname));
+  if (destino) {
+    location.href = destino;
+    return;
+  }
+  apResultadoCierre('Inicia sesión en el portal y vuelve a esta página.', 'error');
+}
+
+function apTodaviaNo() {
+  try { sessionStorage.setItem(AP_CLAVE_CIERRE_LISTO, '1'); } catch (e) {}
+  apCierreEstado = 'listo';
+  if (ovRaiz) ovRaiz.getElementById('ap-ov-cierre').hidden = true;
+}
+
+// Activa la postulación en la cuenta (background.js -> /api/extension/estado,
+// con las mismas reglas que el panel) y sigue con esta misma página: las que
+// sirven se postulan acá, y la primera se muestra antes de enviarla.
+function apEmpezarAPostular(resumen) {
+  if (apCierreEstado !== 'inicial' || !ovRaiz) return;
+  apCierreEstado = 'activando';
+  const texto = AP.textoCierre(resumen);
+  const si = ovRaiz.getElementById('ap-ov-cierre-si');
+  si.disabled = true;
+  si.textContent = 'Activando…';
+  apResultadoCierre('', '');
+  const terminar = (r) => {
+    if (!ovRaiz) return;
+    if (r && r.ok) {
+      apCierreEstado = 'listo';
+      try {
+        sessionStorage.setItem(AP_CLAVE_CIERRE_LISTO, '1');
+        if (resumen.postular) sessionStorage.setItem(AP_CLAVE_REVISAR_PRIMERA, '1');
+      } catch (e) {}
+      if (r.config) { AP.cfg = r.config; AP.activo = r.config.active !== false; }
+      ovRaiz.getElementById('ap-ov-cierre-botones').hidden = true;
+      apResultadoCierre(texto.listo, 'ok');
+      AP.liberarObservadas();
+      setTimeout(() => {
+        if (ovRaiz) ovRaiz.getElementById('ap-ov-cierre').hidden = true;
+        if (resumen.postular && AP.escanear) { AP.procesando = false; AP.escanear(); }
+      }, 3500);
+    } else {
+      apCierreEstado = 'inicial';
+      si.disabled = false;
+      si.textContent = texto.boton;
+      apResultadoCierre((r && r.error) || 'No se pudo activar ahora. Puedes hacerlo desde tu panel.', 'error');
+    }
+  };
+  try {
+    chrome.runtime.sendMessage({ type: 'EMPEZAR_A_POSTULAR' }, (r) => {
+      void chrome.runtime.lastError;
+      terminar(r);
+    });
+  } catch (e) {
+    terminar(null);
+  }
+}
+
 // ── Mensaje de resumen al terminar un escaneo (docs/visibilidad-y-etapa2.md §A) ──
 // Antes cada adaptador decía "X de 20 coinciden", contando solo la banda
 // 'postular' -- "0 de 20" podía ser 20 descartadas, 20 en gris, o cualquier
@@ -288,6 +527,12 @@ AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
   if (c.gris) partes.push(c.gris + ' por decidir');
   if (c.descartar) partes.push(c.descartar + (c.descartar === 1 ? ' descartada' : ' descartadas'));
 
+  // Una pasada que no encontró nada nuevo en la misma página (la dispara
+  // cualquier cambio del DOM) dejaba "Sin ofertas nuevas" encima del resumen
+  // de lo que ya revisó: se queda el resumen (docs/primera-busqueda-guiada.md §11).
+  const url = (typeof location !== 'undefined' && location.href) || '';
+  if (!partes.length && url && apUltimoResumen && apUltimoResumen.url === url) return apUltimoResumen.resumen;
+
   let texto = partes.length ? partes.join(' · ') : 'Sin ofertas nuevas';
   if (soloObservar) texto = '👁 Solo observar · ' + texto;
   if (razonTop) texto += ' — la mayoría: ' + razonTop;
@@ -295,8 +540,11 @@ AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
   const estado = soloObservar
     ? (c.observado > 0 || c.gris > 0 ? 'pendiente' : 'neutral')
     : (c.postular > 0 ? 'ok' : c.gris > 0 ? 'pendiente' : 'neutral');
-  return { texto: texto, estado: estado, accion: accion };
+  const resumen = { texto: texto, estado: estado, accion: accion };
+  if (partes.length) apUltimoResumen = { url: url, resumen: resumen };
+  return resumen;
 };
+let apUltimoResumen = null;
 
 // Qué se puede arreglar desde el aviso. Hoy, solo la comuna: si lo que más se
 // descartó fue "X no está en tus comunas", se ofrece sumar X a la búsqueda.
@@ -397,6 +645,169 @@ AP.formatearRazonCorta = function (r) {
     default: return 'sin razón';
   }
 };
+
+// ── La razón con las palabras del panel (docs/primera-busqueda-guiada.md §11) ──
+// La marca de cada oferta (abajo) dice por qué, igual que el panel
+// (backend/lib/formatear-razon.ts, formatearRazon): es la misma razón que la
+// persona ve después en "Por decidir" o en "Lo último que hizo". Copia, porque
+// la extensión no puede importar ese archivo: backend/scripts/verificar-razones-marca.ts
+// corre las dos con los mismos casos.
+AP.razonComoEnElPanel = function (r) {
+  if (typeof r === 'string') return r;
+  if (!r || typeof r !== 'object' || !r.tipo) return 'Sin razón registrada';
+  switch (r.tipo) {
+    case 'rol':
+      if (r.campo === 'cuerpo') return 'La descripción habla de ' + r.rol + ', lo que buscas';
+      if (r.campo === 'empresa') return 'El nombre de la empresa dice "' + (r.termino || r.rol) + '"';
+      return r.termino && r.termino.toLowerCase() !== r.rol.toLowerCase()
+        ? 'Es de ' + r.rol + ', lo que buscas (dice "' + r.termino + '")'
+        : 'Es de ' + r.rol + ', lo que buscas';
+    case 'rol_fuera_del_titulo':
+      return 'El título es de otro cargo: ' + r.rol + ' solo aparece en ' + (r.campo === 'empresa' ? 'el nombre de la empresa' : 'la descripción');
+    case 'sin_rol': return 'El cargo no se parece a lo que buscas';
+    case 'veto': return r.donde === 'cuerpo' ? r.razon + ' (lo dice el aviso)' : r.razon;
+    case 'ubicacion':
+      if (r.ofertaEn && r.region) return 'Es en ' + (r.region === 'RM' ? 'la Región Metropolitana' : 'la región de ' + r.ofertaEn) + ', y no buscas ahí';
+      return r.ofertaEn ? 'Queda en ' + r.ofertaEn + ', fuera de tus comunas' : 'Queda fuera de tus comunas';
+    case 'ubicacion_desconocida':
+      return r.ofertaEn ? 'Dice "' + r.ofertaEn + '" y no sabemos si queda en tus comunas' : 'No dice en qué comuna es';
+    case 'nivel':
+      return r.certeza === 'desconocida'
+        ? 'Es jefatura ("' + r.termino + '") y no sabemos si buscas ese nivel'
+        : 'Es jefatura ("' + r.termino + '") y buscas otro nivel';
+    case 'duplicado':
+      return r.fecha
+        ? 'Ya postulaste a este cargo en esta empresa el ' + new Date(r.fecha).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })
+        : 'Se repite en esta misma búsqueda';
+    case 'senal': return 'El aviso dice "' + r.patron + '"';
+    case 'sin_senales': return 'El aviso no trae nada claro a favor ni en contra';
+    case 'jornada': {
+      const buscada = r.declarada === 'part_time' ? 'part time' : 'jornada completa';
+      const delAviso = r.declarada === 'part_time' ? 'jornada completa' : 'part time';
+      return 'Es de ' + delAviso + ' y buscas ' + buscada;
+    }
+    case 'jornada_desconocida':
+      return 'No dice la jornada, y buscas ' + (r.declarada === 'part_time' ? 'part time' : 'jornada completa');
+    case 'requisito':
+      return 'Pide ' + (r.que === 'titulo' ? 'un título que no está en tu CV'
+        : r.que === 'licencia' ? 'una licencia de conducir profesional que no está en tu CV'
+        : 'inglés, y tu CV no lo menciona');
+    case 'modo_abierto': return 'Cumple tus condiciones (buscas cualquier trabajo)';
+    case 'sin_perfil': return 'Tu perfil de búsqueda todavía no estaba listo';
+    default: return 'Sin razón registrada';
+  }
+};
+
+// Igual que esRazonPositiva en backend/lib/formatear-razon.ts: true a favor,
+// false en contra, null si no se sabe (un texto viejo).
+AP.esRazonPositiva = function (r) {
+  if (!r || typeof r !== 'object' || !r.tipo) return null;
+  if (r.tipo === 'rol' || r.tipo === 'modo_abierto') return true;
+  if (r.tipo === 'senal') return r.delta >= 0;
+  if (['sin_rol', 'veto', 'ubicacion', 'ubicacion_desconocida', 'rol_fuera_del_titulo', 'nivel', 'duplicado',
+       'sin_senales', 'jornada', 'jornada_desconocida', 'requisito'].indexOf(r.tipo) !== -1) return false;
+  return null;
+};
+
+// ── La marca en cada oferta del listado (docs/primera-busqueda-guiada.md §3.2 y §11) ──
+//
+// Antes la extensión decía solo cuántas ("3 habría postulado · 6 por decidir ·
+// 11 descartadas") en un aviso en la esquina, sin decir cuál era cuál. Ahora
+// cada oferta del listado lleva su marca -- te sirve, para que decidas o no
+// calza -- con su razón, donde la persona está mirando.
+//
+// Las decisiones se guardan en esta pestaña (sessionStorage), no en memoria:
+// Laborum va y vuelve entre el listado y cada aviso, y cada vuelta recarga la
+// extensión. Cada adaptador define AP.tarjetasDeLaPagina() -> [{ el, id }]
+// para saber dónde pintarlas.
+const AP_CLAVE_MARCAS = 'ap_marcas';
+const AP_MAX_MARCAS = 300;
+
+function apLeerMarcas() {
+  try { return JSON.parse(sessionStorage.getItem(AP_CLAVE_MARCAS) || '{}') || {}; } catch (e) { return {}; }
+}
+
+// Cuál de sus razones dice la marca: en una que sirve, la primera a favor; en
+// una que queda en duda, la primera en contra (lo que la dejó ahí, igual que
+// "Lo último que hizo"); en un descarte, la que lo descartó.
+AP.razonDeLaMarca = function (banda, razones) {
+  const lista = Array.isArray(razones) ? razones.filter(Boolean) : (razones ? [razones] : []);
+  if (banda === 'postular') return lista.find(r => AP.esRazonPositiva(r) === true) || null;
+  if (banda === 'gris') return lista.find(r => AP.esRazonPositiva(r) === false) || lista[0] || null;
+  return lista[0] || null;
+};
+
+AP.marcar = function (id, banda, razones) {
+  if (!id || (banda !== 'postular' && banda !== 'gris' && banda !== 'descartar')) return;
+  const marcas = apLeerMarcas();
+  delete marcas[id]; // que la más nueva quede al final (y sea la última en borrarse)
+  marcas[id] = { b: banda, r: AP.razonDeLaMarca(banda, razones) };
+  const ids = Object.keys(marcas);
+  if (ids.length > AP_MAX_MARCAS) for (const viejo of ids.slice(0, ids.length - AP_MAX_MARCAS)) delete marcas[viejo];
+  try { sessionStorage.setItem(AP_CLAVE_MARCAS, JSON.stringify(marcas)); } catch (e) {}
+  AP.pintarMarcas();
+};
+
+// Después de "Empezar a postular", las que solo miró vuelven a estar
+// disponibles para postularse en esta misma página.
+AP.liberarObservadas = function () {
+  const marcas = apLeerMarcas();
+  for (const id of Object.keys(marcas)) if (marcas[id].b === 'postular') AP.vistos.delete(id);
+};
+
+const AP_TEXTO_MARCA = { postular: 'Te sirve', gris: 'Para que decidas', descartar: 'No calza' };
+const AP_ESTILO_MARCA =
+  ':host{all:initial}' +
+  '.m{display:inline-flex;align-items:flex-start;gap:7px;max-width:100%;box-sizing:border-box;padding:5px 10px 5px 6px;' +
+    'border-radius:8px;border:1px solid;font:400 12.5px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;text-align:left}' +
+  '.ico{flex:none;width:16px;height:16px;border-radius:4px;background:#16181A;display:grid;place-items:center;margin-top:1px}' +
+  '.ico svg{width:10px;height:10px;display:block}' +
+  '.ico path{fill:none;stroke:#D6F24B;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}' +
+  '.t{font-weight:700}' +
+  '.postular{background:#EAF7EF;border-color:#BFE6CD;color:#14633A}' +
+  '.gris{background:#FFF5DB;border-color:#F0D995;color:#735000}' +
+  '.descartar{background:#F2F3F3;border-color:#DCDFE0;color:#4B5356}';
+const AP_HTML_MARCA =
+  '<span class="m"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
+  '<span><span class="t"></span><span class="r"></span></span></span>';
+
+let apPintarPendiente = false;
+AP.pintarMarcas = function () {
+  if (apPintarPendiente) return;
+  apPintarPendiente = true;
+  setTimeout(() => { apPintarPendiente = false; apPintarAhora(); }, 120);
+};
+
+function apPintarAhora() {
+  if (typeof AP.tarjetasDeLaPagina !== 'function' || typeof document === 'undefined' || !document.createElement) return;
+  const marcas = apLeerMarcas();
+  const pintadas = new Set();
+  for (const { el, id } of AP.tarjetasDeLaPagina()) {
+    if (!el || pintadas.has(id)) continue;
+    const m = marcas[id];
+    let host = el.querySelector(':scope > [data-ap-marca]');
+    if (!m) { if (host) host.remove(); continue; }
+    pintadas.add(id);
+    const clave = m.b + '|' + JSON.stringify(m.r || null);
+    if (host && host.getAttribute('data-ap-marca') === clave) continue;
+    if (!host) {
+      host = document.createElement('div');
+      // all:initial, como el aviso: que el CSS del portal no la deforme.
+      host.style.cssText = 'all:initial;display:block;width:100%;margin:8px 0 2px;clear:both';
+      host.attachShadow({ mode: 'open' });
+      host.addEventListener('click', (e) => e.stopPropagation()); // no abre la oferta
+      el.appendChild(host);
+    }
+    host.setAttribute('data-ap-marca', clave);
+    const razon = m.r ? AP.razonComoEnElPanel(m.r) : '';
+    host.shadowRoot.innerHTML = '<style>' + AP_ESTILO_MARCA + '</style>' + AP_HTML_MARCA;
+    host.shadowRoot.querySelector('.m').classList.add(m.b);
+    // textContent, nunca innerHTML: la razón puede traer palabras del aviso.
+    host.shadowRoot.querySelector('.t').textContent = AP_TEXTO_MARCA[m.b] + (razon ? ' · ' : '');
+    host.shadowRoot.querySelector('.r').textContent = razon;
+    host.title = 'AutoPostula: ' + AP_TEXTO_MARCA[m.b] + (razon ? ' — ' + razon : '');
+  }
+}
 
 // ── Helpers básicos ───────────────────────────────────────────────
 AP.sleep = function (ms) { return new Promise(r => setTimeout(r, ms)); };
@@ -576,6 +987,19 @@ AP.reportarBandaGris = function (oferta) {
     chrome.runtime.sendMessage({ type: 'REPORTAR_BANDA_GRIS', oferta: oferta });
   } catch (e) {
     console.warn('[AP] No se pudo avisar al background (banda gris):', e);
+  }
+};
+
+// ── Las que habría postulado (docs/primera-busqueda-guiada.md §11) ──────
+// En modo "solo mirar", lo que calzaba quedaba solo en el historial de este
+// navegador: el panel no podía decir cuáles ni cuántas. Fire-and-forget como
+// los descartes. Cada una: { externalId, titulo, empresa, url, razon, score }.
+AP.reportarObservadas = function (ofertas, plataforma) {
+  if (!ofertas || !ofertas.length) return;
+  try {
+    chrome.runtime.sendMessage({ type: 'REPORTAR_OBSERVADAS', ofertas: ofertas, plataforma: plataforma });
+  } catch (e) {
+    console.warn('[AP] No se pudo avisar al background (observadas):', e);
   }
 };
 
@@ -1962,6 +2386,7 @@ AP.confirmarAntesDeEnviar = function (titulo, contexto, mensaje) {
 chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
   if (m.type === 'AUTO_SCAN') {
     AP.escaneoPedido = true;
+    try { sessionStorage.setItem(AP_CLAVE_PESTANA_RAFAGA, '1'); } catch (e) {}
     if (AP.escanear) AP.escanear();
     sendResponse({ ok: true });
   }
@@ -2012,7 +2437,22 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
   }
 });
 
-new MutationObserver(function () {
+// Lo que agrega la propia extensión (el aviso, la marca de cada oferta) no es
+// un cambio del portal: sin este filtro, cada marca pintada volvía a disparar
+// un escaneo.
+function apEsNuestro(nodo) {
+  return !!nodo && nodo.nodeType === 1 && (nodo.id === 'ap-ov' || (!!nodo.hasAttribute && nodo.hasAttribute('data-ap-marca')));
+}
+
+new MutationObserver(function (registros) {
+  const delPortal = !registros || registros.some(r => !Array.prototype.every.call(r.addedNodes || [], apEsNuestro) ||
+    !Array.prototype.every.call(r.removedNodes || [], apEsNuestro));
+  if (!delPortal) return;
+  // Si el portal volvió a dibujar las tarjetas, sus marcas se perdieron.
+  AP.pintarMarcas();
+  // El encabezado de Laborum y Trabajando llega después de cargar.
+  clearTimeout(window._apSesionT);
+  window._apSesionT = setTimeout(() => AP.reportarSesion(), 1500);
   if (AP.activo && !AP.procesando) {
     clearTimeout(window._apT);
     window._apT = setTimeout(() => AP.escanear && AP.escanear(), 2500);
@@ -2024,9 +2464,9 @@ new MutationObserver(function () {
 // El popup muestra una línea por portal conectado. La cuenta sabe cuáles
 // conectó la persona, pero no si la sesión de ESE navegador sigue viva -- y
 // una sesión caída es la causa más común de "no postuló nada y no dijo por
-// qué". Acá se mira lo único que no existe sin sesión: un enlace para
-// cerrarla. Si no aparece ninguno de los dos indicios no se inventa un
-// veredicto: se manda null y el popup dice "Sin revisar".
+// qué". Acá se mira lo que cada portal muestra solo con sesión o solo sin
+// ella. Si no aparece ningún indicio no se inventa un veredicto: no se manda
+// nada y el popup dice "Sin revisar".
 const PORTAL_POR_HOST = [
   [/computrabajo\.(cl|com)$/i, 'Computrabajo'],
   [/laborum\.cl$/i, 'Laborum'],
@@ -2035,26 +2475,71 @@ const PORTAL_POR_HOST = [
 const SEL_CON_SESION = 'a[href*="logout" i], a[href*="cerrar-sesion" i], a[href*="cerrarsesion" i], a[href*="signout" i], form[action*="logout" i]';
 const SEL_SIN_SESION = 'a[href*="/login" i], a[href*="iniciar-sesion" i], a[href*="iniciarsesion" i], a[href*="signin" i]';
 
+// Los dos de arriba solo decían algo en Laborum, y solo cuando faltaba la
+// sesión (docs/primera-busqueda-guiada.md §12). Mirado en los tres sitios el
+// 2026-10-03, con y sin sesión: ninguno tiene en el listado un enlace para
+// cerrarla, y Computrabajo y Trabajando no entran por "/login". Lo que sí
+// distingue los dos casos:
+//   Computrabajo: con sesión, el menú de la persona (data-info-user) y su
+//     <span id="logout">; sin sesión, el botón "Login". Sus enlaces a
+//     /acceso/ están en los dos casos: no sirven.
+//   Laborum: con sesión, el acceso a los mensajes; sin sesión, "Ingresar".
+//   Trabajando: con sesión, "Mis postulaciones" y "Actualizar mi CV"; sin
+//     sesión, "Ingresa".
+// `ingreso` es la página para entrar: ahí llevan la tarjeta del final y el
+// popup. popup.js la copia, y verificar-estado-extension.js compara las dos.
+const SESION_POR_PORTAL = {
+  Computrabajo: {
+    con: '[data-info-user], #logout',
+    sin: '[data-login-button-desktop]',
+    ingreso: 'https://candidato.cl.computrabajo.com/acceso/',
+  },
+  Laborum: {
+    con: 'a[href*="/postulantes/mensajes" i]',
+    sin: 'a[href*="/login" i]',
+    ingreso: 'https://www.laborum.cl/login',
+  },
+  Trabajando: {
+    con: 'a[href$="/mis-postulaciones" i], a[href$="/mi-curriculum" i]',
+    sin: 'a[href*="/ingresa-a-tu-cuenta" i]',
+    ingreso: 'https://www.trabajando.cl/ingresa-a-tu-cuenta',
+  },
+};
+
 AP.portalDelHost = function (host) {
   const par = PORTAL_POR_HOST.find(([re]) => re.test(host));
   return par ? par[1] : null;
 };
 
+AP.ingresoDelPortal = function (portal) {
+  const p = SESION_POR_PORTAL[portal];
+  return p ? p.ingreso : null;
+};
+
 // true = hay sesión, false = no hay, null = no se pudo saber en esta página.
-AP.mirarSesion = function (doc) {
+// Lo de "con sesión" se mira primero: los portales dejan escondidos sus
+// enlaces para entrar aunque la persona ya haya entrado.
+AP.mirarSesion = function (doc, portal) {
   const d = doc || document;
-  if (d.querySelector(SEL_CON_SESION)) return true;
-  if (d.querySelector(SEL_SIN_SESION)) return false;
+  const propio = SESION_POR_PORTAL[portal] || {};
+  if (d.querySelector(SEL_CON_SESION) || (propio.con && d.querySelector(propio.con))) return true;
+  if (d.querySelector(SEL_SIN_SESION) || (propio.sin && d.querySelector(propio.sin))) return false;
   return null;
 };
 
+// Se mira al cargar y otra vez cuando el portal cambia la página (el
+// MutationObserver de arriba): Laborum y Trabajando dibujan el encabezado
+// después de cargar, y la sesión se puede abrir o cerrar sin recargar. Solo
+// se avisa cuando el veredicto cambia.
+let apSesionAvisada = null;
 AP.reportarSesion = function () {
   const portal = AP.portalDelHost(location.hostname);
   if (!portal) return;
-  const hay = AP.mirarSesion();
-  if (hay === null) return; // esta página no dice nada: no se pisa lo anterior
+  const hay = AP.mirarSesion(document, portal);
+  if (hay === null || hay === apSesionAvisada) return; // esta página no dice nada nuevo: no se pisa lo anterior
   try {
     chrome.runtime.sendMessage({ type: 'SESION_PORTAL', portal: portal, hay: hay });
+    apSesionAvisada = hay;
   } catch (e) { /* el service worker se está reiniciando: se reporta la próxima */ }
 };
 

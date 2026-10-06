@@ -60,3 +60,18 @@ export async function purgarDescartes(): Promise<number> {
   const { count } = await prisma.descarte.deleteMany({ where: { vistoEn: { lt: limite } } });
   return count;
 }
+
+// Retención de lo que la extensión habría postulado mirando un portal en modo
+// "solo mirar" (docs/primera-busqueda-guiada.md §11). Es la contracara de los
+// descartes -- las que sí calzaban -- y sirve lo mismo: la primera vez que la
+// persona mira, no para siempre. Mismo plazo; si se cambia acá, revisar lo que
+// diga la política de privacidad.
+export const DIAS_RETENCION_OBSERVADAS = 90;
+
+export async function purgarObservadas(): Promise<number> {
+  const limite = new Date();
+  limite.setDate(limite.getDate() - DIAS_RETENCION_OBSERVADAS);
+
+  const { count } = await prisma.ofertaObservada.deleteMany({ where: { vistoEn: { lt: limite } } });
+  return count;
+}

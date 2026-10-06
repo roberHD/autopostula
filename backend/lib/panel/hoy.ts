@@ -24,7 +24,7 @@ import { filtrosDeLaCuenta, urlDeBusqueda } from "@/lib/busqueda-en-portal";
 const MINUTOS_POR_PREGUNTA = 3;
 
 export type HechoReciente = {
-  tipo: "postulo" | "no_envio" | "por_decidir" | "descarto";
+  tipo: "postulo" | "no_envio" | "por_decidir" | "descarto" | "postularia";
   id: string;
   titulo: string;
   detalle: string;
@@ -60,6 +60,8 @@ export async function armarResumenHoy(userId: string) {
     grisAlgunaVez,
     descartadasTotal,
     plataformas,
+    observadasTotal,
+    observadasRecientes,
   ] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -132,6 +134,15 @@ export async function armarResumenHoy(userId: string) {
     prisma.decisionOferta.findFirst({ where: { userId, fuente: "BANDA_GRIS" }, select: { id: true } }),
     prisma.descarte.count({ where: { userId } }),
     prisma.jobPlatform.findMany({ select: { id: true, nombre: true }, orderBy: { nombre: "asc" } }),
+    // A cuáles habría postulado al mirar un portal en modo "solo mirar"
+    // (docs/primera-busqueda-guiada.md §11), desde la extensión 2.17.
+    prisma.ofertaObservada.count({ where: { userId } }),
+    prisma.ofertaObservada.findMany({
+      where: { userId },
+      orderBy: { vistoEn: "desc" },
+      take: 4,
+      select: { id: true, titulo: true, empresa: true, plataforma: true, razon: true, vistoEn: true },
+    }),
   ]);
 
   // ── Tareas ────────────────────────────────────────────────────────
@@ -260,6 +271,21 @@ export async function armarResumenHoy(userId: string) {
       corregido: !!d.corregidoEn,
     });
   }
+  // Mientras la cuenta solo mira, también a cuáles habría postulado: es lo que
+  // le pedía el aviso de modo prueba ("revisa qué habría postulado") y no había
+  // dónde verlo. Con la postulación activada ya no son noticia: se postulan.
+  if (user && !user.postulacionHabilitada) {
+    for (const o of observadasRecientes) {
+      const motivo = o.razon ? formatearRazon(o.razon) : null;
+      hechos.push({
+        tipo: "postularia",
+        id: o.id,
+        titulo: limpiarTitulo(o.titulo),
+        detalle: [o.empresa, o.plataforma, motivo ? motivo.charAt(0).toLowerCase() + motivo.slice(1) : null].filter(Boolean).join(" · "),
+        en: o.vistoEn.toISOString(),
+      });
+    }
+  }
   hechos.sort((x, y) => y.en.localeCompare(x.en));
 
   // ── Lo que buscas ─────────────────────────────────────────────────
@@ -309,8 +335,11 @@ export async function armarResumenHoy(userId: string) {
       })
     : [];
   const primeraVez = {
-    yaMiro: !!hayDescartes || !!grisAlgunaVez || !!user?.ultimaRafagaEn || todas.length > 0,
+    yaMiro: !!hayDescartes || !!grisAlgunaVez || observadasTotal > 0 || !!user?.ultimaRafagaEn || todas.length > 0,
     descartadas: descartadasTotal,
+    // null si la extensión todavía no las manda (versiones anteriores a la 2.17):
+    // el panel no dice "0" de algo que no sabe.
+    habriaPostulado: observadasTotal > 0 ? observadasTotal : null,
     objetivo,
     busquedas,
   };

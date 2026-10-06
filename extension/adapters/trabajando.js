@@ -148,6 +148,12 @@ function getId(urlOHref) {
   return m ? m[1] : null;
 }
 
+// El de una tarjeta del listado: el de su enlace, o su posición si no tiene.
+function idDeTarjeta(tarjeta, idx) {
+  const a = tarjeta.querySelector('h2 a') || tarjeta.querySelector('a');
+  return getId(a ? a.href.split('#')[0] : '') || ('idx-' + idx);
+}
+
 // ── Título de una tarjeta ───────────────────────────────────────
 function tituloDeTarjeta(tarjeta) {
   const h2 = tarjeta.querySelector('h2 a, h2');
@@ -540,7 +546,7 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
   // el clic que envía -- con "Revisar antes de enviar" el visto bueno se pide
   // ANTES. Con preguntas, lo que se revisa son las respuestas, antes del
   // "Postular" final.
-  if (!document.querySelector(SELECTOR_HAY_PREGUNTAS) && AP.cfg && AP.cfg.modoRevision) {
+  if (!document.querySelector(SELECTOR_HAY_PREGUNTAS) && AP.conRevision()) {
     msg('⏸ Revisión pendiente…', '#2563EB');
     const decision = await AP.confirmarAntesDeEnviar(titulo, contexto,
       'Esta oferta se postula sin preguntas: al confirmar se envía tu CV. ¿Enviar?');
@@ -583,7 +589,7 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
   const { n2, respuestasLog, analisis } = await responderPreguntas(form, contexto);
   const paraLog = () => respuestasLog.map(r => ({ pregunta:r.pregunta, respuestaIa:r.respuestaIa, respuesta:r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia:r.vacia, fueIA:r.fueIA }));
 
-  const conRevision = !!(AP.cfg && AP.cfg.modoRevision);
+  const conRevision = AP.conRevision();
   const sinResponder = respuestasLog.filter(r => r.vacia);
   const faltan = sinResponder.map(r => r.datoFaltante || '"' + (r.pregunta || '').slice(0, 50) + '"').slice(0, 3).join(', ');
   const errorIA = (sinResponder.find(r => r.errorIA) || {}).errorIA;
@@ -717,7 +723,7 @@ async function escanear() {
   tarjetas.forEach((t, idx) => {
     const a = t.querySelector('h2 a') || t.querySelector('a');
     const url = a ? a.href.split('#')[0] : '';
-    const id = getId(url) || ('idx-' + idx);
+    const id = idDeTarjeta(t, idx);
     if (AP.vistos.has(id)) return;
 
     const titulo = tituloDeTarjeta(t);
@@ -727,8 +733,11 @@ async function escanear() {
     avistamientos.push({ externalId: id, titulo, empresa, url });
 
     const resultado = evaluarTarjeta(t);
+    // Cada decisión queda marcada en su tarjeta, con su razón
+    // (docs/primera-busqueda-guiada.md §11).
+    if (resultado.banda !== 'descartar') AP.marcar(id, resultado.banda, resultado.razones);
     if (resultado.banda === 'postular') {
-      pendientes.push({t, id, idx, titulo, empresa});
+      pendientes.push({t, id, idx, titulo, empresa, razones: resultado.razones, score: resultado.score});
     } else if (resultado.banda === 'gris') {
       AP.vistos.add(id);
       candidatosGris.push({t, id, idx, titulo, url, empresa, resultado});
@@ -737,6 +746,7 @@ async function escanear() {
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
       descartes.push({ externalId: id, titulo, empresa, url, razon });
+      AP.marcar(id, 'descartar', [razon]);
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:AP.formatearRazonCorta(razon)});
     }
@@ -768,15 +778,18 @@ async function escanear() {
     const resultado = resultadoFinal || cand.resultado;
 
     if (resultadoFinal && resultadoFinal.banda === 'postular') {
-      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo, empresa: cand.empresa});
+      AP.marcar(cand.id, 'postular', resultadoFinal.razones);
+      pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo, empresa: cand.empresa, razones: resultadoFinal.razones, score: resultadoFinal.score});
     } else if (resultadoFinal && resultadoFinal.banda === 'descartar') {
       conteos.descartar++;
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
       descartes.push({ externalId: cand.id, titulo: cand.titulo, empresa: cand.empresa, url: cand.url, razon });
+      AP.marcar(cand.id, 'descartar', [razon]);
       addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:AP.formatearRazonCorta(razon)});
     } else {
       conteos.gris++;
+      AP.marcar(cand.id, 'gris', resultado.razones);
       addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:'En banda gris — revisar en el dashboard'});
       AP.reportarBandaGris({
         titulo: cand.titulo, url: cand.url, plataforma: 'Trabajando', empresa: cand.empresa,
@@ -790,6 +803,7 @@ async function escanear() {
     conteos.descartar++;
     razonesDescartadas.push(razon);
     descartes.push({ externalId: p.id, titulo: p.titulo, empresa: p.empresa, url: null, razon });
+    AP.marcar(p.id, 'descartar', [razon]);
     AP.vistos.add(p.id);
     addLog({ts:Date.now(), status:'skip', title:p.titulo, url:'', uid:p.id, reason:AP.formatearRazonCorta(razon)});
   });
@@ -811,6 +825,7 @@ async function escanear() {
   if (!pendientes.length) {
     if (siguientePaginaClick(tarjetas.length, botonVerMas)) return; // el MutationObserver retoma solo cuando lleguen las tarjetas nuevas
     AP.reportarEscaneoTerminado(conteos);
+    AP.cierreDePagina();
     return;
   }
 
@@ -820,13 +835,16 @@ async function escanear() {
   AP.procesando = true;
   let cortado = false;
   let intentadas = 0;
-  for (const {t, id, titulo, empresa} of pendientes) {
+  // Las que habría postulado, para el panel (docs/primera-busqueda-guiada.md §11).
+  const observadas = [];
+  for (const {t, id, titulo, empresa, razones, score} of pendientes) {
     if (!AP.activo) break;
     const a = t.querySelector('h2 a') || t.querySelector('a');
     const url = a ? a.href.split('#')[0] : '';
     if (soloObservar) {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:'Habría postulado — modo solo observar'});
+      observadas.push({ externalId: id, titulo, empresa, url, razon: AP.razonDeLaMarca('postular', razones), score });
       continue;
     }
     const verificacion = await AP.puedePostular('Trabajando');
@@ -837,7 +855,7 @@ async function escanear() {
     }
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
-    if (btn) { intentadas++; await postular(url, id, titulo, undefined, empresa); }
+    if (btn) { intentadas++; await postular(url, id, titulo, undefined, empresa); AP.gastarRevisionPrimera(); }
     else {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Panel no cargó'});
@@ -845,6 +863,7 @@ async function escanear() {
     await sleep(DELAY);
   }
   AP.procesando = false;
+  AP.reportarObservadas(observadas, 'Trabajando');
 
   if (cortado) {
     // `conteos.postular` era lo que se iba a postular (lo que dijo el resumen de
@@ -862,6 +881,7 @@ async function escanear() {
   // muestran los otros dos portales.
   const resumenFinal = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
   msg(resumenFinal.texto, resumenFinal.estado, resumenFinal.accion);
+  AP.cierreDePagina();
 }
 
 // ── Postular directo a UNA oferta ya aprobada en banda gris (§8.6) ──────
@@ -971,6 +991,17 @@ AP.escanear = AP.sinReentrada(function () {
   return escanear();
 });
 AP.aplicarDirecto = aplicarDirecto;
+// Las tarjetas del listado, para pintar la marca de cada una (core.js). La
+// tarjeta es una fila (logo | texto) en el computador: la marca va dentro de la
+// columna del texto, debajo del título, y no como una tercera columna que la
+// angosta (verificado contra el sitio real el 2026-10-02).
+AP.tarjetasDeLaPagina = function () {
+  return [...document.querySelectorAll('div.result-box')].map((t, idx) => {
+    const h2 = t.querySelector('h2');
+    const columna = h2 && h2.parentElement && h2.parentElement !== t ? h2.parentElement : t;
+    return { el: columna, id: idDeTarjeta(t, idx) };
+  });
+};
 AP.onInit = function() {
   console.log('[AP-TJ] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible, 'abierta en una oferta:', CARGADA_EN_OFERTA);
   if (enMisPostulaciones()) {

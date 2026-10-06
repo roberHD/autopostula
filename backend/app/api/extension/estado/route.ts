@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { estadoExtension } from "@/lib/estado-extension";
+import { habilitarPostulacion } from "@/lib/habilitar-postulacion";
 
 /**
  * El estado de la extensión, desde la extensión (docs/estrategia-y-rediseno.md §6).
@@ -11,6 +12,10 @@ import { estadoExtension } from "@/lib/estado-extension";
  *
  *   POST { pausada } | { soloObservar } | { revisarAntes }
  *        La persona lo cambió en el popup.
+ *
+ *   POST { empezarAPostular: true }
+ *        "Empezar a postular" en la tarjeta del portal, después de ver qué haría
+ *        con las ofertas de la página (docs/primera-busqueda-guiada.md §11).
  *
  *   POST { migrar: { pausada?, soloObservar?, revisarAntes?, info? } }
  *        Una sola vez, la primera vez que una extensión ya instalada corre con
@@ -53,6 +58,10 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const data: Record<string, unknown> = {};
+  // La activación cambia la cuenta por su cuenta (lib/habilitar-postulacion.ts):
+  // hay que volver a leerla para contestar con el estado nuevo.
+  let releer = false;
+  let recienActivada = false;
 
   if (body && typeof body === "object" && body.migrar && typeof body.migrar === "object") {
     const m = body.migrar as Record<string, unknown>;
@@ -63,6 +72,18 @@ export async function POST(request: Request) {
       const info = limpiarInfo(m.info);
       if (info?.length) data.infoAdicional = info;
     }
+  } else if (body.empezarAPostular === true) {
+    // Es el único lugar donde la persona da permiso mirando el resultado
+    // concreto. Activa la postulación con las mismas reglas que el panel, y
+    // apaga "solo observar" si lo había pedido: el botón dice "Empezar a
+    // postular", y con eso prendido seguiría sin enviar nada.
+    const resultado = await habilitarPostulacion(user.id);
+    if (!resultado.ok) {
+      return NextResponse.json({ error: resultado.error }, { status: 400 });
+    }
+    if (user.soloObservar) data.soloObservar = false;
+    releer = true;
+    recienActivada = resultado.recienActivada;
   } else if (typeof body.agregarInfo === "string") {
     // Desde el panel de revisión: la IA dijo que falta un dato ("¿tienes
     // licencia B?") y la persona lo escribió ahí mismo. Guardarlo en la cuenta
@@ -85,23 +106,23 @@ export async function POST(request: Request) {
     }
   }
 
+  const campos = {
+    busquedaAutomaticaActiva: true,
+    soloObservar: true,
+    revisarAntesDeEnviar: true,
+    postulacionHabilitada: true,
+    infoAdicional: true,
+  } as const;
   const actualizado = Object.keys(data).length
-    ? await prisma.user.update({
-        where: { id: user.id },
-        data,
-        select: {
-          busquedaAutomaticaActiva: true,
-          soloObservar: true,
-          revisarAntesDeEnviar: true,
-          postulacionHabilitada: true,
-          infoAdicional: true,
-        },
-      })
-    : user;
+    ? await prisma.user.update({ where: { id: user.id }, data, select: campos })
+    : releer
+      ? await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: campos })
+      : user;
 
   return NextResponse.json({
     ok: true,
     estado: estadoExtension(actualizado),
     infoAdicional: Array.isArray(actualizado.infoAdicional) ? actualizado.infoAdicional : [],
+    ...(releer ? { recienActivada } : {}),
   });
 }

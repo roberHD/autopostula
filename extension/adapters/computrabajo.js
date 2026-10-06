@@ -610,7 +610,7 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
   // se envía con este mismo clic, así que el visto bueno se pide ANTES. No se
   // sabe de antemano cuál de las dos es (el botón es el mismo), por eso el
   // texto cubre las dos.
-  if (AP.cfg && AP.cfg.modoRevision) {
+  if (AP.conRevision()) {
     msg('⏸ Revisión pendiente…', '#2563EB');
     const decision = await AP.confirmarAntesDeEnviar(titulo, contexto,
       'Vas a postular a esta oferta. Si el portal la deja postular con un clic, se envía apenas confirmes; si tiene preguntas, las revisas antes del envío. ¿Continuar?');
@@ -634,7 +634,7 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
     await sleep(1000);
 
     // Modo revisión: pausar y mostrar respuestas al usuario
-    if (AP.cfg && AP.cfg.modoRevision) {
+    if (AP.conRevision()) {
       msg('⏸ Revisión pendiente…', '#2563EB');
       const decision = await mostrarRevision(titulo, respuestasLog, contexto);
       if (decision === 'skip') {
@@ -802,8 +802,11 @@ async function escanear() {
     avistamientos.push({ externalId: id, titulo, empresa, url });
 
     const resultado = evaluarTarjeta(t);
+    // Cada decisión queda marcada en su tarjeta, con su razón
+    // (docs/primera-busqueda-guiada.md §11).
+    if (resultado.banda !== 'descartar') AP.marcar(id, resultado.banda, resultado.razones);
     if (resultado.banda === 'postular') {
-      pendientes.push({t, id, idx, titulo, empresa});
+      pendientes.push({t, id, idx, titulo, empresa, url, razones: resultado.razones, score: resultado.score});
     } else if (resultado.banda === 'gris') {
       AP.vistos.add(id);
       candidatosGris.push({t, id, idx, titulo, url, empresa, resultado});
@@ -817,6 +820,7 @@ async function escanear() {
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
       descartes.push({ externalId: id, titulo, empresa, url, razon });
+      AP.marcar(id, 'descartar', [razon]);
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:AP.formatearRazonCorta(razon)});
     }
@@ -851,7 +855,7 @@ async function escanear() {
       const relevantes = await clasificarOfertasIA(pendientes.map(p => p.titulo), objetivo);
       if (relevantes) {
         const descartadas = pendientes.filter((p, i) => !relevantes.has(i + 1));
-        descartadas.forEach(p => { AP.vistos.add(p.id); addLog({ts:Date.now(), status:'skip', title:p.titulo, url:'', uid:p.id, reason:'Descartada por filtro IA (no calza con tu objetivo laboral)'}); });
+        descartadas.forEach(p => { AP.vistos.add(p.id); AP.marcar(p.id, 'descartar', ['No calza con tu objetivo laboral (filtro de IA)']); addLog({ts:Date.now(), status:'skip', title:p.titulo, url:'', uid:p.id, reason:'Descartada por filtro IA (no calza con tu objetivo laboral)'}); });
         pendientes = pendientes.filter((p, i) => relevantes.has(i + 1));
       }
     }
@@ -863,6 +867,7 @@ async function escanear() {
     conteos.descartar++;
     razonesDescartadas.push(razon);
     descartes.push({ externalId: p.id, titulo: p.titulo, empresa: p.empresa, url: null, razon });
+    AP.marcar(p.id, 'descartar', [razon]);
     AP.vistos.add(p.id);
     addLog({ts:Date.now(), status:'skip', title:p.titulo, url:'', uid:p.id, reason:AP.formatearRazonCorta(razon)});
   });
@@ -884,6 +889,7 @@ async function escanear() {
   if (!pendientes.length) {
     if (siguientePagina(tarjetas.length, urlPaginaComputrabajo)) return; // navegando a la página siguiente
     AP.reportarEscaneoTerminado(conteos);
+    AP.cierreDePagina();
     return;
   }
 
@@ -898,7 +904,9 @@ async function escanear() {
   AP.procesando = true;
   let cortado = false;
   let intentadas = 0;
-  for (const {t, id, titulo, empresa} of pendientes) {
+  // Las que habría postulado, para el panel (docs/primera-busqueda-guiada.md §11).
+  const observadas = [];
+  for (const {t, id, titulo, empresa, razones, score} of pendientes) {
     if (!AP.activo) break;
     const a = t.querySelector('h2 a, a[href*="oferta"], a[href*="trabajo"]') || t.querySelector('a');
     const url = a && a.href.split('#')[0] || '';
@@ -908,6 +916,7 @@ async function escanear() {
     if (soloObservar) {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:'Habría postulado — modo solo observar'});
+      observadas.push({ externalId: id, titulo, empresa, url, razon: AP.razonDeLaMarca('postular', razones), score });
       continue;
     }
     const verificacion = await AP.puedePostular('Computrabajo');
@@ -918,7 +927,7 @@ async function escanear() {
     }
     msg('Abriendo: ' + titulo.slice(0,35) + '…', '#D97706');
     const btn = await activar(t);
-    if (btn) { intentadas++; await postular(url, id, titulo, undefined, empresa); }
+    if (btn) { intentadas++; await postular(url, id, titulo, undefined, empresa); AP.gastarRevisionPrimera(); }
     else {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:'Panel no cargó'});
@@ -926,6 +935,7 @@ async function escanear() {
     await sleep(DELAY);
   }
   AP.procesando = false;
+  AP.reportarObservadas(observadas, 'Computrabajo');
 
   if (cortado) {
     // `conteos.postular` era lo que se iba a postular (lo que dijo el resumen de
@@ -946,6 +956,7 @@ async function escanear() {
   // quedaba tapado por un "Escaneo completo" sin datos.
   const resumenFinal = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
   msg(resumenFinal.texto, resumenFinal.estado, resumenFinal.accion);
+  AP.cierreDePagina();
 }
 
 // ── Seguimiento de estados en "Mis postulaciones" ───────────────
@@ -1038,6 +1049,10 @@ AP.escanear = AP.sinReentrada(function () {
   return escanear();
 });
 AP.aplicarDirecto = aplicarDirecto;
+// Las tarjetas del listado, para pintar la marca de cada una (core.js).
+AP.tarjetasDeLaPagina = function () {
+  return [...document.querySelectorAll('article.box_offer')].map((t, idx) => ({ el: t, id: getId(t, idx) }));
+};
 AP.onInit = function() {
   console.log('[AP-CT] listo — AP.activo:', AP.activo, 'incTags:', AP.cfg && AP.cfg.incTags && AP.cfg.incTags.length, 'modoRevision:', AP.cfg && AP.cfg.modoRevision, 'IA (token):', AP.iaDisponible);
   if (location.pathname.indexOf('/candidate/match') !== -1) {
