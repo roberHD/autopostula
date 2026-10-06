@@ -550,6 +550,13 @@ p { margin: 0; }
   max-width: 42ch;
 }
 
+/* ── Casillas de aceptación (components/CasillasAceptacion.tsx, Ley 21.719) ── */
+.ap-acepto { display: grid; gap: 10px; margin: 4px 0 14px; }
+.ap-acepto__fila { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.45; cursor: pointer; }
+.ap-acepto__fila input { flex: none; width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--accent); cursor: pointer; }
+.ap-acepto__fila a { color: var(--accent); font-weight: 500; text-decoration: none; }
+.ap-acepto__fila a:hover { text-decoration: underline; }
+
 /* ── Campos ── */
 .ap-campo { margin-bottom: 16px; }
 
@@ -632,6 +639,9 @@ p { margin: 0; }
 .ap-acceso__pie { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 24px; }
 .ap-acceso__pie a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .ap-acceso__pie a:hover { text-decoration: underline; }
+.ap-acceso__enlace { all: unset; color: var(--accent); font-weight: 600; cursor: pointer; }
+.ap-acceso__enlace:hover { text-decoration: underline; }
+.ap-acceso__enlace:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 
 /* Mensajes del formulario: dicen qué pasó y qué hacer, no solo que falló. */
 .ap-mensaje {

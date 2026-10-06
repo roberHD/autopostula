@@ -8,6 +8,7 @@ import {
 import { useAvisos } from "@/components/Avisos";
 import { Skel } from "@/components/Esqueleto";
 import { valorFormateado } from "@/lib/formato-perfil";
+import AutorizacionCv from "@/components/AutorizacionCv";
 
 type Experiencia = { cargo: string; empresa: string; periodo: string };
 
@@ -81,12 +82,19 @@ export default function PerfilCv({ alCambiar, trasCv }: { alCambiar?: () => void
   const [analizando, setAnalizando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
+  // Ley 21.719, art. 16 (lib/consentimiento.ts): autorización expresa para los
+  // datos sensibles del CV, antes de subirlo. `marcaAutoriza` es la casilla.
+  const [autoriza, setAutoriza] = useState(false);
+  const [marcaAutoriza, setMarcaAutoriza] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/perfil")
       .then((res) => res.json())
-      .then((data) => setPerfil(data || {}))
+      .then((data) => {
+        setPerfil(data || {});
+        setAutoriza(!!data?.autorizaDatosSensibles);
+      })
       .catch(() => avisarError("No pudimos cargar tu perfil", "Revisa tu conexión y recarga la página."))
       .finally(() => setCargando(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,16 +105,22 @@ export default function PerfilCv({ alCambiar, trasCv }: { alCambiar?: () => void
       avisarError("Ese archivo no es un PDF", "Exporta tu CV como PDF y vuelve a subirlo.");
       return;
     }
+    if (!autoriza && !marcaAutoriza) {
+      avisarError("Falta tu autorización", "Marca la casilla de abajo para poder subir tu CV.");
+      return;
+    }
     setSubiendo(true);
     try {
       const formData = new FormData();
       formData.append("cv", file);
+      if (!autoriza && marcaAutoriza) formData.append("autorizaDatosSensibles", "true");
       const res = await fetch("/api/cv/upload", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) {
         avisarError("No pudimos procesar tu CV", data.error || "Intenta con otro archivo PDF.");
         return;
       }
+      setAutoriza(true);
       setPerfil((p) => ({ ...p, nombreArchivo: data.nombreArchivo }));
 
       setAnalizando(true);
@@ -211,7 +225,13 @@ export default function PerfilCv({ alCambiar, trasCv }: { alCambiar?: () => void
         style={{ animationDelay: "0.04s" }}
         data-vacio={perfil.nombreArchivo ? undefined : "1"}
         data-arrastrando={arrastrando ? "1" : undefined}
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => {
+          if (!autoriza && !marcaAutoriza) {
+            avisarError("Falta tu autorización", "Marca la casilla de abajo para poder subir tu CV.");
+            return;
+          }
+          fileInputRef.current?.click();
+        }}
         onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
         onDragLeave={() => setArrastrando(false)}
         onDrop={(e) => {
@@ -256,6 +276,24 @@ export default function PerfilCv({ alCambiar, trasCv }: { alCambiar?: () => void
           <span className="ap-cv__accion">{perfil.nombreArchivo ? "Reemplazar" : "Elegir archivo"}</span>
         )}
       </div>
+
+      <AutorizacionCv
+        autoriza={autoriza}
+        hayCv={!!perfil.nombreArchivo}
+        marcada={marcaAutoriza}
+        onMarcar={setMarcaAutoriza}
+        onCambio={(ahora, cvBorrado) => {
+          setAutoriza(ahora);
+          setMarcaAutoriza(false);
+          if (cvBorrado) {
+            setPerfil((p) => ({ ...p, nombreArchivo: null }));
+            exito("Autorización retirada", "Borramos tu CV. Puedes volver a subirlo cuando quieras.");
+          } else {
+            exito("Autorización guardada", "Tu CV sigue funcionando como siempre.");
+          }
+          alCambiar?.();
+        }}
+      />
 
       {trasCv}
 

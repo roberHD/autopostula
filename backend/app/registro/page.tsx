@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import CasillasAceptacion from "@/components/CasillasAceptacion";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -15,6 +16,9 @@ export default function RegistroPage() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // Ley 21.719 (lib/consentimiento.ts): las dos casillas son obligatorias.
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [mayorDeEdad, setMayorDeEdad] = useState(false);
   // docs/creditos-y-pagina-nueva.md §3: quién te invitó viaja en el enlace
   // (?ref=). Se lee del navegador y no con useSearchParams para no obligar a
   // envolver la página en un Suspense por un dato que ni se muestra.
@@ -54,7 +58,7 @@ export default function RegistroPage() {
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre, email, password, ref }),
+        body: JSON.stringify({ nombre, email, password, ref, aceptaTerminos, mayorDeEdad }),
       });
 
       if (!res.ok) {
@@ -145,11 +149,20 @@ export default function RegistroPage() {
               </div>
             </div>
 
+            <CasillasAceptacion
+              aceptaTerminos={aceptaTerminos}
+              mayorDeEdad={mayorDeEdad}
+              onCambio={(c) => {
+                if (c.aceptaTerminos !== undefined) setAceptaTerminos(c.aceptaTerminos);
+                if (c.mayorDeEdad !== undefined) setMayorDeEdad(c.mayorDeEdad);
+              }}
+            />
+
             <button
               type="submit"
               className="ap-btn ap-btn--primary"
               style={{ width: "100%", marginTop: 8 }}
-              disabled={enviando}
+              disabled={enviando || !aceptaTerminos || !mayorDeEdad}
             >
               {enviando ? "Creando tu cuenta…" : "Crear cuenta"}
             </button>
@@ -160,9 +173,7 @@ export default function RegistroPage() {
           </p>
 
           <p style={{ fontSize: 11.5, color: "var(--text-muted)", textAlign: "center", marginTop: 14, lineHeight: 1.5 }}>
-            Al crear tu cuenta aceptas los{" "}
-            <Link href="/terminos" style={{ color: "var(--text-muted)" }}>términos</Link> y la{" "}
-            <Link href="/privacidad" style={{ color: "var(--text-muted)" }}>política de privacidad</Link>.
+            Si entras con Google, te pediremos lo mismo antes de empezar.
           </p>
         </div>
       </div>

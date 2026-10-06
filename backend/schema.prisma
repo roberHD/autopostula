@@ -249,7 +249,8 @@ model User {
   observadas        OfertaObservada[]
   extras            PostulacionExtra[]
   monedas           MovimientoMoneda[]
-  invitadoPor      User?   @relation("Invitaciones", fields: [invitadoPorId], references: [id], onDelete: SetNull)
+  consentimientos   Consentimiento[]
+  invitadoPor     User?   @relation("Invitaciones", fields: [invitadoPorId], references: [id], onDelete: SetNull)
   invitados         User[]  @relation("Invitaciones")
 
   @@map("users")
@@ -941,6 +942,42 @@ model MovimientoMoneda {
 
   @@index([userId, creadoEn])
   @@map("movimientos_monedas")
+}
+
+// ─────────────────────────────────────────
+// Consentimientos (lib/consentimiento.ts)
+// ─────────────────────────────────────────
+// Ley 19.628 modificada por la 21.719, art. 12: "corresponde al responsable
+// probar que contó con el consentimiento del titular". Una fila por cada vez
+// que la persona acepta algo, con la versión del texto que aceptó y cuándo.
+// Retirarlo no borra la fila: le pone fecha a revocadoEn (la revocación "no
+// tendrá efectos retroactivos", y hay que poder mostrar ambas cosas).
+enum TipoConsentimiento {
+  // Términos y condiciones + política de privacidad, en la versión vigente.
+  TERMINOS_Y_PRIVACIDAD
+  // Declaración de tener 18 años o más (los términos son para mayores de edad).
+  MAYORIA_DE_EDAD
+  // Autorización expresa para tratar los datos sensibles que pueda traer el CV
+  // (art. 16: salud, situación socioeconómica, origen étnico, etc.).
+  DATOS_SENSIBLES_CV
+}
+
+model Consentimiento {
+  id         String             @id @default(uuid())
+  userId     String             @map("user_id")
+  tipo       TipoConsentimiento
+  // Qué texto se aceptó: la fecha de los términos y la política, o la del
+  // texto de la autorización del CV (lib/consentimiento.ts).
+  version    String
+  // Desde dónde: "registro", "aceptar" (la página que lo pide al entrar), "cv".
+  origen     String
+  aceptadoEn DateTime           @default(now()) @map("aceptado_en")
+  revocadoEn DateTime?          @map("revocado_en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tipo])
+  @@map("consentimientos")
 }
 
 // ─────────────────────────────────────────

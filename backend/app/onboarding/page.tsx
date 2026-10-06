@@ -12,6 +12,7 @@ import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/componen
 import { LLAVE_INTENCION_PREMIUM, URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 import { sinSoporteExtension } from "@/lib/dispositivo";
 import { valorFormateado } from "@/lib/formato-perfil";
+import AutorizacionCv from "@/components/AutorizacionCv";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -357,6 +358,10 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
   const [mensaje, setMensaje] = useState("");
   const [subidoOk, setSubidoOk] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Ley 21.719, art. 16 (lib/consentimiento.ts): autorización expresa para los
+  // datos sensibles del CV antes de subirlo.
+  const [autoriza, setAutoriza] = useState(false);
+  const [marcaAutoriza, setMarcaAutoriza] = useState(false);
   // §4.2 (docs/revision-2026-09-16.md): "La IA completó tu perfil" sin mostrar
   // qué leyó dejó a una cuenta con el nombre "Roberto Hidalgo Andrés Bizama" y
   // sin cómo verlo. Acá se muestran los datos que más se usan al responder y se
@@ -401,6 +406,7 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
         const res = await fetch("/api/perfil");
         if (res.ok) {
           const data = await parsearRespuesta(res);
+          setAutoriza(!!data?.autorizaDatosSensibles);
           if (data?.nombreArchivo) {
             setNombreArchivo(data.nombreArchivo);
             mostrarDatos(data);
@@ -421,15 +427,22 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
       setSubidoOk(false);
       return;
     }
+    if (!autoriza && !marcaAutoriza) {
+      setMensaje("Marca la autorización de abajo para poder subir tu CV.");
+      setSubidoOk(false);
+      return;
+    }
     setSubiendo(true);
     setMensaje("");
     setSubidoOk(false);
     try {
       const formData = new FormData();
       formData.append("cv", file);
+      if (!autoriza && marcaAutoriza) formData.append("autorizaDatosSensibles", "true");
       const res = await fetch("/api/cv/upload", { method: "POST", body: formData });
       const data = await parsearRespuesta(res);
       if (!res.ok) { setMensaje(data.error || "No se pudo procesar el CV"); return; }
+      setAutoriza(true);
       setNombreArchivo(data.nombreArchivo);
       setSubidoOk(true);
       setSubiendo(false);
@@ -468,7 +481,14 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
     <>
       <Header Icon={FileText} titulo="Sube tu CV" sub="La IA lo usa para responder formularios con tu experiencia real, no respuestas genéricas." />
       <div
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => {
+          if (!autoriza && !marcaAutoriza) {
+            setMensaje("Marca la autorización de abajo para poder subir tu CV.");
+            setSubidoOk(false);
+            return;
+          }
+          fileInputRef.current?.click();
+        }}
         className="ap-dropzone"
       >
         <input
@@ -491,6 +511,26 @@ function PasoCV({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmitir: 
             : "Haz clic para elegir tu CV en PDF"}
         </span>
       </div>
+      {!cargandoEstado && (
+        <div style={{ marginTop: 12 }}>
+          <AutorizacionCv
+            autoriza={autoriza}
+            hayCv={!!nombreArchivo}
+            marcada={marcaAutoriza}
+            onMarcar={(v) => { setMarcaAutoriza(v); if (v) setMensaje(""); }}
+            onCambio={(ahora, cvBorrado) => {
+              setAutoriza(ahora);
+              setMarcaAutoriza(false);
+              if (cvBorrado) {
+                setNombreArchivo(null);
+                setDatosLeidos(null);
+                setSubidoOk(false);
+                setMensaje("Borramos tu CV. Puedes volver a subirlo cuando quieras.");
+              }
+            }}
+          />
+        </div>
+      )}
       {mensaje && (
         <div
           style={{

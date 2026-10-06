@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { premiarPerfilCompleto } from "@/lib/extras";
 import { claveLimite, LIMITES, permitirIntento } from "@/lib/limite-tasa";
+import { autorizaDatosSensibles, registrarDatosSensibles } from "@/lib/consentimiento";
 
 // docs/revision-2026-09-28.md §19: un CV es un PDF de unas pocas páginas. En
 // Vercel el cuerpo ya no puede pasar de 4,5 MB; el tope hace que el mensaje
@@ -28,6 +29,24 @@ export async function POST(request: Request) {
     }
 
     const formData = await request.formData();
+
+    // Ley 21.719, art. 16: un CV suele traer datos sensibles (salud,
+    // discapacidad, situación socioeconómica…), y tratarlos pide autorización
+    // expresa. La pantalla la pide con una casilla junto al botón de subir; acá
+    // se anota y se exige, para que no dependa solo de la pantalla.
+    if (formData.get("autorizaDatosSensibles") === "true") {
+      await registrarDatosSensibles(userId);
+    }
+    if (!(await autorizaDatosSensibles(userId))) {
+      return NextResponse.json(
+        {
+          error: "Antes de subir tu CV necesitamos tu autorización para tratar los datos sensibles que pueda traer.",
+          requiereAutorizacion: true,
+        },
+        { status: 400 }
+      );
+    }
+
     const file = formData.get("cv");
 
     if (!(file instanceof File) || file.size === 0) {

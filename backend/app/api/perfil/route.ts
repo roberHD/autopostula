@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { listaDeTextos, textoCorto } from "@/lib/entrada";
 import { formatearRenta, formatearRut } from "@/lib/formato-perfil";
+import { autorizaDatosSensibles } from "@/lib/consentimiento";
 
 // docs/revision-2026-09-28.md §25: cada campo con su tipo y su largo. Antes
 // entraba cualquier cosa (un objeto en vez de texto terminaba en error 500, y
@@ -54,8 +55,17 @@ export async function GET() {
   const userId = (session?.user as any)?.id;
   if (!userId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const perfil = await prisma.cvProfile.findUnique({ where: { userId } });
-  return NextResponse.json({ ...(perfil || {}), completitud: calcularCompletitud(perfil) });
+  const [perfil, autoriza] = await Promise.all([
+    prisma.cvProfile.findUnique({ where: { userId } }),
+    autorizaDatosSensibles(userId),
+  ]);
+  return NextResponse.json({
+    ...(perfil || {}),
+    completitud: calcularCompletitud(perfil),
+    // Ley 21.719 (lib/consentimiento.ts): sin esto, la pantalla pide la
+    // autorización antes de dejar subir el CV.
+    autorizaDatosSensibles: autoriza,
+  });
 }
 
 export async function PUT(request: Request) {

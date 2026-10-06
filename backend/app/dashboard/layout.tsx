@@ -22,6 +22,7 @@ import BannerModoPrueba from "./BannerModoPrueba";
 import BannerExtension from "./BannerExtension";
 import BannerVencimiento from "./BannerVencimiento";
 import LatidoUso from "./LatidoUso";
+import { aceptoDocumentosVigentes } from "@/lib/consentimiento";
 import { finDelUltimoPase } from "@/lib/plan-vigente";
 import { contarPorDecidir } from "@/lib/panel/listas";
 import { estadoDelPanel } from "@/lib/panel/estado";
@@ -40,10 +41,20 @@ export default async function DashboardLayout({
   }
 
   const userId = (session.user as any).id;
-  const dbUser = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { onboardingCompletado: true, emailVerificado: true, postulacionHabilitada: true },
-  });
+  const [dbUser, acepto] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { onboardingCompletado: true, emailVerificado: true, postulacionHabilitada: true },
+    }),
+    aceptoDocumentosVigentes(userId),
+  ]);
+
+  // Ley 21.719 (lib/consentimiento.ts): sin haber aceptado los términos y la
+  // política vigentes, primero eso. Le toca a las cuentas de Google y a las
+  // anteriores a las casillas del registro, y a todas cuando cambia la política.
+  if (dbUser && !acepto) {
+    redirect("/aceptar?volver=/dashboard");
+  }
 
   // Se consulta la base directo (no la sesión/JWT) para que el chequeo esté
   // siempre al día apenas termine el onboarding, sin esperar a un nuevo login.

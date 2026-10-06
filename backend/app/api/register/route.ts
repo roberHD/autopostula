@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { enviarCorreoVerificacion } from "@/lib/correo";
 import { normalizarEmail, problemaConPassword, textoCorto } from "@/lib/entrada";
 import { claveLimite, ipDe, LIMITES, permitirIntento } from "@/lib/limite-tasa";
+import { filasAceptacion } from "@/lib/consentimiento";
 
 export async function POST(request: Request) {
   const cuerpo = await request.json().catch(() => null);
@@ -19,6 +20,15 @@ export async function POST(request: Request) {
   const problema = problemaConPassword(cuerpo.password);
   if (problema) {
     return NextResponse.json({ error: problema }, { status: 400 });
+  }
+  // Ley 21.719, art. 12: consentimiento previo e inequívoco, y que se pueda
+  // probar. Las dos casillas del formulario son obligatorias y se anotan junto
+  // con la cuenta (lib/consentimiento.ts).
+  if (cuerpo?.aceptaTerminos !== true || cuerpo?.mayorDeEdad !== true) {
+    return NextResponse.json(
+      { error: "Para crear tu cuenta tienes que aceptar los términos y la política de privacidad, y tener 18 años o más." },
+      { status: 400 }
+    );
   }
   const nombre = textoCorto(cuerpo?.nombre, 100);
   const ref = textoCorto(cuerpo?.ref, 20);
@@ -58,7 +68,10 @@ export async function POST(request: Request) {
   const verifyTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
 
   const nuevoUsuario = await prisma.user.create({
-    data: { email, passwordHash, nombre, verifyToken, verifyTokenExpiry, invitadoPorId: invitadoPor?.id ?? null },
+    data: {
+      email, passwordHash, nombre, verifyToken, verifyTokenExpiry, invitadoPorId: invitadoPor?.id ?? null,
+      consentimientos: { create: filasAceptacion("registro") },
+    },
   });
 
   // docs/verificacion-de-correo.md §5: el registro NO falla si el correo no

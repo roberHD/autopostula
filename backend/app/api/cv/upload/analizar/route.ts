@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
+import { autorizaDatosSensibles } from "@/lib/consentimiento";
 
 export async function POST() {
   const session = await auth();
@@ -16,6 +17,14 @@ export async function POST() {
   const cv = await prisma.cvProfile.findUnique({ where: { userId } });
   if (!cv?.textoExtraido) {
     return NextResponse.json({ error: "Primero sube tu CV" }, { status: 400 });
+  }
+  // Esto manda el CV entero a Anthropic: sin la autorización de datos
+  // sensibles (Ley 21.719, art. 16; lib/consentimiento.ts) no sale.
+  if (!(await autorizaDatosSensibles(userId))) {
+    return NextResponse.json(
+      { error: "Falta tu autorización para tratar los datos sensibles de tu CV.", requiereAutorizacion: true },
+      { status: 403 }
+    );
   }
 
   const uso = await checkAndLogAiUsage(userId, "analizar_cv");

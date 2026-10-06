@@ -36,6 +36,9 @@ export const LIMITES = {
   perfilPortalPorUsuario: { max: 5, ventanaMs: 24 * HORA },
   // Subir un CV lo procesa entero en el servidor.
   subidaCvPorUsuario: { max: 15, ventanaMs: HORA },
+  // "Descargar mis datos" arma el JSON de toda la cuenta (portabilidad,
+  // art. 9 de la Ley 19.628 modificada por la 21.719).
+  exportarDatosPorUsuario: { max: 5, ventanaMs: HORA },
 } satisfies Record<string, Limite>;
 
 function secreto(): string {

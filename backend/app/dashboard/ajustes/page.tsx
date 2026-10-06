@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Mail, BadgeCheck, TriangleAlert, LogOut, LifeBuoy, ChevronRight } from "lucide-react";
+import { Mail, BadgeCheck, TriangleAlert, LogOut, LifeBuoy, ChevronRight, Download } from "lucide-react";
 import { textoPruebaEnCurso } from "@/lib/texto-rafaga";
 import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
 import ComoTrabaja from "./ComoTrabaja";
@@ -27,6 +27,38 @@ export default function AjustesPage() {
   const [confirmacionEmail, setConfirmacionEmail] = useState("");
   const [eliminando, setEliminando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState("");
+  const [descargando, setDescargando] = useState(false);
+  const [errorDescarga, setErrorDescarga] = useState("");
+
+  // Ley 21.719, art. 9 (portabilidad): una copia de todo, en JSON, para todos
+  // los planes (app/api/account/exportar-datos). Va por fetch y no por un
+  // enlace directo para poder mostrar el error (por ejemplo, el límite por hora)
+  // en vez de abrir una página con un JSON de error.
+  async function descargarDatos() {
+    setDescargando(true);
+    setErrorDescarga("");
+    try {
+      const res = await fetch("/api/account/exportar-datos");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErrorDescarga(data.error ?? "No pudimos preparar el archivo. Intenta de nuevo en unos segundos.");
+        return;
+      }
+      const nombre = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "autopostula-mis-datos.json";
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombre;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setErrorDescarga("No pudimos conectar con el servidor. Revisa tu conexión e intenta de nuevo.");
+    } finally {
+      setDescargando(false);
+    }
+  }
 
   async function cargar() {
     try {
@@ -223,6 +255,32 @@ export default function AjustesPage() {
           >
             Escribirnos <ChevronRight size={14} />
           </span>
+        </div>
+      </div>
+
+      <div className="ap-section ap-animate-in" style={{ animationDelay: "0.1s" }}>
+        <p className="ap-section-title">Tus datos</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <p style={{ fontSize: 13, fontWeight: 600 }}>Descargar mis datos</p>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.5 }}>
+              Una copia de todo lo que guardamos sobre ti (cuenta, CV, perfil, postulaciones, preferencias, pagos y
+              monedas) en un archivo JSON. Tus datos los corriges en Perfil; para cualquier otra cosa sobre ellos,
+              escríbenos desde Soporte.
+            </p>
+            {errorDescarga && (
+              <p style={{ fontSize: 12, color: "var(--status-rechazado)", marginTop: 6 }}>{errorDescarga}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            className="ap-button-ghost"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}
+            onClick={descargarDatos}
+            disabled={descargando}
+          >
+            <Download size={14} /> {descargando ? "Preparando…" : "Descargar"}
+          </button>
         </div>
       </div>
 
