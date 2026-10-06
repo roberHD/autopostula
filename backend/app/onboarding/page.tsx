@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target, Search, Plus, X, Download } from "lucide-react";
+import { Sparkles, FileText, MessageSquare, Puzzle, Globe, CheckCircle2, Target, Search, Plus, X, Download, Mic, Square } from "lucide-react";
 import { quitarMarkdown } from "@/lib/text";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import { Marca } from "@/components/Marca";
@@ -13,6 +13,7 @@ import { LLAVE_INTENCION_PREMIUM, URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 import { sinSoporteExtension } from "@/lib/dispositivo";
 import { valorFormateado } from "@/lib/formato-perfil";
 import AutorizacionCv from "@/components/AutorizacionCv";
+import { usarDictado } from "@/lib/usar-dictado";
 import "../dashboard/theme.css";
 
 type Mensaje = { role: "user" | "assistant"; content: string };
@@ -915,6 +916,19 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
   const mensajesUsuario = conversacion.filter((m) => m.role === "user").length;
   const puedeFinalizar = sugerenciaFinalizar || mensajesUsuario >= MINIMO_MENSAJES_PARA_FINALIZAR;
 
+  // Dictado por voz, igual que en la conversación de Entrenar IA
+  // (app/dashboard/perfil/conversacion/page.tsx): el texto aparece en el campo
+  // mientras la persona habla, y lo revisa antes de enviarlo. Lee el campo por
+  // ref y no por closure: si leyera la variable del render, al apretar el
+  // micrófono tomaría un valor viejo.
+  const inputRef = useRef("");
+  useEffect(() => { inputRef.current = input; }, [input]);
+  const dictado = usarDictado(
+    setInput,
+    useCallback(() => inputRef.current, []),
+    useCallback((m: string) => setError(m), [])
+  );
+
   return (
     <>
       <Header Icon={MessageSquare} titulo="Conversemos un poco" sub="Así la IA aprende a escribir como tú. Puedes seguir esta conversación más adelante desde el dashboard." />
@@ -938,19 +952,41 @@ function PasoConversacion({ onSiguiente, onOmitir }: { onSiguiente: () => void; 
       </div>
       {!finalizado && !bloqueada && (
         <form
-          onSubmit={(e) => { e.preventDefault(); if (input.trim()) { const t = input.trim(); setInput(""); enviar(t); } }}
-          style={{ display: "flex", gap: 8 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (input.trim()) { dictado.detener(); const t = input.trim(); setInput(""); enviar(t); }
+          }}
+          style={{ display: "flex", gap: 8, alignItems: "center" }}
         >
           <input
             className="ap-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Escribe tu respuesta..."
+            placeholder={dictado.soportado ? "Escribe o dicta tu respuesta..." : "Escribe tu respuesta..."}
             disabled={enviando}
             style={{ flex: 1 }}
           />
+          {dictado.soportado && (
+            <button
+              type="button"
+              className={"ap-redactor__mic" + (dictado.escuchando ? " ap-redactor__mic--activo" : "")}
+              onClick={dictado.alternar}
+              disabled={enviando}
+              aria-label={dictado.escuchando ? "Detener el dictado" : "Dictar por voz"}
+              aria-pressed={dictado.escuchando}
+              title={dictado.escuchando ? "Detener el dictado" : "Dictar por voz"}
+            >
+              {dictado.escuchando ? <Square size={14} /> : <Mic size={16} />}
+            </button>
+          )}
           <button className="ap-button" type="submit" disabled={enviando || !input.trim()}>Enviar</button>
         </form>
+      )}
+      {dictado.escuchando && (
+        <p className="ap-dictando">
+          <span className="ap-dictando__punto" />
+          Escuchando… habla y revisa el texto antes de enviarlo.
+        </p>
       )}
 
       {error && (

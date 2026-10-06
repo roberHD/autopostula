@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { aceptoDocumentosVigentes } from "@/lib/consentimiento";
 import FormAceptar from "./FormAceptar";
 
@@ -25,8 +25,10 @@ export default async function AceptarPage({ searchParams }: { searchParams: Prom
   const { volver } = await searchParams;
   const destino = destinoSeguro(volver);
 
-  const session = await auth();
-  const userId = (session?.user as { id?: string } | undefined)?.id;
+  // getUsuarioSesion y no auth(): una sesión de una cuenta que ya no existe
+  // (borrada, o la base cambió) también va al login, en vez de mostrar un
+  // formulario que no se puede guardar.
+  const { userId } = await getUsuarioSesion();
   if (!userId) redirect(`/login?callbackUrl=${encodeURIComponent("/aceptar?volver=" + destino)}`);
   if (await aceptoDocumentosVigentes(userId)) redirect(destino);
 
