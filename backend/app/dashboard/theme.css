@@ -2572,6 +2572,26 @@
 .ap-columna { display: flex; flex-direction: column; gap: 16px; }
 .ap-lado { padding: 20px; }
 .ap-lado__obj { font-size: 15px; font-weight: 600; margin: 10px 0; }
+
+/* Tus monedas (components/MonedasPerfil.tsx) */
+.ap-monedas__saldo { display: flex; align-items: center; gap: 12px; margin: 16px 0 6px; }
+.ap-monedas__ico {
+  width: 40px; height: 40px; flex: none; border-radius: 12px;
+  display: grid; place-items: center;
+  background: var(--bg-elevated-2); border: 1px solid var(--border); color: var(--accent);
+}
+.ap-monedas__num {
+  font-family: var(--ff-display);
+  font-variation-settings: "wdth" 100;
+  font-weight: 800; font-size: 30px; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ap-monedas__unidad { margin-left: 7px; font-size: 13px; color: var(--text-muted); }
+.ap-monedas__canje { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); display: grid; gap: 8px; }
+.ap-monedas__canje-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ap-monedas__pronto { padding: 3px 10px; font-size: 11.5px; color: var(--text-muted); }
+.ap-monedas__lista { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 14px; }
+.ap-monedas__falta { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
 .ap-afinado { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .ap-afinado__fila { display: flex; justify-content: space-between; font-size: 12px; }
 .ap-afinado__fila span:first-child { color: var(--text-muted); }

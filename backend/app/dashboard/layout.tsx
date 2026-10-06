@@ -21,6 +21,7 @@ import BannerVerificacion from "./BannerVerificacion";
 import BannerModoPrueba from "./BannerModoPrueba";
 import BannerExtension from "./BannerExtension";
 import BannerVencimiento from "./BannerVencimiento";
+import LatidoUso from "./LatidoUso";
 import { finDelUltimoPase } from "@/lib/plan-vigente";
 import { contarPorDecidir } from "@/lib/panel/listas";
 import { estadoDelPanel } from "@/lib/panel/estado";
@@ -61,6 +62,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="ap-shell">
+      <LatidoUso />
       <Sidebar userName={session.user.name ?? session.user.email ?? "Usuario"} pendientesPorDecidir={pendientesPorDecidir} />
       <div className="ap-col">
         {/* docs/optimizacion-2026-09-29.md §1: la barra llega llena desde el

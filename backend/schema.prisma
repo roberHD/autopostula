@@ -248,7 +248,8 @@ model User {
   descartes         Descarte[]
   observadas        OfertaObservada[]
   extras            PostulacionExtra[]
-  invitadoPor       User?   @relation("Invitaciones", fields: [invitadoPorId], references: [id], onDelete: SetNull)
+  monedas           MovimientoMoneda[]
+  invitadoPor      User?   @relation("Invitaciones", fields: [invitadoPorId], references: [id], onDelete: SetNull)
   invitados         User[]  @relation("Invitaciones")
 
   @@map("users")
@@ -909,6 +910,37 @@ model PostulacionExtra {
 
   @@index([userId, creadoEn])
   @@map("postulaciones_extra")
+}
+
+// ─────────────────────────────────────────
+// Monedas (lib/monedas.ts)
+// ─────────────────────────────────────────
+// Se ganan usando AutoPostula: 1 por cada hora de reloj con el panel a la
+// vista o la extensión encendida. Más adelante se canjean por postulaciones
+// extra (500 → 20, 1200 → 50). Mismo diseño que PostulacionExtra: un libro
+// mayor con clave única, no un contador, para que la misma hora no se cobre
+// dos veces aunque avisen el panel y la extensión a la vez.
+enum MotivoMoneda {
+  USO
+  CANJE
+  AJUSTE
+}
+
+model MovimientoMoneda {
+  id       String       @id @default(uuid())
+  userId   String       @map("user_id")
+  // Positivo suma (una hora de uso), negativo resta (un canje).
+  cantidad Int
+  motivo   MotivoMoneda
+  // "uso:<userId>:<AAAA-MM-DDTHH en UTC>", "canje:<id>". La idempotencia vive acá.
+  clave    String       @unique
+  detalle  String?
+  creadoEn DateTime     @default(now()) @map("creado_en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, creadoEn])
+  @@map("movimientos_monedas")
 }
 
 // ─────────────────────────────────────────

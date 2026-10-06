@@ -516,6 +516,45 @@ chrome.runtime.onStartup.addListener(asegurarAlarma);
 // los dos haya disparado antes -- es seguro llamarla siempre, es idempotente.
 asegurarAlarma();
 
+// ── Monedas por hora de uso (backend/lib/monedas.ts) ────────────
+// 1 moneda por cada hora de reloj con la extensión encendida (no en pausa) y
+// conectada a una cuenta. Se revisa cada 15 minutos y cada vez que el worker
+// despierta, pero solo se avisa una vez por hora: el resto de las revisiones
+// no salen de chrome.storage. La hora que vale la decide el servidor, y si el
+// panel ya ganó la moneda de esa hora, este aviso no suma otra.
+const NOMBRE_ALARMA_USO = 'autopostula-uso';
+const MINUTOS_ENTRE_REVISIONES_USO = 15;
+
+async function avisarHoraDeUso() {
+  try {
+    const hora = new Date().toISOString().slice(0, 13);
+    const { active, ultimaHoraUso } = await chrome.storage.local.get(['active', 'ultimaHoraUso']);
+    if (ultimaHoraUso === hora || active !== true) return;
+    const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+    if (!autopostulaToken) return;
+    const res = await fetch(BACKEND_URL + '/api/extension/latido', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken },
+    });
+    if (res.ok) await chrome.storage.local.set({ ultimaHoraUso: hora });
+  } catch (e) {
+    // Sin red: se reintenta en la próxima revisión.
+  }
+}
+
+async function asegurarAlarmaUso() {
+  try {
+    const existente = await chrome.alarms.get(NOMBRE_ALARMA_USO);
+    if (!existente) await chrome.alarms.create(NOMBRE_ALARMA_USO, { periodInMinutes: MINUTOS_ENTRE_REVISIONES_USO });
+  } catch (e) {
+    console.error('[AP] No se pudo asegurar la alarma de horas de uso:', e);
+  }
+}
+// Idempotente, como asegurarAlarma(): crearla sin mirar reiniciaría su reloj
+// en cada despertar del worker.
+asegurarAlarmaUso();
+avisarHoraDeUso();
+
 // docs/rafagas-y-ponerse-al-dia.md §3.2, punto 5: si el worker se reinicia a
 // mitad de una ráfaga (Chrome lo mata por memoria, un crash), retomarORafagaInterrumpida
 // evita que quede "en_curso" para siempre -- eso bloquearía cualquier ráfaga
@@ -1582,6 +1621,8 @@ try {
       // §2.9: además de la ráfaga, revisa lo aprobado en el panel que aún no
       // salió -- una ráfaga que no corre (plan gratis) no puede dejarlo varado.
       procesarAprobadas().catch(() => {});
+    } else if (alarm.name === NOMBRE_ALARMA_USO) {
+      avisarHoraDeUso();
     } else if (alarm.name === NOMBRE_ALARMA_SEGURO_RAFAGA) {
       pasoTerminado(null);
     } else if (alarm.name === NOMBRE_ALARMA_TOPE_RAFAGA) {

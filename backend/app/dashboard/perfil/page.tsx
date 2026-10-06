@@ -5,6 +5,7 @@ import PerfilCv from "@/components/PerfilCv";
 import ChequeoCv from "@/components/ChequeoCv";
 import PerfilPortal from "@/components/PerfilPortal";
 import DatosParaLaIa from "@/components/DatosParaLaIa";
+import MonedasPerfil from "@/components/MonedasPerfil";
 
 /**
  * Perfil: tu CV y tus datos, lo que la IA usa para responder por ti. Entrenar
@@ -26,6 +27,7 @@ export default function PerfilPage() {
             <ChequeoCv version={version} />
             <PerfilPortal />
             <DatosParaLaIa />
+            <MonedasPerfil />
           </div>
         } />
     </div>
