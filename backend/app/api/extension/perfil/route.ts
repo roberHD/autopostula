@@ -40,6 +40,9 @@ async function umbralPostularDeLaCuenta(
         userId,
         fuente: "BANDA_GRIS",
         veredicto: { in: ["SI", "NO"] },
+        // docs/panel-de-revision-en-el-portal.md §3.3: una tanda del panel en
+        // que se marcó casi todo no mueve el corte.
+        pesoReducido: false,
         scoreLocal: { not: null },
         // Solo las que evaluó el scorer de ahora: las de antes traen puntajes
         // con las reglas viejas (la ubicación ilegible restaba 40, por ejemplo).
@@ -102,7 +105,9 @@ export async function GET(request: Request) {
     prisma.decisionOferta.findMany({
       where: {
         userId: user.id,
-        fuente: "BANDA_GRIS",
+        // Las del panel de revisión del portal también: la extensión las encola
+        // al apretar "Postular", y esto las reintenta si quedó alguna sin enviar.
+        fuente: { in: ["BANDA_GRIS", "PANEL_REVISION"] },
         veredicto: "SI",
         jobOfferId: null,
         // Sin enlace o sin portal no hay cómo enviarla: que no ocupe uno de

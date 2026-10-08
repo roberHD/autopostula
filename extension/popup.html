@@ -327,6 +327,8 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .fila-titulo { font-size: 12.5px; font-weight: 700; }
 .fila-sub    { font-size: 11px; color: var(--text-2); margin-top: 1px; }
 .fila-link .chevron { color: var(--text-3); font-size: 15px; line-height: 1; flex-shrink: 0; }
+button.fila-link { width: 100%; border: none; border-bottom: 1px solid var(--border); font: inherit; text-align: left; }
+button.fila-link .fila-titulo, button.fila-link .fila-sub { display: block; }
 
 /* ── Sesión en los portales ── */
 .portal-fila {
@@ -380,6 +382,15 @@ body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
     </div>
   </div>
 </div>
+
+<!-- REVISAR LAS OFERTAS DE ESTA PÁGINA (docs/panel-de-revision-en-el-portal.md §2.1) -->
+<button class="fila-link hidden" id="revision-row" type="button">
+  <span>
+    <span class="fila-titulo" id="revision-titulo"></span>
+    <span class="fila-sub" id="revision-sub"></span>
+  </span>
+  <span class="chevron" aria-hidden="true">›</span>
+</button>
 
 <!-- ÚLTIMA PUESTA AL DÍA -->
 <div class="rafaga-row hidden" id="rafaga-row" role="status">

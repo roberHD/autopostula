@@ -86,6 +86,7 @@ enum FuenteDecision {
   TRIAJE_ONBOARDING
   BANDA_GRIS
   HISTORIAL // pulgar abajo en /dashboard/historial
+  PANEL_REVISION // el panel de revisión del portal (docs/panel-de-revision-en-el-portal.md)
 }
 
 enum Veredicto {
@@ -649,6 +650,13 @@ model DecisionOferta {
   // sobre las decisiones de la persona (scripts/banco-de-casos.ts). Solo
   // BANDA_GRIS; null en las filas anteriores y en las de "No era así".
   entradaScorer Json?        @map("entrada_scorer")
+  // docs/panel-de-revision-en-el-portal.md §3.1: lo que había decidido el motor
+  // (postular | gris | descartar) cuando la persona marcó o desmarcó la oferta
+  // en el panel del portal. null en las decisiones que no vienen del panel.
+  bandaMotor   String?       @map("banda_motor")
+  // §3.3: de una tanda en que se marcó casi todo. Se postula igual, pero no
+  // entra a la compilación del perfil ni al umbral (lib/panel-revision.ts).
+  pesoReducido Boolean       @default(false) @map("peso_reducido")
   fuente      FuenteDecision
   veredicto   Veredicto      @default(PENDIENTE)
   venceEn     DateTime?      @map("vence_en")

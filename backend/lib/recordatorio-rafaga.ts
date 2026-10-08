@@ -151,7 +151,7 @@ export async function ejecutarRecordatorios(opciones: {
     const aprobadas = await prisma.decisionOferta.count({
       where: {
         userId: u.id,
-        fuente: "BANDA_GRIS",
+        fuente: { in: ["BANDA_GRIS", "PANEL_REVISION"] },
         veredicto: "SI",
         jobOfferId: null,
         url: { not: null },

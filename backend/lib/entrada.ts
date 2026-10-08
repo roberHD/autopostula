@@ -13,6 +13,8 @@ const DOMINIOS_POR_PORTAL: Record<string, string[]> = {
   Trabajando: ["trabajando.cl"],
 };
 const TODOS_LOS_DOMINIOS = Object.values(DOMINIOS_POR_PORTAL).flat();
+/** Los nombres de los tres portales, tal como los usa JobPlatform. */
+export const PORTALES_CONOCIDOS: readonly string[] = Object.keys(DOMINIOS_POR_PORTAL);
 
 const LARGO_MAXIMO_URL = 2000;
 

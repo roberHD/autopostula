@@ -166,6 +166,13 @@ function extraerUbicacion(tarjeta) {
   return (el && n(el.textContent)) || n(tarjeta.innerText || '');
 }
 
+// La misma, como la muestra la tarjeta y sin el respaldo de todo su texto,
+// para el panel de revisión (docs/panel-de-revision-en-el-portal.md §2.1).
+function ubicacionVisible(tarjeta) {
+  const el = tarjeta.querySelector('.location');
+  return el ? el.textContent.replace(/\s+/g, ' ').trim() : '';
+}
+
 // ── Empresa de una tarjeta ──────────────────────────────────────
 // "Empresa Confidencial" es un valor real y frecuente acá (no un error) --
 // el scorer y el corpus de solapamiento ya saben tratarlo como genérico.
@@ -724,7 +731,9 @@ async function escanear() {
     const a = t.querySelector('h2 a') || t.querySelector('a');
     const url = a ? a.href.split('#')[0] : '';
     const id = idDeTarjeta(t, idx);
-    if (AP.vistos.has(id)) return;
+    // Lo que la persona decidió en el panel de revisión no se vuelve a decidir
+    // solo (docs/panel-de-revision-en-el-portal.md §2.2).
+    if (AP.vistos.has(id) || AP.decididaEnPanel(id)) return;
 
     const titulo = tituloDeTarjeta(t);
     titulosVistos.push(titulo);
@@ -734,8 +743,10 @@ async function escanear() {
 
     const resultado = evaluarTarjeta(t);
     // Cada decisión queda marcada en su tarjeta, con su razón
-    // (docs/primera-busqueda-guiada.md §11).
-    if (resultado.banda !== 'descartar') AP.marcar(id, resultado.banda, resultado.razones);
+    // (docs/primera-busqueda-guiada.md §11), y con lo que muestra el panel de
+    // revisión (docs/panel-de-revision-en-el-portal.md §2).
+    const datos = { titulo, empresa, url, ubicacion: ubicacionVisible(t), score: resultado.score };
+    if (resultado.banda !== 'descartar') AP.marcar(id, resultado.banda, resultado.razones, datos);
     if (resultado.banda === 'postular') {
       pendientes.push({t, id, idx, titulo, empresa, razones: resultado.razones, score: resultado.score});
     } else if (resultado.banda === 'gris') {
@@ -746,7 +757,7 @@ async function escanear() {
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
       descartes.push({ externalId: id, titulo, empresa, url, razon });
-      AP.marcar(id, 'descartar', [razon]);
+      AP.marcar(id, 'descartar', [razon], datos);
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:AP.formatearRazonCorta(razon)});
     }
@@ -776,20 +787,22 @@ async function escanear() {
       resultadoFinal = AP.evaluarOferta(camposCompletos);
     }
     const resultado = resultadoFinal || cand.resultado;
+    // Con el aviso abierto, el puntaje que vale es el de esta segunda pasada.
+    const datosCand = { titulo: cand.titulo, empresa: cand.empresa, url: cand.url, ubicacion: ubicacionVisible(cand.t), score: resultado.score };
 
     if (resultadoFinal && resultadoFinal.banda === 'postular') {
-      AP.marcar(cand.id, 'postular', resultadoFinal.razones);
+      AP.marcar(cand.id, 'postular', resultadoFinal.razones, datosCand);
       pendientes.push({t: cand.t, id: cand.id, idx: cand.idx, titulo: cand.titulo, empresa: cand.empresa, razones: resultadoFinal.razones, score: resultadoFinal.score});
     } else if (resultadoFinal && resultadoFinal.banda === 'descartar') {
       conteos.descartar++;
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
       descartes.push({ externalId: cand.id, titulo: cand.titulo, empresa: cand.empresa, url: cand.url, razon });
-      AP.marcar(cand.id, 'descartar', [razon]);
+      AP.marcar(cand.id, 'descartar', [razon], datosCand);
       addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:AP.formatearRazonCorta(razon)});
     } else {
       conteos.gris++;
-      AP.marcar(cand.id, 'gris', resultado.razones);
+      AP.marcar(cand.id, 'gris', resultado.razones, datosCand);
       addLog({ts:Date.now(), status:'skip', title:cand.titulo, url:cand.url, uid:cand.id, reason:'En banda gris — revisar en el dashboard'});
       AP.reportarBandaGris({
         titulo: cand.titulo, url: cand.url, plataforma: 'Trabajando', empresa: cand.empresa,

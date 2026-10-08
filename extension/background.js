@@ -29,15 +29,37 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Encola las aprobadas de banda gris que todavía no están en la cola. Devuelve
 // cuántas quedaron nuevas.
+// Las del panel de revisión del portal traen además `origenTab` (a qué pestaña
+// contarle el avance) y `revisar` (mostrarla antes de enviarla).
 function encolarAprobadas(aprobadas) {
   let nuevas = 0;
   for (const item of aprobadas || []) {
-    if (!item.url || decisionesEnCola.has(item.id)) continue;
+    if (!item.url) continue;
+    if (decisionesEnCola.has(item.id)) {
+      // Ya estaba en la cola (la trajo otro camino): que igual se le cuente al panel.
+      const enCola = queue.find((q) => q.decisionId === item.id);
+      if (enCola && item.origenTab != null) enCola.origenTab = item.origenTab;
+      continue;
+    }
     decisionesEnCola.add(item.id);
-    queue.push({ url: item.url, titulo: item.titulo, decisionId: item.id, plataforma: item.plataforma });
+    queue.push({
+      url: item.url, titulo: item.titulo, decisionId: item.id, plataforma: item.plataforma,
+      origenTab: item.origenTab != null ? item.origenTab : null, revisar: !!item.revisar,
+    });
     nuevas++;
   }
   return nuevas;
+}
+
+// docs/panel-de-revision-en-el-portal.md §2.2: el panel de la pestaña desde
+// donde se pidió muestra cómo va cada una. Si esa pestaña ya no está, no pasa nada.
+function avisarPanel(item, estado) {
+  if (!item || item.origenTab == null || !item.decisionId) return;
+  try {
+    chrome.tabs.sendMessage(item.origenTab, { type: 'PROGRESO_REVISION', decisionId: item.decisionId, estado }, () => {
+      void chrome.runtime.lastError;
+    });
+  } catch (e) { /* la pestaña se cerró */ }
 }
 
 function processQueue() {
@@ -65,16 +87,22 @@ async function vaciarCola() {
       if (!verificacion.permitido) {
         decisionesEnCola.delete(item.decisionId);
         if (verificacion.motivo === 'limite') {
-          queue.forEach((q) => q.decisionId && decisionesEnCola.delete(q.decisionId));
+          avisarPanel(item, 'sin_cupo');
+          queue.forEach((q) => {
+            if (q.decisionId) decisionesEnCola.delete(q.decisionId);
+            avisarPanel(q, 'sin_cupo');
+          });
           queue = [];
           break;
         }
+        avisarPanel(item, 'no_enviada');
         continue;
       }
     }
+    avisarPanel(item, 'enviando');
     let resultado;
     try {
-      resultado = await applyInTab(urlParaPostular(item.url, item.plataforma), item.titulo, item.decisionId, item.url);
+      resultado = await applyInTab(urlParaPostular(item.url, item.plataforma), item.titulo, item.decisionId, item.url, item.revisar);
     } catch (e) {
       // Una oferta que revienta no debe llevarse a las demás ni dejar la cola
       // trabada: se sigue con la siguiente, y esta queda pendiente para el próximo ciclo.
@@ -83,6 +111,7 @@ async function vaciarCola() {
     if (item.decisionId) decisionesEnCola.delete(item.decisionId);
     const enviada = !!(resultado && (resultado.ok === true || resultado.success === true));
     if (enviada) enviadas++;
+    avisarPanel(item, enviada ? 'enviada' : resultado && resultado.expirada ? 'expirada' : 'no_enviada');
     if (item.decisionId) {
       // §8.4/§8.6: si la oferta aprobada en banda gris ya no existe, no tiene
       // botón de postular o ya estaba postulada, se marca EXPIRADA en vez de
@@ -184,8 +213,10 @@ const TOPE_TRAS_REVISION_MS = 60 * 1000;
 const pestanasDeAprobadas = new Map();
 
 // `urlOferta` es la dirección del aviso, la que queda en la postulación; `url`
-// es la que se abre (ver urlParaPostular).
-function applyInTab(url, titulo, decisionId, urlOferta) {
+// es la que se abre (ver urlParaPostular). `revisar`: se muestra antes de
+// enviarla aunque la cuenta no tenga "Revisar antes de enviar" (la primera
+// del panel de revisión cuando la cuenta recién empieza a postular).
+function applyInTab(url, titulo, decisionId, urlOferta, revisar) {
   return new Promise(resolve => {
     chrome.tabs.create({ url, active: false }, tab => {
       // Sin pestaña no hay nada que esperar: antes esto reventaba adentro del
@@ -212,7 +243,7 @@ function applyInTab(url, titulo, decisionId, urlOferta) {
         if (tabId !== id || info.status !== 'complete') return;
         chrome.tabs.onUpdated.removeListener(onUpdated);
         setTimeout(() => {
-          chrome.tabs.sendMessage(id, { type: 'DO_APPLY', decisionId, url: urlOferta || url }, res => {
+          chrome.tabs.sendMessage(id, { type: 'DO_APPLY', decisionId, url: urlOferta || url, revisar: !!revisar }, res => {
             if (chrome.runtime.lastError) { /* tab cerrada o sin content script */ }
             setTimeout(() => terminar(res || { success: false, expirada: false }), 3500);
           });
@@ -854,6 +885,60 @@ async function empezarAPostularBackend() {
     console.warn('[AP] No se pudo activar la postulación desde el portal:', e);
     return { ok: false, error: 'No pudimos conectar con AutoPostula. Revisa tu conexión e inténtalo de nuevo.' };
   }
+}
+
+// ── El panel de revisión del portal (docs/panel-de-revision-en-el-portal.md §2.2) ──
+// La persona marcó en el panel a cuáles postular y apretó el botón. Si la
+// cuenta solo miraba, apretar es "Empezar a postular": se activa con las mismas
+// reglas que el panel web, y la primera se muestra antes de enviarla. Las
+// decisiones quedan en el servidor con su puntaje y sus razones, y lo marcado
+// entra a la misma cola que las aprobadas de "Por decidir": revisa el cupo
+// antes de cada una, la abre en otra pestaña y le cuenta el avance al panel.
+async function postularElegidas(msg, sender) {
+  const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
+  if (!autopostulaToken) return { ok: false, error: 'Conecta la extensión con tu cuenta desde tu panel.' };
+  const ofertas = Array.isArray(msg && msg.ofertas) ? msg.ofertas.slice(0, 300) : [];
+  if (!ofertas.some((o) => o && o.elegida)) return { ok: false, error: 'Marca al menos una oferta.' };
+
+  const { config } = await chrome.storage.local.get('config');
+  const soloMiraba = !!(config && (config.soloObservar || config.postulacionHabilitada === false));
+  let configNueva = null;
+  if (soloMiraba) {
+    const activacion = await empezarAPostularBackend();
+    if (!activacion.ok) return { ok: false, error: activacion.error };
+    configNueva = activacion.config;
+  }
+
+  let registro;
+  try {
+    const res = await fetch(BACKEND_URL + '/api/extension/revision', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + autopostulaToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plataforma: msg.plataforma, ofertas }),
+    });
+    registro = await res.json().catch(() => ({}));
+    if (!res.ok || !registro.ok) {
+      return { ok: false, error: registro.error || 'No se pudo guardar lo que elegiste. Inténtalo de nuevo.', config: configNueva };
+    }
+  } catch (e) {
+    console.warn('[AP] No se pudo registrar el panel de revisión:', e);
+    return { ok: false, error: 'No pudimos conectar con AutoPostula. Revisa tu conexión e inténtalo de nuevo.', config: configNueva };
+  }
+
+  const origenTab = sender && sender.tab && sender.tab.id != null ? sender.tab.id : null;
+  const aEnviar = (registro.aEnviar || []).filter((d) => d && d.decisionId && d.url);
+  encolarAprobadas(aEnviar.map((d, i) => ({
+    id: d.decisionId, url: d.url, titulo: d.titulo, plataforma: d.plataforma,
+    origenTab, revisar: soloMiraba && i === 0,
+  })));
+  processQueue();
+  return {
+    ok: true,
+    encoladas: aEnviar.map((d) => ({ decisionId: d.decisionId, externalId: d.externalId })),
+    pesoReducido: !!registro.pesoReducido,
+    primeraConRevision: soloMiraba && aEnviar.length > 0,
+    config: configNueva,
+  };
 }
 
 // Arregla una respuesta desde el panel de revisión (más corta / más formal /
@@ -1996,6 +2081,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'EMPEZAR_A_POSTULAR') {
     empezarAPostularBackend().then(sendResponse).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg.type === 'POSTULAR_ELEGIDAS') {
+    postularElegidas(msg, sender).then(sendResponse).catch(() => sendResponse({ ok: false }));
     return true;
   }
   if (msg.type === 'REPORTAR_AVISTAMIENTOS') {
