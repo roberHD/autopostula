@@ -216,7 +216,8 @@ el dato de las primeras semanas, que es justo cuando más se corrige.
 
 ## 8. Lo que se hizo (2026-10-08, extensión 2.18.0)
 
-> **Estado:** implementado en `rama-roberto`, sin desplegar. Las tareas 1 a 4 de §5, y la regla del
+> **Estado:** el servidor está en producción desde el 2026-10-08 (PR #33); falta subir la extensión
+> 2.18.0 a la tienda. Las tareas 1 a 4 de §5, y la regla del
 > 80% de la 6. Falta la 5 (§8.4).
 
 ### 8.1 Cómo quedó
@@ -316,9 +317,10 @@ onboarding sigue a Hoy. **«Seguir y probar después»** hace lo de siempre.
 
 ### 8.4 Lo que queda
 
-1. **Mergear el PR antes de subir la 2.18.0**: trae dos migraciones (un valor nuevo para la fuente de
-   las decisiones y dos columnas) y dos rutas. Con el servidor viejo, el panel se ve, pero al apretar
-   no puede registrar ni enviar nada.
+1. ~~Mergear el PR antes de subir la 2.18.0~~ **Hecho el 2026-10-08** (PR #33): el despliegue aplicó
+   las dos migraciones (un valor nuevo para la fuente de las decisiones y dos columnas) y las dos
+   rutas responden. Falta subir la 2.18.0 a la tienda; con el servidor viejo el panel se veía, pero
+   al apretar no podía registrar ni enviar nada.
 2. **La tarea 5: el banco de casos con el tercer grupo.** Las verdades sobre «te sirve» (confirmadas
    y quitadas) ya se guardan, pero `scripts/banco-de-casos.ts` todavía no las muestra; con ellas, la
    calibración podría también **subir** el corte, que hoy solo puede bajar.
