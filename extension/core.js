@@ -124,7 +124,94 @@ const AP_ESTILO_CIERRE =
   '.cierre .resultado{margin-top:10px;font-size:12.5px;line-height:1.45}' +
   '.cierre .resultado:empty{display:none}' +
   '.cierre .resultado.ok{color:#5BD59B}' +
-  '.cierre .resultado.error{color:#FF8A9B}';
+  '.cierre .resultado.error{color:#FF8A9B}' +
+  '.cierre .ver-todas{display:inline-block;margin-top:12px;padding:0;border-radius:0;color:#D6F24B;font-size:12.5px;font-weight:600}' +
+  '.cierre .ver-todas:hover{text-decoration:underline}' +
+  '.cierre .ver-todas[hidden]{display:none}';
+
+// El panel de revisión (docs/panel-de-revision-en-el-portal.md §2): la tarjeta
+// del final, abierta. Mismo lenguaje, más alto, con la lista entera.
+const AP_ESTILO_PANEL =
+  '.pila.con-panel>.chip,.pila.con-panel>.cierre{display:none}' +
+  '.panel{box-sizing:border-box;width:420px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);display:flex;flex-direction:column;' +
+    'border-radius:12px;background:#16181A;color:#E9EBEA;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;line-height:1.5;' +
+    'box-shadow:0 12px 30px -10px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.1);animation:entra .28s cubic-bezier(.2,.8,.3,1)}' +
+  '.panel[hidden]{display:none}' +
+  '.panel p{margin:0}' +
+  '.panel .cabeza{position:relative;padding:14px 48px 12px 16px;border-bottom:1px solid #2A2E31}' +
+  '.panel .quien{display:flex;align-items:center;gap:7px;font-size:11px;color:#8E9599;margin-bottom:6px}' +
+  '.panel .marca{width:18px;height:18px;border-radius:5px;border-width:1px}' +
+  '.panel .marca svg{width:11px;height:11px}' +
+  '.panel .titulo{font-size:14px;font-weight:600;line-height:1.4}' +
+  '.panel .ayuda{margin-top:4px;color:#C9CDCF;font-size:12.5px}' +
+  '.panel .ayuda:empty{display:none}' +
+  '.panel .cerrar{all:unset;box-sizing:border-box;position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:7px;' +
+    'display:grid;place-items:center;cursor:pointer;color:#8E9599;transition:background .15s,color .15s}' +
+  '.panel .cerrar:hover{background:#26292D;color:#E9EBEA}' +
+  '.panel .cerrar svg{width:14px;height:14px;display:block}' +
+  '.panel .cerrar path{fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}' +
+  '.panel .lista{flex:1;min-height:0;overflow-y:auto;padding:4px 8px 10px;scrollbar-width:thin;scrollbar-color:#3C4145 transparent}' +
+  '.panel .grupo{margin-top:10px}' +
+  '.panel .grupo-cabeza{display:flex;align-items:center;gap:8px;padding:4px 8px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8E9599}' +
+  '.panel .grupo-cabeza .punto{width:7px;height:7px}' +
+  '.panel .grupo-cabeza.postular .punto{background:#5BD59B}' +
+  '.panel .grupo-cabeza.gris .punto{background:#F3D27A}' +
+  '.panel .grupo-cabeza.descartar .punto{background:#8E9599}' +
+  '.panel .ver{all:unset;cursor:pointer;margin-left:auto;font-size:11.5px;font-weight:600;letter-spacing:0;text-transform:none;color:#D6F24B}' +
+  '.panel .ver:hover{text-decoration:underline}' +
+  '.panel ul{list-style:none;margin:0;padding:0}' +
+  '.panel .item{display:flex;align-items:flex-start;gap:10px;padding:8px;border-radius:8px;cursor:pointer}' +
+  '.panel .item:hover{background:#1F2225}' +
+  '.panel .item input{flex:none;width:16px;height:16px;margin:2px 0 0;accent-color:#D6F24B;cursor:pointer}' +
+  '.panel .item.fija{cursor:default}' +
+  '.panel .item.fija:hover{background:transparent}' +
+  '.panel .item.fija .txt{opacity:.72}' +
+  '.panel .item.fija input{cursor:default}' +
+  '.panel .txt{flex:1;min-width:0}' +
+  '.panel .t{display:block;font-weight:600;line-height:1.35;overflow-wrap:anywhere}' +
+  '.panel .m{display:block;margin-top:1px;color:#8E9599;font-size:11.5px}' +
+  '.panel .r{display:block;margin-top:2px;color:#C9CDCF;font-size:12px}' +
+  '.panel .m:empty,.panel .r:empty{display:none}' +
+  '.panel .estado{flex:none;margin-top:1px;padding:2px 8px;border-radius:999px;background:#26292D;color:#C9CDCF;font-size:11px;font-weight:600;white-space:nowrap}' +
+  '.panel .estado:empty{display:none}' +
+  '.panel .estado.ok{background:#173726;color:#5BD59B}' +
+  '.panel .estado.error{background:#3A1E23;color:#FF8A9B}' +
+  '.panel .estado.activo{background:#33300F;color:#D6F24B}' +
+  '.panel .mas{all:unset;box-sizing:border-box;cursor:pointer;display:block;margin:2px 8px 0;padding:6px 0;font-size:12px;font-weight:600;color:#D6F24B}' +
+  '.panel .mas:hover{text-decoration:underline}' +
+  '.panel .pie{padding:12px 16px 14px;border-top:1px solid #2A2E31}' +
+  '.panel .cupo{margin-bottom:10px;color:#F3D27A;font-size:12.5px}' +
+  '.panel .cupo:empty{display:none}' +
+  '.panel .fila-pie{display:flex;align-items:center;justify-content:space-between;gap:12px}' +
+  '.panel .cuenta{color:#C9CDCF;font-size:12.5px}' +
+  '.panel .si{all:unset;box-sizing:border-box;flex:none;cursor:pointer;border-radius:8px;padding:8px 13px;background:#D6F24B;color:#16181A;' +
+    'font-size:13px;font-weight:700;line-height:1.2;transition:filter .15s,opacity .15s}' +
+  '.panel .si:hover{filter:brightness(1.07)}' +
+  '.panel .si[disabled]{cursor:default;opacity:.5;filter:none}' +
+  '.panel .si[hidden]{display:none}' +
+  '.panel button:focus-visible,.panel input:focus-visible{outline:2px solid #E9EBEA;outline-offset:2px}' +
+  '.panel .resultado{margin-top:10px;font-size:12.5px;line-height:1.45}' +
+  '.panel .resultado:empty{display:none}' +
+  '.panel .resultado.error{color:#FF8A9B}';
+
+const AP_HTML_PANEL =
+  '<div class="panel" id="ap-ov-panel" hidden role="dialog" aria-labelledby="ap-ov-panel-t">' +
+    '<div class="cabeza">' +
+      '<span class="quien"><span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span><span id="ap-ov-panel-quien"></span></span>' +
+      '<p class="titulo" id="ap-ov-panel-t"></p>' +
+      '<p class="ayuda" id="ap-ov-panel-ayuda"></p>' +
+      '<button class="cerrar" id="ap-ov-panel-cerrar" type="button"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>' +
+    '</div>' +
+    '<div class="lista" id="ap-ov-panel-lista"></div>' +
+    '<div class="pie">' +
+      '<p class="cupo" id="ap-ov-panel-cupo"></p>' +
+      '<div class="fila-pie">' +
+        '<p class="cuenta" id="ap-ov-panel-cuenta" role="status"></p>' +
+        '<button class="si" id="ap-ov-panel-si" type="button"></button>' +
+      '</div>' +
+      '<p class="resultado" id="ap-ov-panel-resultado" role="alert"></p>' +
+    '</div>' +
+  '</div>';
 
 const AP_HTML_CIERRE =
   '<div class="cierre" id="ap-ov-cierre" hidden role="dialog" aria-labelledby="ap-ov-cierre-t">' +
@@ -136,6 +223,7 @@ const AP_HTML_CIERRE =
       '<button class="si" id="ap-ov-cierre-si" type="button"></button>' +
       '<button class="no" id="ap-ov-cierre-no" type="button">Todavía no, quiero mirar</button>' +
     '</div>' +
+    '<button class="ver-todas" id="ap-ov-cierre-ver" type="button" hidden></button>' +
     '<p class="resultado" id="ap-ov-cierre-resultado" role="status"></p>' +
   '</div>';
 
@@ -192,11 +280,12 @@ function apAsegurarOverlay() {
     '.resultado.ok{color:#5BD59B}' +
     '.resultado.error{color:#FF8A9B}' +
     '.resultado:empty{display:none}' +
-    AP_ESTILO_CIERRE +
-    '@media (prefers-reduced-motion:reduce){.chip,.cierre,.punto.late{animation:none}.ampliar svg{transition:none}}' +
+    AP_ESTILO_CIERRE + AP_ESTILO_PANEL +
+    '@media (prefers-reduced-motion:reduce){.chip,.cierre,.panel,.punto.late{animation:none}.ampliar svg{transition:none}}' +
     '</style>' +
-    // La tarjeta del final va arriba del aviso de siempre (ver AP.cierreDePagina).
-    '<div class="pila">' + AP_HTML_CIERRE +
+    // La tarjeta del final va arriba del aviso de siempre (ver AP.cierreDePagina),
+    // y el panel de revisión, en el lugar de los dos mientras está abierto.
+    '<div class="pila">' + AP_HTML_PANEL + AP_HTML_CIERRE +
     '<div class="chip" id="ap-ov-chip">' +
       '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
       '<span class="cuerpo">' +
@@ -215,6 +304,11 @@ function apAsegurarOverlay() {
   document.body.appendChild(ov);
   ovRaiz.getElementById('ap-ov-ampliar').addEventListener('click', alternarOverlayAbierto);
   ovRaiz.getElementById('ap-ov-agregar').addEventListener('click', ejecutarAccionOverlay);
+  ovRaiz.getElementById('ap-ov-panel-cerrar').addEventListener('click', apCerrarPanel);
+  ovRaiz.getElementById('ap-ov-panel-si').addEventListener('click', apAccionPanel);
+  ovRaiz.getElementById('ap-ov-panel').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') apCerrarPanel();
+  });
 }
 
 AP.msg = function (texto, estado, accion) {
@@ -428,6 +522,11 @@ function apMostrarCierre(resumen) {
   si.textContent = sinSesion ? 'Iniciar sesión en ' + portal : texto.boton;
   si.onclick = sinSesion ? apIrAIniciarSesion : () => apEmpezarAPostular(resumen);
   ovRaiz.getElementById('ap-ov-cierre-no').onclick = apTodaviaNo;
+  // docs/panel-de-revision-en-el-portal.md §2.1: la lista entera, para elegir.
+  const ver = ovRaiz.getElementById('ap-ov-cierre-ver');
+  ver.hidden = sinSesion;
+  ver.textContent = resumen.total === 1 ? 'Verla y elegir' : 'Ver las ' + resumen.total + ' y elegir';
+  ver.onclick = () => AP.abrirPanel();
   ovRaiz.getElementById('ap-ov-cierre-botones').hidden = false;
   apResultadoCierre('', '');
   ovRaiz.getElementById('ap-ov-cierre').hidden = false;
@@ -444,6 +543,462 @@ function apIrAIniciarSesion() {
     return;
   }
   apResultadoCierre('Inicia sesión en el portal y vuelve a esta página.', 'error');
+}
+
+// ── El panel de revisión (docs/panel-de-revision-en-el-portal.md §2) ──────
+// La tarjeta del final, abierta: todo lo que se revisó en esta página,
+// agrupado por lo que decidió el motor, con una casilla por oferta. Lo de "te
+// sirve" viene marcado y lo demás no: marcar o desmarcar es la corrección
+// (§3.1). Lo marcado se postula por la cola de aprobadas de background.js
+// (POSTULAR_ELEGIDAS): de a una, en otra pestaña y revisando el cupo antes de
+// cada una, mientras el listado y el panel se quedan donde están, con el
+// avance. Cerrar sin apretar no envía ni registra nada (§2.2).
+//
+// Con la cuenta postulando, lo que servía ya lo envió el escaneo: esas salen
+// con lo que pasó, sin casilla, y se puede sumar lo demás.
+
+// Mismo dominio que manifest.json (host_permissions).
+const AP_PANEL_WEB = 'https://autopostula.cl';
+// §4: de a 20 por grupo, con "ver más". Un panel de 60 casillas no lo lee nadie.
+const AP_POR_GRUPO = 20;
+// Si la cola deja de contar (el service worker se reinició), el panel no se
+// queda para siempre en "Enviando…": lo aprobado se reintenta más tarde.
+const AP_VIGIA_PANEL_MS = 4 * 60 * 1000;
+const AP_GRUPOS_PANEL = [
+  { banda: 'postular', nombre: 'Te sirven' },
+  { banda: 'gris', nombre: 'Para que decidas' },
+  { banda: 'descartar', nombre: 'No calzan' },
+];
+// Lo que cuenta la cola de cada una (background.js, avisarPanel).
+const AP_ESTADOS_COLA = {
+  encolada: { clase: '', texto: 'En cola' },
+  enviando: { clase: 'activo', texto: 'Enviando…' },
+  enviada: { clase: 'ok', texto: 'Enviada' },
+  no_enviada: { clase: 'error', texto: 'No se pudo' },
+  expirada: { clase: 'error', texto: 'Ya no está disponible' },
+  sin_cupo: { clase: 'error', texto: 'Sin cupo' },
+  sin_enlace: { clase: 'error', texto: 'Sin enlace' },
+  sigue: { clase: '', texto: 'Sigue en cola' },
+};
+const AP_COLA_PENDIENTE = new Set(['encolada', 'enviando']);
+let apPanel = null;
+let apVigiaPanel = null;
+
+// Lo que se decidió en el panel, en esta pestaña: si la página se vuelve a
+// revisar (al recargar, o al volver al listado), el escaneo no postula por su
+// cuenta lo que la persona quitó ni repite lo que ya va por la cola.
+const AP_CLAVE_DECIDIDAS = 'ap_decididas_panel';
+function apLeerDecididas() {
+  try { return JSON.parse(sessionStorage.getItem(AP_CLAVE_DECIDIDAS) || '{}') || {}; } catch (e) { return {}; }
+}
+AP.decididaEnPanel = function (id) { return !!id && !!apLeerDecididas()[id]; };
+function apGuardarDecididas(ofertas) {
+  const decididas = apLeerDecididas();
+  for (const o of ofertas) if (o.banda === 'postular' || o.elegida) decididas[o.externalId] = o.elegida ? 'si' : 'no';
+  try { sessionStorage.setItem(AP_CLAVE_DECIDIDAS, JSON.stringify(decididas)); } catch (e) {}
+}
+
+// Las ofertas que se revisaron en esta página, en el orden del panel (te
+// sirven, para que decidas, no calzan; dentro de cada grupo, el del listado),
+// con lo que decidió el motor y lo que se guardó de cada una (AP.marcar). Si
+// la banda cambió después (una que resultó repetida), vale la razón de la
+// marca. Es también el orden en que se envían: si el cupo no alcanza, "las
+// primeras" son las de arriba del panel.
+AP.ofertasDelPanel = function () {
+  if (typeof AP.tarjetasDeLaPagina !== 'function') return [];
+  const marcas = apLeerMarcas();
+  const datos = apLeerOfertas();
+  const vistas = new Set();
+  const lista = [];
+  for (const { id } of AP.tarjetasDeLaPagina()) {
+    const m = id && marcas[id];
+    if (!m || vistas.has(id)) continue;
+    vistas.add(id);
+    const d = datos[id] || {};
+    const razones = d.b === m.b && Array.isArray(d.rz) && d.rz.length ? d.rz : (m.r ? [m.r] : []);
+    lista.push({
+      id, banda: m.b, razon: m.r || null, razones,
+      titulo: d.t || '', empresa: d.e || null, ubicacion: d.l || null, url: d.u || null,
+      score: typeof d.s === 'number' ? d.s : null,
+      repetida: razones.some(r => r && r.tipo === 'duplicado'),
+    });
+  }
+  const orden = (o) => AP_GRUPOS_PANEL.findIndex(g => g.banda === o.banda);
+  return lista.map((o, i) => [o, i]).sort((a, b) => orden(a[0]) - orden(b[0]) || a[1] - b[1]).map(par => par[0]);
+};
+
+// Por qué una oferta va sin casilla, o null si se puede marcar.
+function apPorQueFija(o, observando) {
+  if (o.banda === 'postular' && !observando) return 'ya_la_vio_el_escaneo';
+  if (o.repetida) return 'repetida';
+  if (!o.url || !o.titulo) return 'sin_enlace';
+  return null;
+}
+
+// El pie del panel: cuántas, el botón y, si el cupo no alcanza, qué hacer
+// (§2.3: nunca se envía de más ni se corta a la mitad en silencio). `cupo` es
+// lo que devuelve AP.puedePostular, o null si no se sabe (se deja postular: la
+// cola lo revisa igual antes de cada una).
+AP.textoPiePanel = function (n, cupo, portal, sinSesion) {
+  const nombre = portal || 'este portal';
+  if (sinSesion) {
+    return { cuenta: '', cupo: 'Para postular necesitas tu sesión iniciada en ' + nombre + '.', boton: 'Iniciar sesión en ' + nombre, accion: 'sesion', enviar: 0 };
+  }
+  if (cupo && cupo.permitido === false && cupo.motivo === 'portal') {
+    return { cuenta: '', cupo: 'Para postular aquí, conecta ' + nombre + ' en tu panel.', boton: 'Conectar ' + nombre, accion: 'conectar', enviar: 0 };
+  }
+  const limite = cupo && cupo.permitido === false ? 0 : (cupo && typeof cupo.restantes === 'number' ? Math.max(0, cupo.restantes) : null);
+  if (limite === 0) {
+    return { cuenta: '', cupo: 'Ya usaste las postulaciones de este mes.', boton: 'Conseguir más postulaciones', accion: 'comprar', enviar: 0 };
+  }
+  if (!n) return { cuenta: 'No marcaste ninguna.', cupo: '', boton: 'Postular', accion: null, enviar: 0 };
+  if (limite !== null && n > limite) {
+    const quedan = limite === 1 ? 'te queda 1 postulación' : 'te quedan ' + limite + ' postulaciones';
+    return {
+      cuenta: '',
+      cupo: 'Marcaste ' + n + ' y ' + quedan + ' este mes. Saca ' + (n - limite) + ', o envío ' + (limite === 1 ? 'la primera' : 'las primeras ' + limite) + '.',
+      boton: limite === 1 ? 'Postular a la primera' : 'Postular a las primeras ' + limite,
+      accion: 'postular',
+      enviar: limite,
+    };
+  }
+  return {
+    cuenta: n === 1 ? 'Vas a postular a una oferta.' : 'Vas a postular a ' + n + ' ofertas.',
+    cupo: '',
+    boton: n === 1 ? 'Postular a una' : 'Postular a las ' + n,
+    accion: 'postular',
+    enviar: n,
+  };
+};
+
+// La cabeza del panel en cada momento: eligiendo, enviando o terminado.
+// `info`: { total, observando, primeraConRevision } y el avance de la cola
+// ({ enviando, enviadas, sinCupo, enCola, reintentos }).
+AP.textoCabezaPanel = function (estado, info) {
+  if (estado === 'enviando') {
+    return {
+      quien: 'AutoPostula',
+      titulo: info.enviando === 1 ? 'Postulando a una oferta…' : 'Postulando a ' + info.enviando + ' ofertas…',
+      ayuda: 'Las envío de a una, en otra pestaña. Puedes seguir mirando: el avance queda acá.' +
+        (info.primeraConRevision ? ' La primera te la muestro antes de enviarla.' : ''),
+    };
+  }
+  if (estado === 'listo') {
+    const total = info.enviando;
+    let titulo;
+    if (total && info.enviadas === total) titulo = total === 1 ? 'Listo: postulaste a una oferta.' : 'Listo: postulaste a ' + total + ' ofertas.';
+    else if (info.enviadas) titulo = 'Postulaste a ' + info.enviadas + ' de ' + total + '.';
+    else titulo = total === 1 ? 'No se pudo enviar.' : 'No se pudo enviar ninguna.';
+    const notas = [];
+    if (info.sinCupo) notas.push('Se acabaron las postulaciones del mes.');
+    // Una que falló por otra cosa (la página no cargó, faltó un dato) sigue
+    // aprobada: la cola la vuelve a intentar en el próximo ciclo, hasta 3 veces.
+    if (info.reintentos) notas.push(info.reintentos === 1 ? 'La que no se pudo se vuelve a intentar sola más tarde.' : 'Las que no se pudieron se vuelven a intentar solas más tarde.');
+    if (info.enCola) notas.push(info.enCola === 1 ? 'La que quedó en cola se envía sola más tarde.' : 'Las que quedaron en cola se envían solas más tarde.');
+    return { quien: 'AutoPostula', titulo, ayuda: notas.join(' ') };
+  }
+  return {
+    quien: info.observando ? 'AutoPostula · todavía no envió nada' : 'AutoPostula',
+    titulo: info.total === 1 ? 'Revisé 1 oferta de esta página' : 'Revisé ' + info.total + ' ofertas de esta página',
+    ayuda: info.observando
+      ? 'Marca a las que quieres postular y desmarca las que no. No se envía nada hasta que aprietes el botón.'
+      : 'Las que te sirven ya las envié: abajo ves cómo quedó cada una. Si quieres sumar otra, márcala.',
+  };
+};
+
+function apResumenCola() {
+  const r = { enviando: 0, enviadas: 0, sinCupo: 0, enCola: 0, reintentos: 0 };
+  if (!apPanel) return r;
+  for (const clave of apPanel.progreso.values()) {
+    r.enviando++;
+    if (clave === 'enviada') r.enviadas++;
+    else if (clave === 'sin_cupo') r.sinCupo++;
+    else if (clave === 'no_enviada') r.reintentos++;
+    else if (clave === 'sigue' || AP_COLA_PENDIENTE.has(clave)) r.enCola++;
+  }
+  return r;
+}
+
+// Lo que dice el registro de una que el motor iba a postular, con la cuenta
+// postulando: enviada, o que no se envió.
+function apEstadoDelLog(id) {
+  const log = AP.log || [];
+  for (let i = log.length - 1; i >= 0; i--) {
+    const e = log[i];
+    if (!e || e.uid !== id) continue;
+    if (e.status === 'ok') return AP_ESTADOS_COLA.enviada;
+    if (e.status === 'observado') return null;
+    return { clase: 'error', texto: 'No se envió' };
+  }
+  return null;
+}
+
+AP.abrirPanel = function () {
+  if (AP.esPestanaDeRafaga() || apCierreEstado === 'activando') return false;
+  // Mientras se envía (o recién terminó), se vuelve a mostrar con su avance.
+  if (apPanel && apPanel.estado !== 'eligiendo') { apMostrarPanel(); return true; }
+  const ofertas = AP.ofertasDelPanel();
+  if (!ofertas.length) return false;
+  const observando = AP.soloObservarEfectivo();
+  const portal = AP.portalDelHost(location.hostname);
+  apPanel = {
+    url: location.href,
+    observando,
+    ofertas,
+    elegidas: new Set(ofertas.filter(o => o.banda === 'postular' && !apPorQueFija(o, observando)).map(o => o.id)),
+    verDescartadas: false,
+    verTodas: new Set(),
+    estado: 'eligiendo',
+    cupo: null,
+    sinSesion: AP.mirarSesion(document, portal) === false,
+    progreso: new Map(),
+    porDecision: new Map(),
+    primeraConRevision: false,
+  };
+  apMostrarPanel();
+  if (portal) {
+    const p = apPanel;
+    AP.puedePostular(portal).then((cupo) => {
+      if (apPanel !== p) return;
+      p.cupo = cupo || null;
+      apPintarPie();
+    });
+  }
+  return true;
+};
+
+function apMostrarPanel() {
+  apAsegurarOverlay();
+  ovRaiz.querySelector('.pila').classList.add('con-panel');
+  ovRaiz.getElementById('ap-ov-panel').hidden = false;
+  apPintarPanel();
+}
+
+function apCerrarPanel() {
+  if (ovRaiz) {
+    ovRaiz.getElementById('ap-ov-panel').hidden = true;
+    ovRaiz.querySelector('.pila').classList.remove('con-panel');
+  }
+  // Mientras se envía, el avance sigue: se puede volver a abrir desde el ícono.
+  if (apPanel && apPanel.estado === 'enviando') return;
+  apPanel = null;
+  clearTimeout(apVigiaPanel);
+}
+
+function apNodo(tag, clase, texto) {
+  const n = document.createElement(tag);
+  if (clase) n.className = clase;
+  if (texto) n.textContent = texto;
+  return n;
+}
+
+// Las marcadas que de verdad se pueden enviar, en el orden del panel.
+function apElegidasDelPanel() {
+  const p = apPanel;
+  return p ? p.ofertas.filter(o => p.elegidas.has(o.id) && !apPorQueFija(o, p.observando)) : [];
+}
+
+function apPintarPanel() {
+  const p = apPanel;
+  if (!p || !ovRaiz) return;
+  const cabeza = AP.textoCabezaPanel(p.estado, Object.assign({
+    total: p.ofertas.length, observando: p.observando, primeraConRevision: p.primeraConRevision,
+  }, apResumenCola()));
+  ovRaiz.getElementById('ap-ov-panel-quien').textContent = cabeza.quien;
+  ovRaiz.getElementById('ap-ov-panel-t').textContent = cabeza.titulo;
+  ovRaiz.getElementById('ap-ov-panel-ayuda').textContent = cabeza.ayuda;
+  const cerrar = ovRaiz.getElementById('ap-ov-panel-cerrar');
+  const etiqueta = p.estado === 'eligiendo' ? 'Cerrar sin postular' : 'Cerrar';
+  cerrar.setAttribute('aria-label', etiqueta);
+  cerrar.title = etiqueta;
+
+  const lista = ovRaiz.getElementById('ap-ov-panel-lista');
+  const scroll = lista.scrollTop;
+  lista.textContent = '';
+  for (const g of AP_GRUPOS_PANEL) {
+    const delGrupo = p.ofertas.filter(o => o.banda === g.banda);
+    if (!delGrupo.length) continue;
+    const grupo = apNodo('div', 'grupo');
+    const cab = apNodo('div', 'grupo-cabeza ' + g.banda);
+    cab.appendChild(apNodo('span', 'punto'));
+    cab.appendChild(apNodo('span', 'nombre', g.nombre + ' · ' + delGrupo.length));
+    // "No calzan" viene plegado (§2.1): son las que menos se revisan y las que
+    // más espacio ocupan. Las que la persona marcó se ven igual.
+    const plegado = g.banda === 'descartar' && !p.verDescartadas;
+    if (g.banda === 'descartar') {
+      const ver = apNodo('button', 'ver', plegado ? (delGrupo.length === 1 ? 'Verla' : 'Ver las ' + delGrupo.length) : 'Ocultar');
+      ver.type = 'button';
+      ver.setAttribute('aria-expanded', String(!plegado));
+      ver.onclick = () => { p.verDescartadas = !p.verDescartadas; apPintarPanel(); };
+      cab.appendChild(ver);
+    }
+    grupo.appendChild(cab);
+    const visibles = plegado ? delGrupo.filter(o => p.elegidas.has(o.id) || p.progreso.has(o.id)) : delGrupo;
+    const tope = p.verTodas.has(g.banda) ? visibles.length : AP_POR_GRUPO;
+    const ul = apNodo('ul');
+    for (const o of visibles.slice(0, tope)) ul.appendChild(apItemPanel(o));
+    grupo.appendChild(ul);
+    if (visibles.length > tope) {
+      const mas = apNodo('button', 'mas', 'Ver ' + (visibles.length - tope) + ' más');
+      mas.type = 'button';
+      mas.onclick = () => { p.verTodas.add(g.banda); apPintarPanel(); };
+      grupo.appendChild(mas);
+    }
+    lista.appendChild(grupo);
+  }
+  lista.scrollTop = scroll;
+  apPintarPie();
+}
+
+function apItemPanel(o) {
+  const p = apPanel;
+  const fija = apPorQueFija(o, p.observando);
+  const li = apNodo('li');
+  const fila = apNodo('label', 'item' + (fija || p.estado !== 'eligiendo' ? ' fija' : ''));
+  if (!fija) {
+    const casilla = document.createElement('input');
+    casilla.type = 'checkbox';
+    casilla.checked = p.elegidas.has(o.id);
+    casilla.disabled = p.estado !== 'eligiendo';
+    casilla.onchange = () => {
+      if (!apPanel || apPanel.estado !== 'eligiendo') return;
+      if (casilla.checked) apPanel.elegidas.add(o.id); else apPanel.elegidas.delete(o.id);
+      apPintarPie();
+    };
+    fila.appendChild(casilla);
+  }
+  const txt = apNodo('span', 'txt');
+  // textContent siempre: título, empresa y razón vienen del aviso.
+  txt.appendChild(apNodo('span', 't', o.titulo || 'Oferta sin título'));
+  txt.appendChild(apNodo('span', 'm', [o.empresa, o.ubicacion].filter(Boolean).join(' · ')));
+  txt.appendChild(apNodo('span', 'r', fija === 'sin_enlace'
+    ? 'No pude leer su enlace: si te interesa, ábrela en el portal.'
+    : (o.razon ? AP.razonComoEnElPanel(o.razon) : '')));
+  fila.appendChild(txt);
+  const estado = p.progreso.has(o.id) ? AP_ESTADOS_COLA[p.progreso.get(o.id)]
+    : fija === 'ya_la_vio_el_escaneo' ? apEstadoDelLog(o.id) : null;
+  fila.appendChild(apNodo('span', 'estado' + (estado && estado.clase ? ' ' + estado.clase : ''), estado ? estado.texto : ''));
+  li.appendChild(fila);
+  return li;
+}
+
+function apPintarPie() {
+  const p = apPanel;
+  if (!p || !ovRaiz) return;
+  const si = ovRaiz.getElementById('ap-ov-panel-si');
+  const cupo = ovRaiz.getElementById('ap-ov-panel-cupo');
+  const cuenta = ovRaiz.getElementById('ap-ov-panel-cuenta');
+  if (p.estado !== 'eligiendo') {
+    const r = apResumenCola();
+    cupo.textContent = '';
+    cuenta.textContent = r.enviando ? 'Enviadas: ' + r.enviadas + ' de ' + r.enviando + '.' : '';
+    si.hidden = true;
+    return;
+  }
+  const pie = AP.textoPiePanel(apElegidasDelPanel().length, p.cupo, AP.portalDelHost(location.hostname), p.sinSesion);
+  cupo.textContent = pie.cupo;
+  cuenta.textContent = pie.cuenta;
+  si.hidden = false;
+  si.textContent = pie.boton;
+  si.disabled = !pie.accion;
+}
+
+function apAccionPanel() {
+  const p = apPanel;
+  if (!p || p.estado !== 'eligiendo') return;
+  const portal = AP.portalDelHost(location.hostname);
+  const elegidas = apElegidasDelPanel();
+  const pie = AP.textoPiePanel(elegidas.length, p.cupo, portal, p.sinSesion);
+  if (pie.accion === 'sesion') {
+    const destino = AP.ingresoDelPortal(portal);
+    if (destino) location.href = destino;
+    return;
+  }
+  if (pie.accion === 'comprar' || pie.accion === 'conectar') {
+    try { window.open(AP_PANEL_WEB + (pie.accion === 'comprar' ? '/dashboard/premium' : '/dashboard/portales'), '_blank', 'noopener'); } catch (e) {}
+    return;
+  }
+  if (pie.accion !== 'postular' || !pie.enviar) return;
+  apEnviarPanel(elegidas.slice(0, pie.enviar), elegidas.slice(pie.enviar), portal);
+}
+
+// Manda lo elegido a background.js. Las que no alcanzan por el cupo no se
+// registran (ni sí ni no): la persona las quería, pero no las está enviando.
+function apEnviarPanel(enviar, fueraDeCupo, portal) {
+  const p = apPanel;
+  const aEnviar = new Set(enviar.map(o => o.id));
+  const fuera = new Set(fueraDeCupo.map(o => o.id));
+  const ofertas = p.ofertas.filter(o => !fuera.has(o.id)).map((o) => {
+    const guardada = apEntradaGuardada(o.titulo, o.empresa);
+    return {
+      externalId: o.id, titulo: o.titulo, empresa: o.empresa, url: o.url, banda: o.banda,
+      elegida: aEnviar.has(o.id),
+      yaEnviada: o.banda === 'postular' && !p.observando,
+      scoreLocal: o.score != null ? o.score : (guardada ? guardada.score : null),
+      razones: o.razones,
+      entrada: guardada ? guardada.entrada : null,
+    };
+  });
+  p.estado = 'enviando';
+  for (const id of aEnviar) p.progreso.set(id, 'encolada');
+  ovRaiz.getElementById('ap-ov-panel-resultado').textContent = '';
+  apPintarPanel();
+  const terminar = (r) => {
+    if (apPanel !== p) return;
+    if (r && r.config) { AP.cfg = r.config; AP.activo = r.config.active !== false; }
+    if (r && r.ok) {
+      apGuardarDecididas(ofertas);
+      // La tarjeta del final ya no tiene nada que preguntar en esta pestaña.
+      try { sessionStorage.setItem(AP_CLAVE_CIERRE_LISTO, '1'); } catch (e) {}
+      apCierreEstado = 'listo';
+      ovRaiz.getElementById('ap-ov-cierre').hidden = true;
+      p.porDecision = new Map((r.encoladas || []).map(e => [e.decisionId, e.externalId]));
+      const encoladas = new Set(p.porDecision.values());
+      for (const id of aEnviar) if (!encoladas.has(id)) p.progreso.set(id, 'sin_enlace');
+      p.primeraConRevision = !!r.primeraConRevision;
+      if (!encoladas.size) p.estado = 'listo';
+      apArmarVigiaPanel();
+      apPintarPanel();
+      return;
+    }
+    p.estado = 'eligiendo';
+    p.progreso.clear();
+    apPintarPanel();
+    const res = ovRaiz.getElementById('ap-ov-panel-resultado');
+    res.textContent = (r && r.error) || 'No se pudo enviar ahora. Inténtalo de nuevo.';
+    res.className = 'resultado error';
+  };
+  try {
+    chrome.runtime.sendMessage({ type: 'POSTULAR_ELEGIDAS', plataforma: portal, ofertas }, (r) => {
+      void chrome.runtime.lastError;
+      terminar(r);
+    });
+  } catch (e) {
+    terminar(null);
+  }
+}
+
+// Lo que cuenta la cola de cada una (background.js, PROGRESO_REVISION).
+function apProgresoPanel(m) {
+  const p = apPanel;
+  if (!p || !m || !p.porDecision.has(m.decisionId)) return;
+  p.progreso.set(p.porDecision.get(m.decisionId), AP_ESTADOS_COLA[m.estado] ? m.estado : 'no_enviada');
+  const quedan = [...p.porDecision.values()].some(id => AP_COLA_PENDIENTE.has(p.progreso.get(id)));
+  if (!quedan) { p.estado = 'listo'; clearTimeout(apVigiaPanel); }
+  else apArmarVigiaPanel();
+  apPintarPanel();
+}
+
+function apArmarVigiaPanel() {
+  clearTimeout(apVigiaPanel);
+  const p = apPanel;
+  if (!p || p.estado !== 'enviando') return;
+  apVigiaPanel = setTimeout(() => {
+    if (apPanel !== p || p.estado !== 'enviando') return;
+    for (const id of p.porDecision.values()) if (AP_COLA_PENDIENTE.has(p.progreso.get(id))) p.progreso.set(id, 'sigue');
+    p.estado = 'listo';
+    apPintarPanel();
+  }, AP_VIGIA_PANEL_MS);
 }
 
 function apTodaviaNo() {
@@ -473,6 +1028,7 @@ function apEmpezarAPostular(resumen) {
       } catch (e) {}
       if (r.config) { AP.cfg = r.config; AP.activo = r.config.active !== false; }
       ovRaiz.getElementById('ap-ov-cierre-botones').hidden = true;
+      ovRaiz.getElementById('ap-ov-cierre-ver').hidden = true;
       apResultadoCierre(texto.listo, 'ok');
       AP.liberarObservadas();
       setTimeout(() => {
@@ -737,7 +1293,9 @@ AP.razonDeLaMarca = function (banda, razones) {
   return lista[0] || null;
 };
 
-AP.marcar = function (id, banda, razones) {
+// `datos` ({ titulo, empresa, url, ubicacion, score }) es lo que necesita el
+// panel de revisión; se manda la primera vez que se marca cada oferta.
+AP.marcar = function (id, banda, razones, datos) {
   if (!id || (banda !== 'postular' && banda !== 'gris' && banda !== 'descartar')) return;
   const marcas = apLeerMarcas();
   delete marcas[id]; // que la más nueva quede al final (y sea la última en borrarse)
@@ -745,8 +1303,36 @@ AP.marcar = function (id, banda, razones) {
   const ids = Object.keys(marcas);
   if (ids.length > AP_MAX_MARCAS) for (const viejo of ids.slice(0, ids.length - AP_MAX_MARCAS)) delete marcas[viejo];
   try { sessionStorage.setItem(AP_CLAVE_MARCAS, JSON.stringify(marcas)); } catch (e) {}
+  if (datos) apGuardarDatos(id, banda, razones, datos);
   AP.pintarMarcas();
 };
+
+// Lo que se guarda de cada oferta marcada, para el panel de revisión
+// (docs/panel-de-revision-en-el-portal.md §2): título, empresa, comuna, enlace,
+// puntaje y razones, con la banda que tenía. Aparte de ap_marcas para no
+// engordar lo que se lee cada vez que se pintan las marcas; se borran igual,
+// las más viejas primero.
+const AP_CLAVE_OFERTAS = 'ap_ofertas';
+function apLeerOfertas() {
+  try { return JSON.parse(sessionStorage.getItem(AP_CLAVE_OFERTAS) || '{}') || {}; } catch (e) { return {}; }
+}
+function apGuardarDatos(id, banda, razones, datos) {
+  const ofertas = apLeerOfertas();
+  delete ofertas[id];
+  const lista = (Array.isArray(razones) ? razones : [razones]).filter(Boolean).slice(0, 8);
+  ofertas[id] = {
+    b: banda,
+    t: String(datos.titulo || '').slice(0, 200),
+    e: datos.empresa ? String(datos.empresa).slice(0, 120) : null,
+    l: datos.ubicacion ? String(datos.ubicacion).slice(0, 120) : null,
+    u: datos.url ? String(datos.url).slice(0, 600) : null,
+    s: typeof datos.score === 'number' && isFinite(datos.score) ? datos.score : null,
+    rz: JSON.stringify(lista).length < 4000 ? lista : lista.slice(0, 1),
+  };
+  const ids = Object.keys(ofertas);
+  if (ids.length > AP_MAX_MARCAS) for (const viejo of ids.slice(0, ids.length - AP_MAX_MARCAS)) delete ofertas[viejo];
+  try { sessionStorage.setItem(AP_CLAVE_OFERTAS, JSON.stringify(ofertas)); } catch (e) {}
+}
 
 // Después de "Empezar a postular", las que solo miró vuelven a estar
 // disponibles para postularse en esta misma página.
@@ -2432,9 +3018,20 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
       return true;
     }
     if (!AP.aplicarDirecto) { sendResponse({ success: false, expirada: false }); return true; }
+    // La primera del panel de revisión cuando la cuenta recién empieza a
+    // postular: se muestra antes de enviarla, como en "Empezar a postular".
+    if (m.revisar) { try { sessionStorage.setItem(AP_CLAVE_REVISAR_PRIMERA, '1'); } catch (e) {} }
     AP.aplicarDirecto(m.decisionId, m.url).then(sendResponse);
     return true;
   }
+  // docs/panel-de-revision-en-el-portal.md §2.1: el popup ofrece el panel de
+  // revisión si esta página ya se revisó, y lo abre acá.
+  if (m.type === 'ESTADO_REVISION') {
+    const total = AP.esPestanaDeRafaga() ? 0 : AP.ofertasDelPanel().length;
+    sendResponse({ total, enCurso: !!(apPanel && apPanel.estado === 'enviando') });
+  }
+  if (m.type === 'ABRIR_REVISION') sendResponse({ ok: AP.abrirPanel() });
+  if (m.type === 'PROGRESO_REVISION') apProgresoPanel(m);
 });
 
 // Lo que agrega la propia extensión (el aviso, la marca de cada oferta) no es
@@ -2450,6 +3047,9 @@ new MutationObserver(function (registros) {
   if (!delPortal) return;
   // Si el portal volvió a dibujar las tarjetas, sus marcas se perdieron.
   AP.pintarMarcas();
+  // §4: otra página (un portal que pagina sin recargar): el panel listaba las
+  // de antes. Mientras se envía se queda, con el avance.
+  if (apPanel && apPanel.estado === 'eligiendo' && apPanel.url !== location.href) apCerrarPanel();
   // El encabezado de Laborum y Trabajando llega después de cargar.
   clearTimeout(window._apSesionT);
   window._apSesionT = setTimeout(() => AP.reportarSesion(), 1500);

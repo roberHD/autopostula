@@ -278,6 +278,45 @@ $('scan-now-btn').addEventListener('click', () => {
   });
 });
 
+// ── Revisar las ofertas de la página abierta ──────────────────
+// docs/panel-de-revision-en-el-portal.md §2.1: si la pestaña que la persona
+// está mirando es un listado que la extensión ya revisó, el popup ofrece el
+// panel de revisión, que se abre ahí mismo (core.js, ESTADO_REVISION y
+// ABRIR_REVISION). En cualquier otra página la fila no aparece.
+function textoFilaRevision(estado) {
+  if (!estado || !estado.total) return null;
+  if (estado.enCurso) return { titulo: 'Ver cómo van las postulaciones de esta página', sub: 'Se envían de a una, en otra pestaña' };
+  return {
+    titulo: estado.total === 1 ? 'Revisar la oferta de esta página' : 'Revisar las ' + estado.total + ' ofertas de esta página',
+    sub: 'Elige a cuáles postular, con lo que haría con cada una',
+  };
+}
+
+function cargarFilaRevision() {
+  const fila = document.getElementById('revision-row');
+  if (!fila) return;
+  try {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs && tabs[0];
+      if (!tab) return;
+      chrome.tabs.sendMessage(tab.id, { type: 'ESTADO_REVISION' }, (estado) => {
+        if (chrome.runtime.lastError) return; // no es un portal, o la pestaña no tiene la extensión
+        const texto = textoFilaRevision(estado);
+        fila.classList.toggle('hidden', !texto);
+        if (!texto) return;
+        document.getElementById('revision-titulo').textContent = texto.titulo;
+        document.getElementById('revision-sub').textContent = texto.sub;
+        fila.onclick = () => {
+          chrome.tabs.sendMessage(tab.id, { type: 'ABRIR_REVISION' }, () => {
+            void chrome.runtime.lastError;
+            window.close();
+          });
+        };
+      });
+    });
+  } catch (e) { /* popup sin chrome.tabs (no debería pasar) */ }
+}
+
 // ── Token de la cuenta web ────────────────────────────────────
 const apTokenInput      = $('ap-token');
 const apTokenEye        = $('ap-token-eye');
@@ -725,6 +764,7 @@ function actualizarAviso(cambios) {
 document.getElementById('ponerse-btn')?.addEventListener('click', apretarPonerse);
 
 function loadState() {
+  cargarFilaRevision();
   chrome.storage.local.get(['config', 'rafaga', 'sesionesPortales', 'avisoChromeVisto'], data => {
     // Antes que la ráfaga: con qué puesta al día ya se dijo lo de Chrome abierto.
     avisoDatos.chromeVisto = data.avisoChromeVisto || null;

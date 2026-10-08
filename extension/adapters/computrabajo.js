@@ -166,6 +166,14 @@ function extraerUbicacion(tarjeta) {
   return el ? n(el.textContent) : '';
 }
 
+// La misma, como la muestra la tarjeta, para el panel de revisión
+// (docs/panel-de-revision-en-el-portal.md §2.1): la de arriba va normalizada
+// para el scorer, sin mayúsculas ni tildes.
+function ubicacionVisible(tarjeta) {
+  const el = tarjeta.querySelector('p.fs16.fc_base:not(.dFlex)');
+  return el ? el.textContent.replace(/\s+/g, ' ').trim() : '';
+}
+
 // ── Empresa de una tarjeta ──────────────────────────────────────
 // Verificado a mano contra el sitio real (2026-09-04): el link de la empresa
 // trae el atributo offer-grid-article-company-url, estable independiente del
@@ -785,7 +793,9 @@ async function escanear() {
   const candidatosGris = [];
   tarjetas.forEach((t, idx) => {
     const id = getId(t, idx);
-    if (AP.vistos.has(id)) return;
+    // Lo que la persona decidió en el panel de revisión no se vuelve a decidir
+    // solo (docs/panel-de-revision-en-el-portal.md §2.2).
+    if (AP.vistos.has(id) || AP.decididaEnPanel(id)) return;
     const badge = t.querySelector('.postulated:not(.hide), .applied-offer-tag:not(.hide)');
     if (badge && badge.offsetParent !== null) { AP.vistos.add(id); return; }
     const titulo = tituloDeTarjeta(t);
@@ -803,8 +813,10 @@ async function escanear() {
 
     const resultado = evaluarTarjeta(t);
     // Cada decisión queda marcada en su tarjeta, con su razón
-    // (docs/primera-busqueda-guiada.md §11).
-    if (resultado.banda !== 'descartar') AP.marcar(id, resultado.banda, resultado.razones);
+    // (docs/primera-busqueda-guiada.md §11), y con lo que muestra el panel de
+    // revisión (docs/panel-de-revision-en-el-portal.md §2).
+    const datos = { titulo, empresa, url, ubicacion: ubicacionVisible(t), score: resultado.score };
+    if (resultado.banda !== 'descartar') AP.marcar(id, resultado.banda, resultado.razones, datos);
     if (resultado.banda === 'postular') {
       pendientes.push({t, id, idx, titulo, empresa, url, razones: resultado.razones, score: resultado.score});
     } else if (resultado.banda === 'gris') {
@@ -820,7 +832,7 @@ async function escanear() {
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
       descartes.push({ externalId: id, titulo, empresa, url, razon });
-      AP.marcar(id, 'descartar', [razon]);
+      AP.marcar(id, 'descartar', [razon], datos);
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'skip', title:titulo, url, uid:id, reason:AP.formatearRazonCorta(razon)});
     }

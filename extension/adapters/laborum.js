@@ -290,7 +290,9 @@ function extraerFacetasAviso() {
 // acá la memoria de "esto ya se procesó" tiene que salir del log persistente
 // (chrome.storage, sobrevive a la recarga), no del Set en memoria.
 function yaProcesada(id) {
-  if (AP.vistos.has(id)) return true;
+  // Lo que la persona decidió en el panel de revisión no se vuelve a decidir
+  // solo (docs/panel-de-revision-en-el-portal.md §2.2).
+  if (AP.vistos.has(id) || AP.decididaEnPanel(id)) return true;
   const postula = !AP.soloObservarEfectivo();
   return (AP.log || []).some(e => e.uid === id && !(postula && e.status === 'observado'));
 }
@@ -704,8 +706,9 @@ async function resolverAviso(datos) {
   }
   const titulo = datos.titulo || tituloDelAviso();
   const empresa = datos.empresa || empresaDelAviso() || null;
+  const ubicacion = datos.ubicacion || ubicacionDelAviso();
   let resultado = AP.evaluarOferta({
-    titulo, empresa: empresa || '', cuerpo: extraerTextoAviso(), ubicacion: datos.ubicacion || ubicacionDelAviso(),
+    titulo, empresa: empresa || '', cuerpo: extraerTextoAviso(), ubicacion,
   });
 
   // §2.8: tampoco se repite un cargo que ya se postuló con otro id.
@@ -717,8 +720,9 @@ async function resolverAviso(datos) {
 
   // La marca de la tarjeta, para cuando se vuelva al listado
   // (docs/primera-busqueda-guiada.md §11).
-  if (resultado.banda === 'descartar') AP.marcar(datos.id, 'descartar', resultado.razones && resultado.razones.slice(0, 1));
-  else AP.marcar(datos.id, resultado.banda, resultado.razones);
+  const datosMarca = { titulo, empresa, url, ubicacion, score: resultado.score };
+  if (resultado.banda === 'descartar') AP.marcar(datos.id, 'descartar', resultado.razones && resultado.razones.slice(0, 1), datosMarca);
+  else AP.marcar(datos.id, resultado.banda, resultado.razones, datosMarca);
 
   if (resultado.banda === 'postular') {
     // §1.3: el tope del mes y el portal conectado, antes de cada clic (en
@@ -860,7 +864,7 @@ async function escanear() {
     const oferta = { id, titulo, empresa, url: a.href, ubicacion: getUbicacionDeTarjeta(a), razones: resultado.razones, score: resultado.score };
     // Cada decisión queda marcada en su tarjeta, con su razón
     // (docs/primera-busqueda-guiada.md §11).
-    if (resultado.banda !== 'descartar') AP.marcar(id, resultado.banda, resultado.razones);
+    if (resultado.banda !== 'descartar') AP.marcar(id, resultado.banda, resultado.razones, oferta);
     if (resultado.banda === 'postular') {
       pendientes.push(oferta);
     } else if (resultado.banda === 'gris') {
@@ -873,7 +877,7 @@ async function escanear() {
       const razon = (resultado.razones && resultado.razones[0]) || 'No calza con tus filtros';
       razonesDescartadas.push(razon);
       descartes.push({ externalId: id, titulo, empresa, url: a.href, razon });
-      AP.marcar(id, 'descartar', [razon]);
+      AP.marcar(id, 'descartar', [razon], oferta);
       AP.vistos.add(id);
       addLog({ ts: Date.now(), status: 'skip', title: titulo, url: a.href, uid: id, reason: AP.formatearRazonCorta(razon) });
     }

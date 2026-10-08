@@ -1469,28 +1469,45 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
 //
 // §4.2 (docs/revision-2026-09-16.md): "¡Todo listo!" sin la acción que da
 // valor. Por eso el botón dice lo que la persona va a hacer, no "Ir al panel".
+//
+// docs/panel-de-revision-en-el-portal.md §1: si la extensión acaba de quedar
+// conectada, el mejor momento para probarla es este. "Probémosla ahora" abre el
+// portal que conectó con su búsqueda, en otra pestaña, y este cierre sigue a
+// Hoy como siempre. Solo se ofrece si la extensión respondió en esta página y
+// hay portal y búsqueda: prometer "probémosla" y caer en un portal donde no
+// pasa nada es peor que no ofrecerlo. Está acá y no en el paso de la
+// extensión porque el portal se conecta en el paso siguiente.
 function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
   const [enMovil, setEnMovil] = useState(false);
   // docs/revision-2026-09-28.md §11: sin el correo confirmado la extensión no
   // se puede conectar; se dice antes de mandarla a probar.
   const [faltaCorreo, setFaltaCorreo] = useState(false);
   const [quierePremium, setQuierePremium] = useState(false);
+  const [probarAhora, setProbarAhora] = useState<{ portal: string; url: string } | null>(null);
   useEffect(() => {
-    setEnMovil(sinSoporteExtension());
+    const movil = sinSoporteExtension();
+    setEnMovil(movil);
     try {
       setQuierePremium(localStorage.getItem(LLAVE_INTENCION_PREMIUM) === "1");
     } catch {
       // Sin localStorage no se ofrece el atajo al pago; Premium sigue en el panel.
     }
-    fetch("/api/account/extension-conectada")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && data.emailVerificado === false) setFaltaCorreo(true);
-      })
-      .catch(() => {
-        // Si no se puede saber, se muestra el cierre de siempre.
-      });
+    const leer = (ruta: string) => fetch(ruta).then((res) => (res.ok ? res.json() : null)).catch(() => null);
+    Promise.all([leer("/api/account/extension-conectada"), leer("/api/onboarding/primera-busqueda")]).then(([extension, busqueda]) => {
+      // Si no se puede saber, se muestra el cierre de siempre.
+      if (extension && extension.emailVerificado === false) setFaltaCorreo(true);
+      const respondio = !!document.documentElement.dataset.autopostulaExtension;
+      if (!movil && respondio && extension?.extensionConectada && extension.emailVerificado !== false && busqueda?.portal && busqueda?.url) {
+        setProbarAhora({ portal: busqueda.portal, url: busqueda.url });
+      }
+    });
   }, []);
+
+  function probarla() {
+    if (!probarAhora) return;
+    window.open(probarAhora.url, "_blank", "noopener");
+    onTerminar();
+  }
 
   function irAPremium() {
     try {
@@ -1509,6 +1526,8 @@ function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
         sub={
           faltaCorreo
             ? "Tu cuenta quedó configurada. Antes de probarla, confirma tu correo con el enlace que te mandamos: sin eso la extensión no se puede conectar."
+            : probarAhora
+            ? `AutoPostula ya está conectada. Pruébala ahora en ${probarAhora.portal}, con tu búsqueda: marca cada oferta con lo que haría y no envía nada hasta que tú digas.`
             : enMovil
             ? "Tu cuenta quedó configurada. La prueba con ofertas reales se hace en Chrome, en un computador: en tu panel te queda el paso a paso."
             : "Ahora pruébala con ofertas reales, sin enviar nada. En tu panel te esperan los pasos: abrir tu portal con tu búsqueda y ver qué haría con cada oferta."
@@ -1519,13 +1538,28 @@ function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
           Activar Premium
         </button>
       )}
-      <button
-        onClick={() => onTerminar()}
-        className={quierePremium ? "ap-button-ghost" : "ap-button"}
-        style={{ width: "100%" }}
-      >
-        {enMovil ? "Ir al panel" : "Probarla con ofertas reales"}
-      </button>
+      {probarAhora ? (
+        <>
+          <button
+            onClick={probarla}
+            className={quierePremium ? "ap-button-ghost" : "ap-button"}
+            style={{ width: "100%", marginBottom: 10 }}
+          >
+            Probémosla ahora
+          </button>
+          <button onClick={() => onTerminar()} className="ap-button-ghost" style={{ width: "100%" }}>
+            Seguir y probar después
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={() => onTerminar()}
+          className={quierePremium ? "ap-button-ghost" : "ap-button"}
+          style={{ width: "100%" }}
+        >
+          {enMovil ? "Ir al panel" : "Probarla con ofertas reales"}
+        </button>
+      )}
     </>
   );
 }

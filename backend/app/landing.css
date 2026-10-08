@@ -728,3 +728,8 @@
   .lp-head__rule, .lp-paso__line { transform: scaleX(1); }
   .lp-fantasma { opacity: 0.4; }
 }
+
+/* Enlace a la página propia de preguntas y a precios (docs/pendientes-de-lanzamiento-2026-10-07.md §4). */
+.lp-faq__pie{margin-top:22px;text-align:center;font-size:14px;opacity:.75}
+.lp-faq__pie a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+.lp-faq__pie a:hover{opacity:1}

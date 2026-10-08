@@ -5,6 +5,7 @@ import { construirMensajesCV } from "@/lib/ai-messages";
 import { LISTA_LIMPIEZA_CL } from "@/scripts/limpieza/cl";
 import { normalizarVetos, normalizarSenales } from "@/lib/normalizar-patron";
 import { UMBRAL_GRIS_POR_DEFECTO, UMBRAL_POSTULAR_POR_DEFECTO } from "@/lib/calibracion-umbral";
+import { cuentaParaAprender } from "@/lib/panel-revision";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -124,8 +125,12 @@ export async function compilarPerfil(
       "\n"
     : "";
 
-  const decisionesSi = decisiones.filter((d) => d.veredicto === "SI").map((d) => d.tituloCrudo);
-  const decisionesNo = decisiones.filter((d) => d.veredicto === "NO").map((d) => d.tituloCrudo);
+  // docs/panel-de-revision-en-el-portal.md §3.3 y §3.4: del panel del portal
+  // entran las correcciones, no lo que el motor ya iba a postular, y nada de
+  // una tanda en que se marcó casi todo.
+  const queEnsenan = decisiones.filter(cuentaParaAprender);
+  const decisionesSi = queEnsenan.filter((d) => d.veredicto === "SI").map((d) => d.tituloCrudo);
+  const decisionesNo = queEnsenan.filter((d) => d.veredicto === "NO").map((d) => d.tituloCrudo);
 
   const contextoDecisiones =
     (decisionesSi.length

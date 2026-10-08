@@ -1864,6 +1864,113 @@ bloque(async () => {
   check('el latido de la pestaña de una aprobada alarga su seguro (90 s desde ahora)', b.ctx.__alargadoA === 90000, b.ctx.__alargadoA);
 });
 
+// ── 21. El panel de revisión del portal (docs/panel-de-revision-en-el-portal.md §2.2) ──
+bloque(async () => {
+  const URL = (id) => 'https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-vendedor-' + id;
+  const aEnviar = [
+    { externalId: 'A1', decisionId: 'd1', url: URL('A1'), titulo: 'Vendedor', plataforma: 'Computrabajo' },
+    { externalId: 'G1', decisionId: 'd2', url: URL('G1'), titulo: 'Cajero', plataforma: 'Computrabajo' },
+  ];
+  const json = (status, cuerpo) => ({ ok: status < 400, status, json: async () => cuerpo });
+  function nuevo(cfg, opciones) {
+    const o = opciones || {};
+    const b = cargarBackgroundJs({
+      fetchImpl: async (url) => {
+        const u = String(url);
+        if (/\/api\/extension\/estado/.test(u)) return o.estado || json(200, { estado: { pausada: false, soloObservar: false, revisarAntes: false, postulacionHabilitada: true }, recienActivada: true });
+        if (/\/api\/extension\/revision/.test(u)) return o.revision || json(200, { ok: true, pesoReducido: false, aEnviar });
+        if (/\/api\/extension\/puede-postular/.test(u)) return json(200, o.cupo || { permitido: true, motivo: null, restantes: 10 });
+        return json(404, {});
+      },
+    });
+    b.storageLocal.config = cfg;
+    b.aplicadas = [];
+    b.ctx.applyInTab = async (_url, _titulo, decisionId, _urlOferta, revisar) => {
+      b.aplicadas.push(decisionId + (revisar ? ':revisar' : ''));
+      await tick();
+      return (o.resultados && o.resultados[decisionId]) || { ok: true, expirada: false };
+    };
+    b.avisos = [];
+    b.ctx.chrome.tabs.sendMessage = (id, m, cb) => {
+      if (m && m.type === 'PROGRESO_REVISION') b.avisos.push(id + ':' + m.decisionId + ':' + m.estado);
+      if (cb) cb({});
+    };
+    return b;
+  }
+  const llamadas = (b) => b.fetchLlamadas.map(l => l.url.replace(/^https:\/\/autopostula\.cl/, '').split('?')[0]);
+  const ofertas = [
+    { externalId: 'A1', banda: 'postular', elegida: true }, { externalId: 'A2', banda: 'postular', elegida: false },
+    { externalId: 'G1', banda: 'gris', elegida: true },
+  ];
+  const desde = { tab: { id: 77 } };
+
+  // ── La cuenta solo miraba: apretar es empezar a postular ──
+  let b = nuevo({ active: true, postulacionHabilitada: false });
+  await tick();
+  let r = await b.enviarMensajeAsync({ type: 'POSTULAR_ELEGIDAS', plataforma: 'Computrabajo', ofertas }, desde);
+  check('solo mirando: primero se activa la postulación y después se registra lo elegido', r.ok === true && llamadas(b).indexOf('/api/extension/estado') >= 0 && llamadas(b).indexOf('/api/extension/estado') < llamadas(b).indexOf('/api/extension/revision'), llamadas(b));
+  const registro = b.fetchLlamadas.find(l => /\/api\/extension\/revision/.test(l.url));
+  check('...el servidor recibe el portal y cada casilla tal cual', JSON.parse(registro.init.body).plataforma === 'Computrabajo' && JSON.parse(registro.init.body).ofertas.length === 3);
+  check('...la página recibe la config nueva (ya no solo mira) y qué quedó en cola', r.config && r.config.postulacionHabilitada === true && r.encoladas.map(e => e.decisionId + ':' + e.externalId).join() === 'd1:A1,d2:G1', r);
+  check('...y que la primera se muestra antes de enviarla', r.primeraConRevision === true);
+  await hasta(() => b.aplicadas.length >= 2);
+  check('se postulan en orden por la cola de aprobadas; solo la primera con revisión', b.aplicadas.join() === 'd1:revisar,d2', b.aplicadas);
+  await hasta(() => b.avisos.length >= 4);
+  check('la pestaña del panel recibe el avance de cada una', b.avisos.join() === '77:d1:enviando,77:d1:enviada,77:d2:enviando,77:d2:enviada', b.avisos);
+
+  // ── Ya postulaba: sin activar y sin revisión ──
+  b = nuevo({ active: true, postulacionHabilitada: true });
+  await tick();
+  r = await b.enviarMensajeAsync({ type: 'POSTULAR_ELEGIDAS', plataforma: 'Computrabajo', ofertas }, desde);
+  await hasta(() => b.aplicadas.length >= 2);
+  check('ya postulando: no se activa nada, y ninguna va con revisión', r.ok === true && !llamadas(b).includes('/api/extension/estado') && r.primeraConRevision === false && b.aplicadas.join() === 'd1,d2', { llamadas: llamadas(b), aplicadas: b.aplicadas });
+
+  // ── No se pudo activar: no se registra ni se envía nada ──
+  b = nuevo({ active: true, postulacionHabilitada: false }, { estado: json(400, { error: 'Confirma tu objetivo laboral primero' }) });
+  await tick();
+  r = await b.enviarMensajeAsync({ type: 'POSTULAR_ELEGIDAS', plataforma: 'Computrabajo', ofertas }, desde);
+  await tick(20);
+  check('si la cuenta no cumple para activar: el motivo, y nada registrado ni enviado', r.ok === false && r.error === 'Confirma tu objetivo laboral primero' && !llamadas(b).includes('/api/extension/revision') && b.aplicadas.length === 0, r);
+
+  // ── El registro falla: no se envía nada ──
+  b = nuevo({ active: true, postulacionHabilitada: true }, { revision: json(500, { error: 'algo falló' }) });
+  await tick();
+  r = await b.enviarMensajeAsync({ type: 'POSTULAR_ELEGIDAS', plataforma: 'Computrabajo', ofertas }, desde);
+  await tick(20);
+  check('si no se pudo registrar: el error, y no se envía nada', r.ok === false && r.error === 'algo falló' && b.aplicadas.length === 0, r);
+
+  // ── Nada marcado: ni siquiera llama al servidor ──
+  b = nuevo({ active: true, postulacionHabilitada: true });
+  await tick();
+  r = await b.enviarMensajeAsync({ type: 'POSTULAR_ELEGIDAS', plataforma: 'Computrabajo', ofertas: [{ externalId: 'A2', banda: 'postular', elegida: false }] }, desde);
+  check('sin ninguna marcada: no hace nada', r.ok === false && b.fetchLlamadas.filter(l => /revision|estado/.test(l.url)).length === 0, r);
+
+  // ── Sin cupo: ninguna se abre, y el panel lo sabe ──
+  b = nuevo({ active: true, postulacionHabilitada: true }, { cupo: { permitido: false, motivo: 'limite', restantes: 0 } });
+  await tick();
+  r = await b.enviarMensajeAsync({ type: 'POSTULAR_ELEGIDAS', plataforma: 'Computrabajo', ofertas }, desde);
+  await hasta(() => b.avisos.length >= 2);
+  check('sin cupo: no se abre ninguna y el panel recibe "sin cupo" de cada una', b.aplicadas.length === 0 && b.avisos.join() === '77:d1:sin_cupo,77:d2:sin_cupo', b.avisos);
+
+  // ── Una que ya no existe ──
+  b = nuevo({ active: true, postulacionHabilitada: true }, { resultados: { d2: { ok: false, expirada: true } } });
+  await tick();
+  r = await b.enviarMensajeAsync({ type: 'POSTULAR_ELEGIDAS', plataforma: 'Computrabajo', ofertas }, desde);
+  await hasta(() => b.avisos.length >= 4);
+  check('una oferta que ya no está: el panel recibe "expirada"', b.avisos[3] === '77:d2:expirada', b.avisos);
+
+  // ── DO_APPLY lleva la revisión ──
+  b = cargarBackgroundJs();
+  await tick();
+  const enviados = [];
+  b.ctx.chrome.tabs.sendMessage = (id, m, cb) => { enviados.push(m); if (cb) cb({ ok: true }); };
+  const promesa = b.ctx.applyInTab(URL('A1'), 'Vendedor', 'd9', URL('A1'), true);
+  b.completarTab(b.tabsCreados[0].id);
+  await hasta(() => enviados.length >= 1);
+  check('la pestaña recibe DO_APPLY con revisar cuando corresponde', enviados[0] && enviados[0].type === 'DO_APPLY' && enviados[0].revisar === true && enviados[0].decisionId === 'd9', enviados[0]);
+  await promesa;
+});
+
 const tope = setTimeout(() => {
   console.error('✗ tiempo agotado: algún bloque de prueba nunca terminó');
   process.exit(1);

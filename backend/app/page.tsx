@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PREGUNTAS } from "@/lib/preguntas-frecuentes";
 import Link from "next/link";
 import { AlignLeft, Check, Highlighter, Info, Plus } from "lucide-react";
 
@@ -120,34 +121,6 @@ const PLAN_PRO = [
   "Perfil dinámico: sigue aprendiendo de tus conversaciones",
 ];
 
-/* Los miedos reales de quien busca trabajo. La misma lista pinta la sección y
-   los datos estructurados, así no se pueden desincronizar. */
-const PREGUNTAS = [
-  {
-    q: "¿Me pueden bloquear la cuenta del portal?",
-    r: "La extensión trabaja dentro del portal con tu sesión, una oferta a la vez y a un ritmo parecido al de una persona. No usa tu contraseña ni entra por otro lado.",
-  },
-  {
-    q: "¿Por qué no postula a todas las ofertas?",
-    r: "Porque postular a lo que no calza te hace perder tiempo a ti y al reclutador. Deja fuera lo que queda lejos de tus comunas, lo que es de otro nivel o de otro rubro, y lo que ya postulaste. Lo dudoso te lo pregunta.",
-  },
-  {
-    q: "¿Qué pasa si la IA responde mal?",
-    r: "Puedes revisar cada respuesta antes de que se envíe y corregirla. Si le falta un dato tuyo, no lo inventa: deja la postulación pendiente hasta que lo completes.",
-  },
-  {
-    q: "¿Funciona en el celular?",
-    r: "Desde el celular creas tu cuenta, subes tu CV, conversas con la IA, decides las ofertas que quedaron en Por decidir y ves tus postulaciones. Para postular necesitas Chrome en un computador.",
-  },
-  {
-    q: "¿Tengo que dejar el computador prendido?",
-    r: "No. Con Premium se pone al día sola cada vez que abres tu computador, y tú no tienes que hacer nada. Con el plan gratis, la extensión postula mientras estás en el portal.",
-  },
-  {
-    q: "¿Puedo cancelar cuando quiera?",
-    r: "Sí, desde Ajustes. Premium sigue activo hasta el fin del mes que pagaste, y después vuelves al plan gratis.",
-  },
-];
 
 function Tilde({ color }: { color?: string }) {
   return <Check size={15} color={color} strokeWidth={2.6} />;
@@ -492,7 +465,8 @@ export default function LandingPage() {
             </Revelar>
 
             <Revelar className="lp-faq__lista" retraso={1}>
-              {PREGUNTAS.map(({ q, r }, i) => (
+              {/* Las 6 primeras en la portada; las demás viven en /preguntas-frecuentes. */}
+              {PREGUNTAS.slice(0, 6).map(({ q, r }, i) => (
                 <details key={q} open={i === 0}>
                   <summary>
                     {q}
@@ -501,6 +475,14 @@ export default function LandingPage() {
                   <p className="lp-faq__r">{r}</p>
                 </details>
               ))}
+            </Revelar>
+
+            <Revelar retraso={2}>
+              <p className="lp-faq__pie">
+                <Link href="/preguntas-frecuentes">Ver todas las preguntas</Link>
+                {" · "}
+                <Link href="/precios">Precios en detalle</Link>
+              </p>
             </Revelar>
           </div>
         </section>
@@ -537,6 +519,8 @@ export default function LandingPage() {
             <small className="ap-tnum">© {new Date().getFullYear()}</small>
           </div>
           <div className="lp-pie__links">
+            <Link href="/precios">Precios</Link>
+            <Link href="/preguntas-frecuentes">Preguntas frecuentes</Link>
             <Link href="/terminos">Términos y condiciones</Link>
             <Link href="/privacidad">Privacidad</Link>
           </div>

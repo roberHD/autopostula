@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import { Archivo, Inter } from "next/font/google";
 import { ProveedorAvisos } from "@/components/Avisos";
+// docs/pendientes-de-lanzamiento-2026-10-07.md §3: analítica del sitio.
+// La de Vercel y no otra por una razón concreta: no usa cookies, así que no
+// obliga a un banner de consentimiento en la primera pantalla, que es justo
+// donde se mide si la gente entra o se va. Mide páginas vistas y de dónde
+// llegan, nada a nivel de persona: sin grabación de sesión ni mapas de calor,
+// que sobre gente buscando trabajo no corresponde (Ley 21.719).
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 // Archivo variable con el eje de ancho: los titulares van en expandido
@@ -45,6 +52,7 @@ export default function RootLayout({
     <html lang="es" data-scroll-behavior="smooth" className={`${archivo.variable} ${inter.variable}`}>
       <body>
         <ProveedorAvisos>{children}</ProveedorAvisos>
+        <Analytics />
       </body>
     </html>
   );
