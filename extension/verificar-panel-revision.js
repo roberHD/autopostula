@@ -352,7 +352,8 @@ function conPagina(t, extra) {
     const envio = t.mensajes.find(m => m.type === 'POSTULAR_ELEGIDAS');
     check('apretar manda lo elegido a background.js, con el portal', !!envio && envio.plataforma === 'Computrabajo');
     const por = (id) => envio.ofertas.find(o => o.externalId === id);
-    check('va cada oferta revisada, con su banda y si quedó marcada', envio.ofertas.length === 9 && por('P1').elegida && !por('P3').elegida && por('G1').elegida && !por('G2').elegida && por('D2').elegida && !por('D1').elegida, envio.ofertas.map(o => o.externalId + ':' + o.elegida));
+    check('va cada oferta revisada, con su banda y si quedó marcada', envio.ofertas.length === 7 && por('P1').elegida && !por('P3').elegida && por('G1').elegida && por('D2').elegida && !por('D1').elegida, envio.ofertas.map(o => o.externalId + ':' + o.elegida));
+    check('...menos las que iban sin casilla (sin enlace, repetida): sobre esas no se decidió nada', !por('G2') && !por('D4'), envio.ofertas.map(o => o.externalId));
     check('...con el puntaje y las razones que tenía', por('G1').scoreLocal === 55 && por('G1').razones.length === 2 && por('P1').url === URL_CT('P1'));
     check('...y mirando, nada cuenta como ya enviado', envio.ofertas.every(o => o.yaEnviada === false));
     check('mientras tanto: "Postulando a 4 ofertas…", sin botón y sin poder cambiar las casillas', r.getElementById('ap-ov-panel-t').textContent === 'Postulando a 4 ofertas…' && r.getElementById('ap-ov-panel-si').hidden === true && leerPanel(r)[0].filas[0].casilla.disabled === true);

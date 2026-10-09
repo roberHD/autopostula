@@ -68,6 +68,40 @@ AP.gastarRevisionPrimera = function () {
   try { sessionStorage.removeItem(AP_CLAVE_REVISAR_PRIMERA); } catch (e) {}
 };
 
+// docs/panel-de-revision-en-el-portal.md §9.1 (lo decidió Roberto el
+// 2026-10-08): con «Revisar antes de enviar» y la persona mirando la pestaña,
+// la extensión no envía sola lo que sirve. Lo marca, lo propone en la tarjeta
+// del final y espera a que la persona elija en el panel; lo elegido sale por la
+// cola, y cada una se muestra antes de enviarla. En las ráfagas y en las
+// pestañas de fondo, que nadie está mirando, sigue como siempre.
+AP.proponeEnVezDeEnviar = function () {
+  if (!(AP.cfg && AP.cfg.modoRevision) || AP.soloObservarEfectivo() || AP.esPestanaDeRafaga()) return false;
+  try { return !document.hidden; } catch (e) { return false; }
+};
+AP.RAZON_PROPUESTA = 'Te la propuse: espera a que la elijas (Revisar antes de enviar)';
+
+// Un conjunto de ids de esta pestaña (sessionStorage), con tope.
+function apIdsDeLaPestana(clave) {
+  const leer = () => { try { return JSON.parse(sessionStorage.getItem(clave) || '{}') || {}; } catch (e) { return {}; } };
+  return {
+    tiene: (id) => !!id && !!leer()[id],
+    agregar: (ids) => {
+      const todos = leer();
+      for (const id of ids) if (id) { delete todos[id]; todos[id] = 1; }
+      const lista = Object.keys(todos);
+      if (lista.length > 300) for (const viejo of lista.slice(0, lista.length - 300)) delete todos[viejo];
+      try { sessionStorage.setItem(clave, JSON.stringify(todos)); } catch (e) {}
+    },
+  };
+}
+// Las que se propusieron en esta pestaña sin enviarlas (en el panel salen con
+// casilla aunque la cuenta postule), y las que la persona ya vio en una tarjeta
+// del final y dejó para después («Ahora no»).
+const apPropuestas = apIdsDeLaPestana('ap_propuestas');
+const apPropuestasVistas = apIdsDeLaPestana('ap_propuestas_vistas');
+AP.anotarPropuesta = function (id) { apPropuestas.agregar([id]); };
+AP.esPropuesta = function (id) { return apPropuestas.tiene(id); };
+
 // ── Overlay: la máquina hablando dentro del portal ────────────────
 //
 // Vive dentro del sitio de Computrabajo/Laborum, así que tiene dos
@@ -445,7 +479,23 @@ function apMinuscula(t) { return t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
 
 // Lo que dice la tarjeta, con las cifras de las marcas de esta página
 // (AP.resumenDeMarcas): { total, postular, gris, descartar, razonTop }.
-AP.textoCierre = function (c) {
+// `propone`: la cuenta postula con «Revisar antes de enviar» y no se envió nada.
+AP.textoCierre = function (c, propone) {
+  const razon = c.descartar && c.razonTop
+    ? (c.descartar === 1 ? 'Por qué se descarta: ' : 'La razón más repetida para descartar: ') + apMinuscula(AP.razonComoEnElPanel(c.razonTop)) + '.'
+    : '';
+  if (propone) {
+    // Habla solo de lo que espera a la persona: lo dudoso ya quedó en "Por
+    // decidir", y lo que dejó para después en otra tarjeta no se vuelve a contar.
+    return {
+      principal: c.postular === 1
+        ? 'En esta página hay una oferta que te sirve. No la envío hasta que me digas.'
+        : 'En esta página hay ' + c.postular + ' ofertas que te sirven. No envío ninguna hasta que me digas.',
+      razon: c.gris ? (c.gris === 1 ? 'La dudosa la dejé en «Por decidir».' : 'Las ' + c.gris + ' dudosas las dejé en «Por decidir».') : '',
+      boton: c.postular === 1 ? 'Verla y decidir' : 'Elegir a cuáles postular',
+      listo: '',
+    };
+  }
   const resto = [];
   if (c.gris) resto.push('te dejaría ' + c.gris + ' para que decidas');
   if (c.descartar) resto.push('descartaría ' + c.descartar);
@@ -459,9 +509,6 @@ AP.textoCierre = function (c) {
   } else {
     principal = 'De las ' + c.total + ' ofertas de esta página no postularía a ninguna' + (resto.length ? ': ' + apUnir(resto) : '') + '.';
   }
-  const razon = c.descartar && c.razonTop
-    ? (c.descartar === 1 ? 'Por qué se descarta: ' : 'La razón más repetida para descartar: ') + apMinuscula(AP.razonComoEnElPanel(c.razonTop)) + '.'
-    : '';
   const listo = c.postular === 1
     ? 'Listo: empieza por la que te sirve. Te la muestra antes de enviarla.'
     : c.postular
@@ -471,7 +518,9 @@ AP.textoCierre = function (c) {
 };
 
 // Cuenta las marcas de las ofertas que hay en esta página (una vez cada una).
-AP.resumenDeMarcas = function (ids, marcas) {
+// `cuentaLaQueSirve(id)`, si viene, deja fuera las que sirven que ya no esperan
+// a la persona (con «Revisar antes de enviar»: las elegidas o dejadas para después).
+AP.resumenDeMarcas = function (ids, marcas, cuentaLaQueSirve) {
   const c = { total: 0, postular: 0, gris: 0, descartar: 0, razonTop: null };
   const razones = [];
   const contadas = new Set();
@@ -480,6 +529,7 @@ AP.resumenDeMarcas = function (ids, marcas) {
     contadas.add(id);
     const m = marcas[id];
     if (!m || (m.b !== 'postular' && m.b !== 'gris' && m.b !== 'descartar')) continue;
+    if (m.b === 'postular' && cuentaLaQueSirve && !cuentaLaQueSirve(id)) continue;
     c.total++;
     c[m.b]++;
     if (m.b === 'descartar' && m.r) razones.push(m.r);
@@ -488,15 +538,31 @@ AP.resumenDeMarcas = function (ids, marcas) {
   return c;
 };
 
-// Lo llama cada adaptador cuando termina de revisar una página del listado.
+// Lo llama cada adaptador cuando termina de revisar una página del listado. En
+// "solo mirar" pregunta si empieza a postular; con «Revisar antes de enviar»
+// (AP.proponeEnVezDeEnviar), propone lo que sirve y lleva al panel.
 AP.cierreDePagina = function () {
-  if (!AP.soloObservarEfectivo() || AP.esPestanaDeRafaga()) return false;
-  if (typeof AP.tarjetasDeLaPagina !== 'function') return false;
+  if (AP.esPestanaDeRafaga() || typeof AP.tarjetasDeLaPagina !== 'function') return false;
+  apRecorridoNoAplica();
+  const propone = AP.proponeEnVezDeEnviar();
+  if (!AP.soloObservarEfectivo() && !propone) return false;
+  if (apCierreEstado === 'activando') return false;
+  const ids = AP.tarjetasDeLaPagina().map(t => t.id);
+  if (propone) {
+    // Sale mientras quede algo propuesto que la persona no eligió ni dejó para
+    // después: también en la página siguiente, o con las que trae "ver más".
+    const resumen = AP.resumenDeMarcas(ids, apLeerMarcas(), (id) => AP.esPropuesta(id) && !AP.decididaEnPanel(id) && !apPropuestasVistas.tiene(id));
+    if (!resumen.postular) return false;
+    apMostrarCierre(resumen, true);
+    return true;
+  }
   try { if (sessionStorage.getItem(AP_CLAVE_CIERRE_LISTO)) return false; } catch (e) { return false; }
-  if (apCierreEstado === 'activando' || apCierreEstado === 'listo') return false;
-  const resumen = AP.resumenDeMarcas(AP.tarjetasDeLaPagina().map(t => t.id), apLeerMarcas());
+  if (apCierreEstado === 'listo') return false;
+  const resumen = AP.resumenDeMarcas(ids, apLeerMarcas());
   if (!resumen.total) return false;
-  apMostrarCierre(resumen);
+  // La primera vez, el recorrido la muestra cuando le toca (su paso 3).
+  if (apRecorridoRetieneCierre(resumen)) return true;
+  apMostrarCierre(resumen, false);
   return true;
 };
 
@@ -507,9 +573,9 @@ function apResultadoCierre(texto, clase) {
   r.className = 'resultado' + (clase ? ' ' + clase : '');
 }
 
-function apMostrarCierre(resumen) {
+function apMostrarCierre(resumen, propone) {
   apAsegurarOverlay();
-  const texto = AP.textoCierre(resumen);
+  const texto = AP.textoCierre(resumen, propone);
   ovRaiz.getElementById('ap-ov-cierre-t').textContent = texto.principal;
   ovRaiz.getElementById('ap-ov-cierre-razon').textContent = texto.razon;
   // §4 y §3.5: sin sesión en el portal no puede postular. Se dice acá, donde se
@@ -520,11 +586,14 @@ function apMostrarCierre(resumen) {
   const si = ovRaiz.getElementById('ap-ov-cierre-si');
   si.disabled = false;
   si.textContent = sinSesion ? 'Iniciar sesión en ' + portal : texto.boton;
-  si.onclick = sinSesion ? apIrAIniciarSesion : () => apEmpezarAPostular(resumen);
-  ovRaiz.getElementById('ap-ov-cierre-no').onclick = apTodaviaNo;
+  si.onclick = sinSesion ? apIrAIniciarSesion : propone ? () => AP.abrirPanel() : () => apEmpezarAPostular(resumen);
+  const no = ovRaiz.getElementById('ap-ov-cierre-no');
+  no.textContent = propone ? 'Ahora no' : 'Todavía no, quiero mirar';
+  no.onclick = propone ? apAhoraNo : apTodaviaNo;
   // docs/panel-de-revision-en-el-portal.md §2.1: la lista entera, para elegir.
+  // Con «Revisar antes de enviar» eso ya es el botón principal.
   const ver = ovRaiz.getElementById('ap-ov-cierre-ver');
-  ver.hidden = sinSesion;
+  ver.hidden = sinSesion || !!propone;
   ver.textContent = resumen.total === 1 ? 'Verla y elegir' : 'Ver las ' + resumen.total + ' y elegir';
   ver.onclick = () => AP.abrirPanel();
   ovRaiz.getElementById('ap-ov-cierre-botones').hidden = false;
@@ -627,9 +696,11 @@ AP.ofertasDelPanel = function () {
   return lista.map((o, i) => [o, i]).sort((a, b) => orden(a[0]) - orden(b[0]) || a[1] - b[1]).map(par => par[0]);
 };
 
-// Por qué una oferta va sin casilla, o null si se puede marcar.
+// Por qué una oferta va sin casilla, o null si se puede marcar. Con la cuenta
+// postulando, lo que servía ya lo envió el escaneo, salvo que haya quedado
+// propuesto («Revisar antes de enviar», AP.esPropuesta).
 function apPorQueFija(o, observando) {
-  if (o.banda === 'postular' && !observando) return 'ya_la_vio_el_escaneo';
+  if (o.banda === 'postular' && !observando && !AP.esPropuesta(o.id)) return 'ya_la_vio_el_escaneo';
   if (o.repetida) return 'repetida';
   if (!o.url || !o.titulo) return 'sin_enlace';
   return null;
@@ -672,15 +743,16 @@ AP.textoPiePanel = function (n, cupo, portal, sinSesion) {
 };
 
 // La cabeza del panel en cada momento: eligiendo, enviando o terminado.
-// `info`: { total, observando, primeraConRevision } y el avance de la cola
-// ({ enviando, enviadas, sinCupo, enCola, reintentos }).
+// `info`: { total, observando, propone, primeraConRevision, cadaUnaConRevision }
+// y el avance de la cola ({ enviando, enviadas, sinCupo, enCola, reintentos }).
 AP.textoCabezaPanel = function (estado, info) {
   if (estado === 'enviando') {
     return {
       quien: 'AutoPostula',
       titulo: info.enviando === 1 ? 'Postulando a una oferta…' : 'Postulando a ' + info.enviando + ' ofertas…',
       ayuda: 'Las envío de a una, en otra pestaña. Puedes seguir mirando: el avance queda acá.' +
-        (info.primeraConRevision ? ' La primera te la muestro antes de enviarla.' : ''),
+        (info.cadaUnaConRevision ? ' Cada una te la muestro antes de enviarla.'
+          : info.primeraConRevision ? ' La primera te la muestro antes de enviarla.' : ''),
     };
   }
   if (estado === 'listo') {
@@ -696,6 +768,13 @@ AP.textoCabezaPanel = function (estado, info) {
     if (info.reintentos) notas.push(info.reintentos === 1 ? 'La que no se pudo se vuelve a intentar sola más tarde.' : 'Las que no se pudieron se vuelven a intentar solas más tarde.');
     if (info.enCola) notas.push(info.enCola === 1 ? 'La que quedó en cola se envía sola más tarde.' : 'Las que quedaron en cola se envían solas más tarde.');
     return { quien: 'AutoPostula', titulo, ayuda: notas.join(' ') };
+  }
+  if (info.propone) {
+    return {
+      quien: 'AutoPostula · todavía no envió nada',
+      titulo: info.total === 1 ? 'Revisé 1 oferta de esta página' : 'Revisé ' + info.total + ' ofertas de esta página',
+      ayuda: 'Tienes «Revisar antes de enviar»: no envié ninguna. Las que te sirven vienen marcadas; quita las que no quieras y suma las que te interesen.',
+    };
   }
   return {
     quien: info.observando ? 'AutoPostula · todavía no envió nada' : 'AutoPostula',
@@ -744,6 +823,8 @@ AP.abrirPanel = function () {
   apPanel = {
     url: location.href,
     observando,
+    propone: !observando && ofertas.some(o => o.banda === 'postular' && AP.esPropuesta(o.id)),
+    cadaUnaConRevision: !!(AP.cfg && AP.cfg.modoRevision),
     ofertas,
     elegidas: new Set(ofertas.filter(o => o.banda === 'postular' && !apPorQueFija(o, observando)).map(o => o.id)),
     verDescartadas: false,
@@ -772,6 +853,7 @@ function apMostrarPanel() {
   ovRaiz.querySelector('.pila').classList.add('con-panel');
   ovRaiz.getElementById('ap-ov-panel').hidden = false;
   apPintarPanel();
+  apRecorridoEvento('panel');
 }
 
 function apCerrarPanel() {
@@ -779,6 +861,7 @@ function apCerrarPanel() {
     ovRaiz.getElementById('ap-ov-panel').hidden = true;
     ovRaiz.querySelector('.pila').classList.remove('con-panel');
   }
+  apRecorridoEvento('panel_cerrado');
   // Mientras se envía, el avance sigue: se puede volver a abrir desde el ícono.
   if (apPanel && apPanel.estado === 'enviando') return;
   apPanel = null;
@@ -802,7 +885,8 @@ function apPintarPanel() {
   const p = apPanel;
   if (!p || !ovRaiz) return;
   const cabeza = AP.textoCabezaPanel(p.estado, Object.assign({
-    total: p.ofertas.length, observando: p.observando, primeraConRevision: p.primeraConRevision,
+    total: p.ofertas.length, observando: p.observando, propone: p.propone,
+    primeraConRevision: p.primeraConRevision, cadaUnaConRevision: p.cadaUnaConRevision,
   }, apResumenCola()));
   ovRaiz.getElementById('ap-ov-panel-quien').textContent = cabeza.quien;
   ovRaiz.getElementById('ap-ov-panel-t').textContent = cabeza.titulo;
@@ -924,16 +1008,20 @@ function apAccionPanel() {
 
 // Manda lo elegido a background.js. Las que no alcanzan por el cupo no se
 // registran (ni sí ni no): la persona las quería, pero no las está enviando.
+// Tampoco las que iban sin casilla porque no se pueden postular (repetidas, sin
+// enlace): sobre esas no decidió nada. Antes, una que servía y no tenía enlace
+// quedaba registrada como "quitada".
 function apEnviarPanel(enviar, fueraDeCupo, portal) {
   const p = apPanel;
   const aEnviar = new Set(enviar.map(o => o.id));
   const fuera = new Set(fueraDeCupo.map(o => o.id));
-  const ofertas = p.ofertas.filter(o => !fuera.has(o.id)).map((o) => {
+  const sinDecision = new Set(['repetida', 'sin_enlace']);
+  const ofertas = p.ofertas.filter(o => !fuera.has(o.id) && !sinDecision.has(apPorQueFija(o, p.observando))).map((o) => {
     const guardada = apEntradaGuardada(o.titulo, o.empresa);
     return {
       externalId: o.id, titulo: o.titulo, empresa: o.empresa, url: o.url, banda: o.banda,
       elegida: aEnviar.has(o.id),
-      yaEnviada: o.banda === 'postular' && !p.observando,
+      yaEnviada: apPorQueFija(o, p.observando) === 'ya_la_vio_el_escaneo',
       scoreLocal: o.score != null ? o.score : (guardada ? guardada.score : null),
       razones: o.razones,
       entrada: guardada ? guardada.entrada : null,
@@ -959,6 +1047,7 @@ function apEnviarPanel(enviar, fueraDeCupo, portal) {
       if (!encoladas.size) p.estado = 'listo';
       apArmarVigiaPanel();
       apPintarPanel();
+      apRecorridoEvento('enviado');
       return;
     }
     p.estado = 'eligiendo';
@@ -1005,6 +1094,18 @@ function apTodaviaNo() {
   try { sessionStorage.setItem(AP_CLAVE_CIERRE_LISTO, '1'); } catch (e) {}
   apCierreEstado = 'listo';
   if (ovRaiz) ovRaiz.getElementById('ap-ov-cierre').hidden = true;
+  apRecorridoEvento('todavia_no');
+}
+
+// «Ahora no» con «Revisar antes de enviar»: lo propuesto queda sin enviar (se
+// puede elegir después desde el ícono) y la tarjeta no vuelve a salir por esas
+// mismas ofertas.
+function apAhoraNo() {
+  const marcas = apLeerMarcas();
+  const ids = typeof AP.tarjetasDeLaPagina === 'function' ? AP.tarjetasDeLaPagina().map(t => t.id) : [];
+  apPropuestasVistas.agregar(ids.filter(id => marcas[id] && marcas[id].b === 'postular' && AP.esPropuesta(id)));
+  apCierreEstado = 'listo';
+  if (ovRaiz) ovRaiz.getElementById('ap-ov-cierre').hidden = true;
 }
 
 // Activa la postulación en la cuenta (background.js -> /api/extension/estado,
@@ -1031,6 +1132,7 @@ function apEmpezarAPostular(resumen) {
       ovRaiz.getElementById('ap-ov-cierre-ver').hidden = true;
       apResultadoCierre(texto.listo, 'ok');
       AP.liberarObservadas();
+      apRecorridoEvento('activada');
       setTimeout(() => {
         if (ovRaiz) ovRaiz.getElementById('ap-ov-cierre').hidden = true;
         if (resumen.postular && AP.escanear) { AP.procesando = false; AP.escanear(); }
@@ -1052,6 +1154,463 @@ function apEmpezarAPostular(resumen) {
   }
 }
 
+// ── El recorrido de la primera vez (docs/primera-busqueda-guiada.md §13) ──
+//
+// Cuatro pasos encima de la primera búsqueda de verdad, no una demo: cada uno
+// sale cuando pasa lo que explica (las marcas, la tarjeta del final, el panel)
+// y se apoya solo en lo que pinta la extensión, nunca en botones del portal,
+// para no romperse cuando el portal cambia. Queda pendiente al instalar y
+// cuando la persona aprieta «Probémosla ahora» o «Buscar en…» en su panel
+// (background.js, recorridoPendiente). Sale en «solo mirar», con la persona
+// mirando la pestaña, una sola vez, y se puede saltar en cualquier paso.
+// Mientras van los dos primeros pasos la tarjeta del final espera: aparece en
+// el tercero, cuando toca explicarla.
+const AP_REC_TOTAL = 4;
+// Uno que quedó a medias (se cerró la pestaña, fue a iniciar sesión) se retoma
+// donde iba; pasado esto, empieza de nuevo.
+const AP_REC_RETOMAR_MS = 2 * 60 * 60 * 1000;
+let apRecGuardado = null; // chrome.storage.local.recorrido
+let apRec = null;         // el que corre en esta pestaña
+let apRecHost = null, apRecRaiz = null, apRecCuadro = null, apRecAnima = null;
+
+const AP_ESTILO_RECORRIDO =
+  ':host{all:initial}' +
+  '*{box-sizing:border-box}' +
+  // El foco: un marco sobre lo que se explica, y el resto de la página en penumbra.
+  '.foco{position:fixed;left:0;top:0;width:0;height:0;border-radius:12px;border:2px solid #D6F24B;' +
+    'box-shadow:0 0 0 9999px rgba(10,12,13,.46);pointer-events:none}' +
+  '.foco::after{content:"";position:absolute;inset:-3px;border-radius:14px;border:2px solid #D6F24B;animation:r-late 1.9s ease-out infinite}' +
+  '@keyframes r-late{0%{opacity:.8;inset:-3px}100%{opacity:0;inset:-14px}}' +
+  '.foco[hidden],.globo[hidden],.saltar[hidden]{display:none}' +
+  '.globo{position:fixed;left:0;top:0;width:312px;max-width:calc(100vw - 32px);padding:14px 16px;border-radius:12px;pointer-events:auto;' +
+    'background:#16181A;color:#E9EBEA;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 40px -12px rgba(0,0,0,.6);' +
+    'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;line-height:1.5;text-align:left}' +
+  '.globo.entra{animation:r-entra .34s cubic-bezier(.2,.8,.3,1)}' +
+  '@keyframes r-entra{from{opacity:0;transform:translateY(8px) scale(.97)}}' +
+  '.globo.cambia .t,.globo.cambia .d{animation:r-texto .35s ease-out}' +
+  '@keyframes r-texto{from{opacity:.1}}' +
+  // De un paso al otro, el foco y el globo viajan (solo al cambiar de paso: al
+  // seguir un scroll, van pegados).
+  '.anima{transition:left .48s cubic-bezier(.2,.8,.3,1),top .48s cubic-bezier(.2,.8,.3,1),width .48s cubic-bezier(.2,.8,.3,1),height .48s cubic-bezier(.2,.8,.3,1)}' +
+  '.flecha{position:absolute;width:12px;height:12px;background:#16181A;transform:rotate(45deg);border:1px solid rgba(255,255,255,.12)}' +
+  '.flecha[data-lado="derecha"]{left:-7px;border-right:0;border-top:0}' +
+  '.flecha[data-lado="izquierda"]{right:-7px;border-left:0;border-bottom:0}' +
+  '.flecha[data-lado="abajo"]{top:-7px;border-right:0;border-bottom:0}' +
+  '.flecha[data-lado="arriba"]{bottom:-7px;border-left:0;border-top:0}' +
+  '.flecha[data-lado="centro"]{display:none}' +
+  '.cabeza{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;color:#8E9599}' +
+  '.marca{width:18px;height:18px;flex:none;border-radius:5px;background:#26292D;border:1px solid #3C4145;display:grid;place-items:center}' +
+  '.marca svg{width:11px;height:11px;display:block}' +
+  '.marca path{fill:none;stroke:#D6F24B;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}' +
+  '.puntos{display:flex;align-items:center;gap:4px;margin-left:auto}' +
+  '.puntos i{display:block;width:6px;height:6px;border-radius:3px;background:#3C4145;transition:width .3s,background .3s}' +
+  '.puntos[data-n="2"] i:nth-child(-n+1),.puntos[data-n="3"] i:nth-child(-n+2),.puntos[data-n="4"] i:nth-child(-n+3),.puntos[data-n="5"] i{background:#7E8F2C}' +
+  '.puntos[data-n="1"] i:nth-child(1),.puntos[data-n="2"] i:nth-child(2),.puntos[data-n="3"] i:nth-child(3),.puntos[data-n="4"] i:nth-child(4){width:16px;background:#D6F24B}' +
+  'p{margin:0}' +
+  '.t{font-size:15px;font-weight:700;line-height:1.35;color:#F4F5F4}' +
+  '.d{margin-top:5px;color:#C9CDCF}' +
+  '.acciones{display:flex;align-items:center;gap:14px;margin-top:14px}' +
+  'button{all:unset;box-sizing:border-box;cursor:pointer;font-size:13px;line-height:1.2}' +
+  '.si{padding:8px 14px;border-radius:8px;background:#D6F24B;color:#16181A;font-weight:700;transition:filter .15s}' +
+  '.si:hover{filter:brightness(1.07)}' +
+  '.saltar{color:#8E9599;font-size:12px}' +
+  '.saltar:hover{color:#E9EBEA;text-decoration:underline}' +
+  'button:focus-visible{outline:2px solid #E9EBEA;outline-offset:2px}' +
+  '@media (prefers-reduced-motion:reduce){.foco::after,.globo.entra,.globo.cambia .t,.globo.cambia .d{animation:none}.anima{transition:none}}';
+
+const AP_HTML_RECORRIDO =
+  '<div class="foco" id="ap-rec-foco" hidden></div>' +
+  '<div class="globo" id="ap-rec-globo" role="dialog" aria-labelledby="ap-rec-t" aria-describedby="ap-rec-d" hidden>' +
+    '<span class="flecha" id="ap-rec-flecha"></span>' +
+    '<div class="cabeza">' +
+      '<span class="marca"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 6.8"/></svg></span>' +
+      '<span id="ap-rec-paso"></span>' +
+      '<span class="puntos" id="ap-rec-puntos" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' +
+    '</div>' +
+    '<p class="t" id="ap-rec-t"></p>' +
+    '<p class="d" id="ap-rec-d" aria-live="polite"></p>' +
+    '<div class="acciones">' +
+      '<button class="si" id="ap-rec-si" type="button"></button>' +
+      '<button class="saltar" id="ap-rec-saltar" type="button">Saltar el recorrido</button>' +
+    '</div>' +
+  '</div>';
+
+// Lo que dice cada paso. `c`: { total, postular, portal, sinSesion, banda,
+// ultima, sub, variante }.
+AP.textoRecorrido = function (paso, c) {
+  c = c || {};
+  const portal = c.portal || 'el portal';
+  const numero = (n) => 'Paso ' + n + ' de ' + AP_REC_TOTAL;
+  if (paso === 'hola') {
+    return {
+      paso: numero(1), n: 1,
+      titulo: 'Hola, soy AutoPostula',
+      texto: (c.total === 1 ? 'Revisé la oferta de esta página y la marqué' : 'Revisé las ' + c.total + ' ofertas de esta página y marqué cada una') +
+        ' con lo que haría. Te muestro cómo leer las marcas: no envío nada sin que me digas.',
+      boton: 'Muéstrame',
+    };
+  }
+  if (paso === 'marcas') {
+    const porBanda = {
+      postular: ['Esta te sirve', 'Cada oferta lleva su marca y el porqué. A las que te sirven, postularía.'],
+      gris: ['Esta, mejor que la decidas tú', 'Las dudosas no las envío: te las dejo en tu panel, en «Por decidir», para que digas sí o no.'],
+      descartar: ['Esta no calza', 'A las que no calzan no postulo. Si me equivoco con alguna, en la lista la puedes rescatar.'],
+    };
+    const t = porBanda[c.banda] || porBanda.descartar;
+    return { paso: numero(2), n: 2, titulo: t[0], texto: t[1], boton: c.ultima ? 'Ver el resumen' : 'Siguiente' };
+  }
+  if (paso === 'cierre') {
+    if (c.sinSesion) {
+      return {
+        paso: numero(3), n: 3, titulo: 'Para postular, inicia sesión',
+        texto: 'Sin tu sesión en ' + portal + ' no puedo postular por ti. Inicia sesión y vuelve a esta búsqueda: seguimos desde aquí.',
+        boton: 'Iniciar sesión en ' + portal,
+      };
+    }
+    if (!c.postular) {
+      return {
+        paso: numero(3), n: 3, titulo: 'Aquí no hay ninguna que te sirva',
+        texto: 'De esta página no postularía a ninguna. En la lista puedes rescatar alguna, o probar con otra página de la búsqueda.',
+        boton: 'Ver la lista',
+      };
+    }
+    return {
+      paso: numero(3), n: 3, titulo: 'Antes de que salga nada, tú eliges',
+      texto: 'Este es el resumen. En la lista ves ' + (c.total === 1 ? 'la oferta' : 'las ' + c.total) + ' y marcas a cuáles postular. ' +
+        'También puedes empezar de una vez con ' + (c.postular === 1 ? 'la que te sirve.' : 'las que te sirven.'),
+      boton: 'Ver la lista',
+    };
+  }
+  if (paso === 'panel') {
+    return c.sub
+      ? { paso: numero(4), n: 4, titulo: 'Nada sale sin este botón',
+          texto: 'Cuando lo aprietes, las envío de a una en otra pestaña, y la primera te la muestro antes de enviarla.',
+          boton: 'Entendido' }
+      : { paso: numero(4), n: 4, titulo: 'Marca a cuáles postular',
+          texto: 'Las que te sirven ya vienen marcadas. Desmarca las que no quieras y marca las dudosas que te interesen.',
+          boton: 'Siguiente' };
+  }
+  // El final, según cómo terminó.
+  const siempre = 'Desde ahora, cada vez que abras ' + portal + ' en Chrome, reviso las ofertas así.';
+  const finales = {
+    enviado: ['¡Partimos!', 'Aquí ves cómo va cada una. ' + siempre + ' Lo dudoso te lo dejo en «Por decidir».'],
+    activada: ['¡Partimos!', 'Postulo a las que te sirven de esta página, y la primera te la muestro antes de enviarla. ' + siempre],
+    todavia_no: ['Sigo mirando contigo', 'No envío nada. Cuando quieras empezar, abre la lista desde el ícono de AutoPostula en Chrome, o actívala en tu panel de autopostula.cl.'],
+    cerrado: ['No envié nada', 'Cuando quieras, vuelve a la lista con ' + (c.total === 1 ? '«Verla y elegir»' : '«Ver las ' + c.total + ' y elegir»') + ', o aprieta «Empezar a postular».'],
+  };
+  const f = finales[c.variante] || finales.cerrado;
+  return { paso: 'Listo', n: AP_REC_TOTAL + 1, titulo: f[0], texto: f[1], boton: 'Entendido' };
+};
+
+// Dónde va el globo junto a `r` (el rectángulo de lo que se explica): el primer
+// lado de `lados` donde cabe entero; si no cabe en ninguno, abajo al centro.
+AP.lugarDelGlobo = function (r, w, h, lados, vw, vh) {
+  const m = 14, b = 16;
+  const caben = {
+    derecha: r.right + m + w <= vw - b,
+    izquierda: r.left - m - w >= b,
+    abajo: r.bottom + m + h <= vh - b,
+    arriba: r.top - m - h >= b,
+  };
+  const lado = (lados || []).find(l => caben[l]) || 'centro';
+  const entre = (v, min, max) => Math.max(min, Math.min(max, v));
+  if (lado === 'derecha' || lado === 'izquierda') {
+    return { lado, x: lado === 'derecha' ? r.right + m : r.left - m - w, y: entre(r.top + r.height / 2 - h / 2, b, vh - h - b) };
+  }
+  if (lado === 'abajo' || lado === 'arriba') {
+    return { lado, x: entre(r.left + r.width / 2 - w / 2, b, vw - w - b), y: lado === 'abajo' ? r.bottom + m : r.top - m - h };
+  }
+  return { lado, x: entre(vw / 2 - w / 2, b, vw - w - b), y: Math.max(b, vh - h - b) };
+};
+
+function apRecLeido(valor) { apRecGuardado = valor && typeof valor === 'object' ? valor : null; }
+function apRecGuardar(valor) { apRecGuardado = valor; AP.safeSet({ recorrido: valor }); }
+
+// Dónde empieza en esta pestaña, o null si no toca.
+function apRecPasoInicial() {
+  const g = apRecGuardado;
+  if (!g || !AP.soloObservarEfectivo() || AP.esPestanaDeRafaga()) return null;
+  try { if (document.hidden) return null; } catch (e) { return null; }
+  if (g.estado === 'pendiente') return 'hola';
+  if (g.estado !== 'en_curso') return null;
+  if (!g.desde || Date.now() - g.desde > AP_REC_RETOMAR_MS) return 'hola';
+  return g.paso === 'hola' || g.paso === 'marcas' ? g.paso : 'cierre';
+}
+
+// Una cuenta que ya postula (se instaló de nuevo en otro computador, o se activó
+// desde el panel antes de mirar) no lo necesita: no se le muestra, y queda hecho
+// para que no aparezca si algún día vuelve a "solo mirar".
+function apRecorridoNoAplica() {
+  const g = apRecGuardado;
+  if (!g || (g.estado !== 'pendiente' && g.estado !== 'en_curso') || apRec || !AP.cfg) return;
+  if (AP.soloObservarEfectivo() || AP.esPestanaDeRafaga()) return;
+  apRecGuardar({ estado: 'hecho', como: 'ya_postulaba', en: Date.now() });
+}
+
+// La llama AP.cierreDePagina en "solo mirar": true si el recorrido se queda con
+// la tarjeta del final (la muestra él, en su paso 3).
+function apRecorridoRetieneCierre(resumen) {
+  if (apRec) {
+    apRec.resumen = resumen;
+    return apRec.paso === 'hola' || apRec.paso === 'marcas';
+  }
+  const paso = apRecPasoInicial();
+  if (!paso) return false;
+  const g = apRecGuardado;
+  apRec = {
+    paso: null, sub: 0, resumen, ejemplos: [], variante: null, clave: '',
+    desde: g.estado === 'en_curso' && g.desde && Date.now() - g.desde <= AP_REC_RETOMAR_MS ? g.desde : Date.now(),
+  };
+  apRecIr(paso, 0);
+  return true;
+}
+
+// Una oferta de cada marca que haya en la página (te sirve, para que decidas,
+// no calza): la primera de cada una que se vea.
+function apRecEjemplos() {
+  if (typeof AP.tarjetasDeLaPagina !== 'function') return [];
+  const marcas = apLeerMarcas();
+  const tarjetas = AP.tarjetasDeLaPagina();
+  const ejemplos = [];
+  for (const g of AP_GRUPOS_PANEL) {
+    const t = tarjetas.find(x => x.el && marcas[x.id] && marcas[x.id].b === g.banda && apRecSeVe(x.el));
+    if (t) ejemplos.push({ id: t.id, banda: g.banda });
+  }
+  return ejemplos;
+}
+function apRecSeVe(el) {
+  try { return !el.getClientRects || el.getClientRects().length > 0; } catch (e) { return true; }
+}
+
+function apRecIr(paso, sub) {
+  const p = apRec;
+  if (!p) return;
+  p.paso = paso;
+  p.sub = sub || 0;
+  if (paso === 'marcas' && !p.sub) {
+    p.ejemplos = apRecEjemplos();
+    if (!p.ejemplos.length) { apRecIr('cierre', 0); return; }
+  }
+  if (paso === 'cierre' && p.resumen && apCierreEstado === null) apMostrarCierre(p.resumen, false);
+  apRecGuardar({ estado: 'en_curso', paso, desde: p.desde });
+  apRecPintar();
+}
+
+// Lo que explica el paso actual, y de qué lados prefiere el globo.
+function apRecObjetivo() {
+  const p = apRec;
+  if (!p) return null;
+  const delAviso = (id) => (ovRaiz ? ovRaiz.getElementById(id) : null);
+  const seVe = (el) => !!el && !el.hidden && apRecSeVe(el);
+  if (p.paso === 'hola') return { el: delAviso('ap-ov-chip'), lados: ['arriba', 'izquierda'] };
+  if (p.paso === 'marcas') {
+    const ej = p.ejemplos[p.sub];
+    const t = ej && AP.tarjetasDeLaPagina().find(x => x.id === ej.id);
+    return { el: t && t.el, lados: ['derecha', 'abajo', 'arriba', 'izquierda'] };
+  }
+  if (p.paso === 'cierre') return { el: delAviso('ap-ov-cierre'), lados: ['izquierda', 'arriba'] };
+  if (p.paso === 'panel') return { el: delAviso(p.sub ? 'ap-ov-panel-si' : 'ap-ov-panel-lista'), lados: ['izquierda', 'arriba', 'abajo'] };
+  const panel = delAviso('ap-ov-panel'), cierre = delAviso('ap-ov-cierre');
+  const el = p.variante === 'enviado' && seVe(panel) ? panel : seVe(cierre) ? cierre : delAviso('ap-ov-chip');
+  return { el, lados: ['izquierda', 'arriba'] };
+}
+
+function apRecAsegurarUI() {
+  if (!apRecHost) {
+    apRecHost = document.createElement('div');
+    apRecHost.id = 'ap-recorrido';
+    apRecHost.style.cssText = 'all:initial;position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483647';
+    apRecRaiz = apRecHost.attachShadow({ mode: 'open' });
+    apRecRaiz.innerHTML = '<style>' + AP_ESTILO_RECORRIDO + '</style>' + AP_HTML_RECORRIDO;
+    apRecRaiz.getElementById('ap-rec-si').addEventListener('click', apRecAccion);
+    apRecRaiz.getElementById('ap-rec-saltar').addEventListener('click', () => apRecTerminar('saltado'));
+    apRecRaiz.getElementById('ap-rec-globo').addEventListener('keydown', (e) => { if (e.key === 'Escape') apRecTerminar('saltado'); });
+  }
+  // Siempre al final del body: encima del aviso, que tiene el mismo z-index.
+  if (apRecHost.parentNode !== document.body || document.body.lastElementChild !== apRecHost) document.body.appendChild(apRecHost);
+}
+
+function apRecSinMovimiento() {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+}
+
+function apRecPintar() {
+  const p = apRec;
+  if (!p) return;
+  apAsegurarOverlay();
+  apRecAsegurarUI();
+  const portal = AP.portalDelHost(location.hostname) || 'el portal';
+  const resumen = p.resumen || {};
+  const ej = p.paso === 'marcas' ? p.ejemplos[p.sub] : null;
+  const texto = AP.textoRecorrido(p.paso, {
+    total: resumen.total || 0, postular: resumen.postular || 0, portal,
+    sinSesion: AP.mirarSesion(document, portal) === false,
+    banda: ej && ej.banda, ultima: p.paso === 'marcas' && p.sub >= p.ejemplos.length - 1,
+    sub: p.sub, variante: p.variante,
+  });
+  const globo = apRecRaiz.getElementById('ap-rec-globo');
+  const foco = apRecRaiz.getElementById('ap-rec-foco');
+  apRecRaiz.getElementById('ap-rec-paso').textContent = texto.paso;
+  apRecRaiz.getElementById('ap-rec-puntos').setAttribute('data-n', String(texto.n));
+  apRecRaiz.getElementById('ap-rec-t').textContent = texto.titulo;
+  apRecRaiz.getElementById('ap-rec-d').textContent = texto.texto;
+  const si = apRecRaiz.getElementById('ap-rec-si');
+  si.textContent = texto.boton;
+  apRecRaiz.getElementById('ap-rec-saltar').hidden = p.paso === 'fin';
+  // La primera vez el globo entra; después viaja de un lugar al otro, con el foco.
+  const venia = !globo.hidden;
+  globo.hidden = false;
+  globo.classList.remove('entra', 'cambia');
+  void globo.offsetWidth; // para que la animación vuelva a empezar
+  globo.classList.add(venia ? 'cambia' : 'entra');
+  if (venia) {
+    foco.classList.add('anima');
+    globo.classList.add('anima');
+    clearTimeout(apRecAnima);
+    apRecAnima = setTimeout(() => {
+      foco.classList.remove('anima');
+      globo.classList.remove('anima');
+    }, 560);
+  }
+  p.clave = '';
+  const obj = apRecObjetivo();
+  if (p.paso === 'marcas' && obj && obj.el && obj.el.scrollIntoView) {
+    try { obj.el.scrollIntoView({ behavior: apRecSinMovimiento() ? 'auto' : 'smooth', block: 'center' }); } catch (e) {}
+  }
+  apRecSeguir();
+  try { si.focus({ preventScroll: true }); } catch (e) {}
+}
+
+// Pone el foco y el globo donde está lo que se explica. Corre en cada cuadro
+// mientras se ve, así sigue a la página cuando se mueve (un scroll, el portal
+// que carga algo arriba), pero solo toca el DOM si algo cambió.
+function apRecColocar() {
+  const p = apRec;
+  if (!p || !apRecRaiz) return;
+  const globo = apRecRaiz.getElementById('ap-rec-globo');
+  if (globo.hidden) return;
+  const foco = apRecRaiz.getElementById('ap-rec-foco');
+  const flecha = apRecRaiz.getElementById('ap-rec-flecha');
+  const obj = apRecObjetivo();
+  const el = obj && obj.el;
+  const r = el && el.isConnected !== false && !el.hidden && apRecSeVe(el) ? el.getBoundingClientRect() : null;
+  const conObjetivo = !!(r && (r.width || r.height));
+  const vw = window.innerWidth || 1280, vh = window.innerHeight || 800;
+  const w = globo.offsetWidth || 312, h = globo.offsetHeight || 170;
+  const clave = (conObjetivo ? [r.left, r.top, r.width, r.height] : ['sin']).concat([vw, vh, w, h]).map(v => typeof v === 'number' ? Math.round(v) : v).join(',');
+  if (clave === p.clave) return;
+  p.clave = clave;
+  foco.hidden = !conObjetivo;
+  if (conObjetivo) {
+    const pad = 6;
+    foco.style.left = Math.round(r.left - pad) + 'px';
+    foco.style.top = Math.round(r.top - pad) + 'px';
+    foco.style.width = Math.round(r.width + pad * 2) + 'px';
+    foco.style.height = Math.round(r.height + pad * 2) + 'px';
+  }
+  const lugar = AP.lugarDelGlobo(conObjetivo ? r : { left: vw, right: vw, top: vh, bottom: vh, width: 0, height: 0 }, w, h, conObjetivo ? obj.lados : [], vw, vh);
+  globo.style.left = Math.round(lugar.x) + 'px';
+  globo.style.top = Math.round(lugar.y) + 'px';
+  flecha.setAttribute('data-lado', lugar.lado);
+  if (!conObjetivo) return;
+  if (lugar.lado === 'derecha' || lugar.lado === 'izquierda') {
+    flecha.style.left = '';
+    flecha.style.top = Math.round(Math.max(14, Math.min(h - 26, r.top + r.height / 2 - lugar.y - 6))) + 'px';
+  } else {
+    flecha.style.top = '';
+    flecha.style.left = Math.round(Math.max(14, Math.min(w - 26, r.left + r.width / 2 - lugar.x - 6))) + 'px';
+  }
+}
+
+function apRecSeguir() {
+  if (typeof requestAnimationFrame !== 'function') { apRecColocar(); return; }
+  if (apRecCuadro) return;
+  const vuelta = () => {
+    if (!apRec || !apRecRaiz || apRecRaiz.getElementById('ap-rec-globo').hidden) { apRecCuadro = null; return; }
+    apRecColocar();
+    apRecCuadro = requestAnimationFrame(vuelta);
+  };
+  apRecCuadro = requestAnimationFrame(vuelta);
+}
+
+function apRecOcultar() {
+  if (!apRecRaiz) return;
+  apRecRaiz.getElementById('ap-rec-globo').hidden = true;
+  apRecRaiz.getElementById('ap-rec-foco').hidden = true;
+}
+
+function apRecAccion() {
+  const p = apRec;
+  if (!p) return;
+  if (p.paso === 'hola') { apRecIr('marcas', 0); return; }
+  if (p.paso === 'marcas') {
+    if (p.sub < p.ejemplos.length - 1) apRecIr('marcas', p.sub + 1);
+    else apRecIr('cierre', 0);
+    return;
+  }
+  if (p.paso === 'cierre') {
+    const portal = AP.portalDelHost(location.hostname) || '';
+    if (AP.mirarSesion(document, portal) === false) { apIrAIniciarSesion(); return; }
+    // Abrir el panel lleva al paso 4 (apMostrarPanel avisa).
+    if (!AP.abrirPanel()) apRecFin('cerrado');
+    return;
+  }
+  if (p.paso === 'panel') {
+    if (!p.sub) { apRecIr('panel', 1); return; }
+    // Ahora le toca a la persona: el recorrido espera a que apriete o cierre.
+    p.paso = 'esperando';
+    apRecOcultar();
+    return;
+  }
+  if (p.paso === 'fin') apRecTerminar(p.variante || 'terminado');
+}
+
+// El último globo, según cómo terminó. Desde acá ya cuenta como hecho.
+function apRecFin(variante) {
+  const p = apRec;
+  if (!p || p.paso === 'fin') return;
+  p.paso = 'fin';
+  p.variante = variante;
+  apRecGuardar({ estado: 'hecho', como: variante, en: Date.now() });
+  apRecPintar();
+}
+
+function apRecTerminar(como) {
+  const p = apRec;
+  if (!p) return;
+  apRec = null;
+  if (!apRecGuardado || apRecGuardado.estado !== 'hecho') apRecGuardar({ estado: 'hecho', como: como || 'terminado', en: Date.now() });
+  if (apRecCuadro && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(apRecCuadro);
+  apRecCuadro = null;
+  clearTimeout(apRecAnima);
+  if (apRecHost) { apRecHost.remove(); apRecHost = null; apRecRaiz = null; }
+  // Si se saltó antes del paso 3, la tarjeta del final sale ahora.
+  if ((p.paso === 'hola' || p.paso === 'marcas') && p.resumen && apCierreEstado === null) apMostrarCierre(p.resumen, false);
+}
+
+// Lo que pasa en la página y mueve el recorrido.
+function apRecorridoEvento(evento) {
+  const p = apRec;
+  if (!p) return;
+  if (evento === 'panel') {
+    if (p.paso !== 'panel' && p.paso !== 'esperando' && p.paso !== 'fin') apRecIr('panel', 0);
+    return;
+  }
+  if (evento === 'panel_cerrado') {
+    if (p.paso === 'fin') { if (p.variante === 'enviado') apRecTerminar(p.variante); return; }
+    if (p.paso === 'panel' || p.paso === 'esperando') apRecFin('cerrado');
+    return;
+  }
+  if (evento === 'enviado' || evento === 'activada' || evento === 'todavia_no') apRecFin(evento);
+}
+
+// Para las pruebas: en qué va el recorrido de esta pestaña.
+AP.estadoRecorrido = function () {
+  return apRec ? { paso: apRec.paso, sub: apRec.sub, variante: apRec.variante, ejemplos: apRec.ejemplos.map(e => e.banda) } : null;
+};
+AP.accionRecorrido = function () { apRecAccion(); };
+AP.saltarRecorrido = function () { apRecTerminar('saltado'); };
+
 // ── Mensaje de resumen al terminar un escaneo (docs/visibilidad-y-etapa2.md §A) ──
 // Antes cada adaptador decía "X de 20 coinciden", contando solo la banda
 // 'postular' -- "0 de 20" podía ser 20 descartadas, 20 en gris, o cualquier
@@ -1066,7 +1625,7 @@ function apEmpezarAPostular(resumen) {
 // razonTop puede venir ya en texto, o como la lista de razones de descarte:
 // con la lista, además del texto, el resumen trae `accion` cuando la razón
 // principal se arregla desde el propio aviso ("Agregar Santiago a mi búsqueda").
-AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
+AP.mensajeEscaneo = function (conteos, razonTop, soloObservar, propone) {
   let accion = null;
   if (Array.isArray(razonTop)) {
     const principal = AP.razonPrincipal(razonTop);
@@ -1077,6 +1636,9 @@ AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
   const partes = [];
   if (soloObservar) {
     if (c.observado) partes.push(c.observado + ' habría postulado');
+  } else if (propone) {
+    // «Revisar antes de enviar» con la persona mirando: no se envió nada.
+    if (c.propuestas) partes.push(c.propuestas + (c.propuestas === 1 ? ' te sirve' : ' te sirven'));
   } else if (c.postular) {
     partes.push(c.postular + (c.postular === 1 ? ' postulada' : ' postuladas'));
   }
@@ -1091,10 +1653,11 @@ AP.mensajeEscaneo = function (conteos, razonTop, soloObservar) {
 
   let texto = partes.length ? partes.join(' · ') : 'Sin ofertas nuevas';
   if (soloObservar) texto = '👁 Solo observar · ' + texto;
+  else if (propone && c.propuestas) texto = 'Esperando tu visto bueno · ' + texto;
   if (razonTop) texto += ' — la mayoría: ' + razonTop;
 
-  const estado = soloObservar
-    ? (c.observado > 0 || c.gris > 0 ? 'pendiente' : 'neutral')
+  const estado = soloObservar || propone
+    ? ((soloObservar ? c.observado : c.propuestas) > 0 || c.gris > 0 ? 'pendiente' : 'neutral')
     : (c.postular > 0 ? 'ok' : c.gris > 0 ? 'pendiente' : 'neutral');
   const resumen = { texto: texto, estado: estado, accion: accion };
   if (partes.length) apUltimoResumen = { url: url, resumen: resumen };
@@ -3038,7 +3601,7 @@ chrome.runtime.onMessage.addListener((m, _sender, sendResponse) => {
 // un cambio del portal: sin este filtro, cada marca pintada volvía a disparar
 // un escaneo.
 function apEsNuestro(nodo) {
-  return !!nodo && nodo.nodeType === 1 && (nodo.id === 'ap-ov' || (!!nodo.hasAttribute && nodo.hasAttribute('data-ap-marca')));
+  return !!nodo && nodo.nodeType === 1 && (nodo.id === 'ap-ov' || nodo.id === 'ap-recorrido' || (!!nodo.hasAttribute && nodo.hasAttribute('data-ap-marca')));
 }
 
 new MutationObserver(function (registros) {
@@ -3148,7 +3711,8 @@ AP.reportarSesion = function () {
 // decida qué hacer según la URL en la que esté parado (cada portal tiene
 // sus propias páginas de "mis postulaciones", listados, etc.).
 try {
-  chrome.storage.local.get(['config', 'active', 'log'], function (data) {
+  chrome.storage.local.get(['config', 'active', 'log', 'recorrido'], function (data) {
+    apRecLeido(data.recorrido);
     AP.cfg = data.config || null;
     AP.activo = !!(data.active || (AP.cfg && AP.cfg.active));
     AP.log = data.log || [];
@@ -3181,6 +3745,7 @@ try {
     if (area === 'sync' && changes.autopostulaToken) {
       AP.iaDisponible = !!changes.autopostulaToken.newValue;
     }
+    if (area === 'local' && changes.recorrido) apRecLeido(changes.recorrido.newValue);
   });
 } catch (e) {}
 

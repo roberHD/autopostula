@@ -888,14 +888,18 @@ async function escanear() {
   // "postular" -- son ofertas que SE HABRÍAN postulado, se cuentan aparte
   // para que el mensaje no mienta.
   const soloObservar = AP.soloObservarEfectivo();
+  // docs/panel-de-revision-en-el-portal.md §9.1: con «Revisar antes de enviar»
+  // y la persona mirando, las que sirven quedan propuestas, sin enviar.
+  const propone = AP.proponeEnVezDeEnviar();
   {
     // conteos.postular/observado se fija recién acá, después del filtro de
     // IA viejo (si estuviera activo) -- para que el mensaje nunca diga más
     // de lo que realmente va a pasar.
     if (soloObservar) conteos.observado = pendientes.length;
+    else if (propone) conteos.propuestas = pendientes.length;
     else conteos.postular = pendientes.length;
     AP.reportarDescartes(descartes, 'Computrabajo');
-    const resumen = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
+    const resumen = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar, propone);
     msg(resumen.texto, resumen.estado, resumen.accion);
   }
   if (!pendientes.length) {
@@ -929,6 +933,12 @@ async function escanear() {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:'Habría postulado — modo solo observar'});
       observadas.push({ externalId: id, titulo, empresa, url, razon: AP.razonDeLaMarca('postular', razones), score });
+      continue;
+    }
+    if (propone) {
+      AP.vistos.add(id);
+      AP.anotarPropuesta(id);
+      addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:AP.RAZON_PROPUESTA});
       continue;
     }
     const verificacion = await AP.puedePostular('Computrabajo');
@@ -966,7 +976,7 @@ async function escanear() {
   AP.reportarEscaneoTerminado(conteos);
   // §5: el resumen del escaneo ("👁 Solo observar · …", "N postuladas · …") se
   // quedaba tapado por un "Escaneo completo" sin datos.
-  const resumenFinal = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
+  const resumenFinal = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar, propone);
   msg(resumenFinal.texto, resumenFinal.estado, resumenFinal.accion);
   AP.cierreDePagina();
 }

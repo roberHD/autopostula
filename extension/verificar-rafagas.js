@@ -1569,8 +1569,8 @@ bloque(async () => {
     check(archivo + ': ya no queda la consulta única antes del bucle', !/if \(!soloObservar\) \{\s*const verificacion = await AP\.puedePostular/.test(fuente));
     // El texto REAL del bucle, ejecutado con stubs (no una copia reescrita a mano).
     const trozo = fuente.slice(desde, hasta + marcaFin.length);
-    const correr = async ({ permitidos, cantidad, soloObservar, sinPanelEn }) => {
-      const llamadas = { puede: 0, postular: [], msgs: [], terminado: null, logs: [] };
+    const correr = async ({ permitidos, cantidad, soloObservar, propone, sinPanelEn }) => {
+      const llamadas = { puede: 0, postular: [], msgs: [], terminado: null, logs: [], propuestas: [] };
       const ctx = {
         AP: {
           activo: true, procesando: false, vistos: new Set(),
@@ -1581,8 +1581,12 @@ bloque(async () => {
           razonDeLaMarca: () => null,
           gastarRevisionPrimera: () => { llamadas.gastadas = (llamadas.gastadas || 0) + 1; },
           reportarObservadas: (ofertas, p) => { llamadas.observadas = { ofertas, portal: p }; },
+          // docs/panel-de-revision-en-el-portal.md §9.1.
+          anotarPropuesta: (id) => { llamadas.propuestas.push(id); },
+          RAZON_PROPUESTA: 'propuesta',
         },
         soloObservar: !!soloObservar,
+        propone: !!propone,
         pendientes: Array.from({ length: cantidad }, (_, i) => ({ t: { querySelector: () => ({ href: 'https://portal/oferta-' + (i + 1) + '#x' }) }, id: 'id' + (i + 1), titulo: 'Titulo ' + (i + 1) })),
         conteos: { postular: cantidad, gris: 0, descartar: 0 },
         activar: async (t) => (sinPanelEn && t.querySelector().href.includes('oferta-' + sinPanelEn + '#') ? null : {}),
@@ -1613,6 +1617,10 @@ bloque(async () => {
     x = await correr({ permitidos: 99, cantidad: 5, soloObservar: true });
     check(archivo + ': en solo observar no pregunta nada ni postula (no hay nada que limitar), y deja constancia de las 5', x.llamadas.puede === 0 && x.llamadas.postular.length === 0 && x.llamadas.logs.length === 5 && x.llamadas.logs.every(l => l.status === 'observado') && x.salida === 'sigue', x.llamadas);
     check(archivo + ': ...y manda al panel las 5 que habría postulado, con su portal (docs/primera-busqueda-guiada.md §11)', x.llamadas.observadas && x.llamadas.observadas.ofertas.length === 5 && x.llamadas.observadas.portal === portal && x.llamadas.observadas.ofertas[0].externalId === 'id1', x.llamadas.observadas);
+
+    x = await correr({ permitidos: 99, cantidad: 3, propone: true });
+    check(archivo + ': con «Revisar antes de enviar» y la persona mirando, no pregunta ni postula: las 3 quedan propuestas (docs/panel-de-revision-en-el-portal.md §9.1)', x.llamadas.puede === 0 && x.llamadas.postular.length === 0 && x.llamadas.propuestas.join() === 'id1,id2,id3' && x.llamadas.logs.length === 3 && x.llamadas.logs.every(l => l.status === 'observado' && l.reason === 'propuesta') && x.salida === 'sigue', x.llamadas);
+    check(archivo + ': ...y no van como "habría postulado" (eso es de solo mirar)', !!x.llamadas.observadas && x.llamadas.observadas.ofertas.length === 0, x.llamadas.observadas);
 
     x = await correr({ permitidos: 99, cantidad: 4, sinPanelEn: 2 });
     check(archivo + ': si el panel del aviso no cargó, esa oferta no se postuló ni cuenta', x.llamadas.postular.join() === 'id1,id3,id4' && x.llamadas.logs.some(l => l.reason === 'Panel no cargó'), x.llamadas);
@@ -1969,6 +1977,34 @@ bloque(async () => {
   await hasta(() => enviados.length >= 1);
   check('la pestaña recibe DO_APPLY con revisar cuando corresponde', enviados[0] && enviados[0].type === 'DO_APPLY' && enviados[0].revisar === true && enviados[0].decisionId === 'd9', enviados[0]);
   await promesa;
+});
+
+// ── 22. El recorrido de la primera vez (docs/primera-busqueda-guiada.md §13) ──
+bloque(async () => {
+  let b = cargarBackgroundJs();
+  await tick();
+  b.onInstalledListeners.forEach(fn => fn({ reason: 'install' }));
+  await tick();
+  check('al instalar, el recorrido queda pendiente', b.storageLocal.recorrido && b.storageLocal.recorrido.estado === 'pendiente' && b.storageLocal.recorrido.origen === 'instalacion' && typeof b.storageLocal.recorrido.desde === 'number', b.storageLocal.recorrido);
+
+  b = cargarBackgroundJs();
+  await tick();
+  b.onInstalledListeners.forEach(fn => fn({ reason: 'update' }));
+  await tick();
+  check('una actualización no lo trae (quien ya la usaba no lo necesita)', b.storageLocal.recorrido === undefined, b.storageLocal.recorrido);
+
+  let r = await b.enviarMensajeAsync({ type: 'RECORRIDO_PENDIENTE' });
+  check('el panel lo pide («Probémosla ahora», «Buscar en…»): queda pendiente', r && r.ok === true && b.storageLocal.recorrido.estado === 'pendiente' && b.storageLocal.recorrido.origen === 'web', [r, b.storageLocal.recorrido]);
+
+  b.storageLocal.recorrido = { estado: 'hecho', como: 'saltado', en: 1 };
+  r = await b.enviarMensajeAsync({ type: 'RECORRIDO_PENDIENTE' });
+  check('si ya lo hizo (o lo saltó), no se repite', r && r.yaLoHizo === true && b.storageLocal.recorrido.estado === 'hecho', [r, b.storageLocal.recorrido]);
+  b.onInstalledListeners.forEach(fn => fn({ reason: 'install' }));
+  await tick();
+  check('...ni al volver a instalar encima', b.storageLocal.recorrido.estado === 'hecho', b.storageLocal.recorrido);
+
+  const puente = fs.readFileSync(path.join(__dirname, 'bridge.js'), 'utf8');
+  check('bridge.js lleva el pedido de la web y contesta con un evento', /addEventListener\('autopostula:recorrido'/.test(puente) && /type: 'RECORRIDO_PENDIENTE'/.test(puente) && /autopostula:recorrido-resultado/.test(puente));
 });
 
 const tope = setTimeout(() => {

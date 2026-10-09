@@ -2,8 +2,8 @@
 
 > **Estado:** propuesta, 2026-10-08. Sale de dos ideas de Roberto: probar la extensión apenas queda
 > conectada, en el onboarding, y que el panel del escaneo liste todas las ofertas para que la
-> persona corrija lo que el motor decidió. **Implementado el mismo día (§8, extensión 2.18.0)**,
-> salvo el banco de casos con el tercer grupo.
+> persona corrija lo que el motor decidió. **Implementado el mismo día (§8, extensión 2.18.0)**;
+> el banco de casos con el tercer grupo y las dos decisiones que quedaban, en §9 (extensión 2.19.0).
 > **Para:** el chat de producción.
 > **Relacionado:** `primera-busqueda-guiada.md` §10 y §11 (ya implementados en la 2.17),
 > `revision-scorer-2026-09-30.md` §6 (el banco de casos), `rediseno-filtrado-ofertas.md` §8.2.
@@ -216,7 +216,8 @@ el dato de las primeras semanas, que es justo cuando más se corrige.
 
 ## 8. Lo que se hizo (2026-10-08, extensión 2.18.0)
 
-> **Estado:** implementado en `rama-roberto`, sin desplegar. Las tareas 1 a 4 de §5, y la regla del
+> **Estado:** el servidor está en producción desde el 2026-10-08 (PR #33); falta subir la extensión
+> 2.18.0 a la tienda. Las tareas 1 a 4 de §5, y la regla del
 > 80% de la 6. Falta la 5 (§8.4).
 
 ### 8.1 Cómo quedó
@@ -316,13 +317,107 @@ onboarding sigue a Hoy. **«Seguir y probar después»** hace lo de siempre.
 
 ### 8.4 Lo que queda
 
-1. **Mergear el PR antes de subir la 2.18.0**: trae dos migraciones (un valor nuevo para la fuente de
-   las decisiones y dos columnas) y dos rutas. Con el servidor viejo, el panel se ve, pero al apretar
-   no puede registrar ni enviar nada.
-2. **La tarea 5: el banco de casos con el tercer grupo.** Las verdades sobre «te sirve» (confirmadas
-   y quitadas) ya se guardan, pero `scripts/banco-de-casos.ts` todavía no las muestra; con ellas, la
-   calibración podría también **subir** el corte, que hoy solo puede bajar.
-3. **Un «no» del panel vale en esa pestaña.** Si la misma oferta aparece otro día en otra búsqueda, el
-   escaneo la vuelve a evaluar sin acordarse; habría que decidir si un «no» del panel la saca para
-   siempre.
-4. La decisión de §8.2, punto 1.
+1. ~~Mergear el PR antes de subir la 2.18.0~~ **Hecho el 2026-10-08** (PR #33): el despliegue aplicó
+   las dos migraciones (un valor nuevo para la fuente de las decisiones y dos columnas) y las dos
+   rutas responden. Falta subir la 2.18.0 a la tienda; con el servidor viejo el panel se veía, pero
+   al apretar no podía registrar ni enviar nada.
+2. ~~La tarea 5: el banco de casos con el tercer grupo.~~ **Hecho (§9.3).**
+3. ~~Un «no» del panel vale en esa pestaña.~~ **Decidido: se queda así (§9.2).**
+4. ~~La decisión de §8.2, punto 1.~~ **Decidido y hecho (§9.1).**
+
+---
+
+## 9. Las dos decisiones y el banco de casos (2026-10-08, extensión 2.19.0)
+
+> **Estado:** implementado en `rama-roberto`, sin desplegar. Roberto decidió las dos preguntas de
+> §8.4 el mismo día; el servidor de esto no trae migraciones.
+
+### 9.1 «Revisar antes de enviar» deja de enviar sola con la persona mirando
+
+La pregunta de §8.2, punto 1, era si la extensión debía dejar de enviar sola lo que sirve cuando la
+persona está en la pestaña. Roberto: sí, amarrado a «Revisar antes de enviar».
+
+- **Con «Revisar antes de enviar» y la pestaña a la vista** (`AP.proponeEnVezDeEnviar`, en
+  `core.js`), el escaneo marca lo que sirve, pero no lo envía: queda propuesto. El aviso dice
+  «Esperando tu visto bueno · 5 te sirven · 3 por decidir · 12 descartadas», y la tarjeta del final:
+  «En esta página hay 5 ofertas que te sirven. No envío ninguna hasta que me digas.», con «Elegir a
+  cuáles postular» (abre el panel) y «Ahora no».
+- **En el panel**, las propuestas vienen con casilla y marcadas, como en «solo mirar»; lo elegido sale
+  por la cola de aprobadas y cada una se muestra antes de enviarla, porque la revisión sigue puesta.
+  En el registro, dejar una marcada es un «sí» débil y quitarla es un «no», igual que en §8.1.
+- **La tarjeta vuelve a salir** mientras quede algo propuesto que la persona no eligió ni dejó para
+  después: también en la página siguiente o con lo que trae «ver más». «Ahora no» no vuelve a
+  preguntar por esas mismas.
+- **Sin «Revisar antes de enviar»** no cambia nada: entra y postula por ti, que es la promesa del plan
+  gratis. Tampoco cambia en las ráfagas ni en las pestañas de fondo, que nadie está mirando: ahí sigue
+  postulando, y cada postulación se muestra antes de enviarla.
+- En Laborum, con la persona mirando, ya no se va de aviso en aviso: las propuestas se quedan en el
+  listado, igual que las dudosas en «solo mirar» (§11 de `primera-busqueda-guiada.md`).
+
+### 9.2 Un «no» del panel no saca la oferta para siempre
+
+La pregunta de §8.4, punto 3, era si un «no» del panel debía sacar la oferta para siempre. Roberto:
+no, siempre hay que evaluarla de nuevo. El criterio de quien busca trabajo cambia: a las dos semanas
+puede haber más urgencia, o menos. Así que queda como está: el «no» vale en esa pestaña (no la vuelve
+a proponer ni a enviar sola mientras la persona mira), y si la oferta aparece otro día, se vuelve a
+evaluar con el perfil de ese día. El «no» igual enseña: entra a la compilación del perfil (§3.4).
+
+### 9.3 El banco de casos con el tercer grupo, y el corte que también sube
+
+**El banco** (`lib/banco-de-casos.ts` y `scripts/banco-de-casos.ts`) ya mira los tres grupos:
+
+| Grupo | De dónde sale el veredicto |
+|---|---|
+| Por decidir | Lo que la persona decidió en «Por decidir», también desde el panel |
+| **Te sirve** (nuevo) | Lo que la extensión iba a postular sola y la persona dejó marcado (sí) o quitó (no) en el panel. Por tramos de 5 puntos, con las quitadas de más puntaje primero. Las de una tanda con peso reducido van aparte |
+| Descartes | Los que se corrigieron, ahora diciendo cuántos se rescataron en el panel |
+
+Responde el criterio 5 de §6, y además cuánto de lo que se iba a enviar solo la persona no quería.
+Con una cuenta, también vuelve a pasar el scorer de hoy por las de «te sirve».
+
+**El corte** (`lib/calibracion-umbral.ts`) sigue con la regla de siempre: postula sola desde donde la
+persona aprueba 9 de cada 10 de lo que decidió, con 30 decisiones o más y moviéndose como mucho 10
+puntos. Lo nuevo es que ahora también puede **subir**:
+
+- Mira lo que hoy se postularía solo (65 o más) con lo que dijo la persona en el panel. Si de eso
+  aprueba 9 de cada 10, no sube. Si no, sube al primer puntaje desde el cual sí aprueba 9 de cada 10.
+- Si subirlo 10 puntos no alcanza (lo que quita está repartido en todos los puntajes), se queda en el
+  normal: el problema no es el corte sino lo que mide el puntaje, y el banco de casos lo dice.
+- Subir gana a bajar: si a la vez aprueba casi todo lo dudoso de arriba y quita lo que sale solo, se
+  sube. Enviar lo que la persona no quiere gasta cupo y no se deshace.
+- Dejar una marcada puede ser no haberla mirado, así que los «sí» de ahí pesan de más. Por eso mismo,
+  que igual no llegue al 90% es una señal clara. Lo que quitó en el panel cuando el corte estaba más
+  bajo también cuenta para no dejarlo ahí.
+- **Filtros de búsqueda** («Cuándo postula sola») lo explica: «Ahora postula sola desde 70: en el panel
+  del portal quitaste varias de las que iba a enviar con menos puntaje, así que esas ahora te las
+  preguntamos en Por decidir».
+
+### 9.4 Un arreglo de la 2.18
+
+Una oferta que servía pero no traía enlace iba en el panel sin casilla, y al apretar «Postular»
+quedaba registrada como **quitada**: un «no» que la persona nunca dijo. Ahora lo que va sin casilla
+(sin enlace, o repetida) no se manda: sobre eso no se decidió nada.
+
+### 9.5 Cómo se verificó
+
+- **En el listado real de Computrabajo** (navegador integrado, con el simulador de
+  `primera-busqueda-guiada.md` §13.3): con «Revisar antes de enviar», la tarjeta y el aviso proponen
+  las 5 que servían sin enviar ninguna; el panel las trae marcadas; «Postular a las 5» las manda como
+  no enviadas y elegidas, y avisa que cada una se muestra antes de enviarla.
+- **La ruta real del perfil contra una base aparte:** con 8 quitadas entre 65 y 69 y 27 dejadas, el
+  perfil que recibe la extensión postula desde 68 y queda guardado en la cuenta; los descartes
+  rescatados, las tandas con peso reducido y lo del scorer viejo no se cuelan (cada uno habría cambiado
+  el resultado). Con el ajuste apagado, vuelve a 65. El banco de casos, contra esa misma base, muestra
+  el grupo nuevo y dice «el corte subiría a 68». La base se borró.
+- **Filtros de búsqueda**, en el servidor local: los dos textos (el normal y el que subió).
+- **Pruebas:** `extension/verificar-recorrido.js` (sección 6), el bloque 19 de `verificar-rafagas.js`
+  (los adaptadores no preguntan ni postulan: las dejan propuestas), `verificar-panel-revision.js` (lo
+  sin casilla ya no se manda) y `backend/scripts/verificar-banco-de-casos.ts` (62: subir, el tope,
+  cuando no separa, que subir gana, el tercer grupo). Pasan las 14 de la extensión y los scripts del
+  servidor; `tsc` limpio.
+
+### 9.6 Lo que queda
+
+1. La métrica de §6 de `primera-busqueda-guiada.md` para el recorrido (§13.4 de ese documento).
+2. El corte de «Por decidir» hacia abajo (`umbralGris`): si la persona rescata seguido ofertas de «no
+   calza», sus descartes están muy estrictos (§3.2). El banco ya lo cuenta, pero no se ajusta solo.

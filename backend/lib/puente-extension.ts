@@ -5,8 +5,9 @@
 // cual: solo pide, y la extensión decide con su propia sesión (mismo criterio que
 // `autopostula:conectar`).
 //
-// Lo usan "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6) y la
-// activación de la postulación (§4.1).
+// Lo usan "Ponerme al día ahora" (docs/rafagas-y-ponerse-al-dia.md §3.6), la
+// activación de la postulación (§4.1) y el recorrido de la primera vez
+// (docs/primera-busqueda-guiada.md §13).
 
 // bridge.js deja una marca en el DOM apenas carga, y además contesta a un ping
 // por si la página se montó después. Si en 700 ms no contesta nadie, no hay
@@ -25,6 +26,21 @@ export function extensionPresente(): Promise<boolean> {
     window.addEventListener("autopostula:extension-presente", alDetectar);
     window.dispatchEvent(new CustomEvent("autopostula:ping"));
   });
+}
+
+/**
+ * docs/primera-busqueda-guiada.md §13: antes de abrir el portal con la búsqueda
+ * («Probémosla ahora», «Buscar en…»), se le pide a la extensión el recorrido de
+ * la primera vez. No se espera la respuesta: la pestaña del portal tarda más en
+ * cargar que esto en llegar, y una extensión anterior a la 2.19 lo ignora. Si
+ * la persona ya lo hizo, la extensión no lo repite.
+ */
+export function pedirRecorrido(): void {
+  try {
+    window.dispatchEvent(new CustomEvent("autopostula:recorrido"));
+  } catch {
+    // Sin extensión no hay a quién pedirle.
+  }
 }
 
 export type RespuestaExtension = { ok: boolean; motivo?: string };

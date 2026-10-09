@@ -508,7 +508,8 @@ export default function FiltrosPage() {
           Cada oferta recibe un puntaje según cuánto se parece a lo que buscas. Desde {UMBRAL_NORMAL} la
           extensión postula sola; entre 46 y {UMBRAL_NORMAL - 1} te la deja en Por decidir. Si casi siempre
           apruebas las más parecidas, el corte baja (hasta {UMBRAL_NORMAL - 10}) para no preguntarte lo que
-          ya sabemos que dirías.
+          ya sabemos que dirías. Y si en el panel del portal quitas seguido de las que iba a enviar, sube
+          (hasta {UMBRAL_NORMAL + 10}) para preguntarte antes.
         </p>
 
         {mensajeCalibracion && (
@@ -525,6 +526,13 @@ export default function FiltrosPage() {
             </>
           ) : !calibracion.calibrarUmbral ? (
             <>Postula sola desde <strong>{UMBRAL_NORMAL}</strong>, siempre.</>
+          ) : calibracion.umbralPostularCalibrado != null && calibracion.umbralPostularCalibrado > UMBRAL_NORMAL ? (
+            // docs/panel-de-revision-en-el-portal.md §9.3: desde el panel del portal, el corte también sube.
+            <>
+              Ahora postula sola desde <strong>{calibracion.umbralPostularCalibrado}</strong>: en el panel del
+              portal quitaste varias de las que iba a enviar con menos puntaje, así que esas ahora te las
+              preguntamos en Por decidir. Si lo apagas, vuelve a {UMBRAL_NORMAL}.
+            </>
           ) : calibracion.umbralPostularCalibrado != null ? (
             <>
               Ahora postula sola desde <strong>{calibracion.umbralPostularCalibrado}</strong>: de las ofertas
@@ -534,8 +542,8 @@ export default function FiltrosPage() {
           ) : (
             <>
               Por ahora postula sola desde <strong>{UMBRAL_NORMAL}</strong>. Lo revisamos una vez por semana
-              con lo que decides en Por decidir, y solo lo bajamos si apruebas 9 de cada 10 de las más
-              parecidas a lo que buscas.
+              con lo que decides: lo bajamos si apruebas 9 de cada 10 de las más parecidas a lo que buscas, y
+              lo subimos si en el panel del portal quitas seguido de las que iba a enviar con menos puntaje.
             </>
           )}
         </p>
@@ -546,7 +554,7 @@ export default function FiltrosPage() {
             checked={calibracion.calibrarUmbral}
             onChange={(e) => guardarCalibracion(e.target.checked)}
           />
-          Ajustarlo con mis decisiones en Por decidir
+          Ajustarlo con mis decisiones
         </label>
       </div>
       </div>
