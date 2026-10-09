@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Check, Copy, Download, ExternalLink, PlugZap } from "lucide-react";
 import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 import { sinSoporteExtension } from "@/lib/dispositivo";
-import { extensionPresente } from "@/lib/puente-extension";
+import { extensionPresente, pedirRecorrido } from "@/lib/puente-extension";
 import { usarActivarPostulacion } from "@/lib/usar-activar-postulacion";
 import { usarConectarExtension } from "@/lib/usar-conectar-extension";
 import type { ModoAutomatico } from "@/lib/estado-automatico";
@@ -112,12 +112,15 @@ export default function PrimeraBusqueda({
   // La marca en cada oferta y la tarjeta del final son de la extensión 2.17
   // (docs/primera-busqueda-guiada.md §11); bridge.js deja su versión en el DOM.
   const [marcaCadaOferta, setMarcaCadaOferta] = useState(false);
+  // Y desde la 2.19, el recorrido de cuatro pasos (§13).
+  const [conRecorrido, setConRecorrido] = useState(false);
   const conexion = usarConectarExtension(alConectar);
   const activacion = usarActivarPostulacion(alActivar);
 
   useEffect(() => {
     setEnMovil(sinSoporteExtension());
     setMarcaCadaOferta(versionAlMenos(document.documentElement.dataset.autopostulaExtension, [2, 17]));
+    setConRecorrido(versionAlMenos(document.documentElement.dataset.autopostulaExtension, [2, 19]));
     let vigente = true;
     extensionPresente().then((hay) => {
       if (vigente) setExtensionAqui(hay);
@@ -174,6 +177,9 @@ export default function PrimeraBusqueda({
 
   function irAlPortal(b: Busqueda) {
     marcar(FUE_AL_PORTAL);
+    // docs/primera-busqueda-guiada.md §13: en esa búsqueda, la extensión muestra
+    // el recorrido de la primera vez (si ya lo hizo, no lo repite).
+    pedirRecorrido();
     setEsperandoPortal("no");
     if (!b.conectado) {
       // Queda conectado mientras se abre el portal (keepalive: aunque esta
@@ -283,7 +289,9 @@ export default function PrimeraBusqueda({
       : (
         <>
           Se abre {unSoloPortal ?? "el portal que elijas"} con tu búsqueda: {busquedaEnPalabras}.{" "}
-          {marcaCadaOferta
+          {conRecorrido
+            ? "Al llegar, la extensión te muestra en cuatro pasos qué haría con cada oferta y por qué, y te deja elegir a cuáles postular."
+            : marcaCadaOferta
             ? "La extensión marca cada oferta con lo que haría y por qué, y al terminar te pregunta si empieza a postular."
             : "La extensión revisa cada oferta y te muestra abajo a la derecha a cuántas postularía y por qué descarta las demás."}{" "}
           <b>No envía nada.</b>

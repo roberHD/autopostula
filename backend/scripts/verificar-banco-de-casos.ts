@@ -1,6 +1,7 @@
 /**
  * Verificación del banco de casos y de la calibración del umbral
- * (docs/revision-scorer-2026-09-30.md §6 y §7). Lógica pura, sin base de datos:
+ * (docs/revision-scorer-2026-09-30.md §6 y §7), con el tercer grupo y la subida
+ * del corte (docs/panel-de-revision-en-el-portal.md §9.3). Lógica pura, sin base de datos:
  *
  *   npx tsx scripts/verificar-banco-de-casos.ts
  *
@@ -80,6 +81,34 @@ console.log("── Calibración del umbral (§7) ──");
   check("tope: el cargo fuera del título", esTopeDelScorer({ tipo: "rol_fuera_del_titulo" }));
   check("no es tope: una razón vieja en texto", !esTopeDelScorer("calza con vendedor"));
 
+  // Lo que iba a salir solo (65 o más), revisado en el panel del portal (§9.3 del panel).
+  const altasTodasSi = repetir(30, (i) => d(65 + i, "SI"));
+  const sinQuitar = calcularUmbralPostular(altasTodasSi);
+  check("si deja marcado todo lo que iba a salir solo, el corte no sube", sinQuitar.umbral === null && !sinQuitar.noSepara, sinQuitar);
+
+  // 10 de 65 a 69 (8 quitadas) y 25 "sí" de 70 en adelante.
+  const bajasQuitadas = [65, 65, 66, 66, 67, 67, 69, 69].map((s) => d(s, "NO")).concat([d(68, "SI"), d(68, "SI")]);
+  const altas25 = repetir(25, (i) => d(70 + i, "SI"));
+  const sube = calcularUmbralPostular([...bajasQuitadas, ...altas25]);
+  check("si quita las de menos puntaje, sube al primer corte desde el que deja 9 de 10 (68)", sube.umbral === 68 && sube.enTramo === 29 && sube.decisiones === 35, sube);
+
+  const conPocas = calcularUmbralPostular([...bajasQuitadas, ...altas25.slice(0, 19)]);
+  check("con 29 de esas no se mueve", conPocas.umbral === null && !conPocas.noSepara, conPocas);
+
+  const tope = calcularUmbralPostular([...repetir(16, (i) => d(65 + i, "NO")), ...repetir(20, (i) => d(81 + i, "SI"))]);
+  check("sube como mucho 10 puntos: si a 75 todavía quita de más, se queda el normal y avisa que el puntaje no separa", tope.umbral === null && tope.noSepara === true, tope);
+
+  const repartidas = calcularUmbralPostular(repetir(40, (i) => d(65 + (i % 30), i % 4 === 0 ? "NO" : "SI")));
+  check("si lo que quita está repartido en todos los puntajes, subir no lo arregla", repartidas.umbral === null && repartidas.noSepara === true, repartidas);
+
+  const ganaSubir = calcularUmbralPostular([...repetir(30, (i) => d(58 + (i % 7), "SI")), ...bajasQuitadas, ...altas25]);
+  check("si a la vez aprueba las dudosas altas y quita lo que sale solo, gana no enviar lo que quita (sube)", ganaSubir.umbral === 68, ganaSubir);
+
+  // Lo que quitó en el panel cuando el corte estaba más bajo (58) también
+  // cuenta para no dejarlo ahí.
+  const conQuitadasAbajo = calcularUmbralPostular([...bajas, ...altasSi, d(58, "NO"), d(59, "NO"), d(60, "NO")]);
+  check("lo que quitó en el panel con el corte más bajo cuenta para no bajarlo", conQuitadasAbajo.umbral === null, conQuitadasAbajo);
+
   const ahora = new Date("2026-10-10T12:00:00Z");
   const hace = (dias: number) => new Date(ahora.getTime() - dias * 86_400_000);
   check("apagado: no se calcula", !tocaCalibrar({ calibrarUmbral: false, umbralCalibradoEn: null }, ahora));
@@ -142,6 +171,33 @@ console.log("\n── El banco de casos (§6) ──");
   check("descartes por razón, con los corregidos", ds.total === 4 && ds.corregidos === 1 && ds.porRazon[0].razon === "sin_rol" && ds.porRazon[0].total === 2 && ds.porRazon[0].corregidos === 1, ds.porRazon);
   check("las razones viejas en texto se agrupan juntas", claveDeRazon("cualquier cosa") === "(razón vieja, en texto)");
   check('"No era así" es la lista que más enseña', ds.ejemplosCorregidos.length === 1 && ds.ejemplosCorregidos[0].id === "y");
+  check("sin panel del portal, el tercer grupo viene vacío", informe.teSirve.revisadas === 0 && informe.teSirve.porPuntaje.length === 0 && ds.rescatadosEnPanel === 0, informe.teSirve);
+
+  // El tercer grupo (docs/panel-de-revision-en-el-portal.md §9.3).
+  const conPanel = analizarBanco([], [{ id: "y", titulo: "Vendedor", empresa: null, razon: { tipo: "sin_rol" }, scoreLocal: 30, corregido: true }], {
+    teSirve: [
+      { ...fila("t1", 66, "NO"), pesoReducido: false },
+      { ...fila("t2", 67, "SI"), pesoReducido: false },
+      { ...fila("t3", 72, "SI") },
+      { ...fila("t4", 88, "NO") },
+      { ...fila("t5", 70, "NO"), pesoReducido: true },
+    ],
+    rescatadosEnPanel: 1,
+  });
+  const ts = conPanel.teSirve;
+  check("te sirve: cuántas dejó marcadas y cuántas quitó, sin las de peso reducido", ts.revisadas === 4 && ts.dejadas === 2 && ts.quitadas === 2 && ts.conPesoReducido === 1, ts);
+  check(
+    "...por tramos de 5 puntos (sí = dejó, no = quitó)",
+    JSON.stringify(ts.porPuntaje) ===
+      JSON.stringify([
+        { desde: 65, hasta: 69, si: 1, no: 1 },
+        { desde: 70, hasta: 74, si: 1, no: 0 },
+        { desde: 85, hasta: 89, si: 0, no: 1 },
+      ]),
+    ts.porPuntaje
+  );
+  check("...y las quitadas con más puntaje primero", ts.quitadasAltas.map((x) => x.id).join() === "t4,t1", ts.quitadasAltas.map((x) => x.id));
+  check("descartes: cuántos de los corregidos se rescataron en el panel", conPanel.descartes.corregidos === 1 && conPanel.descartes.rescatadosEnPanel === 1, conPanel.descartes);
 }
 
 // ── Volver a correr el scorer (§6.2) ─────────────────────────────────
@@ -165,6 +221,14 @@ console.log("\n── Volver a correr el scorer (§6.2) ──");
   check("los descartes sin corregir solo se cuentan", r.sinVeredicto.gris === 1 && r.sinVeredicto.descartar === 1, r.sinVeredicto);
   check("mejoran: el sí que se postula, el no que se descarta, el No era así que se pregunta", r.mejoran.length === 3, r.mejoran.map((c) => c.titulo));
   check('empeoran, y lo más grave primero: un "no" que se postularía solo', r.empeoran.length === 2 && r.empeoran[0].titulo === "no que ahora se postularía solo", r.empeoran.map((c) => c.titulo));
+
+  // Las de «te sirve»: venían de postular.
+  const teSirve = (veredicto: "SI" | "NO", ahora: CasoParaReCorrer["ahora"], titulo: string): CasoParaReCorrer => ({
+    origen: "te_sirve", veredicto, titulo, antes: "postular", ahora, scoreAntes: 70, scoreAhora: 0,
+  });
+  const rt = resumirReCorrida([teSirve("NO", "gris", "quitada que ahora se pregunta"), teSirve("SI", "gris", "dejada que ahora se pregunta"), teSirve("NO", "postular", "quitada que se seguiría enviando")]);
+  check("te sirve: la quitada que ahora se pregunta mejora; la dejada que ahora se pregunta empeora", rt.mejoran.map((c) => c.titulo).join() === "quitada que ahora se pregunta" && rt.empeoran.map((c) => c.titulo).join() === "dejada que ahora se pregunta", [rt.mejoran.map((c) => c.titulo), rt.empeoran.map((c) => c.titulo)]);
+  check("...y la quitada que se seguiría enviando queda en la matriz como un no que se postula", rt.conVeredicto.NO.postular === 1, rt.conVeredicto);
 
   // El scorer de verdad, cargado como lo carga el banco.
   const puntuar = cargarScorerDeLaExtension();

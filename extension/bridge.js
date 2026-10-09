@@ -64,6 +64,18 @@ window.addEventListener('autopostula:aprobar', () => {
   });
 });
 
+// docs/primera-busqueda-guiada.md §13: «Probémosla ahora» y «Buscar en…» piden
+// el recorrido de la primera vez para la búsqueda que abren. No lleva nada: la
+// extensión solo anota que está pendiente (si ya se hizo, no se repite).
+window.addEventListener('autopostula:recorrido', () => {
+  chrome.runtime.sendMessage({ type: 'RECORRIDO_PENDIENTE' }, (respuesta) => {
+    const detail = chrome.runtime.lastError || !respuesta
+      ? { ok: false, motivo: 'extension_no_responde' }
+      : respuesta;
+    window.dispatchEvent(new CustomEvent('autopostula:recorrido-resultado', { detail }));
+  });
+});
+
 // docs/rafagas-y-ponerse-al-dia.md §3.6: el botón "Ponerme al día ahora" del
 // panel viaja igual que "conectar" -- evento del DOM de esta misma página (no
 // postMessage de cualquier origen), y la respuesta vuelve como otro evento.

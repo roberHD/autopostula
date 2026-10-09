@@ -3,7 +3,8 @@
 > **Estado:** propuesta, 2026-09-29. Nace de una pregunta de Roberto: *"¿qué tan bueno sería hacer
 > una parte de la extensión como tutorial?"*. **El 2026-10-01 se hizo la parte del panel (§10)**,
 > el 2026-10-02 la del portal (§11, extensión 2.17.0) y el 2026-10-04 las tres frases del popup
-> (§12, extensión 2.17.1).
+> (§12, extensión 2.17.1). **El 2026-10-08 Roberto pidió igual unos pasos en el portal, y se hizo
+> el recorrido de la primera vez (§13, extensión 2.19.0)**: reemplaza lo que decían §2 y §9.
 > **Para:** el chat de producción.
 > **Relacionado:** `estrategia-y-rediseno.md` §5.2 ("En el portal · primera búsqueda", tarea 9 del
 > orden) y §5.3 (el popup semáforo), `modo-solo-observar.md` (el modo ya está construido),
@@ -47,6 +48,10 @@ sorprende después. Las dos son pérdida.
 ---
 
 ## 2. Por qué no un tutorial
+
+> **Cambió el 2026-10-08 (§13):** hay un recorrido de cuatro pasos, pero hecho para esquivar estas
+> cuatro razones: sale encima de la búsqueda real, cada paso cuando pasa lo que explica, y se apoya
+> solo en lo que pinta la extensión.
 
 - **Se salta.** Un recorrido de pantallas con "siguiente / entendido" se cierra por reflejo, y el
   que no lo cierra lo olvida antes de necesitarlo.
@@ -218,7 +223,8 @@ El 1 y el 2 se pueden hacer esta semana y son independientes de todo lo demás.
 
 ## 9. Lo que no se hace
 
-- **Un recorrido de pantallas** con globitos y flechas (§2).
+- ~~**Un recorrido de pantallas** con globitos y flechas (§2).~~ Se hizo uno el 2026-10-08, a pedido
+  de Roberto, que no es eso: va encima de la búsqueda real y no explica botones (§13).
 - **Un video de 3 minutos.** Si no se entiende en 60 segundos, el problema es el producto.
 - **Prometer resultados** ("consigue trabajo en 2 semanas").
 - **Mostrar en el video pantallas que todavía no existen.**
@@ -512,3 +518,81 @@ el encabezado después de cargar, y se puede entrar sin recargar), y solo se avi
    (`TEXTO_MODO`, igual que el panel), aunque ya no lo hace sola. La fila de la prueba lo aclara justo
    debajo, pero ese texto podría decir "cuando entras a un portal". Habría que cambiarlo en los dos
    lados (`backend/lib/estado-extension.ts`).
+
+---
+
+## 13. El recorrido de la primera vez (hecho el 2026-10-08, extensión 2.19.0)
+
+> **Estado:** implementado en `rama-roberto`, sin desplegar. Lo pidió Roberto el 2026-10-08: que
+> quien termina el onboarding vaya al portal que eligió, con la extensión, y que ahí le muestren
+> unos pasos, *"bastante dinámico"*.
+
+### 13.1 Por qué ahora sí, si §2 decía que no
+
+§2 descartó un recorrido de pantallas por cuatro razones. Este las esquiva así:
+
+| §2 decía | Este recorrido |
+|---|---|
+| Se salta | Son cuatro pasos y cada uno sale cuando pasa lo que explica, encima de las ofertas reales: no es un muro de «siguiente» antes de empezar. Si se salta, las marcas, la tarjeta del final y el panel se siguen explicando solos |
+| Se rompe con cada rediseño | Se apoya solo en lo que pinta la extensión (el aviso, la marca de cada oferta, la tarjeta del final y el panel), nunca en botones del portal |
+| Explica lo que no preocupa | No explica botones: dice qué va a pasar en tu nombre y qué no, que era lo que §0 decía que preocupa («no envío nada sin que me digas») |
+| Es caro | Usa el aviso que ya existía: es una sección de `core.js` y su prueba |
+
+### 13.2 Cómo quedó
+
+**Cuándo sale.** Una sola vez, en la primera búsqueda que la persona mira en «solo mirar», en la
+pestaña que está mirando (nunca en una ráfaga ni en una pestaña de fondo). Queda pendiente al
+instalar la extensión (una actualización no lo trae: quien ya la usaba no lo necesita) y cuando la
+persona aprieta **«Probémosla ahora»** al cerrar el onboarding o **«Buscar en…»** en la tarjeta
+«Probemos» de Hoy (`bridge.js`, evento `autopostula:recorrido`, sin ningún dato). Si ya lo hizo o lo
+saltó, no se repite, y una cuenta que ya postula no lo ve nunca.
+
+**Los pasos** (`AP.textoRecorrido`, en `extension/core.js`):
+
+| Paso | Dónde apunta | Qué dice |
+|---|---|---|
+| 1 | El aviso de abajo a la derecha | «Hola, soy AutoPostula. Revisé las 20 ofertas de esta página y marqué cada una con lo que haría. Te muestro cómo leer las marcas: no envío nada sin que me digas.» |
+| 2 | Una oferta de cada marca que haya en la página, de a una (la página baja sola hasta ella) | «Esta te sirve» (a las que sirven, postularía), «Esta, mejor que la decidas tú» (quedan en «Por decidir») y «Esta no calza» (si se equivoca, en la lista se puede rescatar) |
+| 3 | La tarjeta del final, que recién aparece acá | «Antes de que salga nada, tú eliges», y lleva a la lista. Sin sesión en el portal: «Para postular, inicia sesión», y se retoma desde ahí al volver |
+| 4 | El panel: primero la lista y después el botón | «Marca a cuáles postular» y «Nada sale sin este botón: (…) la primera te la muestro antes de enviarla» |
+| Final | Según cómo terminó | Apretó «Postular» o «Empezar a postular»: «¡Partimos!», y que desde ahora revisa así cada vez que abre el portal. «Todavía no»: sigue mirando, y cómo empezar después. Cerró la lista: no envió nada, y cómo volver |
+
+**Lo dinámico.** La página queda en penumbra y un marco con brillo enmarca lo que se explica. De un
+paso al otro, el marco y el globo viajan en vez de saltar, y el globo se pone al lado donde quepa
+(a la derecha de una oferta, a la izquierda de la tarjeta y del panel, arriba del aviso). Si la página
+se mueve, la siguen. Con «reducir movimiento» no hay animaciones.
+
+**Lo demás.**
+- Se puede saltar en cualquier paso («Saltar el recorrido» o Escape). Si se salta antes del paso 3,
+  la tarjeta del final aparece en ese momento.
+- Si se corta (se cerró la pestaña, fue a iniciar sesión), se retoma donde iba durante dos horas;
+  después empieza de nuevo.
+- En el onboarding, «¡Todo listo!» dice antes qué va a pasar, en tres líneas numeradas, arriba de
+  «Probémosla ahora». Con la 2.19, la tarjeta «Probemos» de Hoy también lo menciona.
+- Ningún paso dice «banda», «puntaje» ni «modo observar» (criterio 4 de §8).
+
+### 13.3 Cómo se verificó
+
+- **En el listado real de Computrabajo**, en el navegador integrado, que no tiene la extensión: un
+  servidor local trae la página del portal, le quita sus scripts y le pone la extensión nueva con un
+  chrome falso, así que nada se envía. El recorrido entero, del paso 1 al final, con «Postular a las
+  5» (en esa búsqueda había 5 que servían, 3 dudosas y 12 que no calzaban); el marco y el globo en
+  cada paso, y viajando de uno al otro.
+- **No se vio en pantalla en Laborum ni en Trabajando:** arman el listado con JavaScript en el
+  navegador, y la copia sin scripts queda vacía. El recorrido es el mismo código en los tres (solo usa
+  lo que pinta la extensión), y las marcas, la tarjeta y el panel ya se vieron ahí con la 2.18.
+- **El cierre del onboarding y la tarjeta de Hoy**, con el servidor local contra una base aparte y
+  una cuenta de prueba: «Probémosla ahora» pide el recorrido una vez, abre Computrabajo con la
+  búsqueda armada y sigue a Hoy; «Buscar en Computrabajo» también lo pide.
+- **Pruebas:** `extension/verificar-recorrido.js` (nueva, 84 comprobaciones: los textos, dónde va el
+  globo, el recorrido entero, saltarlo, retomarlo, cuándo no sale, los finales y «Revisar antes de
+  enviar») y el bloque 22 de `verificar-rafagas.js` (cuándo queda pendiente). Rompiendo a propósito,
+  en una copia, que la tarjeta espere al paso 3, las pruebas lo detectan.
+
+### 13.4 Lo que queda
+
+1. Verlo en pantalla en Laborum y en Trabajando: se puede con el marco sobre `robots.txt` en el
+   Chrome de Roberto, como se probó la 2.18.
+2. Medirlo (§6): cuántos lo terminan, cuántos lo saltan y en qué paso, contra cuántos aprietan
+   «Empezar a postular». Hoy cómo terminó queda solo en el navegador (`recorrido.como`); habría que
+   mandarlo al servidor.

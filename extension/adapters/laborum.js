@@ -293,7 +293,9 @@ function yaProcesada(id) {
   // Lo que la persona decidió en el panel de revisión no se vuelve a decidir
   // solo (docs/panel-de-revision-en-el-portal.md §2.2).
   if (AP.vistos.has(id) || AP.decididaEnPanel(id)) return true;
-  const postula = !AP.soloObservarEfectivo();
+  // Lo que solo se miró (o se propuso con «Revisar antes de enviar») vuelve a
+  // estar disponible cuando la extensión de verdad postula.
+  const postula = !AP.soloObservarEfectivo() && !AP.proponeEnVezDeEnviar();
   return (AP.log || []).some(e => e.uid === id && !(postula && e.status === 'observado'));
 }
 
@@ -915,12 +917,25 @@ async function escanear() {
     conteos.observado = pendientes.length;
     pendientes = [];
   }
+  // docs/panel-de-revision-en-el-portal.md §9.1: con «Revisar antes de enviar»
+  // y la persona mirando, no se navega a cada aviso: quedan propuestas, y la
+  // tarjeta del final lleva al panel para elegir.
+  const propone = AP.proponeEnVezDeEnviar();
+  if (propone && pendientes.length) {
+    pendientes.forEach(p => {
+      AP.vistos.add(p.id);
+      AP.anotarPropuesta(p.id);
+      addLog({ ts: Date.now(), status: 'observado', title: p.titulo, url: p.url, uid: p.id, reason: AP.RAZON_PROPUESTA });
+    });
+    conteos.propuestas = pendientes.length;
+    pendientes = [];
+  }
   // docs/primera-busqueda-guiada.md §11: con la persona mirando (no en una
   // ráfaga) y en "solo mirar", las dudosas no se abren una por una -- la
   // pestaña saltaba sola de aviso en aviso justo mientras la persona miraba qué
   // hacía la extensión. Van a "Por decidir" con lo que dice la tarjeta, como en
   // Computrabajo. En las ráfagas, que nadie mira, se siguen abriendo (§B).
-  if (soloObservar && candidatosGris.length && !AP.esPestanaDeRafaga()) {
+  if ((soloObservar || propone) && candidatosGris.length && !AP.esPestanaDeRafaga()) {
     for (const cand of candidatosGris) {
       AP.vistos.add(cand.id);
       addLog({ ts: Date.now(), status: 'skip', title: cand.titulo, url: cand.url, uid: cand.id, reason: 'En banda gris — revisar en el dashboard' });
@@ -934,7 +949,7 @@ async function escanear() {
   }
   AP.reportarDescartes(descartes, 'Laborum');
   {
-    const resumen = AP.mensajeEscaneo(sumarConteos(conteos), razonesDescartadas, soloObservar);
+    const resumen = AP.mensajeEscaneo(sumarConteos(conteos), razonesDescartadas, soloObservar, propone);
     msg(resumen.texto, resumen.estado, resumen.accion);
   }
 

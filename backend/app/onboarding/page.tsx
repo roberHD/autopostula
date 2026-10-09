@@ -11,6 +11,7 @@ import { useAvisos } from "@/components/Avisos";
 import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 import { LLAVE_INTENCION_PREMIUM, URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 import { sinSoporteExtension } from "@/lib/dispositivo";
+import { pedirRecorrido } from "@/lib/puente-extension";
 import { valorFormateado } from "@/lib/formato-perfil";
 import AutorizacionCv from "@/components/AutorizacionCv";
 import { usarDictado } from "@/lib/usar-dictado";
@@ -1477,6 +1478,10 @@ function PasoPortal({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOmit
 // hay portal y búsqueda: prometer "probémosla" y caer en un portal donde no
 // pasa nada es peor que no ofrecerlo. Está acá y no en el paso de la
 // extensión porque el portal se conecta en el paso siguiente.
+//
+// docs/primera-busqueda-guiada.md §13: en esa primera búsqueda, la extensión
+// muestra el recorrido (cuatro pasos encima de las ofertas reales). Acá se dice
+// antes qué va a pasar, en tres líneas.
 function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
   const [enMovil, setEnMovil] = useState(false);
   // docs/revision-2026-09-28.md §11: sin el correo confirmado la extensión no
@@ -1505,6 +1510,7 @@ function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
 
   function probarla() {
     if (!probarAhora) return;
+    pedirRecorrido();
     window.open(probarAhora.url, "_blank", "noopener");
     onTerminar();
   }
@@ -1527,7 +1533,7 @@ function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
           faltaCorreo
             ? "Tu cuenta quedó configurada. Antes de probarla, confirma tu correo con el enlace que te mandamos: sin eso la extensión no se puede conectar."
             : probarAhora
-            ? `AutoPostula ya está conectada. Pruébala ahora en ${probarAhora.portal}, con tu búsqueda: marca cada oferta con lo que haría y no envía nada hasta que tú digas.`
+            ? `AutoPostula ya está conectada. Probémosla juntos, con ofertas reales de ${probarAhora.portal}:`
             : enMovil
             ? "Tu cuenta quedó configurada. La prueba con ofertas reales se hace en Chrome, en un computador: en tu panel te queda el paso a paso."
             : "Ahora pruébala con ofertas reales, sin enviar nada. En tu panel te esperan los pasos: abrir tu portal con tu búsqueda y ver qué haría con cada oferta."
@@ -1540,6 +1546,34 @@ function PasoListo({ onTerminar }: { onTerminar: (destino?: string) => void }) {
       )}
       {probarAhora ? (
         <>
+          <ol aria-label="Qué va a pasar" style={{ listStyle: "none", padding: 0, margin: "0 0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {[
+              <>
+                Se abre <b>{probarAhora.portal}</b> con tu búsqueda, en otra pestaña.
+              </>,
+              <>AutoPostula marca cada oferta con lo que haría y por qué, y te lo muestra en cuatro pasos.</>,
+              <>
+                Tú eliges a cuáles postular. <b>No envía nada</b> hasta que aprietes.
+              </>,
+            ].map((texto, i) => (
+              <li
+                key={i}
+                className="ap-animate-in"
+                style={{ animationDelay: `${0.1 + i * 0.12}s`, display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, lineHeight: 1.5, textAlign: "left" }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    flex: "none", width: 22, height: 22, borderRadius: 999, display: "grid", placeItems: "center",
+                    fontSize: 12, fontWeight: 700, background: "var(--accent-soft)", color: "var(--accent)",
+                  }}
+                >
+                  {i + 1}
+                </span>
+                <span>{texto}</span>
+              </li>
+            ))}
+          </ol>
           <button
             onClick={probarla}
             className={quierePremium ? "ap-button-ghost" : "ap-button"}

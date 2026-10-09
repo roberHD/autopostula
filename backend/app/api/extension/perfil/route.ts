@@ -22,9 +22,10 @@ const DIAS_PARA_ENVIAR_APROBADA = 14;
 
 /**
  * docs/revision-scorer-2026-09-30.md §7: el umbral de esta cuenta, ajustado con
- * sus decisiones en "Por decidir" (lib/calibracion-umbral.ts). Se recalcula acá,
- * cuando la extensión pide el perfil y pasó una semana, y se guarda aparte del
- * perfil compilado (que vuelve a 65/45 en cada recompilación). null = el normal.
+ * sus decisiones en "Por decidir" y en el panel del portal
+ * (lib/calibracion-umbral.ts). Se recalcula acá, cuando la extensión pide el
+ * perfil y pasó una semana, y se guarda aparte del perfil compilado (que vuelve
+ * a 65/45 en cada recompilación). null = el normal.
  */
 async function umbralPostularDeLaCuenta(
   userId: string,
@@ -38,7 +39,10 @@ async function umbralPostularDeLaCuenta(
     const decisiones = await prisma.decisionOferta.findMany({
       where: {
         userId,
-        fuente: "BANDA_GRIS",
+        // "Por decidir", y del panel del portal las de «te sirve» que la persona
+        // dejó marcadas o quitó: con esas el corte también puede subir
+        // (docs/panel-de-revision-en-el-portal.md §9.3).
+        OR: [{ fuente: "BANDA_GRIS" }, { fuente: "PANEL_REVISION", bandaMotor: "postular" }],
         veredicto: { in: ["SI", "NO"] },
         // docs/panel-de-revision-en-el-portal.md §3.3: una tanda del panel en
         // que se marcó casi todo no mueve el corte.

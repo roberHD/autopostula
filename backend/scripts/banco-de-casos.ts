@@ -1,6 +1,9 @@
 /**
  * El banco de casos (docs/revision-scorer-2026-09-30.md §6): el scorer contra lo
- * que decidió cada persona. Solo lectura y sin IA: no escribe nada en la base.
+ * que decidió cada persona, en los tres grupos: "Por decidir", lo que iba a
+ * postular sola y se revisó en el panel del portal, y los descartes
+ * (docs/panel-de-revision-en-el-portal.md §9.3). Solo lectura y sin IA: no
+ * escribe nada en la base.
  *
  *   npx tsx scripts/banco-de-casos.ts                      todas las cuentas
  *   npx tsx scripts/banco-de-casos.ts correo@ejemplo.com   una cuenta, y además vuelve a
@@ -22,6 +25,7 @@ import {
   resumirReCorrida,
   type CasoParaReCorrer,
   type DecisionDelBanco,
+  type DecisionDeTeSirve,
   type DescarteDelBanco,
   type InformeBanco,
 } from "../lib/banco-de-casos";
@@ -76,9 +80,28 @@ function imprimirInforme(informe: InformeBanco) {
     for (const d of g.siBajos) console.log(`    ${col(d.scoreLocal, 3)}  ${corto(d.titulo)}${d.empresa ? " · " + d.empresa : ""} — ${primeraRazon(d.razones)}`);
   }
 
+  const ts = informe.teSirve;
+  console.log("\n── Te sirve: lo que la extensión iba a postular sola, revisado en el panel del portal ──");
+  if (!ts.revisadas) {
+    console.log(`  Todavía no hay${ts.conPesoReducido ? ` (${ts.conPesoReducido} de tandas en que se marcó casi todo: no cuentan)` : ""}.`);
+  } else {
+    console.log(`  ${ts.revisadas} revisadas: ${ts.dejadas} las dejó marcadas, ${ts.quitadas} las quitó (${pct(ts.quitadas, ts.revisadas)})`);
+    console.log("  Ojo: dejar una marcada puede ser no haberla mirado; quitarla es una decisión.");
+    if (ts.conPesoReducido) console.log(`  Aparte, ${ts.conPesoReducido} de tandas en que se marcó casi todo (no cuentan).`);
+    console.log("    tramo   dejó  quitó   % quitó");
+    for (const t of ts.porPuntaje) {
+      console.log(`    ${`${t.desde}-${t.hasta}`.padEnd(7)}${col(t.si, 5)}${col(t.no, 7)}${col(pct(t.no, t.si + t.no), 9)}`);
+    }
+    if (ts.quitadasAltas.length) {
+      console.log("\n  Las que quitó con más puntaje (se habrían enviado igual con un corte más alto):");
+      for (const d of ts.quitadasAltas) console.log(`    ${col(d.scoreLocal, 3)}  ${corto(d.titulo)}${d.empresa ? " · " + d.empresa : ""} — ${primeraRazon(d.razones)}`);
+    }
+  }
+
   const ds = informe.descartes;
   console.log("\n── Descartes ──");
-  console.log(`  ${ds.total} descartes, ${ds.corregidos} corregidos con "No era así" (${pct(ds.corregidos, ds.total)})`);
+  console.log(`  ${ds.total} descartes, ${ds.corregidos} corregidos (${pct(ds.corregidos, ds.total)})`);
+  if (ds.rescatadosEnPanel) console.log(`  En el panel del portal se rescataron ${ds.rescatadosEnPanel} que la extensión había descartado.`);
   if (ds.porRazon.length) {
     console.log("    razón                     total  corregidos");
     for (const r of ds.porRazon) console.log(`    ${r.razon.padEnd(24)}${col(r.total, 7)}${col(r.corregidos, 12)}`);
@@ -92,6 +115,7 @@ function imprimirInforme(informe: InformeBanco) {
 }
 
 type FilaDecision = DecisionDelBanco & { userId: string; entradaScorer: unknown; decididoEn: Date | null };
+type FilaTeSirve = DecisionDeTeSirve & { userId: string; entradaScorer: unknown; decididoEn: Date | null };
 type FilaDescarte = DescarteDelBanco & { userId: string; entradaScorer: unknown };
 
 async function leer(userId: string | null) {
@@ -106,6 +130,32 @@ async function leer(userId: string | null) {
     select: {
       id: true, userId: true, tituloCrudo: true, empresa: true, scoreLocal: true,
       veredicto: true, razones: true, entradaScorer: true, decididoEn: true,
+    },
+  });
+  // El tercer grupo: lo que la extensión iba a postular sola, revisado en el
+  // panel del portal (sí = lo dejó marcado, no = lo quitó).
+  const teSirve = await prisma.decisionOferta.findMany({
+    where: {
+      ...(userId ? { userId } : {}),
+      fuente: "PANEL_REVISION",
+      bandaMotor: "postular",
+      veredicto: { in: ["SI", "NO"] },
+      decididoEn: { gte: desde },
+    },
+    select: {
+      id: true, userId: true, tituloCrudo: true, empresa: true, scoreLocal: true,
+      veredicto: true, razones: true, entradaScorer: true, decididoEn: true, pesoReducido: true,
+    },
+  });
+  // Descartes rescatados en el panel: el descarte queda corregido igual que con
+  // "No era así", y además hay un "sí" del panel.
+  const rescatadosEnPanel = await prisma.decisionOferta.count({
+    where: {
+      ...(userId ? { userId } : {}),
+      fuente: "PANEL_REVISION",
+      bandaMotor: "descartar",
+      veredicto: "SI",
+      decididoEn: { gte: desde },
     },
   });
   const descartes = await prisma.descarte.findMany({
@@ -123,6 +173,14 @@ async function leer(userId: string | null) {
         decididoEn: d.decididoEn,
       })
     ),
+    teSirve: teSirve.map(
+      (d): FilaTeSirve => ({
+        id: d.id, userId: d.userId, titulo: d.tituloCrudo, empresa: d.empresa, scoreLocal: d.scoreLocal,
+        veredicto: d.veredicto as "SI" | "NO", razones: d.razones, entradaScorer: d.entradaScorer ?? null,
+        decididoEn: d.decididoEn, pesoReducido: d.pesoReducido,
+      })
+    ),
+    rescatadosEnPanel,
     descartes: descartes.map(
       (d): FilaDescarte => ({
         id: d.id, userId: d.userId, titulo: d.titulo, empresa: d.empresa, razon: d.razon, scoreLocal: d.scoreLocal,
@@ -133,33 +191,40 @@ async function leer(userId: string | null) {
 }
 
 // La calibración de verdad (/api/extension/perfil) usa solo las decisiones de
-// los últimos 90 días que evaluó el scorer nuevo (las que traen entradaScorer).
-function calibracionComoLaDeVerdad(decisiones: FilaDecision[]) {
+// los últimos 90 días que evaluó el scorer nuevo (las que traen entradaScorer):
+// las de "Por decidir" y las de «te sirve» del panel, sin las de peso reducido.
+function calibracionComoLaDeVerdad(decisiones: FilaDecision[], teSirve: FilaTeSirve[]) {
   const limite = Date.now() - DIAS_DE_DECISIONES * 86_400_000;
-  return calcularUmbralPostular(
-    decisiones.filter((d) => d.entradaScorer != null && d.decididoEn && d.decididoEn.getTime() >= limite)
-  );
+  const vale = (d: { entradaScorer: unknown; decididoEn: Date | null }) => d.entradaScorer != null && !!d.decididoEn && d.decididoEn.getTime() >= limite;
+  return calcularUmbralPostular([...decisiones.filter(vale), ...teSirve.filter((d) => !d.pesoReducido && vale(d))]);
 }
 
 async function todasLasCuentas() {
-  const { decisiones, descartes } = await leer(null);
+  const { decisiones, teSirve, rescatadosEnPanel, descartes } = await leer(null);
   console.log(`Banco de casos — todas las cuentas — últimos ${dias} días`);
-  imprimirInforme(analizarBanco(decisiones, descartes));
+  imprimirInforme(analizarBanco(decisiones, descartes, { teSirve, rescatadosEnPanel }));
 
   // Por cuenta: la separación y el umbral se miran de a una, porque lo que
   // es relevante para una persona no lo es para otra (§7).
-  const porCuenta = new Map<string, FilaDecision[]>();
-  for (const d of decisiones) porCuenta.set(d.userId, [...(porCuenta.get(d.userId) ?? []), d]);
-  const cuentas = [...porCuenta.entries()].filter(([, ds]) => ds.length >= 10);
+  const porCuenta = new Map<string, { gris: FilaDecision[]; teSirve: FilaTeSirve[] }>();
+  const deLaCuenta = (id: string) => porCuenta.get(id) ?? porCuenta.set(id, { gris: [], teSirve: [] }).get(id)!;
+  for (const d of decisiones) deLaCuenta(d.userId).gris.push(d);
+  for (const d of teSirve) deLaCuenta(d.userId).teSirve.push(d);
+  const total = (c: { gris: FilaDecision[]; teSirve: FilaTeSirve[] }) => c.gris.length + c.teSirve.length;
+  const cuentas = [...porCuenta.entries()].filter(([, c]) => total(c) >= 10);
   if (!cuentas.length) return;
   const usuarios = await prisma.user.findMany({ where: { id: { in: cuentas.map(([id]) => id) } }, select: { id: true, email: true } });
   const correoDe = new Map(usuarios.map((u) => [u.id, u.email]));
   console.log("\n── Por cuenta (las con 10 decisiones o más) ──");
-  console.log("    decisiones  separación  corte sugerido   cuenta");
-  for (const [id, ds] of cuentas.sort((a, b) => b[1].length - a[1].length)) {
-    const informe = analizarBanco(ds, []);
-    const { umbral } = calibracionComoLaDeVerdad(ds);
-    console.log(`    ${col(ds.length, 10)}${col(num(informe.gris.separacion, 2), 12)}${col(umbral ?? UMBRAL_POSTULAR_POR_DEFECTO, 16)}   ${correoDe.get(id) ?? id}`);
+  console.log("    por decidir  separación  te sirve (quitó)  corte sugerido   cuenta");
+  for (const [id, c] of cuentas.sort((a, b) => total(b[1]) - total(a[1]))) {
+    const informe = analizarBanco(c.gris, [], { teSirve: c.teSirve });
+    const { umbral } = calibracionComoLaDeVerdad(c.gris, c.teSirve);
+    const ts = informe.teSirve;
+    console.log(
+      `    ${col(c.gris.length, 11)}${col(num(informe.gris.separacion, 2), 12)}${col(ts.revisadas ? `${ts.revisadas} (${pct(ts.quitadas, ts.revisadas)})` : "-", 18)}` +
+        `${col(umbral ?? UMBRAL_POSTULAR_POR_DEFECTO, 16)}   ${correoDe.get(id) ?? id}`
+    );
   }
 }
 
@@ -169,20 +234,25 @@ async function unaCuenta(email: string) {
     console.log(`No hay ninguna cuenta con el correo ${email}.`);
     return;
   }
-  const { decisiones, descartes } = await leer(user.id);
+  const { decisiones, teSirve, rescatadosEnPanel, descartes } = await leer(user.id);
   console.log(`Banco de casos — ${user.email} — últimos ${dias} días`);
-  imprimirInforme(analizarBanco(decisiones, descartes));
+  imprimirInforme(analizarBanco(decisiones, descartes, { teSirve, rescatadosEnPanel }));
 
   const filtros = await prisma.searchPreferences.findUnique({ where: { userId: user.id } });
   const amplitud = esAmplitud(filtros?.amplitud) ? filtros.amplitud : AMPLITUD_POR_DEFECTO;
 
   console.log("\n── Umbral para postular sola (§7) ──");
-  const calibracion = calibracionComoLaDeVerdad(decisiones);
-  console.log(`  Decisiones que sirven para calibrar (últimos ${DIAS_DE_DECISIONES} días, scorer nuevo, sin topes, en la banda): ${calibracion.decisiones}`);
+  const calibracion = calibracionComoLaDeVerdad(decisiones, teSirve);
+  console.log(`  Decisiones que sirven para calibrar (últimos ${DIAS_DE_DECISIONES} días, scorer nuevo, sin topes): ${calibracion.decisiones}`);
+  const acuerdo = `${calibracion.enTramo} decisiones desde ahí, ${Math.round((calibracion.acuerdo ?? 0) * 100)}% sí`;
   console.log(
-    calibracion.umbral != null
-      ? `  Con ellas, el corte bajaría a ${calibracion.umbral} (${calibracion.enTramo} decisiones desde ahí, ${Math.round((calibracion.acuerdo ?? 0) * 100)}% sí)`
-      : `  Con ellas, el corte se queda en ${UMBRAL_POSTULAR_POR_DEFECTO}`
+    calibracion.umbral != null && calibracion.umbral > UMBRAL_POSTULAR_POR_DEFECTO
+      ? `  Con ellas, el corte subiría a ${calibracion.umbral}: quitó varias de las que iba a enviar con menos puntaje (${acuerdo})`
+      : calibracion.umbral != null
+        ? `  Con ellas, el corte bajaría a ${calibracion.umbral} (${acuerdo})`
+        : calibracion.noSepara
+          ? `  Con ellas, el corte se queda en ${UMBRAL_POSTULAR_POR_DEFECTO}: quita mucho de lo que iba a enviar, pero en todos los puntajes (subirlo no lo arregla; el problema es lo que mide)`
+          : `  Con ellas, el corte se queda en ${UMBRAL_POSTULAR_POR_DEFECTO}`
   );
   if (!filtros?.calibrarUmbral) console.log("  La cuenta tiene el ajuste apagado (Filtros de búsqueda).");
   else if (amplitud === "abierto") console.log('  La cuenta busca "cualquier trabajo": ahí el ajuste no se aplica.');
@@ -221,6 +291,9 @@ async function unaCuenta(email: string) {
   };
   for (const d of decisiones) {
     reCorrer(d.entradaScorer, { origen: "por_decidir", veredicto: d.veredicto, titulo: d.titulo, antes: "gris", scoreAntes: d.scoreLocal });
+  }
+  for (const d of teSirve) {
+    reCorrer(d.entradaScorer, { origen: "te_sirve", veredicto: d.veredicto, titulo: d.titulo, antes: "postular", scoreAntes: d.scoreLocal });
   }
   for (const d of descartes) {
     // Un duplicado no lo descartó el scorer.

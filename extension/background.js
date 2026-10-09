@@ -1966,6 +1966,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
+  // docs/primera-busqueda-guiada.md §13: «Probémosla ahora» (onboarding) o
+  // «Buscar en…» (Hoy) piden el recorrido para la búsqueda que se va a abrir.
+  if (msg.type === 'RECORRIDO_PENDIENTE') {
+    recorridoPendiente('web').then(sendResponse).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (msg.type === 'APROBAR_PENDIENTES') {
     procesarAprobadas().then(sendResponse).catch((e) => {
       console.warn('[AP] Falló procesar las aprobadas de "Por decidir":', e);
@@ -2160,6 +2166,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((detalle) => {
   console.log('AutoPostula v2 instalado.');
+  if (detalle && detalle.reason === 'install') recorridoPendiente('instalacion').catch(() => {});
 });
+
+// ── El recorrido de la primera vez (docs/primera-busqueda-guiada.md §13) ──
+// Queda pendiente al instalar (una actualización no lo trae: quien ya usaba la
+// extensión no lo necesita) y cuando la persona lo pide desde su panel. Lo
+// muestra core.js en la primera búsqueda que mira en "solo mirar". Si ya lo
+// hizo o lo saltó, no se repite.
+async function recorridoPendiente(origen) {
+  const { recorrido } = await chrome.storage.local.get('recorrido');
+  if (recorrido && recorrido.estado === 'hecho') return { ok: true, yaLoHizo: true };
+  await chrome.storage.local.set({ recorrido: { estado: 'pendiente', origen, desde: Date.now() } });
+  return { ok: true };
+}

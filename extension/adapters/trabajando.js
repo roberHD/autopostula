@@ -824,11 +824,15 @@ async function escanear() {
   // docs/modo-solo-observar.md §3.2: ver el razonamiento completo en
   // computrabajo.js, es el mismo acá.
   const soloObservar = AP.soloObservarEfectivo();
+  // docs/panel-de-revision-en-el-portal.md §9.1: con «Revisar antes de enviar»
+  // y la persona mirando, las que sirven quedan propuestas, sin enviar.
+  const propone = AP.proponeEnVezDeEnviar();
   {
     if (soloObservar) conteos.observado = pendientes.length;
+    else if (propone) conteos.propuestas = pendientes.length;
     else conteos.postular = pendientes.length;
     AP.reportarDescartes(descartes, 'Trabajando');
-    const resumen = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
+    const resumen = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar, propone);
     msg(resumen.texto, resumen.estado, resumen.accion);
   }
 
@@ -858,6 +862,12 @@ async function escanear() {
       AP.vistos.add(id);
       addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:'Habría postulado — modo solo observar'});
       observadas.push({ externalId: id, titulo, empresa, url, razon: AP.razonDeLaMarca('postular', razones), score });
+      continue;
+    }
+    if (propone) {
+      AP.vistos.add(id);
+      AP.anotarPropuesta(id);
+      addLog({ts:Date.now(), status:'observado', title:titulo, url, uid:id, reason:AP.RAZON_PROPUESTA});
       continue;
     }
     const verificacion = await AP.puedePostular('Trabajando');
@@ -892,7 +902,7 @@ async function escanear() {
   AP.reportarEscaneoTerminado(conteos);
   // §5: el aviso final se quedaba en "Escaneo completo" sin el resumen que sí
   // muestran los otros dos portales.
-  const resumenFinal = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar);
+  const resumenFinal = AP.mensajeEscaneo(conteos, razonesDescartadas, soloObservar, propone);
   msg(resumenFinal.texto, resumenFinal.estado, resumenFinal.accion);
   AP.cierreDePagina();
 }
