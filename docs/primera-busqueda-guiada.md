@@ -525,7 +525,8 @@ el encabezado después de cargar, y se puede entrar sin recargar), y solo se avi
 
 > **Estado:** implementado en `rama-roberto`, sin desplegar. Lo pidió Roberto el 2026-10-08: que
 > quien termina el onboarding vaya al portal que eligió, con la extensión, y que ahí le muestren
-> unos pasos, *"bastante dinámico"*.
+> unos pasos, *"bastante dinámico"*. La 2.19.1 (2026-10-09) solo acorta el botón «Iniciar sesión»
+> del paso 3, que en Trabajando quedaba en dos líneas (§13.3). Es la que hay que subir.
 
 ### 13.1 Por qué ahora sí, si §2 decía que no
 
