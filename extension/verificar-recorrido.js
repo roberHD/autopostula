@@ -234,7 +234,7 @@ const PENDIENTE = () => ({ estado: 'pendiente', origen: 'web', desde: Date.now()
     check('...con una sola que sirve, en singular', /la que te sirve\.$/.test(T('cierre', { total: 20, postular: 1 }).texto));
     check('...si no sirve ninguna, lo dice', T('cierre', { total: 20, postular: 0 }).titulo === 'Aquí no hay ninguna que te sirva');
     const sinSesion = T('cierre', { total: 20, postular: 3, portal: 'Computrabajo', sinSesion: true });
-    check('...y sin sesión en el portal, lleva a iniciarla', sinSesion.titulo === 'Para postular, inicia sesión' && /Computrabajo/.test(sinSesion.texto) && sinSesion.boton === 'Iniciar sesión en Computrabajo', sinSesion);
+    check('...y sin sesión en el portal, lleva a iniciarla (el botón corto: el texto ya nombra el portal)', sinSesion.titulo === 'Para postular, inicia sesión' && /Sin tu sesión en Computrabajo/.test(sinSesion.texto) && sinSesion.boton === 'Iniciar sesión', sinSesion);
     const panel0 = T('panel', { sub: 0 }), panel1 = T('panel', { sub: 1 });
     check('paso 4: marcar y desmarcar, y que nada sale sin el botón', panel0.paso === 'Paso 4 de 4' && panel0.titulo === 'Marca a cuáles postular' && panel1.titulo === 'Nada sale sin este botón' && /la primera te la muestro antes de enviarla/.test(panel1.texto) && panel1.boton === 'Entendido', [panel0, panel1]);
     const enviado = T('fin', { variante: 'enviado', portal: 'Computrabajo' });
@@ -412,7 +412,7 @@ const PENDIENTE = () => ({ estado: 'pendiente', origen: 'web', desde: Date.now()
     check('si la persona abre la lista antes (desde el ícono), salta al paso 4', t.AP.estadoRecorrido().paso === 'panel');
 
     t = alPaso3({ docSel: { '[data-login-button-desktop]': [crearElemento('a')] } });
-    check('sin sesión en el portal, el paso 3 lo dice', t.rec().getElementById('ap-rec-t').textContent === 'Para postular, inicia sesión' && t.rec().getElementById('ap-rec-si').textContent === 'Iniciar sesión en Computrabajo');
+    check('sin sesión en el portal, el paso 3 lo dice', t.rec().getElementById('ap-rec-t').textContent === 'Para postular, inicia sesión' && t.rec().getElementById('ap-rec-si').textContent === 'Iniciar sesión');
     t.AP.accionRecorrido();
     check('...y lleva a iniciarla, guardando el paso para retomarlo al volver', t.navegaciones[0] === 'https://candidato.cl.computrabajo.com/acceso/' && t.local.recorrido.estado === 'en_curso' && t.local.recorrido.paso === 'cierre', [t.navegaciones, t.local.recorrido]);
   }

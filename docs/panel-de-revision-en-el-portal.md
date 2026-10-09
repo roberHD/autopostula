@@ -400,10 +400,13 @@ quedaba registrada como **quitada**: un «no» que la persona nunca dijo. Ahora 
 
 ### 9.5 Cómo se verificó
 
-- **En el listado real de Computrabajo** (navegador integrado, con el simulador de
-  `primera-busqueda-guiada.md` §13.3): con «Revisar antes de enviar», la tarjeta y el aviso proponen
-  las 5 que servían sin enviar ninguna; el panel las trae marcadas; «Postular a las 5» las manda como
-  no enviadas y elegidas, y avisa que cada una se muestra antes de enviarla.
+- **En los tres portales reales**: Computrabajo en el navegador integrado (con el simulador de
+  `primera-busqueda-guiada.md` §13.3); Laborum y Trabajando en el Chrome de Roberto, en un marco
+  sobre `robots.txt`. Con «Revisar antes de enviar», el aviso y la tarjeta proponen las que servían (5,
+  6 y 6) sin enviar ninguna; el panel las trae marcadas; «Postular» las manda como no enviadas y
+  elegidas, y avisa que cada una se muestra antes de enviarla. **En Laborum el marco nunca salió del
+  listado** (antes navegaba al primer aviso), y en Trabajando la repetida de la página no se mandó
+  (§9.4).
 - **La ruta real del perfil contra una base aparte:** con 8 quitadas entre 65 y 69 y 27 dejadas, el
   perfil que recibe la extensión postula desde 68 y queda guardado en la cuenta; los descartes
   rescatados, las tandas con peso reducido y lo del scorer viejo no se cuelan (cada uno habría cambiado

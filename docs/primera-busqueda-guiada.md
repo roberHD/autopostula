@@ -578,9 +578,15 @@ se mueve, la siguen. Con «reducir movimiento» no hay animaciones.
   chrome falso, así que nada se envía. El recorrido entero, del paso 1 al final, con «Postular a las
   5» (en esa búsqueda había 5 que servían, 3 dudosas y 12 que no calzaban); el marco y el globo en
   cada paso, y viajando de uno al otro.
-- **No se vio en pantalla en Laborum ni en Trabajando:** arman el listado con JavaScript en el
-  navegador, y la copia sin scripts queda vacía. El recorrido es el mismo código en los tres (solo usa
-  lo que pinta la extensión), y las marcas, la tarjeta y el panel ya se vieron ahí con la 2.18.
+- **En Laborum y en Trabajando, en el Chrome de Roberto** (el 2026-10-09, a pedido suyo), con el
+  código nuevo corriendo en un marco del propio portal sobre `robots.txt`, donde la extensión
+  instalada no actúa, y un chrome falso: el recorrido entero en los dos, del paso 1 al final («Postular
+  a las 6»; 6 que servían y 14 o 9 que no calzaban). En Laborum el globo del paso 2 va abajo de la
+  oferta (las tarjetas son anchas); en Trabajando, al lado de la columna del listado, que baja sola
+  dentro de su propio scroll. En Trabajando no había sesión: el paso 3 dijo «Para postular, inicia
+  sesión», y «Saltar el recorrido» lo cerró dejando la tarjeta a la vista. Ningún clic de envío se
+  intentó y el marco nunca salió del listado. (El simulador del navegador integrado no sirve para
+  estos dos: arman el listado con JavaScript y la copia sin scripts queda vacía.)
 - **El cierre del onboarding y la tarjeta de Hoy**, con el servidor local contra una base aparte y
   una cuenta de prueba: «Probémosla ahora» pide el recorrido una vez, abre Computrabajo con la
   búsqueda armada y sigue a Hoy; «Buscar en Computrabajo» también lo pide.
@@ -591,8 +597,6 @@ se mueve, la siguen. Con «reducir movimiento» no hay animaciones.
 
 ### 13.4 Lo que queda
 
-1. Verlo en pantalla en Laborum y en Trabajando: se puede con el marco sobre `robots.txt` en el
-   Chrome de Roberto, como se probó la 2.18.
-2. Medirlo (§6): cuántos lo terminan, cuántos lo saltan y en qué paso, contra cuántos aprietan
+1. Medirlo (§6): cuántos lo terminan, cuántos lo saltan y en qué paso, contra cuántos aprietan
    «Empezar a postular». Hoy cómo terminó queda solo en el navegador (`recorrido.como`); habría que
    mandarlo al servidor.

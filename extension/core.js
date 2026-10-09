@@ -1261,10 +1261,12 @@ AP.textoRecorrido = function (paso, c) {
   }
   if (paso === 'cierre') {
     if (c.sinSesion) {
+      // El botón corto: el texto ya dice en qué portal (y largo quedaba en dos
+      // líneas, apretado contra "Saltar el recorrido").
       return {
         paso: numero(3), n: 3, titulo: 'Para postular, inicia sesión',
         texto: 'Sin tu sesión en ' + portal + ' no puedo postular por ti. Inicia sesión y vuelve a esta búsqueda: seguimos desde aquí.',
-        boton: 'Iniciar sesión en ' + portal,
+        boton: 'Iniciar sesión',
       };
     }
     if (!c.postular) {
