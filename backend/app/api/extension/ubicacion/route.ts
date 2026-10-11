@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { LISTA_LIMPIEZA_CL } from "@/scripts/limpieza/cl";
 import { nombrePropio } from "@/lib/text";
-import { expandirUbicacionDeclarada } from "@/lib/compilar-perfil";
+import { expandirUbicacionDeclarada } from "@/lib/ubicacion-declarada";
 import type { UbicacionDeclarada } from "@/lib/entrada";
 import { hashToken } from "@/lib/token";
 

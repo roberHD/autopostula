@@ -2,35 +2,17 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
 import { construirMensajesCV } from "@/lib/ai-messages";
-import { LISTA_LIMPIEZA_CL } from "@/scripts/limpieza/cl";
+import { expandirUbicacionDeclarada, type UbicacionDeclarada } from "@/lib/ubicacion-declarada";
 import { normalizarVetos, normalizarSenales } from "@/lib/normalizar-patron";
 import { UMBRAL_GRIS_POR_DEFECTO, UMBRAL_POSTULAR_POR_DEFECTO } from "@/lib/calibracion-umbral";
 import { cuentaParaAprender } from "@/lib/panel-revision";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-type UbicacionDeclarada = { regiones?: string[]; comunas?: string[]; todaLaRegion?: boolean; aceptaRemoto?: boolean };
-
-// docs/revision-2026-09-16.md §2.1: la ubicación se declara (opciones
-// cerradas, ver /api/regiones-comunas), no se infiere del CV con IA -- en la
-// cuenta de prueba, la IA había armado ["maipu","pudahuel","santiago"] para
-// alguien que pidió "Maipú, Cerrillos o Estación Central" y quería EVITAR
-// Pudahuel (su trabajo anterior). Si declaró "toda la región", se expande a
-// las comunas reales de esa región usando la misma lista que ya usa el
-// parser de títulos (scripts/limpieza/cl.ts) -- una sola fuente para las 346
-// comunas, no una copia aparte que se pueda desincronizar.
-export function expandirUbicacionDeclarada(decl: UbicacionDeclarada): { comunas: string[]; aceptaRemoto: boolean } {
-  const regiones = Array.isArray(decl.regiones) ? decl.regiones : [];
-  const comunas = new Set(
-    (Array.isArray(decl.comunas) ? decl.comunas : []).map((c) => c.toLowerCase().trim()).filter(Boolean)
-  );
-  if (decl.todaLaRegion && regiones.length) {
-    for (const t of LISTA_LIMPIEZA_CL) {
-      if (t.tipo === "comuna" && regiones.includes(t.region)) comunas.add(t.termino);
-    }
-  }
-  return { comunas: [...comunas], aceptaRemoto: !!decl.aceptaRemoto };
-}
+// La expansión de la ubicación declarada vive en lib/ubicacion-declarada.ts
+// (también la usa el perfil que se le sirve a la extensión). Se reexporta para
+// no romper a quien la importaba desde acá.
+export { expandirUbicacionDeclarada } from "@/lib/ubicacion-declarada";
 
 // El Perfil de Búsqueda compilado (docs/rediseno-filtrado-ofertas.md §5) --
 // reemplaza a /api/ai/sugerir-filtros y a las columnas planas de

@@ -160,7 +160,7 @@ export async function GET(request: Request) {
   const scorer = {
     usarScorerLocal: !!(filtros?.usarScorerLocal && compilado),
     perfilCompilado: compilado
-      ? await perfilParaElScorer(compilado, { objetivos, amplitud, cv: perfil || {}, umbralPostular: umbralCalibrado })
+      ? await perfilParaElScorer(compilado, { objetivos, amplitud, cv: perfil || {}, umbralPostular: umbralCalibrado, ubicacionDeclarada: filtros?.ubicacionDeclarada })
       : null,
     versionPerfil: filtros?.versionPerfil ?? 0,
     // Revisión externa 2026-09-05: si una recompilación forzada por cambio

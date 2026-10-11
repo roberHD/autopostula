@@ -146,6 +146,12 @@ export default function UbicacionPicker({
           {!valor.todaLaRegion && (
             <div style={{ marginBottom: 14 }}>
               <label className="ap-label">Comunas</label>
+              {/* lib/ubicacion-declarada.ts: sin comunas, la región se toma entera. */}
+              {valor.comunas.length === 0 && (
+                <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px", lineHeight: 1.5 }}>
+                  Si no eliges comunas, buscamos en {valor.regiones.length > 1 ? "esas regiones enteras" : "toda la región"}.
+                </p>
+              )}
               {valor.comunas.length > 0 && (
                 <div className="ap-etiquetas" style={{ marginBottom: 8 }}>
                   {valor.comunas.map((c) => (

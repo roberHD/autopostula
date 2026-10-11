@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { esAmplitud } from "@/lib/amplitud";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { limpiarUbicacion, listaDeTextos } from "@/lib/entrada";
-import { expandirUbicacionDeclarada } from "@/lib/compilar-perfil";
+import { expandirUbicacionDeclarada } from "@/lib/ubicacion-declarada";
 
 // docs/revision-2026-09-28.md §25: solo valores conocidos. Antes se guardaba lo
 // que llegara (un objeto en vez de lista, una modalidad inventada).
