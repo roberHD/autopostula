@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { nuevoToken } from "@/lib/token";
 import { getUsuarioSesion } from "@/lib/auth-helpers";
 import { enviarCorreoVerificacion } from "@/lib/correo";
 
@@ -44,7 +44,8 @@ export async function POST() {
     }
   }
 
-  const verifyToken = crypto.randomBytes(32).toString("hex");
+  // El correo lleva el token; la base, solo su hash (lib/token.ts).
+  const { token: verifyToken, hash: verifyHash } = nuevoToken();
   const verifyTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
 
   // Se manda ANTES de tocar la base: si Resend falla, no queremos haber
@@ -62,7 +63,7 @@ export async function POST() {
 
   await prisma.user.update({
     where: { id: userId },
-    data: { verifyToken, verifyTokenExpiry, verifyUltimoEnvio: new Date() },
+    data: { verifyToken: verifyHash, verifyTokenExpiry, verifyUltimoEnvio: new Date() },
   });
 
   return NextResponse.json({ ok: true });

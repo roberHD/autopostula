@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { estadoExtension } from "@/lib/estado-extension";
 import { habilitarPostulacion } from "@/lib/habilitar-postulacion";
+import { hashToken } from "@/lib/token";
 
 /**
  * El estado de la extensión, desde la extensión (docs/estrategia-y-rediseno.md §6).
@@ -34,7 +35,7 @@ async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 // [{id, texto}], como lo guardaba el popup. Se limpia acá: es texto que

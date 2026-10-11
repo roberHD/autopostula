@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { nuevoToken } from "@/lib/token";
 import { getBaseUrl } from "@/lib/base-url";
 import { enviarCorreoRecuperacion } from "@/lib/correo";
 import { normalizarEmail } from "@/lib/entrada";
@@ -41,12 +41,13 @@ export async function POST(request: Request) {
       return NextResponse.json(MENSAJE_GENERICO, { status: 200 });
     }
 
-    const resetToken = crypto.randomBytes(32).toString("hex");
+    // El enlace lleva el token; la base, solo su hash (lib/token.ts).
+    const { token: resetToken, hash: resetHash } = nuevoToken();
     const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { resetToken, resetTokenExpiry },
+      data: { resetToken: resetHash, resetTokenExpiry },
     });
 
     try {

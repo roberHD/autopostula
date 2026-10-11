@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { hashToken } from "@/lib/token";
 import { problemaConPassword } from "@/lib/entrada";
 import { premiarInvitacion } from "@/lib/extras";
 import { olvidarCuentaDeLaSesion } from "@/auth";
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: problema }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({ where: { resetToken: token } });
+    const user = await prisma.user.findUnique({ where: { resetToken: hashToken(token) } });
 
     if (!user || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
       return NextResponse.json(

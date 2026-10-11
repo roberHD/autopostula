@@ -2,18 +2,23 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Política de privacidad — AutoPostula",
+  title: "Política de privacidad",
   description:
     "Qué datos personales recolecta AutoPostula, para qué los usa, con quién los comparte y cómo ejercer tus derechos.",
 };
 
 export default function PrivacidadPage() {
   return (
-    <LegalPage titulo="Política de privacidad" actualizado="19 de septiembre de 2026">
+    <LegalPage titulo="Política de privacidad" actualizado="11 de octubre de 2026">
       <p>
         Esta política explica qué datos personales recolecta AutoPostula, con qué finalidad los
         usa, con quién los comparte y cómo puedes ejercer tus derechos sobre ellos. Aplica al
-        sitio web, al panel de usuario y a la extensión de Chrome.
+        sitio web, al panel de usuario y a la extensión de Chrome, y a todas las personas que crean
+        una cuenta en AutoPostula para buscar trabajo.
+      </p>
+      <p>
+        <strong>Versión 2026-10-11.</strong> Se rige por la Ley N° 19.628 sobre protección de la
+        vida privada, con las modificaciones de la Ley N° 21.719.
       </p>
 
       <h2>1. Quién es responsable de tus datos</h2>
@@ -24,11 +29,17 @@ export default function PrivacidadPage() {
         en adelante &ldquo;AutoPostula&rdquo;.
       </p>
       <p>
-        Para cualquier consulta sobre esta política o sobre tus datos, escríbenos a{" "}
-        <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a>.
+        Para cualquier consulta sobre esta política o sobre tus datos, y para ejercer tus derechos
+        (ver 9), escríbenos a <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a> o
+        desde el formulario de Soporte de tu panel.
       </p>
 
       <h2>2. Qué datos recolectamos</h2>
+      <p>
+        Casi todo lo que guardamos lo entregas tú: al crear tu cuenta, al subir tu CV, al completar
+        tu perfil y al usar la extensión. Si entras con Google, Google nos entrega tu nombre y tu
+        correo. De los portales solo tomamos los avisos de trabajo, que son públicos.
+      </p>
 
       <h3>2.1 Datos de tu cuenta</h3>
       <ul>
@@ -44,6 +55,12 @@ export default function PrivacidadPage() {
         </li>
         <li>Si confirmaste tu correo electrónico, y en qué fecha.</li>
         <li>Fecha de creación de la cuenta.</li>
+        <li>
+          Que aceptaste los términos y esta política, y que declaraste tener 18 años o más: qué
+          versión aceptaste y cuándo. También si autorizaste o retiraste la autorización de datos
+          sensibles de tu CV (ver 2.2). La ley nos pide poder demostrar tu consentimiento.
+        </li>
+        <li>Cómo nos conociste, si respondes esa pregunta al crear tu cuenta (es opcional).</li>
       </ul>
 
       <h3>2.2 Datos de tu perfil profesional</h3>
@@ -59,11 +76,24 @@ export default function PrivacidadPage() {
         </li>
         <li>Resumen profesional, experiencia laboral y habilidades.</li>
         <li>El texto completo extraído de tu CV y el nombre del archivo original.</li>
+        <li>
+          Los datos sueltos que agregas para responder formularios (por ejemplo, si tienes licencia
+          de conducir o desde cuándo puedes empezar).
+        </li>
       </ul>
       <div className="nota">
         <p>
           <strong>No almacenamos el archivo PDF de tu CV.</strong> Al subirlo extraemos su texto y
           descartamos el archivo; solo conservamos ese texto y el nombre del archivo.
+        </p>
+      </div>
+      <div className="nota">
+        <p>
+          <strong>Datos sensibles.</strong> Un CV puede traer datos que la ley considera sensibles,
+          como de salud, discapacidad, origen étnico o situación socioeconómica. Por eso, antes de
+          subirlo te pedimos tu <strong>autorización expresa</strong> para tratarlos, solo para
+          completar tus postulaciones. Puedes retirarla cuando quieras desde Perfil; al hacerlo
+          borramos tu CV. Si prefieres, quita esos datos de tu CV antes de subirlo.
         </p>
       </div>
 
@@ -163,6 +193,11 @@ export default function PrivacidadPage() {
         quieres evitar y tus preferencias de comuna, jornada y modalidad. Ese perfil es lo que la
         extensión usa para decidir a qué postular, y se recalcula cuando cambias algo.
       </p>
+      <p>
+        Si revisas una tanda de ofertas en el panel de revisión que la extensión muestra dentro del
+        portal, guardamos a cuáles decidiste postular y a cuáles no, junto con lo que el sistema había
+        propuesto, para aprender de tus correcciones.
+      </p>
 
       <h3>2.7 Datos de pago</h3>
       <p>
@@ -186,7 +221,33 @@ export default function PrivacidadPage() {
         <strong>No se guarda en la base de datos de AutoPostula.</strong>
       </p>
 
-      <h3>2.9 Lo que NO recolectamos</h3>
+      <h3>2.9 Monedas, invitaciones y postulaciones extra</h3>
+      <ul>
+        <li>
+          <strong>Monedas.</strong> Ganas una moneda por cada hora en que usas AutoPostula, con el
+          panel abierto y a la vista o con la extensión encendida, y una al día por conversar 10
+          minutos con la IA. Para contarlas registramos la hora en que hubo uso y los minutos en que
+          enviaste mensajes en la conversación; no registramos qué hiciste en esa hora.
+        </li>
+        <li>
+          <strong>Invitaciones.</strong> Tu código de invitación, quién te invitó si llegaste por un
+          enlace, y cuántas personas invitaste tú.
+        </li>
+        <li>
+          <strong>Postulaciones extra.</strong> Las que compraste, ganaste o usaste, con la fecha y
+          el motivo de cada movimiento.
+        </li>
+      </ul>
+
+      <h3>2.10 Estadísticas del sitio</h3>
+      <p>
+        Usamos <strong>Vercel Web Analytics</strong> para saber cuántas personas visitan cada
+        página y desde qué sitio llegan. Registra la página visitada, el sitio de origen, el país y
+        el tipo de dispositivo y navegador. <strong>No usa cookies</strong> ni nos permite saber
+        quién eres: no ve tu cuenta, no graba tus sesiones ni lo que escribes.
+      </p>
+
+      <h3>2.11 Lo que NO recolectamos</h3>
       <ul>
         <li>
           <strong>
@@ -204,88 +265,149 @@ export default function PrivacidadPage() {
           sitio de AutoPostula.
         </li>
         <li>No recibimos ni guardamos el audio del dictado por voz (ver 2.3).</li>
+        <li>No grabamos tus sesiones ni hacemos mapas de lo que tocas en la pantalla.</li>
         <li>No vendemos tus datos a nadie, bajo ninguna circunstancia.</li>
       </ul>
 
-      <h2>3. Para qué usamos tus datos</h2>
+      <h2>3. Para qué usamos tus datos, y con qué base legal</h2>
+      <p>
+        Cada uso de tus datos tiene una base que la ley permite. <strong>Contrato</strong> significa
+        que el dato es necesario para prestarte el servicio que pediste al crear tu cuenta y aceptar
+        los <a href="/terminos">términos</a>. <strong>Consentimiento</strong> es algo que nos
+        autorizaste tú y que puedes retirar. <strong>Interés legítimo</strong> es un interés nuestro
+        que no afecta tus derechos (más abajo decimos cuáles). <strong>Obligación legal</strong> es lo
+        que la ley nos exige guardar.
+      </p>
       <table>
         <thead>
           <tr>
             <th>Dato</th>
             <th>Finalidad</th>
+            <th>Base legal</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>Correo y contraseña</td>
             <td>Autenticarte y permitirte recuperar el acceso a tu cuenta.</td>
+            <td>Contrato</td>
           </tr>
           <tr>
             <td>Confirmación del correo</td>
-            <td>
-              Asegurar que la cuenta que conecta la extensión o contrata un plan pertenece a una
-              dirección real.
-            </td>
+            <td>Asegurar que la cuenta que conecta la extensión o contrata un plan pertenece a una dirección real.</td>
+            <td>Contrato</td>
+          </tr>
+          <tr>
+            <td>Aceptación de los términos, esta política y tus autorizaciones</td>
+            <td>Poder demostrar que diste tu consentimiento, y con qué versión.</td>
+            <td>Obligación legal</td>
           </tr>
           <tr>
             <td>CV y perfil profesional</td>
             <td>Completar automáticamente los formularios de postulación y generar respuestas.</td>
+            <td>Contrato; los datos sensibles del CV, tu consentimiento expreso</td>
           </tr>
           <tr>
             <td>Filtros y perfil de búsqueda</td>
             <td>Decidir a qué ofertas postular y cuáles descartar.</td>
+            <td>Contrato</td>
           </tr>
           <tr>
             <td>Ofertas revisadas</td>
             <td>No procesar dos veces la misma oferta y mejorar el reconocimiento de cargos.</td>
+            <td>Interés legítimo</td>
           </tr>
           <tr>
             <td>Tus preferencias y el detalle de las ofertas por decidir</td>
-            <td>
-              Mostrarte lo que necesitas para decidir, aprender qué cargos te interesan y afinar el
-              perfil de búsqueda.
-            </td>
+            <td>Mostrarte lo que necesitas para decidir, aprender qué cargos te interesan y afinar el perfil de búsqueda.</td>
+            <td>Contrato</td>
           </tr>
           <tr>
             <td>Perfil de estilo</td>
             <td>Ajustar el tono y la extensión de las respuestas generadas.</td>
+            <td>Contrato</td>
           </tr>
           <tr>
             <td>Respuestas propuestas por la IA y tus correcciones</td>
             <td>Mejorar las respuestas futuras a partir de cómo corriges las que genera la IA.</td>
+            <td>Contrato</td>
           </tr>
           <tr>
             <td>Historial de postulaciones</td>
             <td>Mostrarte tu actividad y evitar postular dos veces a lo mismo.</td>
+            <td>Contrato</td>
           </tr>
           <tr>
             <td>Registro de puestas al día y fecha en que conectaste la extensión</td>
-            <td>
-              Mostrarte cuándo se puso al día por última vez y cuánto suele tardar. Con Premium,
-              además, avisarte por correo si lleva 48 horas o más sin hacerlo (ver 6).
-            </td>
+            <td>Mostrarte cuándo se puso al día por última vez y cuánto suele tardar. Con Premium, además, avisarte por correo si lleva 48 horas o más sin hacerlo (ver 6).</td>
+            <td>Contrato; los recordatorios por correo, interés legítimo</td>
           </tr>
           <tr>
             <td>Tus postulaciones automáticas de prueba</td>
-            <td>
-              Contar las 5 de la prueba gratuita, mostrártelas y avisarte por correo cuando la
-              prueba termina.
-            </td>
+            <td>Contar las 5 de la prueba gratuita, mostrártelas y avisarte por correo cuando la prueba termina.</td>
+            <td>Contrato</td>
           </tr>
           <tr>
             <td>Registro de uso de IA</td>
             <td>Aplicar los límites mensuales de tu plan.</td>
+            <td>Contrato</td>
+          </tr>
+          <tr>
+            <td>Monedas, invitaciones y postulaciones extra</td>
+            <td>Darte las monedas y los premios que te corresponden, y descontar las postulaciones extra que usas.</td>
+            <td>Contrato</td>
+          </tr>
+          <tr>
+            <td>Cómo nos conociste</td>
+            <td>Saber por qué canales llega la gente a AutoPostula.</td>
+            <td>Consentimiento (responder es opcional)</td>
           </tr>
           <tr>
             <td>Datos de pago</td>
             <td>Activar tu pase y emitir el comprobante.</td>
+            <td>Contrato y obligación legal (tributaria)</td>
           </tr>
           <tr>
             <td>Mensajes de soporte</td>
             <td>Responder tu consulta o resolver el problema que reportaste.</td>
+            <td>Contrato</td>
+          </tr>
+          <tr>
+            <td>Estadísticas del sitio</td>
+            <td>Saber qué páginas se visitan y de dónde llega la gente, sin identificar a nadie.</td>
+            <td>Interés legítimo</td>
+          </tr>
+          <tr>
+            <td>Registro de intentos de inicio de sesión, registro y recuperación</td>
+            <td>Frenar a quien prueba contraseñas o crea cuentas en masa.</td>
+            <td>Interés legítimo</td>
           </tr>
         </tbody>
       </table>
+      <p>Nuestros intereses legítimos son estos, y en ninguno usamos tus datos para algo distinto:</p>
+      <ul>
+        <li>
+          <strong>Que el servicio funcione bien:</strong> no revisar dos veces la misma oferta y
+          entender que distintos títulos de avisos son el mismo cargo, con títulos públicos que no
+          llevan ningún dato tuyo.
+        </li>
+        <li>
+          <strong>Saber cómo se usa el sitio:</strong> estadísticas de visitas agregadas y sin
+          cookies, que no identifican a nadie.
+        </li>
+        <li>
+          <strong>Proteger las cuentas:</strong> limitar los intentos de inicio de sesión, de
+          registro y de recuperación de contraseña.
+        </li>
+        <li>
+          <strong>Recordarte que la extensión no se ha puesto al día</strong>, si tienes Premium.
+          Cada correo trae un enlace para dejar de recibirlos.
+        </li>
+      </ul>
+      <p>
+        Siempre puedes pedirnos que te expliquemos un tratamiento basado en interés legítimo, y
+        oponerte a él (ver 9).
+      </p>
 
       <h2>4. Uso de inteligencia artificial</h2>
       <p>
@@ -333,6 +455,32 @@ export default function PrivacidadPage() {
         </p>
       </div>
 
+      <h3>Decisiones automatizadas</h3>
+      <p>
+        Cuando activas la postulación, la extensión decide sola a qué ofertas postular en tu nombre.
+        Esto es lo que la ley llama una decisión automatizada, y te contamos cómo funciona:
+      </p>
+      <ul>
+        <li>
+          <strong>La lógica.</strong> Cada oferta recibe un puntaje de 0 a 100 según cuánto se parece a
+          tu perfil de búsqueda: el cargo y sus sinónimos, la comuna o región, la jornada, lo que
+          pide (un título, una licencia o inglés que tu CV no menciona) y lo que dijiste que no
+          quieres. No se usa IA oferta por oferta: lo calcula la extensión en tu navegador.
+        </li>
+        <li>
+          <strong>Las consecuencias.</strong> Desde 65 puntos la extensión postula sola (el corte
+          puede bajar hasta 55 si casi siempre apruebas las ofertas parecidas; lo puedes apagar en
+          Filtros). Entre 46 y 64 la oferta queda en <em>Por decidir</em> para que elijas tú. Con 45
+          o menos se descarta, y te mostramos por qué.
+        </li>
+        <li>
+          <strong>Tus derechos frente a ellas.</strong> Puedes ver la razón de cada descarte y
+          corregirlo, revisar las respuestas antes de que se envíen (modo revisión), dejar que la
+          extensión solo mire sin postular, decidir tú en <em>Por decidir</em> o en el panel de
+          revisión, y escribirnos para darnos tu punto de vista o pedir que revisemos una decisión.
+        </li>
+      </ul>
+
       <h2>5. Con quién compartimos tus datos</h2>
       <p>
         No vendemos ni cedemos tus datos. Los compartimos únicamente con los proveedores necesarios
@@ -344,6 +492,7 @@ export default function PrivacidadPage() {
             <th>Proveedor</th>
             <th>Para qué</th>
             <th>Qué recibe</th>
+            <th>Dónde</th>
           </tr>
         </thead>
         <tbody>
@@ -351,11 +500,13 @@ export default function PrivacidadPage() {
             <td>Anthropic</td>
             <td>Generar respuestas y analizar avisos</td>
             <td>CV, perfil, aviso de trabajo</td>
+            <td>Estados Unidos</td>
           </tr>
           <tr>
             <td>Flow</td>
             <td>Procesar los pagos de los pases</td>
             <td>Identificación básica y datos de la transacción</td>
+            <td>Chile</td>
           </tr>
           <tr>
             <td>Resend</td>
@@ -364,6 +515,7 @@ export default function PrivacidadPage() {
               hacernos llegar los mensajes de soporte
             </td>
             <td>Tu correo electrónico y, si escribes a soporte, tu mensaje y sus adjuntos</td>
+            <td>Estados Unidos</td>
           </tr>
           <tr>
             <td>Google</td>
@@ -372,13 +524,15 @@ export default function PrivacidadPage() {
               los mensajes de soporte
             </td>
             <td>Tu mensaje de soporte y sus adjuntos, si nos escribes</td>
+            <td>Estados Unidos</td>
           </tr>
           <tr>
             <td>
               <strong>Vercel</strong>
             </td>
-            <td>Alojar la aplicación</td>
-            <td>Datos técnicos de conexión</td>
+            <td>Alojar la aplicación y medir las visitas del sitio (ver 2.10)</td>
+            <td>Datos técnicos de conexión y estadísticas de visitas sin cookies</td>
+            <td>Estados Unidos</td>
           </tr>
           <tr>
             <td>
@@ -386,6 +540,7 @@ export default function PrivacidadPage() {
             </td>
             <td>Almacenar la base de datos</td>
             <td>Los datos de la sección 2 que guardamos en nuestra base de datos</td>
+            <td>Brasil (São Paulo)</td>
           </tr>
         </tbody>
       </table>
@@ -394,8 +549,15 @@ export default function PrivacidadPage() {
         navegador (ver 2.3).
       </p>
       <p>
-        Algunos de estos proveedores procesan datos fuera de Chile. Al usar AutoPostula aceptas esa
-        transferencia internacional, necesaria para prestar el servicio.
+        Estos proveedores tratan tus datos por encargo nuestro: solo pueden usarlos para prestarnos
+        su servicio, no para fines propios.
+      </p>
+      <p>
+        <strong>Transferencias fuera de Chile.</strong> Como muestra la tabla, salvo Flow, estos
+        proveedores tratan los datos en Estados Unidos o en Brasil. Mientras la Agencia de
+        Protección de Datos Personales no publique qué países ofrecen un nivel adecuado de
+        protección, estas transferencias se amparan en los acuerdos de tratamiento de datos que
+        tenemos con cada proveedor, que incluyen cláusulas contractuales de protección de datos.
       </p>
       <p>
         También podemos entregar datos si una autoridad competente nos lo exige mediante una orden
@@ -484,7 +646,8 @@ export default function PrivacidadPage() {
       <p>
         Si activas el modo solo observar, la extensión revisa y clasifica las ofertas igual que
         siempre, pero <strong>no postula a ninguna ni genera respuestas</strong>. Sirve para ver qué
-        haría antes de dejarla actuar.
+        haría antes de dejarla actuar. Las ofertas a las que habría postulado quedan en tu cuenta
+        para mostrártelas, y se eliminan a los 90 días.
       </p>
 
       <h2>7. Por cuánto tiempo conservamos tus datos</h2>
@@ -503,6 +666,15 @@ export default function PrivacidadPage() {
         <li>
           <strong>Las ofertas que AutoPostula descartó por ti</strong>, con su razón (ver 2.5), se
           eliminan a los <strong>90 días</strong>.
+        </li>
+        <li>
+          <strong>Las ofertas a las que la extensión habría postulado en modo solo observar</strong>{" "}
+          (ver 6) se eliminan a los <strong>90 días</strong>.
+        </li>
+        <li>
+          <strong>El registro de tus consentimientos</strong> (ver 2.1) se conserva mientras tu
+          cuenta esté activa, incluso los que retiraste: hay que poder mostrar qué autorizaste y
+          cuándo dejaste de hacerlo.
         </li>
         <li>
           <strong>Las ofertas que quedan esperando tu decisión</strong> vencen a los 7 días si no
@@ -538,74 +710,122 @@ export default function PrivacidadPage() {
       <h2>8. Seguridad</h2>
       <ul>
         <li>Las contraseñas se guardan como hash con bcrypt, nunca en texto plano.</li>
+        <li>
+          El token que conecta la extensión con tu cuenta y los de los enlaces de los correos
+          también se guardan solo como hash: quien leyera nuestra base de datos no podría usarlos.
+        </li>
         <li>Todo el tráfico entre tu navegador y nuestros servidores viaja cifrado (HTTPS).</li>
         <li>El acceso a la base de datos está restringido y protegido por credenciales.</li>
         <li>
           Los enlaces para confirmar tu correo vencen a las 24 horas y los de recuperación de
           contraseña a la hora. Ambos dejan de servir apenas se usan.
         </li>
+        <li>
+          Limitamos los intentos de inicio de sesión, de registro y de recuperación de contraseña.
+          Para eso guardamos una huella cifrada de la conexión, no tu dirección IP.
+        </li>
+        <li>Cada cuenta solo puede ver y cambiar sus propios datos.</li>
       </ul>
       <p>
-        Ningún sistema es completamente invulnerable. Si detectamos un incidente de seguridad que
-        afecte tus datos personales, te avisaremos.
+        Ningún sistema es completamente invulnerable. Si un incidente de seguridad pone en riesgo
+        tus datos personales, lo informaremos sin demora a la Agencia de Protección de Datos
+        Personales y, cuando la ley lo exige (por ejemplo, si afecta datos sensibles o
+        financieros), también a ti, en palabras claras y diciendo qué se vio afectado y qué hicimos.
       </p>
 
       <h2>9. Tus derechos</h2>
-      <p>
-        Conforme a la Ley N° 19.628 sobre protección de la vida privada, y a la Ley N° 21.719 una
-        vez que entre en vigencia, tienes derecho a:
-      </p>
+      <p>Sobre tus datos personales tienes derecho a:</p>
       <ul>
         <li>
-          <strong>Acceder</strong> a los datos personales que tenemos sobre ti.
+          <strong>Acceso:</strong> saber qué datos tenemos sobre ti y cómo los usamos.
         </li>
         <li>
-          <strong>Rectificar</strong> los datos que estén incorrectos o desactualizados.
+          <strong>Rectificación:</strong> corregir los que estén incorrectos o desactualizados.
         </li>
         <li>
-          <strong>Eliminar</strong> tus datos y tu cuenta.
+          <strong>Supresión:</strong> que los borremos, incluida tu cuenta.
         </li>
         <li>
-          <strong>Oponerte</strong> a determinados tratamientos.
+          <strong>Oposición:</strong> oponerte a que usemos tus datos para algo en particular, por
+          ejemplo lo que hacemos por interés legítimo (ver 3).
         </li>
         <li>
-          <strong>Solicitar una copia</strong> de tus datos en un formato legible.
+          <strong>Portabilidad:</strong> recibir una copia de tus datos en un formato que otros
+          sistemas puedan leer.
+        </li>
+        <li>
+          <strong>Bloqueo:</strong> pedir que suspendamos temporalmente el uso de tus datos mientras
+          resolvemos una solicitud tuya de rectificación, supresión u oposición.
+        </li>
+        <li>
+          <strong>No quedar sujeto a decisiones solo automatizadas</strong> sin poder pedir una
+          explicación, una revisión humana y dar tu punto de vista (ver 4).
+        </li>
+        <li>
+          <strong>Retirar tu consentimiento</strong> cuando quieras, sin tener que dar razones. No
+          afecta lo que hicimos antes de que lo retiraras.
+        </li>
+      </ul>
+
+      <h3>Cómo ejercerlos</h3>
+      <p>Mucho lo puedes hacer tú mismo desde tu panel, al instante:</p>
+      <ul>
+        <li>
+          <strong>Ver y corregir</strong> tus datos: en Perfil.
+        </li>
+        <li>
+          <strong>Descargar una copia de todo</strong> en un archivo JSON: en Ajustes → Tus datos →
+          Descargar mis datos.
+        </li>
+        <li>
+          <strong>Retirar la autorización de datos sensibles de tu CV</strong>: en Perfil, debajo de
+          tu CV. Al hacerlo borramos tu CV.
+        </li>
+        <li>
+          <strong>Eliminar tu cuenta</strong>: en Ajustes → Zona de peligro → Eliminar mi cuenta. El
+          borrado es inmediato: se elimina tu CV, tu perfil, tu historial de postulaciones, tus
+          preferencias y tu pase Premium (si tienes uno vigente, se da por terminado).
+        </li>
+        <li>
+          <strong>Dejar de recibir recordatorios</strong>: con el enlace que trae cada correo.
         </li>
       </ul>
       <p>
-        Puedes editar la mayor parte de tus datos directamente desde tu panel, en la sección
-        Perfil.
+        Para todo lo demás, o si no puedes entrar a tu cuenta, escríbenos a{" "}
+        <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a> o desde el formulario de
+        Soporte, desde el correo con el que te registraste, diciendo qué derecho quieres ejercer y
+        sobre qué datos. Es gratis. Te confirmamos que la recibimos y te respondemos por escrito{" "}
+        <strong>dentro de 30 días corridos</strong>; si necesitamos más tiempo, te avisamos y el plazo
+        se puede extender una sola vez por otros 30 días.
       </p>
       <div className="nota">
         <p>
-          <strong>Para eliminar tu cuenta</strong>, entra a tu panel y ve a Ajustes → Zona de
-          peligro → Eliminar mi cuenta. El borrado es inmediato: se elimina tu CV, tu perfil, tu
-          historial de postulaciones, tus preferencias y tu pase Premium (si tienes uno vigente,
-          se da por terminado). Si no puedes acceder a tu cuenta, escríbenos a{" "}
-          <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a> desde
-          el correo con el que te registraste; en ese caso procesamos la solicitud dentro de los 30
-          días siguientes y te confirmamos cuando esté hecho.
+          <strong>Si no respondemos a tiempo o rechazamos tu solicitud</strong>, te diremos por qué y
+          podrás reclamar ante la <strong>Agencia de Protección de Datos Personales</strong> dentro de
+          los 30 días hábiles siguientes.
         </p>
       </div>
 
       <h2>10. Cookies</h2>
       <p>
         Usamos únicamente las cookies necesarias para mantener tu sesión iniciada. No usamos
-        cookies de publicidad ni de seguimiento de terceros, ni herramientas de analítica. Si
-        borras estas cookies, se cerrará tu sesión.
+        cookies de publicidad ni de seguimiento de terceros. Las estadísticas del sitio (ver 2.10)
+        no usan cookies. Si borras estas cookies, se cerrará tu sesión.
       </p>
 
       <h2>11. Menores de edad</h2>
       <p>
-        AutoPostula está dirigido a personas mayores de 18 años. No recolectamos deliberadamente
-        datos de menores de edad. Si detectamos una cuenta de un menor, la eliminaremos.
+        AutoPostula está dirigido a personas mayores de 18 años, y al crear tu cuenta declaras
+        tener esa edad. No recolectamos deliberadamente datos de menores de edad. Si detectamos una
+        cuenta de un menor, la eliminaremos.
       </p>
 
       <h2>12. Cambios a esta política</h2>
       <p>
         Podemos actualizar esta política. Si el cambio es relevante, te avisaremos por correo o
-        mediante un aviso visible en la aplicación antes de que entre en vigencia. La fecha de la
-        última actualización aparece al comienzo de esta página.
+        mediante un aviso visible en la aplicación antes de que entre en vigencia, y te pediremos
+        que aceptes la versión nueva la próxima vez que entres a tu panel. La fecha y la versión
+        aparecen al comienzo de esta página.
       </p>
 
       <h2>13. Contacto</h2>

@@ -122,6 +122,7 @@ model User {
   oauthProvider   String?  @map("oauth_provider")
   nombre          String?
   rol             Rol      @default(USUARIO)
+  // Hash SHA-256 del token de la extensión, no el token (lib/token.ts).
   apiToken        String?  @unique @map("api_token")
   usarFiltroIA    Boolean  @default(true) @map("usar_filtro_ia")
   // Preferencia propia del usuario, independiente de si el plan lo permite —
@@ -163,6 +164,7 @@ model User {
   // sin tener que crear el cliente de nuevo cada vez.
   flowCustomerId String? @map("flow_customer_id")
   // ── recuperación de contraseña ──
+  // Hash del token del enlace para recuperar la contraseña (lib/token.ts).
   resetToken       String?   @unique @map("reset_token")
   resetTokenExpiry DateTime? @map("reset_token_expiry")
   // ── verificación de correo (docs/verificacion-de-correo.md) ──
@@ -171,6 +173,7 @@ model User {
   // pisarían. null = sin verificar; con fecha = cuándo (más útil que un
   // booleano para soporte y métricas de conversión del registro).
   emailVerificado   DateTime? @map("email_verificado")
+  // Hash del token del enlace para verificar el correo (lib/token.ts).
   verifyToken       String?   @unique @map("verify_token")
   verifyTokenExpiry DateTime? @map("verify_token_expiry")
   // Último envío del correo de verificación, para el límite de reenvíos

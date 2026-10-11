@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { limpiarEntradaScorer, puntajeONull, textoCorto, urlDePortal } from "@/lib/entrada";
+import { hashToken } from "@/lib/token";
 
 // Reporta una oferta que el scorer local (§6) dejó en banda gris -- entra a
 // la cola de decisión del usuario (§8), no se descarta ni se postula sola.
@@ -9,7 +10,7 @@ async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 // TTL de la cola (§8.4): generoso, pero corta el pudrimiento de ofertas viejas.

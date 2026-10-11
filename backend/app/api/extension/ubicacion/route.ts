@@ -5,6 +5,7 @@ import { LISTA_LIMPIEZA_CL } from "@/scripts/limpieza/cl";
 import { nombrePropio } from "@/lib/text";
 import { expandirUbicacionDeclarada } from "@/lib/compilar-perfil";
 import type { UbicacionDeclarada } from "@/lib/entrada";
+import { hashToken } from "@/lib/token";
 
 /**
  * "Agregar a mi perfil" desde el aviso de la extensión: el resumen del escaneo
@@ -24,7 +25,7 @@ async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 const sinTildes = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage } from "@/lib/ai-usage";
+import { hashToken } from "@/lib/token";
 
 /**
  * Arreglar una respuesta sin volver a escribirla entera
@@ -23,7 +24,7 @@ async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 // docs/revision-2026-09-28.md §14: sin voseo ("Dejala", "Subile", "Bajale"): la

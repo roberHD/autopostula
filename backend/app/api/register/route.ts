@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { nuevoToken } from "@/lib/token";
 import { enviarCorreoVerificacion } from "@/lib/correo";
 import { normalizarEmail, problemaConPassword, textoCorto } from "@/lib/entrada";
 import { claveLimite, ipDe, LIMITES, permitirIntento } from "@/lib/limite-tasa";
@@ -64,12 +64,13 @@ export async function POST(request: Request) {
     : null;
 
   const passwordHash = await bcrypt.hash(cuerpo.password, 10);
-  const verifyToken = crypto.randomBytes(32).toString("hex");
+  // El correo lleva el token; la base, solo su hash (lib/token.ts).
+  const { token: verifyToken, hash: verifyHash } = nuevoToken();
   const verifyTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
 
   const nuevoUsuario = await prisma.user.create({
     data: {
-      email, passwordHash, nombre, verifyToken, verifyTokenExpiry, invitadoPorId: invitadoPor?.id ?? null,
+      email, passwordHash, nombre, verifyToken: verifyHash, verifyTokenExpiry, invitadoPorId: invitadoPor?.id ?? null,
       consentimientos: { create: filasAceptacion("registro") },
     },
   });

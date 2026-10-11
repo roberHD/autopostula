@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { puntajeONull, urlDePortal } from "@/lib/entrada";
+import { hashToken } from "@/lib/token";
 
 async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 /**
