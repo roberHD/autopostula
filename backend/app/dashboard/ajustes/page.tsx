@@ -7,6 +7,7 @@ import { Mail, BadgeCheck, TriangleAlert, LogOut, LifeBuoy, ChevronRight, Downlo
 import { textoPruebaEnCurso } from "@/lib/texto-rafaga";
 import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
 import ComoTrabaja from "./ComoTrabaja";
+import DerechosDatos from "@/components/DerechosDatos";
 
 export default function AjustesPage() {
   const router = useRouter();
@@ -265,8 +266,7 @@ export default function AjustesPage() {
             <p style={{ fontSize: 13, fontWeight: 600 }}>Descargar mis datos</p>
             <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.5 }}>
               Una copia de todo lo que guardamos sobre ti (cuenta, CV, perfil, postulaciones, preferencias, pagos y
-              monedas) en un archivo JSON. Tus datos los corriges en Perfil; para cualquier otra cosa sobre ellos,
-              escríbenos desde Soporte.
+              monedas) en un archivo JSON. Tus datos los corriges en Perfil.
             </p>
             {errorDescarga && (
               <p style={{ fontSize: 12, color: "var(--status-rechazado)", marginTop: 6 }}>{errorDescarga}</p>
@@ -282,6 +282,8 @@ export default function AjustesPage() {
             <Download size={14} /> {descargando ? "Preparando…" : "Descargar"}
           </button>
         </div>
+        <div style={{ borderTop: "1px solid var(--border)", margin: "16px 0" }} />
+        <DerechosDatos />
       </div>
 
       <div

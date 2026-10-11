@@ -13,6 +13,7 @@ import {
   Inbox,
   Menu,
   Settings,
+  ShieldCheck,
   Sparkles,
   UserRound,
   X,
@@ -49,6 +50,12 @@ const GRUPOS: { titulo?: string; items: { href: string; label: string; Icon: any
   },
 ];
 
+// Solo para cuentas ADMIN: lo que el equipo tiene que atender (lib/derechos.ts).
+const GRUPO_EQUIPO = {
+  titulo: "Equipo",
+  items: [{ href: "/dashboard/derechos", label: "Solicitudes de datos", Icon: ShieldCheck }],
+};
+
 // Entrenar IA agrupa tres pantallas (Conversación, Calibración y Ajuste fino)
 // que se cambian con pestañas adentro — las tres marcan el mismo item del menú.
 const RUTAS_ENTRENAR = ["/dashboard/perfil/conversacion", "/dashboard/perfil/entrenar", "/dashboard/perfil/calibracion"];
@@ -61,10 +68,13 @@ function estaActivo(href: string, pathname: string) {
 export default function Sidebar({
   userName,
   pendientesPorDecidir = null,
+  esAdmin = false,
 }: {
   userName: string;
   // Cuántas hay en "Por decidir" al cargar, contado en el servidor (layout).
   pendientesPorDecidir?: number | null;
+  // Las cuentas ADMIN ven además la sección del equipo (solicitudes de derechos).
+  esAdmin?: boolean;
 }) {
   const pathname = usePathname();
   const [menuAbierto, setMenuAbierto] = useState(false);
@@ -135,7 +145,7 @@ export default function Sidebar({
       </div>
 
       <nav className="ap-nav">
-        {GRUPOS.map((grupo, gi) => (
+        {(esAdmin ? [...GRUPOS, GRUPO_EQUIPO] : GRUPOS).map((grupo, gi) => (
           <div key={grupo.titulo ?? gi} style={{ display: "contents" }}>
             {grupo.titulo && <p className="ap-nav-grupo">{grupo.titulo}</p>}
             {grupo.items.map(({ href, label, Icon }) => {

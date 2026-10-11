@@ -254,6 +254,7 @@ model User {
   extras            PostulacionExtra[]
   monedas           MovimientoMoneda[]
   consentimientos   Consentimiento[]
+  solicitudesDerechos SolicitudDerecho[]
   invitadoPor     User?   @relation("Invitaciones", fields: [invitadoPorId], references: [id], onDelete: SetNull)
   invitados         User[]  @relation("Invitaciones")
 
@@ -989,6 +990,62 @@ model Consentimiento {
 
   @@index([userId, tipo])
   @@map("consentimientos")
+}
+
+// ─────────────────────────────────────────
+// Solicitudes de derechos sobre datos personales (lib/derechos.ts)
+// ─────────────────────────────────────────
+// Ley 19.628 modificada por la 21.719, art. 11: acusar recibo y responder por
+// escrito dentro de 30 días corridos (prorrogables una vez por 30), y guardar
+// el respaldo de la respuesta, su fecha y su contenido íntegro. Por eso la fila
+// sobrevive al borrado de la cuenta (userId pasa a null y queda el correo): es
+// la prueba de que se respondió, incluida una solicitud de supresión.
+enum TipoSolicitudDerecho {
+  ACCESO
+  RECTIFICACION
+  SUPRESION
+  OPOSICION
+  PORTABILIDAD
+  BLOQUEO
+  DECISION_AUTOMATIZADA
+  OTRO
+}
+
+enum EstadoSolicitudDerecho {
+  RECIBIDA
+  PRORROGADA
+  RESPONDIDA
+  RECHAZADA
+}
+
+model SolicitudDerecho {
+  id                 String                 @id @default(uuid())
+  userId             String?                @map("user_id")
+  // El correo al que se responde, guardado aparte: tiene que seguir ahí aunque
+  // la cuenta se borre.
+  email              String
+  tipo               TipoSolicitudDerecho
+  detalle            String                 @db.Text
+  // "panel" (la pidió desde Ajustes) o "correo" (la registró el equipo).
+  origen             String
+  estado             EstadoSolicitudDerecho @default(RECIBIDA)
+  recibidaEn         DateTime               @default(now()) @map("recibida_en")
+  // Plazo para responder: 30 días corridos desde que se recibió, o 30 más si
+  // se prorrogó (una sola vez).
+  venceEn            DateTime               @map("vence_en")
+  prorrogadaEn       DateTime?              @map("prorrogada_en")
+  motivoProrroga     String?                @db.Text @map("motivo_prorroga")
+  // La respuesta tal como se mandó (o el fundamento del rechazo), y cuándo.
+  respondidaEn       DateTime?              @map("respondida_en")
+  respuesta          String?                @db.Text
+  // El último aviso al equipo de que vence pronto: uno por día como máximo.
+  avisoVencimientoEn DateTime?              @map("aviso_vencimiento_en")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([estado, venceEn])
+  @@index([userId])
+  @@map("solicitudes_derechos")
 }
 
 // ─────────────────────────────────────────

@@ -677,6 +677,11 @@ export default function PrivacidadPage() {
           cuándo dejaste de hacerlo.
         </li>
         <li>
+          <strong>Tus solicitudes para ejercer derechos</strong> (ver 9), con nuestra respuesta, se
+          conservan <strong>aunque elimines tu cuenta</strong>: la ley nos pide guardar el respaldo de
+          cada respuesta. De ellas queda solo tu correo, lo que pediste y lo que te respondimos.
+        </li>
+        <li>
           <strong>Las ofertas que quedan esperando tu decisión</strong> vencen a los 7 días si no
           las revisas. Dejan de estar pendientes, pero el registro de que vencieron se conserva
           mientras tu cuenta esté activa, porque es parte de lo que el sistema aprende de tus
@@ -791,10 +796,11 @@ export default function PrivacidadPage() {
         </li>
       </ul>
       <p>
-        Para todo lo demás, o si no puedes entrar a tu cuenta, escríbenos a{" "}
-        <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a> o desde el formulario de
-        Soporte, desde el correo con el que te registraste, diciendo qué derecho quieres ejercer y
-        sobre qué datos. Es gratis. Te confirmamos que la recibimos y te respondemos por escrito{" "}
+        Para todo lo demás, pídelo en <strong>Ajustes → Tus datos → Ejercer un derecho</strong>: eliges
+        el derecho, nos cuentas qué necesitas y ahí mismo ves el estado de tu solicitud y nuestra
+        respuesta. Si no puedes entrar a tu cuenta, escríbenos a{" "}
+        <a href="mailto:AutopostulaI@gmail.com">AutopostulaI@gmail.com</a> desde el correo con el que
+        te registraste, diciendo qué derecho quieres ejercer y sobre qué datos. Es gratis. Te confirmamos que la recibimos y te respondemos por escrito{" "}
         <strong>dentro de 30 días corridos</strong>; si necesitamos más tiempo, te avisamos y el plazo
         se puede extender una sola vez por otros 30 días.
       </p>
