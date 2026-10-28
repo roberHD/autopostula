@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { randomBytes } from "crypto";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { nuevoToken } from "@/lib/token";
 
 // docs/verificacion-de-correo.md §5: sin correo verificado no se obtiene el
 // token de la extensión, ni leyéndolo (GET) ni generándolo (POST) -- es lo
@@ -30,12 +30,15 @@ export async function GET() {
     );
   }
 
+  // La base guarda solo el hash del token (lib/token.ts): no hay cómo
+  // devolverlo. Se dice si existe, y el token se entrega una sola vez, en el
+  // POST que lo genera.
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { apiToken: true },
   });
 
-  return NextResponse.json({ apiToken: user?.apiToken ?? null });
+  return NextResponse.json({ tieneToken: !!user?.apiToken });
 }
 
 export async function POST() {
@@ -52,12 +55,15 @@ export async function POST() {
     );
   }
 
-  const nuevoToken = randomBytes(32).toString("hex");
+  // Se guarda el hash y se devuelve el token: es la única vez que sale del
+  // servidor (lib/token.ts). Generar uno nuevo desconecta la extensión que
+  // tenía el anterior.
+  const { token, hash } = nuevoToken();
 
   await prisma.user.update({
     where: { id: userId },
-    data: { apiToken: nuevoToken },
+    data: { apiToken: hash },
   });
 
-  return NextResponse.json({ apiToken: nuevoToken });
+  return NextResponse.json({ apiToken: token });
 }

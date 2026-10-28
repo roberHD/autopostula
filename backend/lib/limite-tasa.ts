@@ -39,6 +39,9 @@ export const LIMITES = {
   // "Descargar mis datos" arma el JSON de toda la cuenta (portabilidad,
   // art. 9 de la Ley 19.628 modificada por la 21.719).
   exportarDatosPorUsuario: { max: 5, ventanaMs: HORA },
+  // Solicitudes de derechos desde el panel: cada una manda dos correos y abre
+  // un plazo legal de respuesta (lib/derechos.ts).
+  solicitudesDerechoPorUsuario: { max: 5, ventanaMs: 24 * HORA },
 } satisfies Record<string, Limite>;
 
 function secreto(): string {

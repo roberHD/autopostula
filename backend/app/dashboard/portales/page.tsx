@@ -30,7 +30,11 @@ export default function PortalesPage() {
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [maxActivas, setMaxActivas] = useState<number | null>(null);
   const [planNombre, setPlanNombre] = useState<string | null>(null);
+  // El token de verdad solo existe acá si se acaba de generar: la base guarda
+  // su hash (lib/token.ts) y no hay cómo volver a mostrarlo. `tieneToken` dice
+  // si la cuenta ya tiene uno, aunque no se pueda ver.
   const [token, setToken] = useState<string | null>(null);
+  const [tieneToken, setTieneToken] = useState(false);
   const [revelado, setRevelado] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [mensaje, setMensaje] = useState("");
@@ -65,7 +69,7 @@ export default function PortalesPage() {
     try {
       const res = await fetch("/api/account/token");
       const data = await res.json();
-      if (res.ok) setToken(data.apiToken);
+      if (res.ok) setTieneToken(!!data.tieneToken);
     } catch (err) {
       console.error("Error cargando token:", err);
     }
@@ -130,6 +134,7 @@ export default function PortalesPage() {
         }
         t = data.apiToken as string;
         setToken(t);
+        setTieneToken(true);
       } catch {
         setConexion({ estado: "error", texto: "No pudimos conectar con el servidor." });
         return;
@@ -171,6 +176,7 @@ export default function PortalesPage() {
 
   async function regenerarToken() {
     setMensaje("");
+    if (tieneToken && !window.confirm("Se va a generar un token nuevo y la extensión que usa el anterior se desconecta. ¿Seguir?")) return;
     try {
       const res = await fetch("/api/account/token", { method: "POST" });
       const data = await res.json();
@@ -179,6 +185,8 @@ export default function PortalesPage() {
         return;
       }
       setToken(data.apiToken);
+      setTieneToken(true);
+      setRevelado(true);
     } catch (err) {
       console.error("Error generando token:", err);
       setMensaje("No se pudo generar el token — revisa la consola");
@@ -436,7 +444,11 @@ export default function PortalesPage() {
               }}
             >
               <code style={{ flex: 1, fontSize: 12, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {token ? (revelado ? token : masked) : "Todavía no tienes un token"}
+                {token
+                  ? (revelado ? token : masked)
+                  : tieneToken
+                  ? "Ya tienes un token (por seguridad no se vuelve a mostrar)"
+                  : "Todavía no tienes un token"}
               </code>
               {token && (
                 <>
@@ -459,9 +471,15 @@ export default function PortalesPage() {
             </div>
             <button className="ap-button-ghost" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }} onClick={regenerarToken}>
               <RefreshCw size={14} />
-              {token ? "Regenerar" : "Generar token"}
+              {tieneToken ? "Generar uno nuevo" : "Generar token"}
             </button>
           </div>
+          {token && (
+            <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 10, lineHeight: 1.5 }}>
+              Cópialo ahora: por seguridad guardamos solo una huella del token y no lo podemos volver a mostrar. Si lo
+              pierdes, genera uno nuevo.
+            </p>
+          )}
         </div>
       </div>
     </div>

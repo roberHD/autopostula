@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Términos y condiciones — AutoPostula",
+  title: "Términos y condiciones",
   description:
     "Condiciones de uso del servicio AutoPostula: cuenta, uso de portales de terceros, contenido generado por IA, planes, pagos y cancelación.",
 };

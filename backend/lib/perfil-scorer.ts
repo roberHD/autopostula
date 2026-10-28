@@ -1,6 +1,7 @@
 import { objetivosPermitenDirectivo } from "@/lib/nivel-cargo";
 import { rolesPorAmplitud, type Amplitud, type ObjetivoParaAmplitud } from "@/lib/amplitud";
 import { requisitosDelCandidato } from "@/lib/requisitos-cv";
+import { esUbicacionDeclarada, expandirUbicacionDeclarada } from "@/lib/ubicacion-declarada";
 
 /**
  * El perfil compilado tal como lo usa el scorer de la extensión: lo guardado
@@ -22,9 +23,11 @@ export async function perfilParaElScorer(
     cv: Parameters<typeof requisitosDelCandidato>[0];
     // docs/revision-scorer-2026-09-30.md §7: el de la cuenta, si se ajustó.
     umbralPostular: number | null;
+    // Lo que declaró en el selector de ubicación (SearchPreferences.ubicacionDeclarada).
+    ubicacionDeclarada?: unknown;
   }
 ): Promise<Record<string, unknown>> {
-  const { objetivos, amplitud, cv, umbralPostular } = opciones;
+  const { objetivos, amplitud, cv, umbralPostular, ubicacionDeclarada } = opciones;
   const rolesDeclarados: { canonico?: string; sinonimos?: string[] }[] = Array.isArray(compilado.roles)
     ? (compilado.roles as { canonico?: string; sinonimos?: string[] }[])
     : [];
@@ -38,6 +41,12 @@ export async function perfilParaElScorer(
   return {
     ...compilado,
     ...(umbralPostular != null ? { umbralPostular } : {}),
+    // La ubicación se recalcula desde lo declarado en cada consulta, como la
+    // amplitud: así lo que dice Filtros es siempre lo que usa el scorer, aunque
+    // la copia guardada en el perfil compilado haya quedado de antes (por
+    // ejemplo, de cuando "una región sin comunas" no filtraba nada; ver
+    // lib/ubicacion-declarada.ts). Sin declaración, queda la del perfil.
+    ...(esUbicacionDeclarada(ubicacionDeclarada) ? { ubicacion: expandirUbicacionDeclarada(ubicacionDeclarada) } : {}),
     nivelDirectivo: objetivosPermitenDirectivo(objetivos),
     amplitud,
     modo: amplitud === "abierto" ? "abierto" : "objetivo",

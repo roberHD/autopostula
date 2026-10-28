@@ -6,6 +6,7 @@ import { urlDePortal } from "@/lib/entrada";
 import { perfilParaElScorer } from "@/lib/perfil-scorer";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { DIAS_DE_DECISIONES, calcularUmbralPostular, tocaCalibrar } from "@/lib/calibracion-umbral";
+import { hashToken } from "@/lib/token";
 
 // Mismo patrón de auth por token que /api/ai/analizar-oferta y compañía —
 // esta ruta la usa la extensión (Authorization: Bearer <apiToken>), nunca
@@ -14,7 +15,7 @@ async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 // Cuánto se sigue intentando enviar una oferta aprobada en "Por decidir".
@@ -159,7 +160,7 @@ export async function GET(request: Request) {
   const scorer = {
     usarScorerLocal: !!(filtros?.usarScorerLocal && compilado),
     perfilCompilado: compilado
-      ? await perfilParaElScorer(compilado, { objetivos, amplitud, cv: perfil || {}, umbralPostular: umbralCalibrado })
+      ? await perfilParaElScorer(compilado, { objetivos, amplitud, cv: perfil || {}, umbralPostular: umbralCalibrado, ubicacionDeclarada: filtros?.ubicacionDeclarada })
       : null,
     versionPerfil: filtros?.versionPerfil ?? 0,
     // Revisión externa 2026-09-05: si una recompilación forzada por cambio

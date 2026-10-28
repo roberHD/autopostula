@@ -44,7 +44,7 @@ export default async function DashboardLayout({
   const [dbUser, acepto] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { onboardingCompletado: true, emailVerificado: true, postulacionHabilitada: true },
+      select: { onboardingCompletado: true, emailVerificado: true, postulacionHabilitada: true, rol: true },
     }),
     aceptoDocumentosVigentes(userId),
   ]);
@@ -74,7 +74,7 @@ export default async function DashboardLayout({
   return (
     <div className="ap-shell">
       <LatidoUso />
-      <Sidebar userName={session.user.name ?? session.user.email ?? "Usuario"} pendientesPorDecidir={pendientesPorDecidir} />
+      <Sidebar userName={session.user.name ?? session.user.email ?? "Usuario"} pendientesPorDecidir={pendientesPorDecidir} esAdmin={dbUser.rol === "ADMIN"} />
       <div className="ap-col">
         {/* docs/optimizacion-2026-09-29.md §1: la barra llega llena desde el
             servidor; mientras tanto, su mismo esqueleto de siempre. */}

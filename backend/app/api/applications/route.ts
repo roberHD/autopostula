@@ -8,6 +8,7 @@ import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
 import { enviarCorreoPruebaTerminada } from "@/lib/correo";
 import { textoCorto, urlDePortal } from "@/lib/entrada";
 import { listarPostulaciones } from "@/lib/panel/listas";
+import { hashToken } from "@/lib/token";
 
 // docs/revision-2026-09-28.md §25: topes para lo que llega de la extensión. Un
 // formulario real tiene unas pocas preguntas; esto solo corta lo absurdo.
@@ -32,7 +33,7 @@ async function getUserFromToken(request: Request) {
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
 
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 export async function POST(request: Request) {

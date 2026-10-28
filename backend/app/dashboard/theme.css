@@ -2974,3 +2974,19 @@
 @media (max-width: 420px) {
   .ap-canales { grid-template-columns: 1fr 1fr; }
 }
+
+/* Ejercer un derecho (components/DerechosDatos.tsx) y la página del equipo
+   (app/dashboard/derechos), Ley 21.719 art. 11 */
+.ap-derechos { display: grid; gap: 12px; }
+.ap-derechos__form { display: grid; gap: 6px; padding: 14px; border-radius: 12px; background: var(--bg-elevated-2); border: 1px solid var(--border); }
+.ap-derechos__ayuda { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 4px; }
+.ap-derechos__ok { font-size: 12.5px; line-height: 1.5; color: var(--status-finalizado); }
+.ap-derechos__error { font-size: 12px; color: var(--status-rechazado); margin-top: 6px; }
+.ap-derechos__lista { display: grid; gap: 8px; }
+.ap-derechos__item { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); font-size: 12.5px; }
+.ap-derechos__cab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ap-derechos__estado { font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--bg-elevated-2); border: 1px solid var(--border); }
+.ap-derechos__estado[data-estado="RESPONDIDA"] { color: var(--status-finalizado); }
+.ap-derechos__estado[data-estado="RECHAZADA"] { color: var(--status-rechazado); }
+.ap-derechos__respuesta { font-size: 12.5px; line-height: 1.55; margin-top: 6px; white-space: pre-wrap; }
+.ap-derechos__plazo[data-urgente="1"] { color: var(--status-rechazado); font-weight: 600; }

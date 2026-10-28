@@ -19,12 +19,15 @@ export const NOMBRE_REGION: Record<string, string> = {
   BI: "Biobío", AR: "La Araucanía", LR: "Los Ríos", LL: "Los Lagos", AI: "Aysén", MA: "Magallanes",
 };
 
-// Las regiones enteras si eligió "toda la región"; si no, sus comunas.
+// Las regiones enteras si eligió "toda la región" o no marcó comunas; si no, sus comunas.
 export function lugaresDeclarados(ubicacion: UbicacionDeclarada | null | undefined): string[] {
   if (!ubicacion) return [];
-  return ubicacion.todaLaRegion
+  // Una región sin comunas elegidas también es la región entera
+  // (lib/ubicacion-declarada.ts): antes acá no salía nada.
+  const comunas = ubicacion.comunas ?? [];
+  return ubicacion.todaLaRegion || comunas.length === 0
     ? (ubicacion.regiones ?? []).map((r) => NOMBRE_REGION[r] ?? r)
-    : ubicacion.comunas ?? [];
+    : comunas;
 }
 
 type PreferenciasParaIA = {

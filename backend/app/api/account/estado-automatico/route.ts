@@ -3,12 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { modoAutomatico, motivoInactivo, PRUEBA_TOTAL, type ModoAutomatico } from "@/lib/estado-automatico";
+import { hashToken } from "@/lib/token";
 
 async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 export async function GET(request: Request) {

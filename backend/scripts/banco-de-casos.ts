@@ -276,7 +276,7 @@ async function unaCuenta(email: string) {
     prisma.cvProfile.findUnique({ where: { userId: user.id } }),
   ]);
   const umbral = filtros.calibrarUmbral && amplitud !== "abierto" ? filtros.umbralPostularCalibrado : null;
-  const perfil = await perfilParaElScorer(compilado, { objetivos, amplitud, cv: cv || {}, umbralPostular: umbral });
+  const perfil = await perfilParaElScorer(compilado, { objetivos, amplitud, cv: cv || {}, umbralPostular: umbral, ubicacionDeclarada: filtros.ubicacionDeclarada });
   const puntuar = cargarScorerDeLaExtension();
 
   const casos: CasoParaReCorrer[] = [];

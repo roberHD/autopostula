@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { hashToken } from "@/lib/token";
 import { premiarInvitacion } from "@/lib/extras";
 
 // docs/verificacion-de-correo.md §5 -- valida y consume el token del enlace
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Falta el token", estado: "invalido" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { verifyToken: token } });
+  const user = await prisma.user.findUnique({ where: { verifyToken: hashToken(token) } });
 
   if (!user) {
     return NextResponse.json(

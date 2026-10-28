@@ -14,6 +14,7 @@ import {
   limpiarPerfilIA,
 } from "@/lib/contexto-ia";
 import { preguntaPideRenta, rentaDeclarada } from "@/lib/renta-ia";
+import { hashToken } from "@/lib/token";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -21,7 +22,7 @@ async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 // Misma limpieza que tenía content.js — no se toca la lógica, solo se mueve de lugar.

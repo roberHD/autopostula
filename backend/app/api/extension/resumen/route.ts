@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { estadoExtension } from "@/lib/estado-extension";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { inicioDelDiaChile, inicioDeOtroDiaChile } from "@/lib/tiempo";
+import { hashToken } from "@/lib/token";
 
 /**
  * Lo que muestra el popup de la extensión (docs/estrategia-y-rediseno.md §6).
@@ -16,7 +17,7 @@ async function getUserFromToken(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
   if (!token) return null;
-  return prisma.user.findUnique({ where: { apiToken: token } });
+  return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
 export async function GET(request: Request) {
