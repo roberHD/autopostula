@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { MarcaAcceso, Mensaje, BotonGoogle, PanelTinta } from "@/components/acceso/Piezas";
 import { COOKIE_INVITACION, LLAVE_INTENCION_PREMIUM } from "@/lib/enlaces";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
 
 export default function RegistroPage() {
   const [nombre, setNombre] = useState("");
@@ -183,7 +184,7 @@ export default function RegistroPage() {
         marcado="que llenas a mano."
         bajada="Después de este, los llena AutoPostula por ti — con tus palabras y tu experiencia real."
         hechos={[
-          "20 postulaciones gratis al mes, sin tarjeta",
+          `${POSTULACIONES_GRATIS_AL_MES} postulaciones gratis al mes, sin tarjeta`,
           "La IA lee tu CV y arma tu perfil sola",
           // docs/revision-2026-09-28.md §12: antes decía "Tú revisas antes de
           // enviar, siempre", pero la revisión es opcional y viene apagada.

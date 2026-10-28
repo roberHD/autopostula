@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
 
 export const alt = "AutoPostula — Postula a lo que te sirve. Escribe una sola vez.";
 export const size = { width: 1200, height: 630 };
@@ -82,7 +83,7 @@ export default function Imagen() {
         <div style={{ display: "flex", alignItems: "center", gap: 28, fontSize: 26, color: "#8E9599" }}>
           <span>Computrabajo, Laborum y Trabajando.com</span>
           <span style={{ color: "#3C4145" }}>|</span>
-          <span>20 postulaciones gratis al mes</span>
+          <span>{POSTULACIONES_GRATIS_AL_MES} postulaciones gratis al mes</span>
         </div>
       </div>
     ),

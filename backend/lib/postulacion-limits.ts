@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { saldoExtras } from "@/lib/extras";
 import { inicioDelMesChile } from "@/lib/tiempo";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
 
 /**
  * Cuántas postulaciones lleva el usuario este mes y cuántas le quedan según su
@@ -20,7 +21,8 @@ export async function obtenerEstadoPostulaciones(userId: string) {
 
   const subscripcion = await obtenerSubscripcionVigente(userId);
 
-  const limite = subscripcion?.plan.limitePostulacionesMes ?? 20;
+  // El plan gratis no tiene fila de Subscription (lib/plans.ts): sin pase, este es su límite.
+  const limite = subscripcion?.plan.limitePostulacionesMes ?? POSTULACIONES_GRATIS_AL_MES;
 
   if (limite === null) {
     return { permitido: true, restantes: null, limite: null, delMes: null, extras: 0 };
@@ -33,8 +35,12 @@ export async function obtenerEstadoPostulaciones(userId: string) {
   // a la empresa (el formulario se quedó a medio enviar) -- contarla acá
   // gastaba cupo real del mes por algo que nunca se envió, y de paso hacía
   // que el límite pareciera alcanzado antes de tiempo.
+  //
+  // docs/creditos-y-pagina-nueva.md §3.7: las de la prueba automática
+  // (esDePrueba) tampoco cuentan -- van por su propio cupo de 5. Si contaran,
+  // con 10 al mes la prueba más la primera página se comían el mes el día 1.
   const usadas = await prisma.application.count({
-    where: { userId, enviadaEn: { gte: inicioMes }, estadoActual: { not: "INCOMPLETA" } },
+    where: { userId, enviadaEn: { gte: inicioMes }, estadoActual: { not: "INCOMPLETA" }, esDePrueba: false },
   });
 
   // docs/creditos-y-pagina-nueva.md §3: las postulaciones extra (compradas o

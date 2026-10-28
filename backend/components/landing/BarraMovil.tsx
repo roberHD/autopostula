@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
 
 /**
  * En el celular el botón principal queda arriba y no vuelve nunca. Esta barra
@@ -23,7 +24,7 @@ export default function BarraMovil() {
     <div className={`lp-movil${visible ? " is-on" : ""}`}>
       <div className="lp-movil__in">
         <p className="lp-movil__txt">
-          <b>20 postulaciones gratis</b>
+          <b>{POSTULACIONES_GRATIS_AL_MES} postulaciones gratis</b>
           Sin tarjeta
         </p>
         <Link className="ap-btn ap-btn--primary" href="/registro">

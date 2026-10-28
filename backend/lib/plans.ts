@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
 
 // Números decididos para el lanzamiento del premium (2026-09-03): $3.990 CLP,
 // hoy por un pase de 30 días (lib/pases.ts; docs/pase-prepagado.md -- el precio
 // que se cobra sale del catálogo de pases, `precioMensual` es solo informativo),
-// 80 postulaciones/mes (4x el free), portales ilimitados a la vez, búsqueda
+// 80 postulaciones/mes (8x el free desde que bajó a 10), portales ilimitados a la vez, búsqueda
 // automática, perfil dinámico (calibración + seguir conversando con la IA de
 // estilo), analítica avanzada, sin anuncios. El free no tiene fila propia --
 // el resto del código lo trata como "sin Subscription" y usa sus propios
@@ -16,7 +17,7 @@ export const PLANES_BASE = [
     nombre: "Free",
     precioMensual: 0,
     maxPlataformasActivas: 1,
-    limitePostulacionesMes: 20,
+    limitePostulacionesMes: POSTULACIONES_GRATIS_AL_MES,
     busquedaAutomatica: false,
     muestraAnuncios: true,
     guardaConversacionesIa: false,

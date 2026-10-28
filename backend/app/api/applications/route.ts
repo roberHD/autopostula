@@ -75,7 +75,11 @@ export async function POST(request: Request) {
     }
 
     const estadoPostulaciones = await obtenerEstadoPostulaciones(user.id);
-    if (!estadoPostulaciones.permitido) {
+    // docs/creditos-y-pagina-nueva.md §3.7: lo que envía una ráfaga en una cuenta
+    // que todavía tiene prueba va por las 5 de la prueba, no por las del mes ni
+    // por las extra. Por eso pasa aunque el mes ya esté en cero.
+    const enPrueba = desdeRafaga === true && (await obtenerModoAutomatico(user)) === "prueba";
+    if (!estadoPostulaciones.permitido && !enPrueba) {
       return NextResponse.json(
         { error: `Alcanzaste el límite de postulaciones de tu plan este mes (${estadoPostulaciones.limite}).` },
         { status: 403 }
@@ -193,46 +197,46 @@ export async function POST(request: Request) {
       });
     }
 
+    // §4.1: una postulación ENVIADA desde una ráfaga, en una cuenta gratis que
+    // todavía tiene prueba, gasta una de las 5 y queda marcada como de prueba
+    // (esDePrueba): así no se cuenta en las del mes (§3.7). Una INCOMPLETA no
+    // llegó a la empresa (§8.3 de la revisión), así que no descuenta. Va con la
+    // postulación ya guardada: si esto falla, la postulación existe igual (ya
+    // salió al portal, no se puede deshacer) y cuenta como una normal.
+    let prueba: { restantes: number; total: number } | undefined;
+    if (enPrueba && !incompleta) {
+      try {
+        const restantes = await consumirPrueba(user.id, application.id);
+        if (restantes !== null) {
+          prueba = { restantes, total: PRUEBA_TOTAL };
+          // El único correo que recibe una cuenta gratis por este tema, y solo
+          // la postulación que se llevó el último cupo llega acá con 0. Con
+          // await: en serverless, un envío sin esperar puede quedar congelado
+          // al responder y perderse.
+          if (restantes === 0 && user.emailVerificado) {
+            await enviarCorreoPruebaTerminada(user.email, PRUEBA_TOTAL).catch((e) =>
+              console.error("[prueba] No se pudo mandar el correo de fin de prueba:", e)
+            );
+          }
+        }
+      } catch (e) {
+        console.error("[prueba] No se pudo descontar la postulación de prueba:", e);
+      }
+    }
+
     // docs/creditos-y-pagina-nueva.md §3: si el cupo del mes ya estaba en cero,
     // esta postulación salió de las extra (compradas o ganadas) y se descuenta
     // una. Va después de crear la postulación, con su id: la clave del
     // movimiento es esa, así que reintentar el mismo POST no cobra dos veces.
-    // Una INCOMPLETA no llegó a la empresa (§8.3), así que no gasta nada.
-    if (!incompleta && estadoPostulaciones.delMes === 0) {
+    // Una INCOMPLETA no llegó a la empresa (§8.3), así que no gasta nada, y una
+    // de prueba ya se pagó con la prueba (va antes, para saberlo).
+    if (!incompleta && !prueba && estadoPostulaciones.delMes === 0) {
       try {
         await gastarExtra(user.id, application.id);
       } catch (err) {
         // La postulación ya salió al portal: no se deshace porque el descuento
         // falle. Queda en el log para revisarlo.
         console.error("[extras] No se pudo descontar la postulación extra:", application.id, err);
-      }
-    }
-
-    // §4.1: una postulación ENVIADA desde una ráfaga, en una cuenta gratis que
-    // todavía tiene prueba, gasta una de las 5. Una INCOMPLETA no llegó a la
-    // empresa (§8.3 de la revisión), así que no descuenta. Va al final, con la
-    // postulación ya guardada: si esto falla, la postulación existe igual (ya
-    // salió al portal, no se puede deshacer) y solo la prueba queda sin descontar.
-    let prueba: { restantes: number; total: number } | undefined;
-    if (desdeRafaga === true && !incompleta) {
-      try {
-        if ((await obtenerModoAutomatico(user)) === "prueba") {
-          const restantes = await consumirPrueba(user.id, application.id);
-          if (restantes !== null) {
-            prueba = { restantes, total: PRUEBA_TOTAL };
-            // El único correo que recibe una cuenta gratis por este tema, y solo
-            // la postulación que se llevó el último cupo llega acá con 0. Con
-            // await: en serverless, un envío sin esperar puede quedar congelado
-            // al responder y perderse.
-            if (restantes === 0 && user.emailVerificado) {
-              await enviarCorreoPruebaTerminada(user.email, PRUEBA_TOTAL).catch((e) =>
-                console.error("[prueba] No se pudo mandar el correo de fin de prueba:", e)
-              );
-            }
-          }
-        }
-      } catch (e) {
-        console.error("[prueba] No se pudo descontar la postulación de prueba:", e);
       }
     }
 

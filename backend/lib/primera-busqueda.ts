@@ -8,6 +8,7 @@
 // recién ahí decidir si empieza a postular.
 
 import type { ModoAutomatico } from "@/lib/estado-automatico";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
 
 export type ClavePaso = "instalar" | "conectar" | "mirar" | "computador" | "decidir";
 export type EstadoPaso = "hecho" | "ahora" | "despues";
@@ -69,7 +70,7 @@ export function textoLoQueMiro(c: { porDecidir: number; descartadas: number; hab
 
 // Qué pasa al activarla, según el plan (lib/estado-automatico.ts).
 export function textoAlActivar(modo: ModoAutomatico | null, pruebaTotal: number): string {
-  if (modo === "prueba") return `Al activarla envía sola tus primeras ${pruebaTotal} postulaciones de prueba, sin que entres a ningún portal.`;
+  if (modo === "prueba") return `Al activarla envía sola tus primeras ${pruebaTotal} postulaciones de prueba, sin que entres a ningún portal. No se descuentan de tus ${POSTULACIONES_GRATIS_AL_MES} del mes.`;
   if (modo === "premium") return "Al activarla se pone al día sola cada vez que abres Chrome.";
   if (modo === "manual") return "Al activarla, postula por ti cada vez que entres a Computrabajo, Laborum o Trabajando.";
   return "Al activarla empieza a postular a las que calzan contigo.";

@@ -6,7 +6,9 @@
 // relevante en cualquiera de las dos (términos: 19-09-2026; política: 11-10-2026,
 // la que se adaptó a la Ley 21.719 y dice "Versión 2026-10-11" al comienzo).
 // Al cambiar cualquiera de las dos de forma relevante, se cambia esto: todas las
-// cuentas vuelven a aceptar la próxima vez que entren al panel.
+// cuentas vuelven a aceptar la próxima vez que entren al panel. (El 28-10-2026
+// los términos cambiaron una frase a favor de la persona -- la prueba automática
+// ya no se descuenta del límite mensual, §6.1 -- y por eso no se pide aceptar de nuevo.)
 export const VERSION_DOCUMENTOS = "2026-10-11";
 
 // El texto de la autorización del CV (abajo). Si el texto cambia, cambia esto.

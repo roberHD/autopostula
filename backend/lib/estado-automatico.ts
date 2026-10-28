@@ -27,6 +27,15 @@ export function modoAutomatico(e: {
   return e.pruebaRestantes > 0 ? "prueba" : "manual";
 }
 
+// ¿Hay cupo para que corran las ráfagas? En Premium es el cupo del mes. En la
+// prueba no: sus postulaciones no se descuentan de las del mes
+// (docs/creditos-y-pagina-nueva.md §3.7), así que la prueba sigue aunque la
+// persona ya haya gastado las del mes a mano. Lo aprobado en "Por decidir" que
+// la ráfaga envía sí es del mes, y la extensión lo corta aparte (motivo "limite").
+export function cupoParaLasRafagas(modo: ModoAutomatico, cupoDelMesPermitido: boolean): boolean {
+  return modo === "prueba" || cupoDelMesPermitido;
+}
+
 // Por qué la búsqueda automática NO está corriendo, o null si está corriendo.
 //
 // Un solo veredicto para las dos superficies que lo muestran: la barra del

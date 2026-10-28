@@ -4,11 +4,12 @@ import { LegalPage } from "@/components/LegalPage";
 import { PASES, formatoPesos } from "@/lib/pases";
 import { PAQUETES } from "@/lib/extras";
 import { PLANES_BASE } from "@/lib/plans";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
+import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
 
 export const metadata: Metadata = {
   title: "Precios",
-  description:
-    "20 postulaciones gratis al mes. Pases de 30 o 90 días de pago único, sin cobro automático, y paquetes de postulaciones que no vencen.",
+  description: `${POSTULACIONES_GRATIS_AL_MES} postulaciones gratis al mes. Pases de 30 o 90 días de pago único, sin cobro automático, y paquetes de postulaciones que no vencen.`,
   alternates: { canonical: "https://autopostula.cl/precios" },
 };
 
@@ -23,7 +24,7 @@ const PREMIUM = PLANES_BASE.find((p) => p.tipo === "PREMIUM")!;
 const FILAS = [
   {
     nombre: "Gratis",
-    incluye: `${GRATIS.limitePostulacionesMes} postulaciones al mes. Entras tú a los portales y la extensión postula mientras navegas.`,
+    incluye: `${GRATIS.limitePostulacionesMes} postulaciones al mes. Entras tú a los portales y la extensión postula mientras navegas. Al empezar, ${PRUEBA_TOTAL} postulaciones automáticas de prueba, aparte de esas ${GRATIS.limitePostulacionesMes}.`,
     precio: "$0",
   },
   {
@@ -50,7 +51,7 @@ const FILAS = [
 
 export default function PreciosPage() {
   return (
-    <LegalPage titulo="Precios" actualizado="8 de octubre de 2026">
+    <LegalPage titulo="Precios" actualizado="28 de octubre de 2026">
       <p>
         Todos los precios están en pesos chilenos, con impuestos incluidos. No se pide tarjeta para
         crear la cuenta ni para usar el plan gratis.

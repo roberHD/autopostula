@@ -1,5 +1,9 @@
 # Ráfagas: que se ponga al día cada vez que abres el computador — especificación
 
+> **2026-10-28:** el plan gratis pasó de 20 a 10 al mes, y la prueba de §4.1 **ya no se descuenta**
+> de esas 10: va por su propio cupo (`creditos-y-pagina-nueva.md` §3.7). Las notas de abajo que dicen
+> "las 20 del mes" son de antes de ese cambio.
+>
 > **Estado:** implementada: los 10 pasos de §7 hechos y con test (`extension/verificar-rafagas.js`,
 > `backend/scripts/verificar-texto-rafaga.ts`, `backend/scripts/verificar-recordatorio-rafaga.ts`, 2026-09-19).
 > Falta publicar la versión 2.13.0 de la extensión con los textos de la ficha (§5) y **verificar a
@@ -425,7 +429,7 @@ momento de aprobar.
 aprobar en el panel con la extensión presente, al abrir Chrome y en cada chequeo, la extensión pide sus
 aprobadas y las envía (`revision-2026-09-16.md` §2.9). Cada una es una oferta que la persona aprobó a
 mano, así que la línea entre planes sigue siendo quién **busca**, no quién ejecuta lo ya decidido; y cuenta
-dentro de las 20 del mes, no de la prueba de §4.1. Se descartó el botón "Abrir y postular" para el plan
+dentro de las del mes, no de la prueba de §4.1. Se descartó el botón "Abrir y postular" para el plan
 gratis: le pedía un clic más por oferta a quien ya había dicho que sí, sin proteger nada que no proteja ya
 el tope mensual. Nunca debe quedar un "Sí" aprobado sin decir cuándo se envía: eso lo dice el panel
 ("Por decidir").
@@ -475,16 +479,18 @@ Dejar de recibir estos avisos
 
 | | Gratis | Premium |
 |---|---|---|
-| Escanear, completar formularios y postular **cuando la persona entra al portal** | ✅ hasta 20 al mes | ✅ hasta 80 al mes |
+| Escanear, completar formularios y postular **cuando la persona entra al portal** | ✅ hasta 10 al mes (20 hasta el 28-10) | ✅ hasta 80 al mes |
 | Ráfagas automáticas (abrir Chrome, despertar, chequeo) | **Solo la prueba:** 5 postulaciones, una vez por cuenta | ✅ |
 | Botón "Ponerme al día ahora" | — | ✅ |
 | Recordatorio por correo | — | ✅ |
-| Lo aprobado en "Por decidir" (celular incluido) | Se envía solo al abrir Chrome en el computador, o al aprobar si ya está abierto; cuenta dentro de las 20 | Igual, y va primero en cada ráfaga |
+| Lo aprobado en "Por decidir" (celular incluido) | Se envía solo al abrir Chrome en el computador, o al aprobar si ya está abierto; cuenta dentro de las 10 del mes | Igual, y va primero en cada ráfaga |
 
 ### 4.1 La prueba de 5 postulaciones automáticas
 
 **Qué es.** Las primeras 5 postulaciones que envían las ráfagas en una cuenta gratis. Una sola vez
-por cuenta, no por mes. **Cuentan dentro de las 20 del mes** (son postulaciones como cualquier otra).
+por cuenta, no por mes. **No se descuentan de las 10 del mes** (desde el 2026-10-28; antes contaban
+dentro de las 20): van por su propio cupo, y una ráfaga en prueba corre aunque el mes ya esté en cero
+(`creditos-y-pagina-nueva.md` §3.7).
 
 **Cuándo arranca.** Apenas la persona activa la postulación desde el panel
 (`revision-2026-09-16.md` §1.2, `postulacionHabilitada`): se corre una ráfaga de inmediato, con
@@ -549,7 +555,7 @@ correo verificado. Son 5 postulaciones: no vale la pena más control que eso.
 2. Llegando a 5 postulaciones enviadas, la ráfaga se corta aunque queden ofertas por postular.
 3. Una postulación INCOMPLETA en la ráfaga de prueba **no** descuenta.
 4. Terminada la prueba, abrir Chrome, despertar el computador o esperar el chequeo **no** dispara
-   ráfagas; entrar a mano a un portal sigue postulando normalmente, dentro de las 20 del mes.
+   ráfagas; entrar a mano a un portal sigue postulando normalmente, dentro de las del mes.
 5. Premium y admin no ven nada de la prueba.
 
 ---

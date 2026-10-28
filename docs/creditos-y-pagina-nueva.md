@@ -149,8 +149,9 @@ migraciones.
 
 El orden es siempre el mismo, y está implementado así en `api/applications/route.ts`:
 
-1. **Primero, el cupo del mes** del plan (20 gratis / 80 con pase vigente). Lo que ya está pagado
-   se usa primero.
+1. **Primero, el cupo del mes** del plan (10 gratis / 80 con pase vigente; hasta el 28-10 eran 20
+   gratis, §3.7). Lo que ya está pagado se usa primero. Las 5 de la prueba automática van aparte:
+   no tocan ni el cupo del mes ni los créditos.
 2. **Recién cuando ese cupo está en cero**, se descuenta un crédito.
 3. Si no quedan créditos, no se postula: el límite se revisa **antes** de enviar
    (`revision-2026-09-16.md` §0), nunca después.
@@ -220,6 +221,53 @@ se entregó, y eso tiene nombre en la Ley 19.496.
 
 Queda pendiente decidir qué se hace con las **2 postulaciones de Trabajando** que figuran
 enviadas y no existen en el portal (`revision-2026-09-16.md` §8.1).
+
+### 3.7 El plan gratis: 10 al mes, con la prueba aparte (2026-10-28)
+
+Lo decidió Roberto el 2026-10-28. Hasta ese día eran 20 al mes.
+
+**Por qué 10.**
+
+- **El plan gratis no es una prueba: se renueva cada mes.** Como AutoPostula solo postula a lo que
+  sirve (en las pruebas de la 2.19, 5 o 6 por página de 15 a 20 ofertas), 20 bien elegidas al mes ya
+  eran una búsqueda tranquila, sin motivo para pagar. Con 10, el pase (80) pasa de 4 a 8 veces el
+  gratis.
+- **Lo que vale del gratis sigue sin tope.** Con el cupo en cero, la extensión sigue marcando todas
+  las ofertas (te sirve, no calza, por decidir); solo deja de enviar, y el panel del portal ofrece
+  «Conseguir más postulaciones».
+- **Subir después se anuncia como un regalo; bajar, no.** Con 17 cuentas reales
+  (`analisis-usuarios-2026-10-28.md`) era el momento más barato. Ninguna cuenta queda cortada si
+  sale antes del 1 de noviembre: de las dos que postularon, una lleva 5 y la otra ya había pasado
+  las 20.
+
+**La prueba automática va aparte.** Las 5 de `rafagas-y-ponerse-al-dia.md` §4.1 ya no se descuentan
+del mes. Si se descontaran, la prueba (5) más la primera página del recorrido de la 2.19 (5 o 6) se
+comían las 10 el primer día, antes de que una empresa alcance a llamar. Con la prueba aparte y el
+premio por dejar el perfil listo (+5, §1.1), el primer mes rinde 20; desde el segundo, 10.
+
+**Cómo quedó en el código.**
+
+- El número vive en `lib/plan-gratis.ts` (`POSTULACIONES_GRATIS_AL_MES`), un archivo sin imports para
+  que lo lean también los componentes del navegador y la imagen para redes. De ahí lo toman
+  `lib/plans.ts`, el límite (`lib/postulacion-limits.ts`) y todos los textos: landing, registro,
+  imagen para redes, barra del celular, `/precios`, preguntas frecuentes, correo de vencimiento del
+  pase y la tabla de Premium.
+- `obtenerEstadoPostulaciones` no cuenta las postulaciones con `esDePrueba`.
+- Lo que envía una ráfaga en prueba pasa aunque el mes esté en cero: `puede-postular?origen=rafaga`
+  la deja pasar, y `POST /api/applications` con `desdeRafaga` gasta la prueba **antes** de mirar las
+  extra (una de prueba no gasta extra). `cupoParaLasRafagas` (`lib/estado-automatico.ts`) le dice lo
+  mismo a `/api/account/estado-automatico` y a la barra del panel.
+- Lo aprobado en «Por decidir» sigue siendo del mes: la extensión lo pide sin `origen=rafaga` y lo
+  corta con `limite`.
+- Términos §6.1: la prueba «no se descuenta de tu límite mensual». Es un cambio a favor de la
+  persona, así que no se pide aceptar de nuevo (`VERSION_DOCUMENTOS` sigue igual).
+- Verificación: `scripts/verificar-plan-gratis.ts` contra una base de prueba (las rutas de verdad,
+  con token), más casos nuevos en `verificar-texto-rafaga.ts`, `verificar-primera-busqueda.ts` y
+  `verificar-extras.ts`.
+
+**Lo que hay que mirar.** `63b2e7`, la cuenta más activa del análisis del 28-10, postuló 25 (20 del
+mes + 5 del premio) y no volvió. Si se fue porque se quedó sin cupo el primer día, el problema no
+es 20 o 10: es qué pasa al llegar al tope. Conviene confirmarlo antes de mover el número otra vez.
 
 ---
 

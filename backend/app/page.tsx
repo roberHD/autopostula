@@ -11,6 +11,8 @@ import Revelar from "@/components/Revelar";
 import VolverArriba from "@/components/VolverArriba";
 import { Marca } from "@/components/Marca";
 import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
+import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
 import "./landing.css";
 
 export const metadata: Metadata = {
@@ -105,12 +107,14 @@ const PASOS = [
 
 /* Los textos de los planes salen de rafagas-y-ponerse-al-dia.md §5: nada de
    "postula sola" sin condiciones. La linea entre planes es quien entra al
-   portal, no cuantas postulaciones hace. */
+   portal, no cuantas postulaciones hace. Lo primero del gratis es lo que no
+   tiene tope: marcar las ofertas (docs/creditos-y-pagina-nueva.md §3.7). */
 const PLAN_LIBRE = [
-  "20 postulaciones al mes",
+  "Te marca todas las ofertas que te sirven",
+  `${POSTULACIONES_GRATIS_AL_MES} postulaciones al mes`,
   "Un portal conectado a la vez",
   "Entras al portal y la extensión postula por ti",
-  "Prueba: 5 postulaciones automáticas",
+  `Prueba: ${PRUEBA_TOTAL} postulaciones automáticas, aparte de las ${POSTULACIONES_GRATIS_AL_MES}`,
 ];
 
 const PLAN_PRO = [

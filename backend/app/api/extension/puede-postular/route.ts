@@ -41,11 +41,15 @@ export async function GET(request: Request) {
 
   // Primero que el resto: no es "este portal no", ni "este mes no" -- es que
   // ninguna ráfaga debería seguir corriendo, y la extensión corta todas.
-  if (searchParams.get("origen") === "rafaga" && (await obtenerModoAutomatico(user)) === "manual") {
+  const modoRafaga = searchParams.get("origen") === "rafaga" ? await obtenerModoAutomatico(user) : null;
+  if (modoRafaga === "manual") {
     return NextResponse.json({ permitido: false, motivo: "prueba_terminada", restantes: estado.restantes });
   }
 
-  if (!estado.permitido) {
+  // docs/creditos-y-pagina-nueva.md §3.7: lo que envía la ráfaga de una cuenta
+  // en prueba sale de las 5 de la prueba, no de las del mes -- se deja pasar
+  // aunque el mes esté en cero. POST /api/applications la marca como de prueba.
+  if (!estado.permitido && modoRafaga !== "prueba") {
     return NextResponse.json({ permitido: false, motivo: "limite", restantes: estado.restantes });
   }
 

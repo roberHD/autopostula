@@ -9,6 +9,7 @@ import "dotenv/config";
 import { prisma } from "../lib/prisma";
 import { anotarExtra, gastarExtra, obtenerCodigoInvitacion, premiarInvitacion, premiarPerfilCompleto, saldoExtras, PREMIOS } from "../lib/extras";
 import { obtenerEstadoPostulaciones } from "../lib/postulacion-limits";
+import { POSTULACIONES_GRATIS_AL_MES } from "../lib/plan-gratis";
 
 const PREFIJO = "verificar-extras-";
 
@@ -53,8 +54,8 @@ async function main() {
 
     // ── El cupo: primero el del plan, después las extra ──
     const estado = await obtenerEstadoPostulaciones(anfitrion.id);
-    check("el cupo separa lo del mes de lo extra", estado.delMes === 20 && estado.extras === 19, estado);
-    check("y lo que se muestra es la suma", estado.restantes === 39, estado);
+    check("el cupo separa lo del mes de lo extra", estado.delMes === POSTULACIONES_GRATIS_AL_MES && estado.extras === 19, estado);
+    check("y lo que se muestra es la suma", estado.restantes === POSTULACIONES_GRATIS_AL_MES + 19, estado);
 
     // ── Premio por invitar ──
     const invitado = await crearCuenta("invitado", { invitadoPorId: anfitrion.id });

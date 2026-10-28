@@ -4,7 +4,7 @@ import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
 import { datosDeLaOferta } from "@/lib/datos-postulacion";
 import { resumenUltimaRafaga, estimadoDuracionRafagaMs } from "@/lib/rafagas";
-import { modoAutomatico, motivoInactivo, PRUEBA_TOTAL } from "@/lib/estado-automatico";
+import { modoAutomatico, motivoInactivo, cupoParaLasRafagas, PRUEBA_TOTAL } from "@/lib/estado-automatico";
 
 /**
  * Estado de la máquina, para la barra que va arriba de todo el dashboard.
@@ -56,9 +56,11 @@ export async function armarEstadoPanel(userId: string) {
 
   // "Postulando" solo si se cumplen las tres: el plan (o la prueba) lo permite,
   // no está pausada a mano, y todavía queda cupo. Si falta una, la barra dice cuál.
-  const activa = modo !== "manual" && !pausadaPorTi && cupo.permitido && portalesActivos > 0;
+  // La prueba tiene su propio cupo: no depende de las del mes (cupoParaLasRafagas).
+  const hayCupo = cupoParaLasRafagas(modo, cupo.permitido);
+  const activa = modo !== "manual" && !pausadaPorTi && hayCupo && portalesActivos > 0;
 
-  const motivo = motivoInactivo({ modo, pausadaPorTi, cupoPermitido: cupo.permitido, portalesActivos });
+  const motivo = motivoInactivo({ modo, pausadaPorTi, cupoPermitido: hayCupo, portalesActivos });
 
   // Lo usado del mes sale de lo que queda DEL MES, no del total: desde que
   // existen las postulaciones extra (docs/creditos-y-pagina-nueva.md §3) el total

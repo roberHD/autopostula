@@ -169,7 +169,7 @@ audio.
 | 0:26–0:38 | El formulario del portal llenándose, y la respuesta escrita con datos del CV | "Cuando tú lo autorizas, responde los formularios con tu experiencia real. No con un texto genérico." |
 | 0:38–0:48 | El panel "Hoy": lo que hizo, lo que espera decisión | "Tú revisas lo dudoso. Lo claro lo envía sola." |
 | 0:48–0:56 | La pantalla de Por decidir en un teléfono | "Desde el celular decides. El computador hace el resto." |
-| 0:56–1:00 | Logo + "20 postulaciones gratis al mes" | "AutoPostula. No postula a todo: postula a lo que te sirve." |
+| 0:56–1:00 | Logo + "10 postulaciones gratis al mes" (eran 20 hasta el 28-10, `creditos-y-pagina-nueva.md` §3.7) | "AutoPostula. No postula a todo: postula a lo que te sirve." |
 
 Tres reglas para que no se caiga:
 

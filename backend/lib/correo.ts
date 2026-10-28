@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { getBaseUrl } from "@/lib/base-url";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
 import {
   RUTA_VER_LAS_DE_PRUEBA,
   TEXTO_DESPUES_DE_LA_PRUEBA,
@@ -248,7 +249,7 @@ export function armarAvisoPase(tipo: AvisoPase, venceEn: Date) {
       <div style="${ESTILO_MARCO}">
         <h2 style="color: #111827;">Tu Premium vence ${cuando}</h2>
         <p style="color: #4B5563; line-height: 1.6;">
-          Después vuelves al plan gratis (20 postulaciones al mes, un portal, sin búsqueda automática).
+          Después vuelves al plan gratis (${POSTULACIONES_GRATIS_AL_MES} postulaciones al mes, un portal, sin búsqueda automática).
           Si quieres seguir con Premium, renueva antes: los días nuevos se suman a los que te quedan.
         </p>
         ${botones}

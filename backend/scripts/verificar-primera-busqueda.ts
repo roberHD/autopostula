@@ -8,6 +8,7 @@ import {
   textoLoQueMiro,
   type EntradaPasos,
 } from "../lib/primera-busqueda";
+import { POSTULACIONES_GRATIS_AL_MES } from "../lib/plan-gratis";
 
 let fallos = 0;
 function check(desc: string, cond: boolean, detalle?: unknown) {
@@ -58,6 +59,8 @@ check("sin cifras no inventa ninguna", t === "Ya revisó ofertas para ti.", t);
 
 // ── Al activar, según el plan ────────────────────────────────────────────
 check("prueba: dice cuántas envía sola", textoAlActivar("prueba", 5).includes("primeras 5"));
+check("prueba: y que no se descuentan de las del mes (créditos §3.7)",
+  textoAlActivar("prueba", 5).includes(`No se descuentan de tus ${POSTULACIONES_GRATIS_AL_MES} del mes`), textoAlActivar("prueba", 5));
 check("premium: se pone al día sola", textoAlActivar("premium", 5).includes("cada vez que abres Chrome"));
 check("manual: postula cuando entra a un portal", textoAlActivar("manual", 5).includes("cada vez que entres"));
 check("sin saber el plan, no promete nada que no sea cierto", !/\d/.test(textoAlActivar(null, 5)));

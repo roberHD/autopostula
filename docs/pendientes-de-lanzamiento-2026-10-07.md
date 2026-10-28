@@ -4,6 +4,9 @@
 > **Para:** Roberto (§1 y §2) y el chat de producción (§3 y §4).
 > **Relacionado:** `creditos-y-pagina-nueva.md` §4 y §5, `amplitud-de-busqueda.md` §4,
 > `rediseno-filtrado-ofertas.md` §7.1, `primera-busqueda-guiada.md`.
+> **2026-10-28:** el plan gratis bajó de 20 a 10 al mes y la prueba automática ya no se descuenta
+> de esas 10 (`creditos-y-pagina-nueva.md` §3.7). Los textos de §4 dicen 20; en el código ya están
+> con el número nuevo.
 
 ---
 

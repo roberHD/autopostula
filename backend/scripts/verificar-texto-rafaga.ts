@@ -21,7 +21,7 @@ import {
   textoVerLasDePrueba,
   type ResumenRafaga,
 } from "../lib/texto-rafaga";
-import { modoAutomatico, motivoInactivo, PRUEBA_TOTAL } from "../lib/estado-automatico";
+import { modoAutomatico, motivoInactivo, cupoParaLasRafagas, PRUEBA_TOTAL } from "../lib/estado-automatico";
 import { armarCorreoPruebaTerminada } from "../lib/correo";
 
 let fallos = 0;
@@ -160,6 +160,17 @@ check(
   motivoInactivo({ ...ok, pausadaPorTi: true, cupoPermitido: false, portalesActivos: 0 }) === "pausada",
 );
 check("sin cupo gana sobre sin portales", motivoInactivo({ ...ok, cupoPermitido: false, portalesActivos: 0 }) === "sin-cupo");
+
+// ── El cupo de las ráfagas (docs/creditos-y-pagina-nueva.md §3.7) ──
+check("prueba: corre aunque ya no queden del mes (no se descuenta de ellas)", cupoParaLasRafagas("prueba", false) === true);
+check("prueba con cupo del mes: corre igual", cupoParaLasRafagas("prueba", true) === true);
+check("premium sin cupo del mes: no corre", cupoParaLasRafagas("premium", false) === false);
+check("premium con cupo: corre", cupoParaLasRafagas("premium", true) === true);
+check(
+  "la barra dice 'sin-cupo' a Premium sin cupo, pero no a una prueba",
+  motivoInactivo({ ...ok, cupoPermitido: cupoParaLasRafagas("premium", false) }) === "sin-cupo" &&
+    motivoInactivo({ ...ok, modo: "prueba", cupoPermitido: cupoParaLasRafagas("prueba", false) }) === null,
+);
 
 // ── La prueba de 5 postulaciones automáticas (§4.1) ──────────────────────
 // Las mismas frases que extension/popup.js y el correo: verificar-rafagas.js las

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function TerminosPage() {
   return (
-    <LegalPage titulo="Términos y condiciones" actualizado="19 de septiembre de 2026">
+    <LegalPage titulo="Términos y condiciones" actualizado="28 de octubre de 2026">
       <p>
         Estos términos regulan el uso de AutoPostula: el sitio web, el panel de usuario y la
         extensión de Chrome. Al crear una cuenta o instalar la extensión, aceptas lo que sigue.
@@ -128,7 +128,7 @@ export default function TerminosPage() {
       <p>
         Incluye además una <strong>prueba única de 5 postulaciones automáticas</strong>: las
         primeras cinco postulaciones que la extensión envía por sí sola, sin que entres a ningún
-        portal, y que cuentan dentro de tu límite mensual. Fuera de esa prueba, en el plan gratuito
+        portal, y que no se descuentan de tu límite mensual. Fuera de esa prueba, en el plan gratuito
         las búsquedas las inicias tú: entras a un portal y la extensión completa y envía los
         formularios ahí mismo.
       </p>

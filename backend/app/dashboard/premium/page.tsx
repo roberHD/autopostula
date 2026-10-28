@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { Check, Sparkles, PartyPopper, TriangleAlert, Clock, ShieldCheck } from "lucide-react";
 import { PASES, formatoPesos, type IdPase } from "@/lib/pases";
 import Extras from "./Extras";
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
 
 type Fila = { texto: string; free: string | boolean; premium: string | boolean };
 
 const FILAS: Fila[] = [
-  { texto: "Postulaciones por mes", free: "20", premium: "80" },
+  { texto: "Postulaciones por mes", free: String(POSTULACIONES_GRATIS_AL_MES), premium: "80" },
   { texto: "Portales conectados a la vez", free: "1", premium: "Todos" },
   { texto: "Postulaciones automáticas (sin entrar al portal)", free: "Prueba de 5", premium: true },
   { texto: "Se pone al día sola al abrir tu computador", free: false, premium: true },

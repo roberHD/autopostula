@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { obtenerEstadoPostulaciones } from "@/lib/postulacion-limits";
-import { modoAutomatico, motivoInactivo, PRUEBA_TOTAL, type ModoAutomatico } from "@/lib/estado-automatico";
+import { modoAutomatico, motivoInactivo, cupoParaLasRafagas, PRUEBA_TOTAL, type ModoAutomatico } from "@/lib/estado-automatico";
 import { hashToken } from "@/lib/token";
 
 async function getUserFromToken(request: Request) {
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
   // ráfagas -- pero solo la extensión NUEVA sabe marcar cuáles postulaciones
   // salieron de una ráfaga (desdeRafaga en POST /api/applications), que es lo
   // que gasta la prueba. Una extensión vieja (la de la tienda antes de esta
-  // versión) postularía sola sin descontar nada, hasta el tope de 20 al mes: le
+  // versión) postularía sola sin descontar nada, hasta el tope del mes: le
   // regalaría el plan Premium a quien no lo paga. Por eso la nueva pide
   // `?prueba=1` y la vieja sigue viendo `false`, como siempre.
   const clienteSabeLaPrueba = new URL(request.url).searchParams.get("prueba") === "1";
@@ -61,8 +61,10 @@ export async function GET(request: Request) {
   // abriendo pestañas y escaneando ofertas -- la extensión corta el ciclo acá,
   // antes de llegar a postular de verdad (postular ya pasó en el portal externo
   // para cuando el backend se entera al guardar el registro, así que ese chequeo
-  // solo no alcanza para el flujo automático).
-  const busquedaAutomatica = modoParaElCliente !== "manual" && user.busquedaAutomaticaActiva && estadoPostulaciones.permitido;
+  // solo no alcanza para el flujo automático). La prueba va por su propio cupo
+  // (lib/estado-automatico.ts, cupoParaLasRafagas).
+  const hayCupo = cupoParaLasRafagas(modoParaElCliente, estadoPostulaciones.permitido);
+  const busquedaAutomatica = modoParaElCliente !== "manual" && user.busquedaAutomaticaActiva && hayCupo;
 
   return NextResponse.json({
     busquedaAutomatica,
@@ -85,7 +87,7 @@ export async function GET(request: Request) {
     motivo: motivoInactivo({
       modo: modoParaElCliente,
       pausadaPorTi: !user.busquedaAutomaticaActiva,
-      cupoPermitido: estadoPostulaciones.permitido,
+      cupoPermitido: hayCupo,
       portalesActivos: cuentasActivas.length,
     }),
     // Se mantiene por compatibilidad -- background.js viejo (o una versión

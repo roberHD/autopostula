@@ -9,6 +9,9 @@
  *
  * Son los miedos reales de quien busca trabajo, no una lista de funciones.
  */
+import { POSTULACIONES_GRATIS_AL_MES } from "@/lib/plan-gratis";
+import { PRUEBA_TOTAL } from "@/lib/estado-automatico";
+
 export type Pregunta = { q: string; r: string };
 
 export const PREGUNTAS: Pregunta[] = [
@@ -34,7 +37,7 @@ export const PREGUNTAS: Pregunta[] = [
   },
   {
     q: "¿Cuánto cuesta?",
-    r: "Gratis son 20 postulaciones al mes. Con un pase son 80 al mes: $3.990 por 30 días o $9.990 por 90 días, de pago único, sin cobro automático. Y si se te acaban las del mes, hay paquetes de 20 postulaciones por $1.990 o 50 por $3.990.",
+    r: `Gratis son ${POSTULACIONES_GRATIS_AL_MES} postulaciones al mes, y al empezar la extensión envía ${PRUEBA_TOTAL} sola, de prueba, que no se descuentan de esas ${POSTULACIONES_GRATIS_AL_MES}. Con un pase son 80 al mes: $3.990 por 30 días o $9.990 por 90 días, de pago único, sin cobro automático. Y si se te acaban las del mes, hay paquetes de 20 postulaciones por $1.990 o 50 por $3.990.`,
   },
   {
     q: "¿Vencen las postulaciones que compro aparte?",
