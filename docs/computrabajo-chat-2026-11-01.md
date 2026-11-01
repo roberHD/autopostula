@@ -118,6 +118,20 @@ guardado en el servidor, y hoy nadie lo pidió.
   avisos para postularlos ahora se prueba en una pestaña de fondo, y se agregó que con la persona
   mirando propone y no abre nada.
 
+- **Los tres portales, en el Chrome de Roberto** (el mismo día, a pedido suyo): el código de la
+  2.20.0 corriendo en un marco de cada portal sobre `robots.txt`, con un `chrome` falso que nunca
+  deja postular (el cupo siempre en cero) y la pestaña «a la vista».
+
+  | Portal | Listado y marcas | Lista para elegir | Paso de preguntas |
+  |---|---|---|---|
+  | Computrabajo | 18 marcadas; 1 te sirve | «Hay una oferta que te sirve. No la envío hasta que me digas»; la lista con la de calzado marcada | Cambió al chat (§2): lo arregla la 2.20.0 |
+  | Laborum | 20 marcadas; no abre ningún aviso | «Hay 18 ofertas que te sirven…» | Sin cambios: su código sigue armando el modal `form#form-preguntas` con el botón `form: 'form-preguntas'` |
+  | Trabajando | 15 marcadas | «Hay 15 ofertas que te sirven…»; la lista con 15 casillas | Sin cambios: «Comenzar», «Confirma tu postulación al cargo» y «¡Has postulado al empleo!», los mismos textos que busca el adaptador |
+
+  Ninguno pidió postular; la única consulta de cupo fue la de la lista al abrirse. Laborum y
+  Trabajando se revisaron en su código actual, sin apretar «Postular»: en esos dos, una oferta sin
+  preguntas se envía con ese mismo clic.
+
 **Lo que no se probó:** enviar una postulación de verdad por el chat real. Contestar ahí ya es
 mandar datos al portal, así que espera el permiso de Roberto.
 
@@ -127,8 +141,11 @@ mandar datos al portal, así que espera el permiso de Roberto.
 
 1. **Una postulación real por el chat**, con permiso, para confirmar la flecha y la confirmación
    contra el sitio y no contra la copia.
-2. **Revisar Laborum y Trabajando** por si cambiaron igual (lo pidió Roberto el mismo día).
-3. **Subir la 2.20.0** y **mergear** (la regla 8 del prompt es del servidor).
-4. **El historial de Roberto** tiene como enviada la oferta de calzado que no salió (del 2026-11-01).
-5. **Idea:** Computrabajo ya trae sus propias respuestas sugeridas (`#kq-ia-suggestions`). Podrían
+2. **Subir la 2.20.0** y **mergear** (la regla 8 del prompt es del servidor).
+3. **El historial de Roberto** tiene como enviada la oferta de calzado que no salió (del 2026-11-01).
+4. **Idea:** Computrabajo ya trae sus propias respuestas sugeridas (`#kq-ia-suggestions`). Podrían
    servir de respaldo cuando la IA nuestra no sabe un dato simple, como el correo.
+5. **Para que no vuelva a pasar sin que nadie se entere:** un portal cambió su formulario y la
+   extensión siguió diciendo «✓» por diez días. Con la 2.20.0 eso queda como «por terminar» con el
+   motivo; contar esas en la pantalla de admin (`pendientes-de-lanzamiento-2026-10-07.md` §3) avisaría
+   el próximo cambio el mismo día.
