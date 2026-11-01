@@ -824,8 +824,8 @@ async function escanear() {
   // docs/modo-solo-observar.md §3.2: ver el razonamiento completo en
   // computrabajo.js, es el mismo acá.
   const soloObservar = AP.soloObservarEfectivo();
-  // docs/panel-de-revision-en-el-portal.md §9.1: con «Revisar antes de enviar»
-  // y la persona mirando, las que sirven quedan propuestas, sin enviar.
+  // docs/panel-de-revision-en-el-portal.md §9.1: con la persona mirando, las
+  // que sirven quedan propuestas, sin enviar (desde el 2026-11-01 es lo normal).
   const propone = AP.proponeEnVezDeEnviar();
   {
     if (soloObservar) conteos.observado = pendientes.length;

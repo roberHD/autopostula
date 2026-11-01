@@ -571,6 +571,311 @@ async function rellenar(contexto) {
   return { n2, respuestasLog, analisis };
 }
 
+// ── El chat de preguntas (docs/computrabajo-chat-2026-11-01.md) ───────────
+// Desde el 2026-10-22 (kq-conversational.bundle), "Postularme" en una oferta
+// con preguntas no muestra un formulario con todas a la vista: abre
+// "Preguntas de selección", un chat que las hace de a una. Por dentro sigue
+// siendo un formulario (form[form-apply-kq]) con un paso por pregunta
+// ([data-step]): la pregunta completa está desde el principio en
+// label[data-kq-question-text] (en pantalla se "escribe" de a poco), y la
+// respuesta queda en el campo oculto del paso ([data-kq-answer-hidden]); el
+// paso contestado lleva data-kq-response. Se contesta como lo hace una persona:
+// el texto en la casilla de abajo (textarea[answer-kq]) y clic en la flecha
+// ([icon-arrow], que Computrabajo solo acepta con la clase "send", cuando la
+// casilla tiene texto y la pregunta terminó de escribirse); las de opciones,
+// con un clic en la opción (label.radio). Al final aparece "Enviar mi CV".
+// Verificado contra el sitio real el 2026-11-01.
+//
+// Antes la extensión leía como pregunta el texto gris de la casilla
+// ("Escribe tu respuesta aquí"), la misma para todas, y no apretaba la flecha.
+
+const KQ = {
+  form: 'form[form-apply-kq]',
+  paso: '[data-step]',
+  pregunta: 'label[data-kq-question-text]',
+  respuestaOculta: 'input[data-kq-answer-hidden]',
+  grupoOpciones: '[data-kq-question-radio]',
+  opcion: 'label.radio',
+  textoOpcion: '.label_box',
+  casilla: 'textarea[answer-kq]',
+  flecha: '[icon-arrow]',
+  final: '[show-btn-apply]',
+  enviar: 'a[data-apply-ac-kq]',
+};
+
+// El chat abierto en esta página, o null. No se exige que la casilla esté a la
+// vista: en una pregunta de opciones Computrabajo la esconde.
+function chatKq() {
+  const form = document.querySelector(KQ.form);
+  if (!form) return null;
+  const pasos = [...form.querySelectorAll(KQ.paso)];
+  if (!pasos.length || !pasos.some(p => AP.esVisible(p))) return null;
+  const cont = form.closest('[data-offers-grid-apply-container]') || form.parentElement || document.body;
+  return { cont, form, casilla: cont.querySelector(KQ.casilla) || document.querySelector(KQ.casilla) };
+}
+
+function pasosKq(form) {
+  return [...form.querySelectorAll(KQ.paso)].map(el => {
+    const label = el.querySelector(KQ.pregunta);
+    const pregunta = ((label && (label.getAttribute('data-kq-question-text') || label.textContent)) || '').trim().replace(/\s+/g, ' ');
+    const opciones = el.hasAttribute('data-kq-radio')
+      ? [...el.querySelectorAll(KQ.opcion)]
+          .map(l => ({ el: l, texto: ((l.querySelector(KQ.textoOpcion) || l).textContent || '').trim() }))
+          .filter(o => o.texto)
+      : null;
+    return { el, pregunta, opciones };
+  });
+}
+
+function pasoRespondido(paso) {
+  if (paso.el.getAttribute('data-kq-response')) return true;
+  const oculto = paso.el.querySelector(KQ.respuestaOculta);
+  return !!(oculto && oculto.value);
+}
+
+function botonEnviarFinal(chat) {
+  const caja = chat.cont.querySelector(KQ.final);
+  const enviar = caja && !caja.classList.contains('hide') && caja.querySelector(KQ.enviar);
+  return enviar && AP.esVisible(enviar) ? enviar : null;
+}
+
+// Como esperarA, pero también ve los cambios de clase y de texto (así avanza el
+// chat: muestra el paso siguiente quitándole "hide"), y además revisa cada
+// medio segundo por si un cambio no dispara el observador.
+function esperarEnChat(condicion, ms) {
+  return new Promise(resolve => {
+    const ya = condicion();
+    if (ya) return resolve(ya);
+    let listo = false;
+    const terminar = (r) => {
+      if (listo) return;
+      listo = true;
+      obs.disconnect(); clearTimeout(t); clearInterval(revision);
+      resolve(r);
+    };
+    const probar = () => { const r = condicion(); if (r) terminar(r); };
+    const obs = new MutationObserver(probar);
+    obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
+    const revision = setInterval(probar, 500);
+    const t = setTimeout(() => terminar(condicion() || null), ms);
+  });
+}
+
+// El "¡Te postulaste correctamente!" que muestra Computrabajo, si está a la vista.
+function avisoDeExito() {
+  try {
+    const r = document.evaluate("//*[text()[contains(., 'postulaste correctamente')]]", document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+    for (let i = 0; i < r.snapshotLength; i++) {
+      const el = r.snapshotItem(i);
+      if (AP.esVisible(el)) return el;
+    }
+  } catch (e) {}
+  return null;
+}
+
+// El formulario de antes: preguntas a la vista y un "Enviar mi CV" al final.
+function hayFormularioViejo() {
+  const panel = document.querySelector('.box_detail,[data-offers-grid-box-detail]') || document;
+  return [...panel.querySelectorAll('textarea,input[type=radio]')].some(el => el.offsetParent && !el.closest('.hide'));
+}
+
+// Lo que se guarda de las respuestas (sin referencias al DOM).
+function respuestasParaGuardar(respuestasLog) {
+  return respuestasLog.map(r => ({ pregunta: r.pregunta, respuestaIa: r.respuestaIa, respuesta: r.respuesta, fueEditada: r.respuestaIa !== r.respuesta, vacia: r.vacia, fueIA: r.fueIA }));
+}
+
+// Una postulación que no se pudo terminar: queda en el panel como "por
+// terminar", con el enlace y el motivo, y no cuenta en el mes. Antes, en
+// varios de estos casos se daba por enviada.
+function dejarIncompleta(o, razon, respuestasLog) {
+  const respuestas = respuestasLog && respuestasLog.length ? respuestasParaGuardar(respuestasLog) : undefined;
+  addLog({ ts: Date.now(), status: 'err', title: o.titulo, url: o.url, uid: o.id, reason: razon, respuestas });
+  reportarPostulacion({ id: o.id, titulo: o.titulo, empresa: o.empresa, url: o.url, incompleta: true, nota: razon, respuestas, decisionOfertaId: o.decisionOfertaId });
+  msg('⚠ No se terminó: ' + o.titulo.slice(0, 30), '#DC2626');
+  return { ok: false, expirada: false };
+}
+
+const cortar = (t) => (t.length > 60 ? t.slice(0, 57) + '…' : t);
+
+// Las respuestas de todas las preguntas del chat, de una vez (una sola llamada
+// a la IA, con la pregunta de verdad de cada paso). Las opciones del modal de
+// revisión no apuntan a la página (offsetParent null): elegir otra ahí no la
+// marca en el chat antes de tiempo. Se marca recién cuando el chat llega a esa
+// pregunta (responderChat).
+async function prepararChat(chat, contexto) {
+  const perfil = (AP.cfg && AP.cfg.perfil) || {};
+  const respuestasLog = [];
+  const pendientes = [];
+  for (const paso of pasosKq(chat.form)) {
+    if (pasoRespondido(paso)) continue; // ya contestada: el chat se retomó
+    if (paso.opciones) {
+      const opciones = paso.opciones.map(o => ({ texto: o.texto, el: { offsetParent: null, kq: o.el } }));
+      const elegida = calcularRespuesta(paso.pregunta, opciones, perfil);
+      const entrada = { pregunta: paso.pregunta, kqPaso: paso.el, tipo: 'opcion', opciones, el: null,
+        elegidoEl: elegida ? elegida.el : null, respuesta: elegida ? elegida.texto : '', respuestaIa: elegida ? elegida.texto : '', vacia: !elegida };
+      respuestasLog.push(entrada);
+      if (!elegida) pendientes.push(entrada);
+    } else {
+      const entrada = { pregunta: paso.pregunta, kqPaso: paso.el, tipo: 'texto', el: null, respuesta: '', respuestaIa: '', vacia: true, fueIA: false };
+      // Igual que en el formulario de antes: si la IA no dice nada, "No".
+      if (n(paso.pregunta).includes('discapacidad')) entrada.fallback = 'No';
+      respuestasLog.push(entrada);
+      pendientes.push(entrada);
+    }
+  }
+
+  let analisis = null;
+  if (pendientes.length && AP.iaDisponible) {
+    msg('IA respondiendo ' + pendientes.length + ' pregunta(s)…', 'trabajando');
+    const preguntas = pendientes.map((e, i) => ({ id: 'k' + i, pregunta: e.pregunta, opciones: e.tipo === 'opcion' ? e.opciones.map(o => o.texto) : null }));
+    const resultado = await analizarYResponder(contexto, preguntas);
+    analisis = resultado.analisis;
+    pendientes.forEach((e, i) => {
+      const val = resultado.respuestas['k' + i];
+      const falta = resultado.datosFaltantes && resultado.datosFaltantes['k' + i];
+      if (falta) e.datoFaltante = falta;
+      else if (val && e.tipo === 'opcion') {
+        const rNorm = n(val);
+        const o = e.opciones.find(op => n(op.texto) === rNorm) ||
+          e.opciones.find(op => rNorm.includes(n(op.texto)) || (n(op.texto).length < 4 && rNorm.startsWith(n(op.texto))));
+        if (o) Object.assign(e, { elegidoEl: o.el, respuesta: o.texto, respuestaIa: o.texto, vacia: false, fueIA: true });
+      } else if (val) {
+        const v = AP.limitarTexto(val, null);
+        Object.assign(e, { respuesta: v, respuestaIa: v, vacia: false, fueIA: true });
+      }
+      if (e.vacia && !e.datoFaltante && e.fallback) Object.assign(e, { respuesta: e.fallback, respuestaIa: e.fallback, vacia: false });
+      if (e.vacia && resultado.error) e.errorIA = resultado.error;
+    });
+  } else {
+    for (const e of pendientes) {
+      if (e.vacia && e.fallback) Object.assign(e, { respuesta: e.fallback, respuestaIa: e.fallback, vacia: false });
+    }
+    // El matchScore de la postulación, como siempre (aunque no haya qué preguntar).
+    if (AP.iaDisponible) analisis = (await analizarYResponder(contexto, [])).analisis;
+  }
+  return { respuestasLog, analisis };
+}
+
+// Escribe la respuesta y aprieta la flecha. Mientras Computrabajo "escribe" la
+// pregunta no acepta el envío: la flecha recién toma la clase "send" cuando la
+// casilla cambia y la pregunta ya terminó, así que se reintenta.
+async function escribirYEnviar(chat, valor) {
+  const casilla = chat.casilla;
+  const hasta = Date.now() + 30000;
+  while (Date.now() < hasta) {
+    if (!AP.activo) return false;
+    const flecha = chat.cont.querySelector(KQ.flecha) || document.querySelector(KQ.flecha);
+    if (casilla && flecha && !casilla.disabled && AP.esVisible(casilla)) {
+      if (casilla.value !== valor) setVal(casilla, valor);
+      else casilla.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(150);
+      if (flecha.classList.contains('send')) { flecha.click(); return true; }
+    }
+    await sleep(400);
+  }
+  return false;
+}
+
+// Contesta pregunta por pregunta, en el orden en que el chat las muestra (si
+// una respuesta hace saltar preguntas, esas no se esperan), y devuelve el
+// "Enviar mi CV" del final sin apretarlo.
+async function responderChat(chat, respuestasLog) {
+  const porPaso = new Map(respuestasLog.map(r => [r.kqPaso, r]));
+  for (let vuelta = 0; vuelta < 40; vuelta++) {
+    if (!AP.activo) return { ok: false, razon: 'Pausaste la extensión a la mitad de las preguntas' };
+    AP.latido();
+    const siguiente = await esperarEnChat(() => {
+      const enviar = botonEnviarFinal(chat);
+      if (enviar) return { enviar };
+      const paso = pasosKq(chat.form).find(p => !pasoRespondido(p) && AP.esVisible(p.el));
+      return paso ? { paso } : null;
+    }, 30000);
+    if (!siguiente) return { ok: false, razon: 'El chat de Computrabajo dejó de avanzar a la mitad de las preguntas' };
+    if (siguiente.enviar) return { ok: true, enviar: siguiente.enviar };
+
+    const paso = siguiente.paso;
+    const r = porPaso.get(paso.el);
+    if (!r) return { ok: false, razon: 'Apareció una pregunta que no estaba al principio: «' + cortar(paso.pregunta) + '»' };
+    if (r.tipo === 'opcion') {
+      const opcion = r.elegidoEl && r.elegidoEl.kq;
+      const grupo = paso.el.querySelector(KQ.grupoOpciones);
+      // Las opciones aparecen cuando la pregunta termina de escribirse.
+      const lista = opcion && await esperarEnChat(() => (!grupo || !grupo.classList.contains('hide')) && AP.esVisible(opcion) && opcion, 30000);
+      if (!lista) return { ok: false, razon: 'No pude marcar la opción en «' + cortar(r.pregunta) + '»' };
+      lista.click();
+    } else if (!(await escribirYEnviar(chat, r.respuesta))) {
+      return { ok: false, razon: 'El chat de Computrabajo no dejó enviar la respuesta a «' + cortar(r.pregunta) + '»' };
+    }
+    const guardada = await esperarEnChat(() => pasoRespondido(paso), 12000);
+    if (!guardada) return { ok: false, razon: 'El chat de Computrabajo no guardó la respuesta a «' + cortar(r.pregunta) + '»' };
+    await sleep(300);
+  }
+  return { ok: false, razon: 'El chat de Computrabajo no terminó nunca de preguntar' };
+}
+
+async function postularEnChat(chat, o) {
+  msg('Leyendo las preguntas de Computrabajo…', '#D97706');
+  AP.latido();
+  const { respuestasLog, analisis } = await prepararChat(chat, o.contexto);
+  AP.latido();
+
+  if (AP.conRevision()) {
+    msg('⏸ Revisión pendiente…', '#2563EB');
+    const decision = await mostrarRevision(o.titulo, respuestasLog, o.contexto);
+    if (decision === 'skip') {
+      addLog({ ts: Date.now(), status: 'skip', title: o.titulo, url: o.url, uid: o.id, reason: 'Saltada en revisión manual' });
+      return { ok: false, expirada: false };
+    }
+  } else {
+    // Lo mismo que el formulario de antes: sin nadie revisando, lo que la IA
+    // no sabe se le pide a la persona. En el chat también lo que quedó vacío:
+    // una respuesta en blanco no se puede mandar.
+    const faltan = respuestasLog.filter(r => r.datoFaltante || r.vacia);
+    if (faltan.length) {
+      const que = faltan.map(r => r.datoFaltante || cortar(r.pregunta)).slice(0, 3).join(', ');
+      if (sessionStorage.getItem(CLAVE_NADIE_CONTESTO) === '1') {
+        return dejarIncompleta(o, 'Faltan datos para responder (' + que + '): guárdalos en tu perfil', respuestasLog);
+      }
+      msg('⏸ Falta información para postular…', '#2563EB');
+      const decision = await mostrarRevision(o.titulo, respuestasLog, o.contexto,
+        { titulo: 'Falta información para postular', limiteMs: 120000 });
+      if (decision === 'skip') {
+        if (!AP.revisionVencida) {
+          addLog({ ts: Date.now(), status: 'skip', title: o.titulo, url: o.url, uid: o.id, reason: 'Saltada: faltaban respuestas (' + que + ')', respuestas: respuestasParaGuardar(respuestasLog) });
+          return { ok: false, expirada: false };
+        }
+        sessionStorage.setItem(CLAVE_NADIE_CONTESTO, '1');
+        return dejarIncompleta(o, 'Faltaban respuestas (' + que + ') y nadie contestó a tiempo', respuestasLog);
+      }
+    }
+  }
+
+  const sinResponder = respuestasLog.find(r => r.tipo === 'opcion' ? !(r.elegidoEl && r.elegidoEl.kq) : !r.respuesta);
+  if (sinResponder) return dejarIncompleta(o, 'Quedó sin respuesta: «' + cortar(sinResponder.pregunta) + '»', respuestasLog);
+
+  msg('Respondiendo en el chat de Computrabajo…', '#D97706');
+  const r = await responderChat(chat, respuestasLog);
+  if (!r.ok) return dejarIncompleta(o, r.razon, respuestasLog);
+
+  r.enviar.scrollIntoView({ block: 'center' });
+  await sleep(300);
+  r.enviar.click();
+  AP.latido();
+  const exito = await esperarEnChat(() => avisoDeExito(), 20000);
+  if (!exito) return dejarIncompleta(o, 'Respondí las preguntas y apreté «Enviar mi CV», pero Computrabajo no confirmó la postulación', respuestasLog);
+
+  const respuestas = respuestasParaGuardar(respuestasLog);
+  addLog({ ts: Date.now(), status: 'ok', title: o.titulo, url: o.url, uid: o.id, reason: 'Enviado (' + respuestasLog.length + ' preguntas en el chat)', respuestas });
+  const reportado = await reportarPostulacion({ id: o.id, titulo: o.titulo, empresa: o.empresa, url: o.url, matchScore: analisis && analisis.matchScore, respuestas, decisionOfertaId: o.decisionOfertaId });
+  if (!reportado || !reportado.ok) {
+    addLog({ ts: Date.now(), status: 'err', title: o.titulo, url: o.url, uid: o.id, reason: 'Se envió en el portal, pero no se guardó en AutoPostula: ' + ((reportado && reportado.error) || 'error desconocido') });
+    msg('⚠ Enviado, no se guardó: ' + o.titulo.slice(0, 30), '#DC2626');
+  } else {
+    msg('✓ ' + o.titulo.slice(0, 40), '#16A34A');
+  }
+  return { ok: true, expirada: false };
+}
+
 // ── Postular ──────────────────────────────────────────────────
 // Devuelve { ok, expirada } -- expirada=true cuando la oferta ya no se puede
 // enviar nunca: no hay ningún botón de postular (§8.4/§8.6: ya no existe o no
@@ -630,11 +935,29 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
 
   btn.scrollIntoView({behavior:'smooth', block:'center'});
   await sleep(400);
+  // Un "¡Te postulaste correctamente!" que ya estaba a la vista (de la oferta
+  // anterior) no cuenta como el de esta.
+  const exitoAntes = avisoDeExito();
   btn.click();
-  await sleep(2000);
 
-  const panelPostForm = document.querySelector('.box_detail,[data-offers-grid-box-detail]') || document;
-  const hayForm = [...panelPostForm.querySelectorAll('textarea,input[type=radio]')].some(el => el.offsetParent && !el.closest('.hide'));
+  // docs/computrabajo-chat-2026-11-01.md: después del clic pueden pasar tres
+  // cosas, y se espera a ver cuál. Antes se miraba una sola vez a los 2 s: si
+  // el chat de preguntas todavía no cargaba, se daba por enviada una
+  // postulación que nunca salió. El formulario de antes recién se acepta
+  // pasados 2,5 s, para no confundirlo con el chat mientras carga.
+  const clicEn = Date.now();
+  const tras = await esperarEnChat(() => {
+    const exito = avisoDeExito();
+    if (exito && exito !== exitoAntes) return { tipo: 'exito' };
+    const chat = chatKq();
+    if (chat) return { tipo: 'chat', chat };
+    if (Date.now() - clicEn > 2500 && hayFormularioViejo()) return { tipo: 'form' };
+    return null;
+  }, 15000);
+  const oferta = { id, titulo, empresa, url, decisionOfertaId, contexto };
+  if (!tras) return dejarIncompleta(oferta, 'Apreté «Postularme», pero Computrabajo no mostró ni la confirmación ni las preguntas');
+  if (tras.tipo === 'chat') return postularEnChat(tras.chat, oferta);
+  const hayForm = tras.tipo === 'form';
 
   if (hayForm) {
     msg('Rellenando formulario…', '#D97706');
@@ -701,7 +1024,10 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
       btnEnviar.scrollIntoView({block:'center'});
       await sleep(300);
       btnEnviar.click();
-      await sleep(2000);
+      // Enviada es solo lo que Computrabajo confirma (antes se daba por hecha
+      // apenas se apretaba el botón).
+      const confirmada = await esperarEnChat(() => avisoDeExito(), 20000);
+      if (!confirmada) return dejarIncompleta(oferta, 'Respondí el formulario y apreté «Enviar mi CV», pero Computrabajo no confirmó la postulación', respuestasLog);
       // Log con resumen de respuestas
       // Quitar referencias al DOM (el, elegidoEl, opciones) antes de guardar — no son serializables.
       // respuestaIa/fueEditada (docs/banco-de-preguntas.md §3): sin esto el backend
@@ -726,10 +1052,10 @@ async function postular(url, id, titulo, decisionOfertaId, empresa) {
       }
       return { ok: true, expirada: false };
     } else {
-      addLog({ts:Date.now(), status:'err', title:titulo, url, uid:id, reason:'Sin botón Enviar mi CV'});
-      return { ok: false, expirada: false };
+      return dejarIncompleta(oferta, 'No encontré «Enviar mi CV» en el formulario de preguntas', respuestasLog);
     }
   } else {
+    // Directa: la confirmación de Computrabajo ya se vio (tras.tipo === 'exito').
     addLog({ts:Date.now(), status:'ok', title:titulo, url, uid:id, reason:'Postulación directa'});
     // docs/revision-2026-09-28.md §1: con el enlace, para que el historial pueda
     // mostrar "Ver oferta" (antes esta rama no lo mandaba).
@@ -888,8 +1214,8 @@ async function escanear() {
   // "postular" -- son ofertas que SE HABRÍAN postulado, se cuentan aparte
   // para que el mensaje no mienta.
   const soloObservar = AP.soloObservarEfectivo();
-  // docs/panel-de-revision-en-el-portal.md §9.1: con «Revisar antes de enviar»
-  // y la persona mirando, las que sirven quedan propuestas, sin enviar.
+  // docs/panel-de-revision-en-el-portal.md §9.1: con la persona mirando, las
+  // que sirven quedan propuestas, sin enviar (desde el 2026-11-01 es lo normal).
   const propone = AP.proponeEnVezDeEnviar();
   {
     // conteos.postular/observado se fija recién acá, después del filtro de

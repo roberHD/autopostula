@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Verificación del chat de Computrabajo</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f4f5f7; }
+  .hide { display: none !important; }
+  .grilla { display: flex; gap: 16px; padding: 16px; }
+  .lista { width: 320px; background: #fff; padding: 12px; }
+  .box_detail { flex: 1; background: #fff; padding: 16px; min-height: 500px; }
+  .b_primary { display: inline-block; background: #0b3d91; color: #fff; padding: 10px 18px; border-radius: 20px; cursor: pointer; }
+  .icon.i_arrow_up { display: inline-block; width: 28px; height: 28px; border-radius: 50%; background: #bbb; cursor: pointer; }
+  .icon.i_arrow_up.send { background: #0b3d91; }
+  textarea#inputText { width: 80%; height: 60px; }
+  .sub_box { background: #e8f0ff; margin: 6px 0 12px 40px; padding: 6px 10px; border-radius: 8px; }
+  label.radio { display: inline-block; margin-right: 12px; padding: 6px 12px; border: 1px solid #0b3d91; border-radius: 16px; cursor: pointer; }
+</style>
+<script>
+// ── Lo que hace de background: registra los mensajes y contesta ──
+window.__mensajes = [];
+window.__registro = [];
+window.__oyentes = [];
+const ESCENA = new URLSearchParams(location.search).get('escena') || 'chat';
+window.__config = {
+  active: true, postulacionHabilitada: true, modoRevision: false, soloObservar: false,
+  perfil: { nombre: 'Persona de Prueba', email: 'persona.prueba@ejemplo.cl', tel: '+56 9 1111 1111', comuna: 'Ñuñoa' },
+  info: [],
+};
+function respuestaPara(p) {
+  const t = p.pregunta.toLowerCase();
+  if (ESCENA === 'falta' && t.includes('dias a trabajar')) return { respuesta: null, datoFaltante: 'días y horario disponibles' };
+  if (t.includes('discapacidad')) return { respuesta: 'No requiero ajustes.' };
+  if (p.opciones && t.includes('calzado')) return { respuesta: 'NO' };
+  if (t.includes('dias a trabajar')) return { respuesta: 'Puedo trabajar de lunes a sábado, en la tarde.' };
+  if (t.includes('correo')) return { respuesta: 'persona.prueba@ejemplo.cl' };
+  if (t.includes('experiencia en el area de calzado')) return { respuesta: 'No he vendido calzado, pero tengo tres años en retail atendiendo clientes.' };
+  return { respuesta: 'RESPUESTA GENÉRICA (la IA no recibió una pregunta de verdad)' };
+}
+window.chrome = {
+  runtime: {
+    lastError: null,
+    id: 'simulador',
+    onMessage: { addListener(fn) { window.__oyentes.push(fn); } },
+    sendMessage(m, cb) {
+      window.__mensajes.push(JSON.parse(JSON.stringify(m)));
+      let r = { ok: true };
+      if (m.type === 'PUEDE_POSTULAR') r = { permitido: true };
+      if (m.type === 'DUPLICADOS') r = { duplicados: [] };
+      if (m.type === 'AI_CALL') {
+        const preguntas = (m.payload && m.payload.preguntas) || [];
+        r = { analisis: { matchScore: 81 }, respuestas: preguntas.map(p => Object.assign({ id: p.id, datoFaltante: null }, respuestaPara(p))) };
+      }
+      if (typeof cb === 'function') { setTimeout(() => cb(r), 40); return; }
+      return Promise.resolve(r);
+    },
+  },
+  storage: {
+    local: {
+      get(_k, cb) { const v = { config: window.__config, active: true, log: [], recorrido: { estado: 'hecho', como: 'simulador' } }; if (cb) setTimeout(() => cb(JSON.parse(JSON.stringify(v))), 0); return Promise.resolve(v); },
+      set(_o, cb) { if (cb) cb(); return Promise.resolve(); },
+    },
+    sync: { get(_k, cb) { const v = { autopostulaToken: 'token-de-prueba' }; if (cb) setTimeout(() => cb(v), 0); return Promise.resolve(v); }, set() {} },
+    onChanged: { addListener() {} },
+  },
+};
+</script>
+</head>
+<body>
+<div class="grilla">
+  <div class="lista"><p>Listado (no se usa)</p></div>
+  <div class="box_detail" id="detalle">
+    <p class="title_offer">Vendedor/a de Calzado Deportivo Part time Temporada Navidad</p>
+    <p>GrupoExpro · Santiago - Providencia, R.Metropolitana</p>
+    <span class="b_primary big" data-apply-ac offer-detail-not-applied id="postularme"><span offer-detail-button>Postularme</span></span>
+    <p>Grupo expro junto a importante empresa líder en calzado busca personas entusiastas, con orientación al cliente, para desempeñarse como vendedor part time de 20 horas semanales en temporada navideña.</p>
+  </div>
+</div>
+
+<script>
+// ── La copia del chat (mismo HTML que el sitio real del 2026-11-01) ──
+const PREGUNTAS = [
+  { id: 74047745, tipo: 'texto', texto: 'Si presentas algún tipo de discapacidad, indicamos si requiere algún ajuste razonable o adaptación para llevar a cabo el proceso de selección.' },
+  { id: 74047746, tipo: 'opcion', texto: '¿Posee experiencia en el Area de Calzado?', opciones: [['36100210', 'SI'], ['36100211', 'NO']] },
+  { id: 74047747, tipo: 'texto', texto: 'Comente dias a trabajar y disponibilidad' },
+  { id: 74047748, tipo: 'texto', texto: 'Indique su correo electronico' },
+  { id: 74047749, tipo: 'texto', texto: 'Comente su experiencia en el area de calzado' },
+];
+if (ESCENA === 'opcionPrimero') PREGUNTAS.unshift(PREGUNTAS.splice(1, 1)[0]);
+
+function pasoHtml(q, i) {
+  const comun = 'data-step="' + (i + 1) + '" data-div-kq-id="' + q.id + '" data-kq-user-step="true"';
+  const label = '<label class="fwB fs18 text_typed" data-kq-question-text="' + q.texto.replace(/"/g, '&quot;') + '"></label>';
+  const oculto = '<input type="hidden" name="' + q.id + '" data-kq-answer-hidden="true">';
+  if (q.tipo === 'opcion') {
+    const ops = q.opciones.map(([v, t]) => '<label class="radio"><input type="radio" name="' + q.id + '" value="' + v + '" score="0"><span class="input"></span><span class="label_box">' + t + '</span></label>').join('');
+    return '<div class="field_radio_box show hide" ' + comun + ' data-kq-radio="true">' + label + '<div class="group hide" data-kq-question-radio="' + (i + 1) + '">' + ops + '</div>' + oculto + '</div>';
+  }
+  return '<div class="field_textarea show hide" ' + comun + ' data-kq-text>' + label + oculto + '</div>';
+}
+
+function abrirChat() {
+  const cont = document.createElement('div');
+  cont.setAttribute('data-offers-grid-apply-container', '');
+  cont.innerHTML =
+    '<div class="bg_brand_light pAll30"><div class="w100"><p class="fs18 fwB">Preguntas de selección</p><p>Ya casi estamos, pero antes contesta estas preguntas.</p></div></div>' +
+    '<div class="box_answer boxIA" box-answer><form form-apply-kq data-num-kq="' + PREGUNTAS.length + '">' +
+      '<input type="hidden" name="__RequestVerificationToken" value="x">' + PREGUNTAS.map(pasoHtml).join('') +
+    '</form><div class="hide" end-form></div></div>' +
+    '<div class="hide" id="kq-ia-suggestions" aria-hidden="true"><span data-ia-step="4" data-ia-text="sugerencia@computrabajo.cl"></span></div>' +
+    '<div class="box_send" show-question><div class="field_textarea mb0" textarea-answer>' +
+      '<textarea id="inputText" placeholder="Escribe tu respuesta aquí" answer-kq></textarea><span class="icon i_arrow_up" icon-arrow></span>' +
+    '</div></div>' +
+    '<div class="box_send hide" show-btn-apply><a class="b_primary_inv mr10" back-show-detail-container-click>Volver al detalle</a>' +
+      '<a class="b_primary ml10" data-apply-ac-kq data-href-offer-apply="#">Enviar mi CV</a></div>';
+  const detalle = document.getElementById('detalle');
+  detalle.innerHTML = '';
+  detalle.appendChild(cont);
+
+  const pasos = [...cont.querySelectorAll('[data-step]')];
+  const casilla = cont.querySelector('textarea[answer-kq]');
+  const flecha = cont.querySelector('[icon-arrow]');
+  const caja = cont.querySelector('[show-question]');
+  const final = cont.querySelector('[show-btn-apply]');
+  let actual = 0, bloqueado = false;
+
+  function actualizarFlecha() {
+    if (ESCENA === 'atascada') return; // nunca acepta el envío
+    flecha.classList.toggle('send', casilla.value.trim().length > 0 && !bloqueado);
+  }
+  function mostrarPaso(i) {
+    const el = pasos[i];
+    el.classList.remove('hide');
+    const label = el.querySelector('label[data-kq-question-text]');
+    const texto = label.getAttribute('data-kq-question-text');
+    label.textContent = '';
+    bloqueado = true; flecha.classList.remove('send');
+    caja.classList.toggle('hide', el.hasAttribute('data-kq-radio'));
+    let k = 0;
+    const t = setInterval(() => {
+      k += 4; label.textContent = texto.slice(0, k);
+      if (k >= texto.length) {
+        clearInterval(t); bloqueado = false; actualizarFlecha();
+        const g = el.querySelector('[data-kq-question-radio]');
+        if (g) g.classList.remove('hide');
+      }
+    }, 20);
+  }
+  function guardar(i, valor, visible) {
+    const el = pasos[i];
+    el.querySelector('input[data-kq-answer-hidden]').value = valor;
+    el.dataset.kqResponse = 'User';
+    const b = document.createElement('div'); b.className = 'sub_box'; b.textContent = visible || valor;
+    el.querySelector('label').after(b);
+    window.__registro.push({ paso: i + 1, pregunta: PREGUNTAS[i].texto, valor: visible || valor });
+  }
+  function siguiente() {
+    actual++;
+    if (actual < pasos.length) setTimeout(() => mostrarPaso(actual), 250);
+    else { caja.classList.add('hide'); final.classList.remove('hide'); }
+  }
+  function enviarTexto() {
+    if (bloqueado || !flecha.classList.contains('send')) return;
+    const v = casilla.value.trim(); if (!v) return;
+    guardar(actual, v); casilla.value = ''; flecha.classList.remove('send'); siguiente();
+  }
+  casilla.addEventListener('input', actualizarFlecha);
+  casilla.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarTexto(); } });
+  flecha.addEventListener('click', enviarTexto);
+  cont.querySelectorAll('label.radio').forEach((l) => l.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (bloqueado) return;
+    const input = l.querySelector('input[type=radio]');
+    input.checked = true;
+    guardar(actual, input.value, l.querySelector('.label_box').textContent.trim());
+    l.closest('[data-kq-question-radio]').classList.add('hide');
+    siguiente();
+  }));
+  final.querySelector('[data-apply-ac-kq]').addEventListener('click', () => {
+    setTimeout(() => { mostrarExito(); window.__enviado = true; }, 600);
+  });
+  mostrarPaso(0);
+}
+
+function mostrarExito() {
+  document.getElementById('detalle').innerHTML = '<div><span class="icon"></span><p class="fs22 fwB">¡Te postulaste correctamente!</p><p>Se adjuntó el documento a tu postulación.</p></div>';
+}
+
+document.getElementById('postularme').addEventListener('click', () => {
+  if (ESCENA === 'directa') { setTimeout(() => { mostrarExito(); window.__enviado = true; }, 500); return; }
+  if (ESCENA === 'muda') return;
+  setTimeout(abrirChat, ESCENA === 'lenta' ? 1800 : 350);
+});
+
+// ── La prueba: una aprobada que llega a esta pestaña (DO_APPLY → aplicarDirecto) ──
+window.correr = async function () {
+  const r = await AP.aplicarDirecto('d1', 'https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-vendedor-18006D1086D0298661373E686DCF3405');
+  const reportes = __mensajes.filter(m => m.type === 'REPORTAR_POSTULACION').map(m => m.oferta);
+  return {
+    r,
+    reportes: reportes.map(o => ({ incompleta: !!o.incompleta, nota: o.nota || null, respuestas: (o.respuestas || []).map(x => x.pregunta.slice(0, 45) + ' => ' + x.respuesta) })),
+    preguntasIA: __mensajes.filter(m => m.type === 'AI_CALL').map(m => (m.payload.preguntas || []).map(p => p.pregunta.slice(0, 60) + (p.opciones ? ' [' + p.opciones.join('/') + ']' : ''))),
+    chat: __registro,
+    enviado: !!window.__enviado,
+  };
+};
+const RESPUESTA_FALTA = 'Lunes a viernes, de 15:00 a 21:00.';
+// Contesta la ventana "Falta información para postular" como lo haría la persona.
+window.contestarFalta = async function (texto) {
+  for (let i = 0; i < 80; i++) {
+    const host = document.getElementById('ap-revision-panel');
+    const raiz = host && host.shadowRoot;
+    const vacia = raiz && [...raiz.querySelectorAll('.ap-rev-textarea')].find(t => !t.value);
+    if (vacia) {
+      vacia.value = texto; vacia.dispatchEvent(new Event('input', { bubbles: true }));
+      raiz.getElementById('ap-rev-confirm').click();
+      return 'contestada';
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+  return 'no apareció la ventana';
+};
+
+// ── Una escena sola, dentro de la página de todas (iframe con &auto=1) ──
+if (new URLSearchParams(location.search).get('auto') === '1') {
+  window.addEventListener('load', () => setTimeout(async () => {
+    let resultado;
+    try {
+      const p = correr();
+      if (ESCENA === 'falta') await contestarFalta(RESPUESTA_FALTA);
+      resultado = await p;
+    } catch (e) { resultado = { error: String(e && e.stack || e) }; }
+    parent.postMessage({ escena: ESCENA, resultado }, '*');
+  }, 800));
+}
+</script>
+<script src="/ext/data/comunas-cl.js"></script>
+<script src="/ext/core.js"></script>
+<script src="/ext/adapters/computrabajo.js"></script>
+</body>
+</html>

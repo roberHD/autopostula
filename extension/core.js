@@ -68,17 +68,19 @@ AP.gastarRevisionPrimera = function () {
   try { sessionStorage.removeItem(AP_CLAVE_REVISAR_PRIMERA); } catch (e) {}
 };
 
-// docs/panel-de-revision-en-el-portal.md §9.1 (lo decidió Roberto el
-// 2026-10-08): con «Revisar antes de enviar» y la persona mirando la pestaña,
-// la extensión no envía sola lo que sirve. Lo marca, lo propone en la tarjeta
-// del final y espera a que la persona elija en el panel; lo elegido sale por la
-// cola, y cada una se muestra antes de enviarla. En las ráfagas y en las
-// pestañas de fondo, que nadie está mirando, sigue como siempre.
+// docs/panel-de-revision-en-el-portal.md §9.1: con la persona mirando la
+// pestaña, la extensión no envía sola lo que sirve. Lo marca, lo propone en la
+// tarjeta del final y espera a que la persona elija en el panel; lo elegido
+// sale por la cola. En las ráfagas y en las pestañas de fondo, que nadie está
+// mirando, sigue como siempre. Hasta el 2026-11-01 era solo con «Revisar antes
+// de enviar»; desde ese día es lo normal (lo decidió Roberto después de ver a
+// la extensión enviar sola sin mostrarle la lista, docs/computrabajo-chat-2026-11-01.md).
+// «Revisar antes de enviar» sigue mostrando cada postulación antes de enviarla.
 AP.proponeEnVezDeEnviar = function () {
-  if (!(AP.cfg && AP.cfg.modoRevision) || AP.soloObservarEfectivo() || AP.esPestanaDeRafaga()) return false;
+  if (AP.soloObservarEfectivo() || AP.esPestanaDeRafaga()) return false;
   try { return !document.hidden; } catch (e) { return false; }
 };
-AP.RAZON_PROPUESTA = 'Te la propuse: espera a que la elijas (Revisar antes de enviar)';
+AP.RAZON_PROPUESTA = 'Te la propuse: espera a que la elijas';
 
 // Un conjunto de ids de esta pestaña (sessionStorage), con tope.
 function apIdsDeLaPestana(clave) {
@@ -479,7 +481,7 @@ function apMinuscula(t) { return t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
 
 // Lo que dice la tarjeta, con las cifras de las marcas de esta página
 // (AP.resumenDeMarcas): { total, postular, gris, descartar, razonTop }.
-// `propone`: la cuenta postula con «Revisar antes de enviar» y no se envió nada.
+// `propone`: la cuenta postula, la persona está mirando y no se envió nada.
 AP.textoCierre = function (c, propone) {
   const razon = c.descartar && c.razonTop
     ? (c.descartar === 1 ? 'Por qué se descarta: ' : 'La razón más repetida para descartar: ') + apMinuscula(AP.razonComoEnElPanel(c.razonTop)) + '.'
@@ -539,8 +541,8 @@ AP.resumenDeMarcas = function (ids, marcas, cuentaLaQueSirve) {
 };
 
 // Lo llama cada adaptador cuando termina de revisar una página del listado. En
-// "solo mirar" pregunta si empieza a postular; con «Revisar antes de enviar»
-// (AP.proponeEnVezDeEnviar), propone lo que sirve y lleva al panel.
+// "solo mirar" pregunta si empieza a postular; postulando con la persona
+// mirando (AP.proponeEnVezDeEnviar), propone lo que sirve y lleva al panel.
 AP.cierreDePagina = function () {
   if (AP.esPestanaDeRafaga() || typeof AP.tarjetasDeLaPagina !== 'function') return false;
   apRecorridoNoAplica();
@@ -591,7 +593,7 @@ function apMostrarCierre(resumen, propone) {
   no.textContent = propone ? 'Ahora no' : 'Todavía no, quiero mirar';
   no.onclick = propone ? apAhoraNo : apTodaviaNo;
   // docs/panel-de-revision-en-el-portal.md §2.1: la lista entera, para elegir.
-  // Con «Revisar antes de enviar» eso ya es el botón principal.
+  // Cuando se propone, eso ya es el botón principal.
   const ver = ovRaiz.getElementById('ap-ov-cierre-ver');
   ver.hidden = sinSesion || !!propone;
   ver.textContent = resumen.total === 1 ? 'Verla y elegir' : 'Ver las ' + resumen.total + ' y elegir';
@@ -773,7 +775,7 @@ AP.textoCabezaPanel = function (estado, info) {
     return {
       quien: 'AutoPostula · todavía no envió nada',
       titulo: info.total === 1 ? 'Revisé 1 oferta de esta página' : 'Revisé ' + info.total + ' ofertas de esta página',
-      ayuda: 'Tienes «Revisar antes de enviar»: no envié ninguna. Las que te sirven vienen marcadas; quita las que no quieras y suma las que te interesen.',
+      ayuda: 'No envié ninguna: las que te sirven vienen marcadas. Quita las que no quieras y suma las que te interesen.',
     };
   }
   return {
@@ -1639,10 +1641,12 @@ AP.mensajeEscaneo = function (conteos, razonTop, soloObservar, propone) {
   if (soloObservar) {
     if (c.observado) partes.push(c.observado + ' habría postulado');
   } else if (propone) {
-    // «Revisar antes de enviar» con la persona mirando: no se envió nada.
+    // La persona mirando: no se envió nada, se propone.
     if (c.propuestas) partes.push(c.propuestas + (c.propuestas === 1 ? ' te sirve' : ' te sirven'));
   } else if (c.postular) {
-    partes.push(c.postular + (c.postular === 1 ? ' postulada' : ' postuladas'));
+    // Se dice antes de enviarlas: "por postular", no "postuladas" (el aviso
+    // decía "3 postuladas" sin haber enviado ninguna todavía).
+    partes.push(c.postular + ' por postular');
   }
   if (c.gris) partes.push(c.gris + ' por decidir');
   if (c.descartar) partes.push(c.descartar + (c.descartar === 1 ? ' descartada' : ' descartadas'));
@@ -2968,6 +2972,10 @@ AP.limitarTexto = function (val, el) {
   if (el && el.maxLength && el.maxLength > 0 && el.maxLength < 10000) max = el.maxLength;
   if (val.length <= max) return val;
   const cortado = val.slice(0, max);
+  // Mejor terminar en la última oración completa que dejar una a medias ("…me
+  // atrae vender dermocosmética porque", docs/computrabajo-chat-2026-11-01.md).
+  const finOracion = Math.max(cortado.lastIndexOf('. '), cortado.lastIndexOf('! '), cortado.lastIndexOf('? '), cortado.endsWith('.') ? cortado.length - 1 : -1);
+  if (finOracion > max * 0.5) return cortado.slice(0, finOracion + 1).trim();
   const ultimoEspacio = cortado.lastIndexOf(' ');
   const final = (ultimoEspacio > max * 0.6 ? cortado.slice(0, ultimoEspacio) : cortado).trim();
   return final;

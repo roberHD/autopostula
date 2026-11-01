@@ -223,7 +223,7 @@ const perfil = {
 // desglose de las tres bandas más la razón de descarte más frecuente.
 {
   const r = AP.mensajeEscaneo({ postular: 2, gris: 6, descartar: 12 }, 'no calza con "desarrollador de software"');
-  check('desglose: cuenta las tres bandas', r.texto === '2 postuladas · 6 por decidir · 12 descartadas — la mayoría: no calza con "desarrollador de software"');
+  check('desglose: cuenta las tres bandas', r.texto === '2 por postular · 6 por decidir · 12 descartadas — la mayoría: no calza con "desarrollador de software"', r.texto);
   check('desglose: estado ok cuando hubo postulaciones', r.estado === 'ok');
 }
 {

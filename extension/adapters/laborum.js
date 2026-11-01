@@ -293,7 +293,7 @@ function yaProcesada(id) {
   // Lo que la persona decidió en el panel de revisión no se vuelve a decidir
   // solo (docs/panel-de-revision-en-el-portal.md §2.2).
   if (AP.vistos.has(id) || AP.decididaEnPanel(id)) return true;
-  // Lo que solo se miró (o se propuso con «Revisar antes de enviar») vuelve a
+  // Lo que solo se miró (o se propuso con la persona mirando) vuelve a
   // estar disponible cuando la extensión de verdad postula.
   const postula = !AP.soloObservarEfectivo() && !AP.proponeEnVezDeEnviar();
   return (AP.log || []).some(e => e.uid === id && !(postula && e.status === 'observado'));
@@ -917,8 +917,8 @@ async function escanear() {
     conteos.observado = pendientes.length;
     pendientes = [];
   }
-  // docs/panel-de-revision-en-el-portal.md §9.1: con «Revisar antes de enviar»
-  // y la persona mirando, no se navega a cada aviso: quedan propuestas, y la
+  // docs/panel-de-revision-en-el-portal.md §9.1: con la persona mirando (desde
+  // el 2026-11-01, siempre), no se navega a cada aviso: quedan propuestas, y la
   // tarjeta del final lleva al panel para elegir.
   const propone = AP.proponeEnVezDeEnviar();
   if (propone && pendientes.length) {

@@ -334,6 +334,12 @@ onboarding sigue a Hoy. **«Seguir y probar después»** hace lo de siempre.
 
 ### 9.1 «Revisar antes de enviar» deja de enviar sola con la persona mirando
 
+> **2026-11-01 (extensión 2.20.0):** ya no está amarrado a «Revisar antes de enviar». Con la pestaña
+> a la vista, la extensión propone y deja elegir **siempre**; envía sola solo en las ráfagas y en
+> las pestañas de fondo. Lo decidió Roberto después de ver a la extensión postular sola sin
+> mostrarle la lista (`computrabajo-chat-2026-11-01.md` §4). «Revisar antes de enviar» sigue
+> mostrando cada postulación antes de enviarla.
+
 La pregunta de §8.2, punto 1, era si la extensión debía dejar de enviar sola lo que sirve cuando la
 persona está en la pestaña. Roberto: sí, amarrado a «Revisar antes de enviar».
 

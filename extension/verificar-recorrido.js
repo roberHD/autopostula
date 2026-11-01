@@ -417,12 +417,12 @@ const PENDIENTE = () => ({ estado: 'pendiente', origen: 'web', desde: Date.now()
     check('...y lleva a iniciarla, guardando el paso para retomarlo al volver', t.navegaciones[0] === 'https://candidato.cl.computrabajo.com/acceso/' && t.local.recorrido.estado === 'en_curso' && t.local.recorrido.paso === 'cierre', [t.navegaciones, t.local.recorrido]);
   }
 
-  // ── 6. «Revisar antes de enviar» con la persona mirando ──────────
+  // ── 6. La persona mirando: propone (desde el 2026-11-01, sin «Revisar antes de enviar») ──
   {
     const POSTULA_REVISANDO = { active: true, postulacionHabilitada: true, modoRevision: true };
     let t = crear({ cfg: POSTULA_REVISANDO });
     check('con la cuenta postulando y «Revisar antes de enviar», mirando la pestaña: propone', t.AP.proponeEnVezDeEnviar() === true);
-    check('...sin «Revisar antes de enviar», no', crear({ cfg: { active: true, postulacionHabilitada: true } }).AP.proponeEnVezDeEnviar() === false);
+    check('...y sin «Revisar antes de enviar», también: la lista es lo normal (docs/computrabajo-chat-2026-11-01.md)', crear({ cfg: { active: true, postulacionHabilitada: true } }).AP.proponeEnVezDeEnviar() === true);
     check('...en "solo mirar", no (eso es otra cosa)', crear({ cfg: { active: true, postulacionHabilitada: false, modoRevision: true } }).AP.proponeEnVezDeEnviar() === false);
     check('...en una pestaña de fondo, no: postula como siempre', crear({ cfg: POSTULA_REVISANDO, oculta: true }).AP.proponeEnVezDeEnviar() === false);
     check('...ni en una ráfaga', crear({ cfg: POSTULA_REVISANDO, sesion: { ap_pestana_de_rafaga: '1' } }).AP.proponeEnVezDeEnviar() === false);
@@ -440,7 +440,7 @@ const PENDIENTE = () => ({ estado: 'pendiente', origen: 'web', desde: Date.now()
 
     r.getElementById('ap-ov-cierre-si').onclick();
     check('"Elegir a cuáles postular" abre el panel', r.getElementById('ap-ov-panel').hidden === false);
-    check('...que dice que no envió ninguna', r.getElementById('ap-ov-panel-quien').textContent === 'AutoPostula · todavía no envió nada' && /«Revisar antes de enviar»: no envié ninguna/.test(r.getElementById('ap-ov-panel-ayuda').textContent), r.getElementById('ap-ov-panel-ayuda').textContent);
+    check('...que dice que no envió ninguna', r.getElementById('ap-ov-panel-quien').textContent === 'AutoPostula · todavía no envió nada' && /^No envié ninguna/.test(r.getElementById('ap-ov-panel-ayuda').textContent), r.getElementById('ap-ov-panel-ayuda').textContent);
     const grupoSirve = r.getElementById('ap-ov-panel-lista').children[0];
     const casillas = grupoSirve.children[1].children.map(li => li.children[0].children.find(h => h.tagName === 'INPUT'));
     check('...y las que sirven vienen con casilla, marcadas (no "ya enviadas")', casillas.length === 3 && casillas.every(c => c && c.checked));

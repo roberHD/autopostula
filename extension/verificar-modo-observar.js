@@ -42,7 +42,8 @@ function cargarCoreJs() {
   const { AP } = cargarCoreJs();
 
   const rNormal = AP.mensajeEscaneo({ postular: 2, gris: 6, descartar: 12 }, 'no calza', false);
-  check('sin soloObservar: mensaje normal sin el prefijo del ojo', !rNormal.texto.includes('👁') && rNormal.texto.includes('2 postuladas'));
+  // "por postular": se dice antes de enviarlas (decía "2 postuladas" sin haber enviado nada).
+  check('sin soloObservar: mensaje normal sin el prefijo del ojo', !rNormal.texto.includes('👁') && rNormal.texto.includes('2 por postular'));
 
   const rObs = AP.mensajeEscaneo({ observado: 2, gris: 6, descartar: 12 }, 'no calza con "desarrollador de software"', true);
   check('soloObservar: antepone el prefijo "👁 Solo observar"', rObs.texto.startsWith('👁 Solo observar · '));

@@ -158,7 +158,11 @@ export async function POST(request: Request) {
       '4. Si la pregunta de texto libre pide VARIOS datos a la vez (ej: "indique su comuna y telefono"), responde TODOS los datos pedidos, no solo el primero.\n' +
       "5. Responde en TEXTO PLANO. NUNCA uses markdown (nada de #, ##, **, guiones ni listas). NUNCA repitas ni cites la pregunta antes de responder. NUNCA agregues introducciones tipo \"Respuesta:\" ni comillas envolviendo el texto.\n" +
       '6. SE CONCISO Y EVITA REDUNDANCIA: no repitas la misma idea con otras palabras. Usa el tono que tu mismo determinaste en el "analisis" en vez de sonar siempre igual de formal en todas las respuestas.\n' +
-      "7. Registro escrito profesional siempre, aunque el tono configurado sea cercano: sin muletillas orales (\"nomas\", \"cachai\", \"o sea\") ni groserias. Cercano no es igual a hablado.\n\n" +
+      "7. Registro escrito profesional siempre, aunque el tono configurado sea cercano: sin muletillas orales (\"nomas\", \"cachai\", \"o sea\") ni groserias. Cercano no es igual a hablado.\n" +
+      // docs/computrabajo-chat-2026-11-01.md: en el chat de Computrabajo cada
+      // pregunta va sola y la respuesta se lee como un mensaje; "Indique su
+      // correo" contestado con un parrafo de presentacion se veia mal.
+      "8. Si la pregunta pide un DATO PUNTUAL (correo, telefono, comuna, RUT, fecha, cantidad de anios, dias u horario disponibles), responde solo con ese dato, o con una frase corta que lo contenga. Nada de presentaciones ni de hablar de tu experiencia cuando no te la preguntan.\n\n" +
       (incluirCv ? "" : AVISO_SIN_PERFIL) +
       bloqueEstilo +
       bloqueEntrenamiento +

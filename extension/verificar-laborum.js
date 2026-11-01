@@ -78,13 +78,17 @@ function paginaDeAviso({ titulo, ficha, descripcion, empresa, relacionados }) {
 }
 
 // ── Contexto: core.js + laborum.js reales ─────────────────────────
-function crear({ pathname, historia, pagina, sesion, perfil, cfgExtra }) {
+// `oculta`: una pestaña de fondo (la de una ráfaga o una abierta por la cola).
+// Desde el 2026-11-01, con la persona mirando la extensión propone en vez de
+// abrir y postular (docs/computrabajo-chat-2026-11-01.md): lo que abre los
+// avisos para postularlos se prueba en una pestaña de fondo.
+function crear({ pathname, historia, pagina, sesion, perfil, cfgExtra, oculta }) {
   const mensajes = [];
   const navegaciones = [];
   const sesionStorage = Object.assign({}, sesion || {});
   const local = { config: null, active: true, log: [] };
   const doc = {
-    documentElement: {}, body: { innerText: '' }, hidden: false,
+    documentElement: {}, body: { innerText: '' }, hidden: !!oculta,
     querySelector: (s) => ((pagina.sel || {})[s] || [])[0] || null,
     querySelectorAll: (s) => (pagina.sel || {})[s] || [],
     getElementById: (id) => (pagina.porId || {})[id] || null,
@@ -190,7 +194,7 @@ const LISTADO_PT = '/en-region-metropolitana/empleos-part-time-busqueda-vendedor
 
   // ── 2. La búsqueda filtrada por jornada: la tarjeta lleva esa jornada ──
   {
-    const t = crear({ pathname: LISTADO_PT, historia: 1, pagina: { sel: { 'a[href^="/empleos/"]': [tarjeta({ id: 11, titulo: 'Vendedor de tienda' })] } }, perfil: PERFIL });
+    const t = crear({ pathname: LISTADO_PT, historia: 1, pagina: { sel: { 'a[href^="/empleos/"]': [tarjeta({ id: 11, titulo: 'Vendedor de tienda' })] } }, perfil: PERFIL, oculta: true });
     await t.AP.escanear();
     await esperarTodo();
     const ev = t.evaluadas[0];
@@ -201,11 +205,22 @@ const LISTADO_PT = '/en-region-metropolitana/empleos-part-time-busqueda-vendedor
     check('...con lo que decía la tarjeta y el listado al que volver', pendiente && pendiente.id === '11' && pendiente.empresa === 'Empresa SpA' && /empleos-part-time-busqueda-vendedor\.html$/.test(pendiente.desde), pendiente);
     check('no avisa que terminó: todavía falta el aviso', t.terminados().length === 0);
 
-    const sin = crear({ pathname: '/en-region-metropolitana/empleos-busqueda-vendedor.html', historia: 1, pagina: { sel: { 'a[href^="/empleos/"]': [tarjeta({ id: 12, titulo: 'Vendedor de tienda' })] } }, perfil: PERFIL });
+    const sin = crear({ pathname: '/en-region-metropolitana/empleos-busqueda-vendedor.html', historia: 1, pagina: { sel: { 'a[href^="/empleos/"]': [tarjeta({ id: 12, titulo: 'Vendedor de tienda' })] } }, perfil: PERFIL, oculta: true });
     await sin.AP.escanear();
     await esperarTodo();
     check('listado sin filtro de jornada: la tarjeta va sin texto', sin.evaluadas[0] && sin.evaluadas[0].campos.cuerpo === '');
     check('...queda en duda y se abre para revisar (Etapa 2)', sin.evaluadas[0].banda === 'gris' && /-12\.html$/.test(sin.navegaciones[0] || ''), sin.navegaciones);
+
+    // La misma búsqueda con la persona mirando: no abre el aviso, lo propone
+    // y espera que lo elija en la lista (la tarjeta del final la abre).
+    const mirando = crear({ pathname: LISTADO_PT, historia: 1, pagina: { sel: { 'a[href^="/empleos/"]': [tarjeta({ id: 13, titulo: 'Vendedor de tienda' })] } }, perfil: PERFIL });
+    let cierres = 0;
+    mirando.AP.cierreDePagina = () => { cierres++; return true; };
+    await mirando.AP.escanear();
+    await esperarTodo();
+    check('postulando con la persona mirando: no abre el aviso', mirando.navegaciones.length === 0, mirando.navegaciones);
+    check('...lo deja propuesto para la lista, sin enviarlo', JSON.parse(mirando.sesion.ap_propuestas || '{}')['13'] === 1 && !mirando.mensajes.some(m => m.type === 'PUEDE_POSTULAR'), mirando.sesion.ap_propuestas);
+    check('...y al terminar la página pide la tarjeta del final', cierres === 1, cierres);
   }
 
   // ── 3. Pestaña abierta directo en un aviso (una aprobada de "Por decidir") ──
@@ -229,7 +244,7 @@ const LISTADO_PT = '/en-region-metropolitana/empleos-part-time-busqueda-vendedor
   {
     const pendiente = { id: '31', titulo: 'Vendedor/a 40 hrs Mall Los Dominicos', url: 'https://www.laborum.cl/empleos/vendedor-a-40-hrs-31.html', empresa: 'Tienda SpA', ubicacion: 'Las Condes, Región Metropolitana', desde: 'https://www.laborum.cl' + LISTADO_PT };
     const pagina = paginaDeAviso({ titulo: pendiente.titulo, ficha: ['Presencial', 'Ventas', 'Full-time, Indeterminado', 'Junior'], descripcion: 'Buscamos vendedor para tienda.' });
-    const t = crear({ pathname: '/empleos/vendedor-a-40-hrs-31.html', historia: 2, pagina, sesion: { ap_aviso_pendiente: JSON.stringify(pendiente), ap_conteos_laborum: JSON.stringify({ postular: 1 }) }, perfil: PERFIL });
+    const t = crear({ pathname: '/empleos/vendedor-a-40-hrs-31.html', historia: 2, pagina, sesion: { ap_aviso_pendiente: JSON.stringify(pendiente), ap_conteos_laborum: JSON.stringify({ postular: 1 }) }, perfil: PERFIL, oculta: true });
     await t.AP.escanear();
     await esperarTodo();
     const ev = t.evaluadas[0];
@@ -261,7 +276,7 @@ const LISTADO_PT = '/en-region-metropolitana/empleos-part-time-busqueda-vendedor
   {
     const pendiente = { id: '51', titulo: 'Vendedor', url: 'https://www.laborum.cl/empleos/vendedor-51.html', desde: 'https://www.laborum.cl' + LISTADO_PT };
     const pagina = paginaDeAviso({ titulo: 'Otro aviso', ficha: ['Part-time, Indeterminado'] });
-    const t = crear({ pathname: '/empleos/otro-aviso-52.html', historia: 3, pagina, sesion: { ap_aviso_pendiente: JSON.stringify(pendiente) }, perfil: PERFIL });
+    const t = crear({ pathname: '/empleos/otro-aviso-52.html', historia: 3, pagina, sesion: { ap_aviso_pendiente: JSON.stringify(pendiente) }, perfil: PERFIL, oculta: true });
     await t.AP.escanear();
     await esperarTodo();
     check('otro aviso que el pedido: no lo puntúa ni postula', t.evaluadas.length === 0);
@@ -302,7 +317,7 @@ const LISTADO_PT = '/en-region-metropolitana/empleos-part-time-busqueda-vendedor
     check('solo mirar: la que habría postulado va al panel, con su razón a favor', obs && obs.plataforma === 'Laborum' && obs.ofertas.length === 1 && obs.ofertas[0].externalId === '72' && obs.ofertas[0].razon.tipo === 'rol' && t.navegaciones.length === 0, obs);
 
     // Después de "Empezar a postular", lo que solo se miró ya no cuenta como hecho.
-    const despues = crear({ pathname: LISTADO_PT, historia: 1, pagina: pagina(), perfil: PERFIL });
+    const despues = crear({ pathname: LISTADO_PT, historia: 1, pagina: pagina(), perfil: PERFIL, oculta: true });
     despues.AP.log = [{ ts: 1, status: 'observado', title: 'Vendedor de tienda', uid: '72', reason: 'Habría postulado — modo solo observar' }];
     await despues.AP.escanear();
     await esperarTodo();
