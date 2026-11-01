@@ -53,5 +53,12 @@ export async function GET() {
 
   const regiones = Object.entries(NOMBRE_REGION).map(([codigo, nombre]) => ({ codigo, nombre }));
 
-  return NextResponse.json({ regiones, comunas });
+  // La lista sale del código, no de la base: solo cambia con un deploy. Que el
+  // navegador la guarde un día, en vez de volver a bajar ~14 KB cada vez que se
+  // abre Filtros o el onboarding. "private": la ruta pide sesión, así que
+  // ningún caché compartido la guarda.
+  return NextResponse.json(
+    { regiones, comunas },
+    { headers: { "Cache-Control": "private, max-age=86400" } },
+  );
 }

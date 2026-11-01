@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Marca } from "@/components/Marca";
 import { CORREO_CONTACTO } from "@/lib/enlaces";
-import "./landing.css";
 
 export const metadata: Metadata = {
   title: "Esta página no existe",
@@ -15,6 +14,10 @@ export const metadata: Metadata = {
  * Un 404 es un callejón sin salida: su único trabajo es sacarte de ahí. Por
  * eso no lleva ni ilustración ni chiste, sino las tres puertas que alguien
  * perdido realmente quiere, y la del medio depende de si ya tiene cuenta.
+ *
+ * No importa landing.css: no usa nada de ahí, y como Next monta el 404 en la
+ * raíz, ese import hacía que el CSS de la portada (19 KB) se bajara antes de
+ * mostrar cualquier página, panel y login incluidos.
  */
 export default function NoEncontrada() {
   return (
