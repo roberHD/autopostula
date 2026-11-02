@@ -32,10 +32,29 @@ function el(props) {
 
 function tarjeta({ id, titulo, empresa, ubicacion }) {
   const a = { href: 'https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-' + id, textContent: titulo };
+  const h2 = el({ textContent: titulo, sel: { a: [a] } });
   return el({
     attrs: { 'data-id': id },
     sel: {
-      h2: [el({ textContent: titulo, sel: { a: [a] } })],
+      h2: [h2],
+      'h2, h3': [h2],
+      'h2 a, a[href*="oferta"], a[href*="trabajo"]': [a],
+      '[offer-grid-article-company-url]': [el({ textContent: empresa })],
+      'p.fs16.fc_base:not(.dFlex)': [el({ textContent: ubicacion })],
+    },
+  });
+}
+
+// La tarjeta de la página de una empresa ("/team-work/empleos…", verificada en
+// vivo el 2026-11-02): el título va en un <h3> con a.js-o-link, no en un <h2>.
+function tarjetaDeEmpresa({ id, titulo, empresa, ubicacion }) {
+  const a = { href: 'https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-' + id, textContent: titulo };
+  const h3 = el({ textContent: titulo + ' Vista', sel: { a: [a] } });
+  return el({
+    attrs: { 'data-id': id },
+    sel: {
+      'h2, h3': [h3],
+      'a.js-o-link': [a],
       'h2 a, a[href*="oferta"], a[href*="trabajo"]': [a],
       '[offer-grid-article-company-url]': [el({ textContent: empresa })],
       'p.fs16.fc_base:not(.dFlex)': [el({ textContent: ubicacion })],
@@ -134,6 +153,23 @@ const URL_AVISO = 'https://cl.computrabajo.com/ofertas-de-trabajo/oferta-de-trab
   const sinFiltro = await escanear('/trabajo-de-vendedor-en-rmetropolitan', tarjetas());
   check('búsqueda sin filtro de jornada: la tarjeta va sin texto', sinFiltro.evaluadas[0] && sinFiltro.evaluadas[0].cuerpo === '', sinFiltro.evaluadas[0]);
   check('...y la que no dice jornada sigue en duda, como antes', sinFiltro.evaluadas[0].banda === 'gris' && sinFiltro.mensajes.some(m => m.type === 'REPORTAR_BANDA_GRIS'), sinFiltro.evaluadas[0]);
+
+  // ── 1b. La página de una empresa (2026-11-02) ─────────────────
+  // Roberto: "estas ofertas tienen todo el tema de vendedor, y de part-time, y
+  // no calzan". El título no se leía (estaba en un <h3>) y se puntuaba "Oferta".
+  {
+    const t = crear({ pathname: '/team-work/empleos-en-rmetropolitana-jornada-part-time', tarjetas: [
+      tarjetaDeEmpresa({ id: 'C1B2C3D4E5F6', titulo: 'Asesor(a) de venta Part time 20 Hrs Adidas Originals', empresa: 'Team-Work', ubicacion: 'Santiago - Las condes, R.Metropolitana' }),
+      tarjetaDeEmpresa({ id: 'D1B2C3D4E5F6', titulo: 'Asesor(a) de Ventas Part time 20 Hrs adidas Terrex', empresa: 'Team-Work', ubicacion: 'Santiago - Las condes, R.Metropolitana' }),
+    ] });
+    t.AP.cfg.scorer.perfilCompilado.roles[0].sinonimos = ['asesor de ventas', 'ejecutivo de ventas', 'promotor de ventas'];
+    await t.AP.escanear();
+    await esperarTodo();
+    const [originals, terrex] = t.evaluadas;
+    check('página de empresa: el título se lee del <h3> (antes: "Oferta")', originals && originals.titulo === 'Asesor(a) de venta Part time 20 Hrs Adidas Originals', originals);
+    check('..."Asesor(a) de venta" calza con el sinónimo "asesor de ventas" (singular y plural)', originals && originals.banda === 'postular', originals);
+    check('...y "Asesor(a) de Ventas" también', terrex && terrex.banda === 'postular', terrex);
+  }
 
   // ── 2. Aprobadas: dónde se abren (urlParaPostular, background.js real) ──
   {

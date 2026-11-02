@@ -139,11 +139,16 @@ function getId(tarjeta, idx) {
 // El <h2> trae adentro los badges "Postulado"/"Vista" (ocultos con display:none,
 // pero SIGUEN estando en el DOM) -- textContent los incluye igual aunque estén
 // invisibles, así que hay que leer el texto del <a> del título, no el h2 entero.
+//
+// En el buscador el título va en un <h2>; en la página de una empresa
+// ("/team-work/empleos…") va en un <h3>, con a.js-o-link (verificado en vivo
+// el 2026-11-02). Antes solo se miraba el <h2>: ahí todas las ofertas se
+// puntuaban como "Oferta" y salían "No calza · El cargo no se parece a lo que
+// buscas", aunque dijeran "Asesor(a) de Ventas".
 function tituloDeTarjeta(tarjeta) {
-  const h2 = tarjeta.querySelector('h2');
-  if (!h2) return 'Oferta';
-  const a = h2.querySelector('a');
-  const texto = (a ? a.textContent : h2.textContent) || '';
+  const titular = tarjeta.querySelector('h2, h3');
+  const a = (titular && titular.querySelector('a')) || tarjeta.querySelector('a.js-o-link');
+  const texto = (a ? a.textContent : titular ? titular.textContent : '') || '';
   return texto.trim() || 'Oferta';
 }
 

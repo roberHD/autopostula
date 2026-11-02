@@ -1,6 +1,6 @@
 # El chat de preguntas de Computrabajo — 2026-11-01
 
-> **Estado:** implementado en `rama-roberto` (extensión 2.20.0), sin subir a la tienda.
+> **Estado:** implementado en `rama-roberto` (extensión 2.20.0; la 2.20.1 suma §7), sin subir a la tienda.
 > **Origen:** un video de Roberto del 2026-11-01 en Computrabajo: la extensión no postuló a la
 > oferta que más le servía, contestaba mal y siempre lo mismo, y nunca le mostró la lista para elegir.
 > **Relacionado:** `panel-de-revision-en-el-portal.md` §9.1, `creditos-y-pagina-nueva.md` §3.6
@@ -149,3 +149,29 @@ mandar datos al portal, así que espera el permiso de Roberto.
    extensión siguió diciendo «✓» por diez días. Con la 2.20.0 eso queda como «por terminar» con el
    motivo; contar esas en la pantalla de admin (`pendientes-de-lanzamiento-2026-10-07.md` §3) avisaría
    el próximo cambio el mismo día.
+
+---
+
+## 7. «Asesor(a) de venta» salía «No calza» (2026-11-02, extensión 2.20.1)
+
+Roberto mandó dos capturas de la página de Team-Work en Computrabajo: ofertas de adidas que decían
+«Asesor(a) de Ventas» y «Asesor(a) de venta», part time y en la RM, marcadas «No calza · El cargo no
+se parece a lo que buscas». Su perfil (Filtros) sí tenía «asesor de ventas» como sinónimo de
+vendedor. Eran dos fallas:
+
+1. **En la página de una empresa no se leía el título.** Ahí Computrabajo lo pone en un `<h3>` con
+   `a.js-o-link`, no en el `<h2>` del buscador. `tituloDeTarjeta` solo miraba el `<h2>`: todas las
+   ofertas de esas páginas se puntuaban como «Oferta» y salían «No calza». Verificado en vivo: de 20
+   tarjetas, 20 títulos vacíos. Ahora lee el `<h2>` o el `<h3>`, y si no, el `a.js-o-link`.
+2. **Un sinónimo en plural no calzaba con el aviso en singular.** «asesor de ventas» no calzaba con
+   «Asesor(a) de venta». `apPatronPalabra` (core.js) ahora lleva un plural a su singular y lo
+   flexiona desde ahí: ventas → venta, vendedores/vendedoras → vendedor, auxiliares → auxiliar,
+   jefes → jefe. «-is»/«-us» no se tocan (análisis, crisis), y si el singular queda muy corto (redes →
+   red) se deja como estaba.
+
+Verificado contra la página real de Team-Work con el perfil de Roberto: «Asesor(a) de Ventas Part
+Time 30 horas Mall Parque Arauco» pasó de «No calza» a «Te sirve · Es de vendedor, lo que buscas
+(dice "asesor de ventas")»; «Apoyos de Temporada» sigue «No calza» (no es venta). Las tres de las
+capturas ya estaban postuladas, y esas la extensión no las vuelve a marcar. Casos nuevos en
+`verificar-computrabajo.js` (la tarjeta de empresa) y `verificar-scorer.js` (13b, singular y plural);
+deshaciendo cada arreglo, fallan.

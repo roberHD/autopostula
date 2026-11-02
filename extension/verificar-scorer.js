@@ -183,6 +183,23 @@ const perfil = {
   check('"recepcionistas" matchea "recepcionista" (plural en -ista)', r2.banda === 'postular');
 }
 
+// 13b. Un sinónimo en PLURAL también calza con el aviso en singular
+// (2026-11-02). El perfil real de Roberto tenía "asesor de ventas" y los
+// avisos de adidas en Computrabajo dicen "Asesor(a) de venta": salían "No
+// calza · El cargo no se parece a lo que buscas".
+{
+  const conPlurales = (canonico) => ({ roles: [{ canonico, sinonimos: [], peso: 1 }], umbralPostular: 65, umbralGris: 45 });
+  const calza = (canonico, titulo) => AP.puntuarOferta({ titulo, empresa: '', cuerpo: '', ubicacion: '' }, conPlurales(canonico)).razones.some(r => r.tipo === 'rol');
+  check('"asesor de ventas" calza con "Asesor(a) de venta Part time 20 Hrs Adidas Originals"', calza('asesor de ventas', 'Asesor(a) de venta Part time 20 Hrs Adidas Originals'));
+  check('...y con "Asesora de venta" y "Asesor de ventas"', calza('asesor de ventas', 'Asesora de venta') && calza('asesor de ventas', 'Asesor de ventas'));
+  check('"vendedores" y "vendedoras" calzan con "Vendedor"/"Vendedora"', calza('vendedores', 'Vendedor de tienda') && calza('vendedoras', 'Vendedora part time'));
+  check('"auxiliares de aseo" calza con "Auxiliar de aseo"', calza('auxiliares de aseo', 'Auxiliar de aseo'));
+  check('"jefes de tienda" calza con "Jefe de tienda"', calza('jefes de tienda', 'Jefe de tienda'));
+  check('"análisis" no es un plural: "analista de analisis" sigue calzando con su texto', calza('analista de analisis', 'Analista de analisis de datos'));
+  check('"redes sociales" sigue calzando (el singular "red" sería muy corto)', calza('redes sociales', 'Community manager redes sociales'));
+  check('...y "asesor de ventas" NO calza con "Asesor de ventanas" (palabra completa)', !calza('asesor de ventas', 'Asesor de ventanas'));
+}
+
 // 14. perfilDesactualizado (revisión externa 2026-09-05): si una
 // recompilación forzada por cambio de objetivo falló, AP.evaluarOferta debe
 // mandar todo a banda gris -- no confiar en un puntaje que puede estar

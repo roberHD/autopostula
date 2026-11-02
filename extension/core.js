@@ -2401,6 +2401,20 @@ function apPatronPalabra(palabra) {
   // Muy corta: no flexionar -- recortarle la vocal final a algo como "pt" o
   // "de" genera un patrón que matchea casi cualquier cosa.
   if (palabra.length < 4) return escapada;
+  // Un plural también calza con el singular (2026-11-02): el perfil de Roberto
+  // tenía "asesor de ventas" y los avisos de adidas dicen "Asesor(a) de venta",
+  // y quedaban "No calza · El cargo no se parece a lo que buscas". Se vuelve al
+  // singular y se flexiona desde ahí con las reglas de abajo, que ya incluyen
+  // el plural: ventas -> venta, cajeros -> cajero, vendedores/vendedoras ->
+  // vendedor, auxiliares -> auxiliar, jefes -> jefe. Si el singular queda muy
+  // corto (redes -> red), se deja como estaba. "-is"/"-us" no son plurales
+  // (análisis, crisis, virus): esos tampoco se tocan.
+  if (palabra.length >= 5 && /s$/.test(palabra)) {
+    const singular = /(?:ores|oras)$/.test(palabra) || /[rlndj]es$/.test(palabra)
+      ? palabra.slice(0, -2)
+      : /[aeo]s$/.test(palabra) ? palabra.slice(0, -1) : null;
+    if (singular && singular.length >= 4) return apPatronPalabra(singular);
+  }
   // -or: vendedor -> vendedor/a/es/as (acá el sufijo sí se agrega, no se
   // saca nada de la raíz).
   if (/^[a-z]+or$/.test(palabra)) return escapada + '(?:a|es|as)?';
