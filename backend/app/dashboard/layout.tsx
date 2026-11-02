@@ -41,6 +41,17 @@ export default async function DashboardLayout({
   }
 
   const userId = (session.user as any).id;
+
+  // Fin del último pase Premium, para el aviso de vencimiento (§6; un admin no
+  // tiene pases y no necesita el aviso), y el número de "Por decidir" del menú
+  // (docs/optimizacion-2026-09-29.md §3; si falla, el menú lo pide solo: null).
+  // No dependen de la cuenta ni de los términos, así que salen junto con esas
+  // consultas y no después: es una vuelta menos a la base en cada carga del
+  // panel. Si toca redirigir, se descartan.
+  const premiumHastaP = finDelUltimoPase(userId);
+  premiumHastaP.catch(() => {}); // si se redirige antes de esperarla, que no quede un rechazo suelto
+  const pendientesP = contarPorDecidir(userId).catch(() => null);
+
   const [dbUser, acepto] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -62,14 +73,7 @@ export default async function DashboardLayout({
     redirect("/onboarding");
   }
 
-  // Fin del último pase Premium, para el aviso de vencimiento (§6). Un admin no
-  // tiene pases y no necesita el aviso. En paralelo, el número de "Por decidir"
-  // del menú (docs/optimizacion-2026-09-29.md §3), que antes el menú pedía
-  // después; si falla, el menú lo pide solo (null).
-  const [premiumHasta, pendientesPorDecidir] = await Promise.all([
-    finDelUltimoPase(userId),
-    contarPorDecidir(userId).catch(() => null),
-  ]);
+  const [premiumHasta, pendientesPorDecidir] = await Promise.all([premiumHastaP, pendientesP]);
 
   return (
     <div className="ap-shell">

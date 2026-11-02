@@ -79,6 +79,25 @@
 .lp-fantasma__casilla { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-muted); }
 .lp-fantasma__casilla i { width: 13px; height: 13px; border: 1px solid var(--border-strong); border-radius: 3px; flex: none; }
 
+/* Una capa por velocidad (Papeleo.tsx). Su desplazamiento lo hace el
+   navegador, atado al scroll y fuera del hilo principal. Es la misma cuenta
+   que hacía el JS: translateY = scrollY × (factor − 1), comprobada pieza por
+   pieza (mismo píxel). El rango largo solo fija la escala: la página nunca
+   llega a recorrerlo entero, así que el movimiento sigue siendo lineal. */
+.lp-papeleo__capa { position: absolute; inset: 0; }
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .lp-papeleo__capa {
+      animation: lp-paralaje linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0px 50000px;
+    }
+  }
+}
+@keyframes lp-paralaje {
+  to { transform: translateY(calc((var(--factor) - 1) * 50000px)); }
+}
+
 /* Todo el contenido va encima del papeleo. */
 .lp-encima { position: relative; z-index: 1; }
 
