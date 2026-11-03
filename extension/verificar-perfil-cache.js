@@ -162,6 +162,38 @@ function cargarBackground({ configInicial } = {}) {
       r && r.config && r.config.perfil && r.config.perfil.renta === '$650.000 líquidos', r);
   }
 
+  // ── El panel avisa que cambió la búsqueda: no se espera el guardián ─────────
+  // Error real del 2026-11-03: una cuenta nueva cambió sus objetivos y la
+  // extensión siguió puntuando con el perfil anterior hasta 5 minutos.
+  {
+    const recien = { perfil: { renta: 'x' }, perfilActualizadoEn: Date.now() };
+    const { enviar } = cargarBackground({ configInicial: recien });
+    const r = await enviar({ type: 'SINCRONIZAR_PERFIL', forzar: true });
+    await tick(30);
+    check('forzado desde el panel: se rehace aunque se haya sincronizado hace un momento', r && r.omitido === false, r);
+  }
+  {
+    const recien = { perfil: { renta: 'x' }, perfilActualizadoEn: Date.now() };
+    const { ctx, enviar } = cargarBackground({ configInicial: recien });
+    const avisos = [];
+    ctx.chrome.tabs.query = async () => [{ id: 7 }, { id: 9 }];
+    ctx.chrome.tabs.sendMessage = async (id, m) => { avisos.push({ id, tipo: m && m.type, renta: m && m.config && m.config.perfil && m.config.perfil.renta }); };
+    await enviar({ type: 'SINCRONIZAR_PERFIL', forzar: true });
+    await tick(30);
+    check('forzado: las pestañas de portales abiertas reciben la config nueva',
+      avisos.length === 2 && avisos.every(a => a.tipo === 'CONFIG_UPDATED' && a.renta === '$650.000 líquidos'), avisos);
+  }
+  {
+    const viejo = { perfil: { renta: 'x' }, perfilActualizadoEn: Date.now() - 10 * 60e3 };
+    const { ctx, enviar } = cargarBackground({ configInicial: viejo });
+    const avisos = [];
+    ctx.chrome.tabs.query = async () => [{ id: 7 }];
+    ctx.chrome.tabs.sendMessage = async (id, m) => { avisos.push(m && m.type); };
+    await enviar({ type: 'SINCRONIZAR_PERFIL' });
+    await tick(30);
+    check('sin forzar (lo pide una pestaña del portal): no se les avisa a todas', avisos.length === 0, avisos);
+  }
+
   console.log(fallos ? `\n✗ ${fallos} fallo(s)` : '\n✓ todo bien');
   process.exit(fallos ? 1 : 0);
 })();

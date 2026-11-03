@@ -270,6 +270,7 @@ function apAsegurarOverlay() {
   // Reset propio: que el portal no nos empuje ni nos herede nada.
   ov.style.cssText = 'all:initial;position:fixed;bottom:16px;right:16px;z-index:2147483647';
   ovRaiz = ov.attachShadow({ mode: 'open' });
+  apProtegerFoco(ov);
   ovRaiz.innerHTML =
     '<style>' +
     ':host,*{box-sizing:border-box}' +
@@ -1425,6 +1426,7 @@ function apRecAsegurarUI() {
     apRecHost.id = 'ap-recorrido';
     apRecHost.style.cssText = 'all:initial;position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483647';
     apRecRaiz = apRecHost.attachShadow({ mode: 'open' });
+    apProtegerFoco(apRecHost);
     apRecRaiz.innerHTML = '<style>' + AP_ESTILO_RECORRIDO + '</style>' + AP_HTML_RECORRIDO;
     apRecRaiz.getElementById('ap-rec-si').addEventListener('click', apRecAccion);
     apRecRaiz.getElementById('ap-rec-saltar').addEventListener('click', () => apRecTerminar('saltado'));
@@ -1964,6 +1966,40 @@ function apPintarAhora() {
   }
 }
 
+// ── Los portales no le roban el foco a los paneles de AutoPostula ──────────
+// Error real del 2026-11-03 (cuenta nueva en trabajando.com): en el panel de
+// revisión no se podía escribir, y lo que la persona tecleaba terminaba en el
+// campo del portal. Trabajando hace las preguntas en una ventana de Bootstrap,
+// y Bootstrap tiene una trampa de foco: si el foco va a algo que no está dentro
+// de su ventana, se lo devuelve. Los paneles de AutoPostula viven en un shadow
+// DOM agregado al final de la página, así que para el portal el foco siempre
+// iba "afuera".
+//
+// Cortar los eventos en el panel no alcanza: jQuery (debajo de Bootstrap 4)
+// escucha "focus" en captura sobre el document, y eso corre ANTES de que el
+// evento llegue al panel. Se cortan en captura sobre window, que es lo primero
+// del recorrido de un evento, y solo cuando el foco va hacia un panel marcado
+// con data-ap-foco: el resto de la página no se entera de nada distinto, y su
+// propio formulario se sigue pudiendo usar (extension/verificar-foco.js).
+const AP_ATRIBUTO_FOCO = 'data-ap-foco';
+
+function apProtegerFoco(host) {
+  if (host && typeof host.setAttribute === 'function') host.setAttribute(AP_ATRIBUTO_FOCO, '');
+}
+
+(function apInstalarProteccionDeFoco() {
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+  if (window.__apProteccionDeFoco) return;
+  window.__apProteccionDeFoco = true;
+  const vaHaciaUnPanel = (e) => {
+    const ruta = typeof e.composedPath === 'function' ? e.composedPath() : [];
+    return ruta.some((nodo) => nodo && nodo.nodeType === 1 && typeof nodo.hasAttribute === 'function' && nodo.hasAttribute(AP_ATRIBUTO_FOCO));
+  };
+  for (const tipo of ['focusin', 'focusout', 'focus', 'blur']) {
+    window.addEventListener(tipo, (e) => { if (vaHaciaUnPanel(e)) e.stopImmediatePropagation(); }, true);
+  }
+})();
+
 // ── Helpers básicos ───────────────────────────────────────────────
 AP.sleep = function (ms) { return new Promise(r => setTimeout(r, ms)); };
 AP.n = function (s) { return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim(); };
@@ -2422,6 +2458,17 @@ function apPatronPalabra(palabra) {
   if (/^[a-z]+(ista|e)$/.test(palabra)) return escapada + 's?';
   // -o: cajero -> "cajer" + o/a/os/as (acá SÍ hay que sacar la "o" final).
   if (/^[a-z]+o$/.test(palabra)) return apEscaparRegex(palabra.slice(0, -1)) + '(?:o|a|os|as)';
+  // Femenino de un oficio en -or (2026-11-03): "vendedora" caía en la regla de
+  // "cajera" de abajo, que cambia la "a" por o/a/os/as y exige una vocal
+  // después de "vendedor" -- así "vendedora" no calzaba con "Vendedor", ni con
+  // "Vendedor(a)", ni con "Vendedor/a", que es como vienen escritos casi todos
+  // los avisos. Se vuelve al masculino y se flexiona desde ahí (la regla de -or
+  // ya incluye la forma en -a). Solo -dora/-tora/-sora: vendedora, conductora,
+  // asesora; "mejora" o "demora" no son femeninos de nada y no se tocan.
+  if (palabra.length >= 6 && /^[a-z]+[dts]ora$/.test(palabra)) return apPatronPalabra(palabra.slice(0, -1));
+  // "jefa" con "Jefe": el masculino de este oficio no termina en -o, así que la
+  // regla de "cajera" tampoco lo alcanzaba ("Jefe de local" quedaba fuera).
+  if (palabra === 'jefa') return 'jef(?:e|a|es|as)';
   // -a: cajera -> misma raíz que el caso anterior.
   if (/^[a-z]+a$/.test(palabra)) return apEscaparRegex(palabra.slice(0, -1)) + '(?:o|a|os|as)';
   // Termina en consonante (chofer, auxiliar): +es.
@@ -3125,6 +3172,7 @@ AP.mostrarRevision = function (titulo, respuestasLog, contexto, opciones) {
     host.id = 'ap-revision-panel';
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483648';
     const raiz = host.attachShadow({ mode: 'open' });
+    apProtegerFoco(host);
 
     const esc = t => (t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 

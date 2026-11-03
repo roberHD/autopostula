@@ -2106,11 +2106,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // panel y se va a postular a mano en ese momento seguia con la foto vieja.
   // El guardian de tiempo evita una peticion por cada pagina del portal que
   // abra -- navegar un listado son decenas de cargas.
+  //
+  // `forzar` lo manda el panel web por bridge.js, justo después de guardar un
+  // cambio de la búsqueda (objetivos, ubicación, amplitud...). Error real del
+  // 2026-11-03: una cuenta nueva cambió sus objetivos y la extensión siguió
+  // puntuando con el perfil anterior hasta que pasaron los 5 minutos del
+  // guardián -- las ofertas de esos minutos quedaron en "Por decidir" con el
+  // puntaje viejo. Forzado no espera, y además le pasa la config nueva a todas
+  // las pestañas de portales abiertas: el aviso no viene de ninguna de ellas.
   if (msg.type === 'SINCRONIZAR_PERFIL') {
     (async () => {
       const { config } = await chrome.storage.local.get('config');
       const ultima = (config && config.perfilActualizadoEn) || 0;
-      if (Date.now() - ultima < MINUTOS_ENTRE_SINCRONIZACIONES * 60e3) return { ok: true, omitido: true };
+      if (!msg.forzar && Date.now() - ultima < MINUTOS_ENTRE_SINCRONIZACIONES * 60e3) return { ok: true, omitido: true };
       const { autopostulaToken } = await chrome.storage.sync.get('autopostulaToken');
       if (!autopostulaToken) return { ok: false };
       await actualizarFiltrosDesdeBackend(autopostulaToken);
@@ -2119,6 +2127,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // en la respuesta evita tener que avisarle a TODAS las pestañas
       // (CONFIG_UPDATED) por algo que pidio una sola.
       const { config: fresca } = await chrome.storage.local.get('config');
+      if (msg.forzar && fresca) {
+        const tabs = await chrome.tabs.query({
+          url: [
+            '*://*.computrabajo.com/*', '*://*.computrabajo.cl/*',
+            '*://*.laborum.cl/*', '*://*.trabajando.cl/*',
+          ],
+        });
+        tabs.forEach((t) => chrome.tabs.sendMessage(t.id, { type: 'CONFIG_UPDATED', config: fresca }).catch(() => {}));
+      }
       return { ok: true, omitido: false, config: fresca || null };
     })().then(sendResponse).catch(() => sendResponse({ ok: false }));
     return true;

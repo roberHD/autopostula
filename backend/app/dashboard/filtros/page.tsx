@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { X, FlaskConical, Target, Plus, MapPin, Compass, Gauge } from "lucide-react";
 import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
+import SelectorPeso from "@/components/SelectorPeso";
+import { PESO_LO_BUSCO, TEXTO_PESO, seBuscaDeVerdad } from "@/lib/peso-objetivo";
+import { avisarPerfilActualizado } from "@/lib/puente-extension";
 
 type PerfilCompilado = {
   version: number;
@@ -134,6 +137,7 @@ export default function FiltrosPage() {
       if (!res.ok) { setMensajeScorer(data.error ?? "No se pudo actualizar tu búsqueda"); return; }
       setPerfilCompilado(data.perfilCompilado);
       setMensajeScorer("Búsqueda actualizada.");
+      avisarPerfilActualizado();
     } catch (err) {
       console.error("Error compilando perfil:", err);
       setMensajeScorer("No se pudo actualizar tu búsqueda — revisa la consola");
@@ -161,6 +165,7 @@ export default function FiltrosPage() {
         return;
       }
       setMensajeAmplitud("Guardado. La extensión lo usa desde su próxima revisión.");
+      avisarPerfilActualizado();
     } catch (err) {
       console.error("Error guardando amplitud:", err);
       setAmplitud(anterior);
@@ -187,6 +192,7 @@ export default function FiltrosPage() {
         return;
       }
       setCalibracion({ calibrarUmbral: data.calibrarUmbral !== false, umbralPostularCalibrado: data.umbralPostularCalibrado ?? null });
+      avisarPerfilActualizado();
       setMensajeCalibracion("Guardado. La extensión lo usa desde su próxima revisión.");
     } catch (err) {
       console.error("Error guardando el ajuste del umbral:", err);
@@ -207,6 +213,7 @@ export default function FiltrosPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setMensajeUbicacion(data.error ?? "No se pudo guardar"); return; }
       setMensajeUbicacion("Guardado. La extensión la usa desde su próxima revisión.");
+      avisarPerfilActualizado();
     } catch (err) {
       console.error("Error guardando ubicación:", err);
       setMensajeUbicacion("No se pudo guardar — revisa la consola");
@@ -234,6 +241,7 @@ export default function FiltrosPage() {
       setObjetivoConfirmado(true);
       setObjetivos(limpios);
       if (data.perfilCompilado) setPerfilCompilado(data.perfilCompilado);
+      avisarPerfilActualizado();
       setSugerirRetriaje(!!data.sugerirRetriaje);
       setMensajeObjetivo(
         data.avisoCompilacion
@@ -305,18 +313,14 @@ export default function FiltrosPage() {
                 setObjetivos(copia);
               }}
             />
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.1}
-              className="ap-input"
-              style={{ width: 72 }}
-              title="Peso: 1.0 = objetivo principal, menos si lo aceptarías pero no lo buscas activamente"
-              value={o.peso}
-              onChange={(e) => {
+            {/* lib/peso-objetivo.ts: palabras en vez de un "0,5" que nadie sabía
+                que significaba "nunca se postula solo". */}
+            <SelectorPeso
+              peso={o.peso}
+              style={{ width: 132 }}
+              onChange={(peso) => {
                 const copia = [...objetivos];
-                copia[i] = { ...copia[i], peso: Math.max(0, Math.min(1, Number(e.target.value))) };
+                copia[i] = { ...copia[i], peso };
                 setObjetivos(copia);
               }}
             />
@@ -333,13 +337,15 @@ export default function FiltrosPage() {
           </div>
         ))}
 
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "2px 0 12px" }}>{TEXTO_PESO.explicacion}</p>
+
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           {objetivos.length < 4 && (
             <button
               type="button"
               className="ap-button-ghost"
               style={{ display: "flex", alignItems: "center", gap: 6 }}
-              onClick={() => setObjetivos([...objetivos, { ciuo: null, etiqueta: "", peso: 0.5 }])}
+              onClick={() => setObjetivos([...objetivos, { ciuo: null, etiqueta: "", peso: PESO_LO_BUSCO }])}
             >
               <Plus size={14} /> Agregar otro objetivo
             </button>
@@ -460,7 +466,7 @@ export default function FiltrosPage() {
               <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Roles</p>
               {perfilCompilado.roles.map((r) => (
                 <p key={r.canonico} style={{ fontSize: 12.5, marginBottom: 3 }}>
-                  <strong>{r.canonico}</strong> ({Math.round(r.peso * 100)}%) — {r.sinonimos.join(", ")}
+                  <strong>{r.canonico}</strong> ({seBuscaDeVerdad(r.peso) ? "lo buscas" : "lo aceptarías"}) — {r.sinonimos.join(", ")}
                 </p>
               ))}
             </div>

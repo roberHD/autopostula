@@ -200,6 +200,27 @@ const perfil = {
   check('...y "asesor de ventas" NO calza con "Asesor de ventanas" (palabra completa)', !calza('asesor de ventas', 'Asesor de ventanas'));
 }
 
+// 13c. Un patrón en FEMENINO calza con el aviso en masculino (2026-11-03).
+// "vendedora" caía en la regla de "cajera" y exigía una vocal después de
+// "vendedor": no calzaba con "Vendedor", "Vendedor(a)" ni "Vendedor/a", que es
+// como vienen escritos casi todos los avisos.
+{
+  const perfilDe = (canonico) => ({ roles: [{ canonico, sinonimos: [], peso: 1 }], umbralPostular: 65, umbralGris: 45 });
+  const calza = (canonico, titulo) => AP.puntuarOferta({ titulo, empresa: '', cuerpo: '', ubicacion: '' }, perfilDe(canonico)).razones.some(r => r.tipo === 'rol');
+  check('"vendedora" calza con "Vendedor(a) de Autos", "Vendedor Técnico" y "Vendedor/a integral"',
+    calza('vendedora', 'Vendedor(a) de Autos Seminuevos') && calza('vendedora', 'Vendedor Técnico') && calza('vendedora', 'Vendedor/a integral'));
+  check('...y sigue calzando con "Vendedora de tienda"', calza('vendedora', 'Vendedora de tienda'));
+  check('"asesora de ventas" calza con "Asesor(a) de Ventas" y "Asesor de venta"',
+    calza('asesora de ventas', 'Asesor(a) de Ventas Part Time') && calza('asesora de ventas', 'Asesor de venta'));
+  check('"conductora" y "operadora" calzan con "Conductor" y "Operador"',
+    calza('conductora', 'Conductor clase B') && calza('operadora', 'Operador de grúa'));
+  check('"jefa de local" calza con "Jefe de local", "Jefa de local" y "Jefe(a) de Local"',
+    calza('jefa de local', 'Jefe de local') && calza('jefa de local', 'Jefa de local') && calza('jefa de local', 'Jefe(a) de Local'));
+  check('"vendedora" con peso 1 y el cargo en el título se postula', AP.puntuarOferta({ titulo: 'Vendedor Técnico', empresa: '', cuerpo: '', ubicacion: '' }, perfilDe('vendedora')).banda === 'postular');
+  check('...y lo que no es femenino de un oficio no cambia: "mejora" no calza con "Mejor", "jefa" no calza con "Jefatura"',
+    !calza('mejora continua', 'Mejor continua') && !calza('jefa', 'Jefatura de ventas') && !calza('vendedora', 'Vendimia'));
+}
+
 // 14. perfilDesactualizado (revisión externa 2026-09-05): si una
 // recompilación forzada por cambio de objetivo falló, AP.evaluarOferta debe
 // mandar todo a banda gris -- no confiar en un puntaje que puede estar

@@ -76,6 +76,21 @@ window.addEventListener('autopostula:recorrido', () => {
   });
 });
 
+// El panel acaba de guardar un cambio de la búsqueda (objetivos, ubicación,
+// amplitud, "Actualizar mi búsqueda"): la extensión vuelve a pedir el perfil
+// ahora, en vez de esperar hasta 5 minutos. Error real del 2026-11-03: una
+// cuenta nueva cambió sus objetivos y siguió viendo todo en "Por decidir" con
+// el perfil anterior. El evento no lleva nada: la extensión pide el perfil al
+// servidor con su propio token, así que esta página no le puede meter uno.
+window.addEventListener('autopostula:perfil-actualizado', () => {
+  chrome.runtime.sendMessage({ type: 'SINCRONIZAR_PERFIL', forzar: true }, () => {
+    // Sin respuesta que esperar: el panel no muestra nada distinto si la
+    // extensión no está (el caso típico, el celular). Leer lastError evita el
+    // aviso de Chrome por un error no revisado.
+    void chrome.runtime.lastError;
+  });
+});
+
 // docs/rafagas-y-ponerse-al-dia.md §3.6: el botón "Ponerme al día ahora" del
 // panel viaja igual que "conectar" -- evento del DOM de esta misma página (no
 // postMessage de cualquier origen), y la respuesta vuelve como otro evento.

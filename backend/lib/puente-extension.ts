@@ -43,6 +43,24 @@ export function pedirRecorrido(): void {
   }
 }
 
+/**
+ * El panel acaba de guardar un cambio de la búsqueda (objetivos, ubicación,
+ * amplitud, «Actualizar mi búsqueda»…): la extensión vuelve a pedir el perfil
+ * ahora y se lo pasa a las pestañas de portales abiertas, en vez de esperar
+ * hasta 5 minutos. Error real del 2026-11-03: una cuenta nueva cambió sus
+ * objetivos y la extensión siguió puntuando con el perfil anterior.
+ *
+ * Como pedirRecorrido, no espera respuesta: sin extensión (el celular) no pasa
+ * nada, y una extensión anterior a la 2.21 simplemente lo ignora.
+ */
+export function avisarPerfilActualizado(): void {
+  try {
+    window.dispatchEvent(new CustomEvent("autopostula:perfil-actualizado"));
+  } catch {
+    // Sin extensión no hay a quién avisarle.
+  }
+}
+
 export type RespuestaExtension = { ok: boolean; motivo?: string };
 
 // La extensión hace consultas al servidor antes de contestar, así que se le da

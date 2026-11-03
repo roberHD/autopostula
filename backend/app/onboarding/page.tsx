@@ -11,7 +11,9 @@ import { useAvisos } from "@/components/Avisos";
 import UbicacionPicker, { ubicacionVacia, type UbicacionValor } from "@/components/UbicacionPicker";
 import { LLAVE_INTENCION_PREMIUM, URL_CHROME_WEB_STORE } from "@/lib/enlaces";
 import { sinSoporteExtension } from "@/lib/dispositivo";
-import { pedirRecorrido } from "@/lib/puente-extension";
+import { avisarPerfilActualizado, pedirRecorrido } from "@/lib/puente-extension";
+import SelectorPeso from "@/components/SelectorPeso";
+import { PESO_LO_BUSCO, seBuscaDeVerdad } from "@/lib/peso-objetivo";
 import { valorFormateado } from "@/lib/formato-perfil";
 import AutorizacionCv from "@/components/AutorizacionCv";
 import { usarDictado } from "@/lib/usar-dictado";
@@ -703,6 +705,7 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
         setError(data.error ?? "No se pudo guardar");
         return;
       }
+      avisarPerfilActualizado();
       onSiguiente();
     } catch (e) {
       console.error("Error guardando objetivo:", e);
@@ -786,6 +789,22 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
                   ))}
                 </div>
               )}
+              {i > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                  <SelectorPeso
+                    peso={o.peso}
+                    style={{ width: 150 }}
+                    onChange={(peso) => {
+                      const copia = [...objetivos];
+                      copia[i] = { ...copia[i], peso };
+                      setObjetivos(copia);
+                    }}
+                  />
+                  <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                    {seBuscaDeVerdad(o.peso) ? "Se postula solo cuando calza." : "Te lo pregunto antes, en «Por decidir»."}
+                  </span>
+                </div>
+              )}
               {objetivos.length > 1 && (
                 <button
                   type="button"
@@ -804,7 +823,7 @@ function PasoObjetivo({ onSiguiente, onOmitir }: { onSiguiente: () => void; onOm
               type="button"
               className="ap-button-ghost"
               style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 16 }}
-              onClick={() => setObjetivos([...objetivos, { ciuo: null, etiqueta: "", peso: 0.5 }])}
+              onClick={() => setObjetivos([...objetivos, { ciuo: null, etiqueta: "", peso: PESO_LO_BUSCO }])}
             >
               <Plus size={14} /> También me interesa...
             </button>
