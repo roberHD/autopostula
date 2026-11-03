@@ -5,6 +5,7 @@ import { obtenerSubscripcionVigente } from "@/lib/plan-vigente";
 import { asegurarPlataformasBase } from "@/lib/platforms";
 import { asegurarPlanesBase } from "@/lib/plans";
 import { premiarPerfilCompleto } from "@/lib/extras";
+import { esperandoEnPortalesDesconectados } from "@/lib/aprobadas-por-enviar";
 
 export async function GET() {
   const session = await auth();
@@ -18,7 +19,7 @@ export async function GET() {
   // tanto en local como recién desplegado en un ambiente nuevo.
   await Promise.all([asegurarPlataformasBase(), asegurarPlanesBase()]);
 
-  const [plataformas, cuentas, subscripcion, usuario] = await Promise.all([
+  const [plataformas, cuentas, subscripcion, usuario, esperandoPorPortal] = await Promise.all([
     // docs/revision-2026-09-28.md: orden fijo (antes el que devolviera la base,
     // y a veces Trabajando salía primero).
     prisma.jobPlatform.findMany({ orderBy: { nombre: "asc" } }),
@@ -31,9 +32,13 @@ export async function GET() {
     }),
     obtenerSubscripcionVigente(userId),
     prisma.user.findUnique({ where: { id: userId }, select: { rol: true } }),
+    // docs/aprobadas-y-portal-desconectado-2026-11-03.md: lo aprobado en un
+    // portal desconectado no se envía. La tarjeta de ese portal lo dice.
+    esperandoEnPortalesDesconectados(userId),
   ]);
 
   return NextResponse.json({
+    esperandoPorPortal,
     plataformas,
     cuentas: cuentas.map((c) => ({
       id: c.id,

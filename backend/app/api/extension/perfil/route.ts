@@ -6,6 +6,8 @@ import { urlDePortal } from "@/lib/entrada";
 import { perfilParaElScorer } from "@/lib/perfil-scorer";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { DIAS_DE_DECISIONES, calcularUmbralPostular, tocaCalibrar } from "@/lib/calibracion-umbral";
+import { filtroAprobadasPorEnviar, portalesConectados } from "@/lib/aprobadas-por-enviar";
+import { esLaMismaOferta } from "@/lib/misma-oferta";
 import { hashToken } from "@/lib/token";
 
 // Mismo patrón de auth por token que /api/ai/analizar-oferta y compañía —
@@ -18,8 +20,8 @@ async function getUserFromToken(request: Request) {
   return prisma.user.findUnique({ where: { apiToken: hashToken(token) } });
 }
 
-// Cuánto se sigue intentando enviar una oferta aprobada en "Por decidir".
-const DIAS_PARA_ENVIAR_APROBADA = 14;
+// Cuántas aprobadas se le entregan a la extensión en cada consulta.
+const APROBADAS_POR_CONSULTA = 5;
 
 /**
  * docs/revision-scorer-2026-09-30.md §7: el umbral de esta cuenta, ajustado con
@@ -107,25 +109,28 @@ export async function GET(request: Request) {
     // en la revisión...) quedaba ahí para siempre, y con 5 así ninguna
     // aprobación nueva se enviaba más. Ahora primero las recientes, y pasados
     // 14 días se dejan de intentar (siguen siendo un "sí" para el perfil).
-    prisma.decisionOferta.findMany({
-      where: {
-        userId: user.id,
-        // Las del panel de revisión del portal también: la extensión las encola
-        // al apretar "Postular", y esto las reintenta si quedó alguna sin enviar.
-        fuente: { in: ["BANDA_GRIS", "PANEL_REVISION"] },
-        veredicto: "SI",
-        jobOfferId: null,
-        // Sin enlace o sin portal no hay cómo enviarla: que no ocupe uno de
-        // los 5 cupos (igual que el conteo de lib/recordatorio-rafaga.ts).
-        url: { not: null },
-        plataforma: { not: null },
-        // Una fila sin fecha (no debería haber) no se deja afuera: la extensión
-        // igual la cierra a los 3 intentos fallidos.
-        OR: [{ decididoEn: null }, { decididoEn: { gte: new Date(Date.now() - DIAS_PARA_ENVIAR_APROBADA * 24 * 3_600_000) } }],
-      },
-      orderBy: { decididoEn: "desc" },
-      take: 5,
-    }),
+    // Las del panel de revisión del portal también: la extensión las encola al
+    // apretar "Postular", y esto las reintenta si quedó alguna sin enviar.
+    //
+    // docs/aprobadas-y-portal-desconectado-2026-11-03.md: solo las de portales
+    // conectados. Las de uno desconectado no se pueden enviar (puede-postular
+    // dice que no) y ocupaban los 5 cupos para siempre: una cuenta tenía los 5
+    // con ofertas de Trabajando después de cambiarse a Laborum. Siguen
+    // aprobadas: si vuelve a conectar ese portal dentro de los 14 días, salen.
+    // Y una oferta aprobada dos veces (pasaba antes del arreglo de
+    // /api/extension/banda-gris) ocupa un solo cupo.
+    (async () => {
+      const filas = await prisma.decisionOferta.findMany({
+        where: filtroAprobadasPorEnviar(user.id, new Date(), await portalesConectados(user.id)),
+        orderBy: { decididoEn: "desc" },
+        take: APROBADAS_POR_CONSULTA * 4,
+      });
+      const unicas: typeof filas = [];
+      for (const d of filas) {
+        if (!unicas.some((u) => esLaMismaOferta(u, d))) unicas.push(d);
+      }
+      return unicas.slice(0, APROBADAS_POR_CONSULTA);
+    })(),
     // §2.7: el nivel del cargo se calcula acá, en cada consulta, y no dentro de
     // perfilCompilado -- así también rige para perfiles compilados antes de
     // que existiera, sin obligar a recompilarlos.

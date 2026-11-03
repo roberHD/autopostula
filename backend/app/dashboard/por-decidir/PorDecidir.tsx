@@ -5,6 +5,7 @@ import { ExternalLink, Building2, TriangleAlert, Star } from "lucide-react";
 import { SwipeTriaje, type ItemSwipe } from "@/components/SwipeTriaje";
 import { formatearRazon, esRazonPositiva } from "@/lib/formatear-razon";
 import type { EstadoExtension } from "@/lib/estado-extension";
+import type { EsperaPorPortal } from "@/lib/aprobadas-por-enviar";
 
 // Facetas leídas en la Etapa 2 (docs/visibilidad-y-etapa2.md §B/§E) -- todos
 // opcionales, una fila sin Etapa 2 (o de antes del cambio) simplemente no
@@ -32,7 +33,27 @@ type DecisionGris = {
   razones: unknown[] | null;
   detalleAviso: DetalleAviso;
   venceEn: string | null;
+  // false = el portal de la oferta está desconectado: un «sí» no se envía hasta
+  // que lo vuelva a conectar (docs/aprobadas-y-portal-desconectado-2026-11-03.md).
+  portalConectado?: boolean;
 };
+
+/**
+ * Lo que espera en un portal desconectado, en palabras. Error real del
+ * 2026-11-03: una cuenta gratis se cambió de Trabajando a Laborum y siguió
+ * aprobando ofertas de Trabajando que nunca iban a salir, sin que nada se lo dijera.
+ */
+function textoEsperaPortal(e: EsperaPorPortal): string {
+  const aprobadas =
+    e.aprobadas === 1 ? "1 oferta aprobada" : `${e.aprobadas} ofertas aprobadas`;
+  if (e.aprobadas > 0 && e.pendientes > 0) {
+    return `Tienes ${aprobadas} de ${e.portal} que no se ${e.aprobadas === 1 ? "va" : "van"} a enviar mientras siga así, y ${e.pendientes} más por decidir acá.`;
+  }
+  if (e.aprobadas > 0) {
+    return `Tienes ${aprobadas} de ${e.portal} que no se ${e.aprobadas === 1 ? "va" : "van"} a enviar mientras siga así.`;
+  }
+  return `Lo que apruebes de ${e.portal} acá no se va a enviar mientras siga así.`;
+}
 
 // La razón de ubicación (§C) trae la comuna real de la oferta -- es la queja
 // concreta del criterio de aceptación §H.2 ("la razón debe nombrar la comuna").
@@ -127,6 +148,7 @@ function RazonesEnDos({ razones }: { razones: unknown[] }) {
 export type InicialPorDecidir = {
   pendientes: DecisionGris[];
   expiradasSinRevisar: number;
+  esperandoPortal?: EsperaPorPortal[];
   estadoExt: EstadoExtension | null;
   ahora: string;
 };
@@ -142,6 +164,7 @@ export default function PorDecidir({
 }) {
   const [pendientes, setPendientes] = useState<DecisionGris[] | null>(inicial?.pendientes ?? null);
   const [expiradasSinRevisar, setExpiradasSinRevisar] = useState(inicial?.expiradasSinRevisar ?? 0);
+  const [esperandoPortal, setEsperandoPortal] = useState<EsperaPorPortal[]>(inicial?.esperandoPortal ?? []);
   const [ahora] = useState(() => (inicial ? new Date(inicial.ahora).getTime() : Date.now()));
   const [mensaje, setMensaje] = useState("");
   const [aviso, setAviso] = useState("");
@@ -183,6 +206,7 @@ export default function PorDecidir({
       }
       setPendientes(data.pendientes ?? []);
       setExpiradasSinRevisar(data.expiradasSinRevisar ?? 0);
+      setEsperandoPortal(data.esperandoPortal ?? []);
     } catch (err) {
       console.error("Error cargando banda gris:", err);
       setMensaje("No se pudo cargar — revisa la consola");
@@ -212,7 +236,22 @@ export default function PorDecidir({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: item.id, veredicto }),
       });
-      if (res.ok && veredicto === "SI") avisarALaExtension();
+      if (!res.ok) return;
+      const portal = typeof item.plataforma === "string" ? item.plataforma : null;
+      if (item.portalConectado === false && portal) {
+        // La extensión no la puede enviar todavía: no tiene sentido avisarle, y
+        // su respuesta ("ya la tiene en cola") diría algo que no es cierto.
+        setEsperandoPortal((lista) =>
+          lista.map((e) =>
+            e.portal === portal
+              ? { ...e, pendientes: Math.max(0, e.pendientes - 1), aprobadas: e.aprobadas + (veredicto === "SI" ? 1 : 0) }
+              : e
+          )
+        );
+        if (veredicto === "SI") setAviso(`Aprobada. Se enviará cuando vuelvas a conectar ${portal} en Portales.`);
+        return;
+      }
+      if (veredicto === "SI") avisarALaExtension();
     } catch (err) {
       console.error("Error guardando decisión:", err);
     }
@@ -228,6 +267,7 @@ export default function PorDecidir({
       razones: d.razones,
       detalleAviso: d.detalleAviso,
       venceEn: d.venceEn,
+      portalConectado: d.portalConectado !== false,
     })) ?? [];
 
   return (
@@ -257,6 +297,31 @@ export default function PorDecidir({
           {aviso}
         </p>
       )}
+
+      {esperandoPortal.filter((e) => e.aprobadas > 0 || e.pendientes > 0).map((e) => (
+        <div
+          key={e.portal}
+          className="ap-section"
+          role="note"
+          style={{
+            display: "flex", alignItems: "flex-start", gap: 10,
+            borderColor: "color-mix(in oklch, var(--chart-4) 35%, transparent)",
+          }}
+        >
+          <TriangleAlert size={16} color="var(--chart-4)" style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+            <p>
+              <strong>{e.portal} está desconectado.</strong> {textoEsperaPortal(e)}
+            </p>
+            <p style={{ color: "var(--text-muted)", marginTop: 2 }}>
+              {e.aprobadas > 0
+                ? "Si lo vuelves a conectar, se envían las que aprobaste en los últimos 14 días."
+                : "Si lo vuelves a conectar, se envía lo que apruebes."}{" "}
+              <a href="/dashboard/portales" style={{ color: "var(--accent)" }}>Ir a Portales</a>
+            </p>
+          </div>
+        </div>
+      ))}
 
       {expiradasSinRevisar > 0 && (
         <div
@@ -301,6 +366,17 @@ export default function PorDecidir({
 
               return (
                 <div style={{ textAlign: "center" }}>
+                  {item.portalConectado === false && !!item.plataforma && (
+                    <p
+                      style={{
+                        fontSize: 12.5, color: "var(--chart-4)", marginBottom: 8,
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                      }}
+                    >
+                      <TriangleAlert size={13} style={{ flexShrink: 0 }} />
+                      {String(item.plataforma)} está desconectado: si dices que sí, se envía cuando lo vuelvas a conectar.
+                    </p>
+                  )}
                   {!!item.empresa && (
                     <p style={{ fontSize: 12.5, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 6 }}>
                       <Building2 size={13} /> {String(item.empresa)}
@@ -351,10 +427,13 @@ export default function PorDecidir({
                 </div>
               );
             }}
-            pie={
-              <p className="ap-decidir-cuando">
-                Si dices que sí, se envía <b>en cuanto tu computador tenga Chrome abierto con la extensión</b>.
-              </p>
+            pie={(item) =>
+              // La de un portal desconectado ya dice arriba cuándo se envía.
+              item.portalConectado === false ? null : (
+                <p className="ap-decidir-cuando">
+                  Si dices que sí, se envía <b>en cuanto tu computador tenga Chrome abierto con la extensión</b>.
+                </p>
+              )
             }
           />
         )}

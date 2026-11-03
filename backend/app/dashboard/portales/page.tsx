@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ShieldCheck, KeyRound, Eye, EyeOff, Copy, Check, RefreshCw, Plug, PlugZap, Puzzle } from "lucide-react";
+import { ShieldCheck, KeyRound, Eye, EyeOff, Copy, Check, RefreshCw, Plug, PlugZap, Puzzle, TriangleAlert } from "lucide-react";
 import { URL_CHROME_WEB_STORE } from "@/lib/enlaces";
+import type { EsperaPorPortal } from "@/lib/aprobadas-por-enviar";
 
 type Plataforma = { id: string; nombre: string; urlBase: string };
 type Cuenta = {
@@ -25,6 +26,14 @@ const ESTILO_PORTAL: Record<string, { color: string; mono: string }> = {
 };
 const ESTILO_DEFAULT = { color: "var(--accent)", mono: "??" };
 
+// docs/aprobadas-y-portal-desconectado-2026-11-03.md: lo aprobado en un portal
+// desconectado espera hasta que se vuelva a conectar (14 días como máximo).
+function textoAprobadasEsperando(n: number): string {
+  return n === 1
+    ? "Tienes 1 oferta aprobada de acá esperando: se envía si lo vuelves a conectar."
+    : `Tienes ${n} ofertas aprobadas de acá esperando: se envían si lo vuelves a conectar.`;
+}
+
 export default function PortalesPage() {
   const [plataformas, setPlataformas] = useState<Plataforma[]>([]);
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
@@ -38,6 +47,8 @@ export default function PortalesPage() {
   const [revelado, setRevelado] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  const [aviso, setAviso] = useState("");
+  const [esperando, setEsperando] = useState<EsperaPorPortal[]>([]);
   const [cargando, setCargando] = useState(true);
   // §4.4 (docs/revision-2026-09-16.md): reconectar la extensión sin copiar el
   // token a mano. `null` = todavía detectando si está instalada.
@@ -45,21 +56,25 @@ export default function PortalesPage() {
   const [conexion, setConexion] = useState<{ estado: "libre" | "conectando" | "ok" | "error"; texto?: string }>({ estado: "libre" });
   const temporizadorConexion = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function cargar() {
+  // Devuelve lo que espera en cada portal desconectado (null si no se pudo cargar).
+  async function cargar(): Promise<EsperaPorPortal[] | null> {
     try {
       const res = await fetch("/api/platform-accounts");
       const data = await res.json();
       if (!res.ok) {
         setMensaje(data.error ?? `Error ${res.status} al cargar portales`);
-        return;
+        return null;
       }
       setPlataformas(data.plataformas ?? []);
       setCuentas(data.cuentas ?? []);
       setMaxActivas(data.maxPlataformasActivas ?? null);
       setPlanNombre(data.planNombre ?? null);
+      setEsperando(data.esperandoPorPortal ?? []);
+      return data.esperandoPorPortal ?? [];
     } catch (err) {
       console.error("Error cargando portales:", err);
       setMensaje("No se pudo cargar la lista de portales — revisa la consola");
+      return null;
     } finally {
       setCargando(false);
     }
@@ -152,6 +167,7 @@ export default function PortalesPage() {
 
   async function conectar(platformId: string) {
     setMensaje("");
+    setAviso("");
     const res = await fetch("/api/platform-accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -166,12 +182,23 @@ export default function PortalesPage() {
   }
 
   async function desconectar(platformId: string) {
+    setMensaje("");
+    setAviso("");
     await fetch("/api/platform-accounts", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ platformId }),
     });
-    cargar();
+    const espera = await cargar();
+    // Error real del 2026-11-03: una cuenta se cambió de portal y lo que había
+    // aprobado en el anterior dejó de enviarse sin que nada se lo dijera.
+    const nombre = plataformas.find((p) => p.id === platformId)?.nombre;
+    const aprobadas = espera?.find((e) => e.portal === nombre)?.aprobadas ?? 0;
+    if (nombre && aprobadas > 0) {
+      setAviso(
+        `Desconectaste ${nombre}. ${aprobadas === 1 ? "La oferta que aprobaste de ahí queda guardada y se envía" : `Las ${aprobadas} ofertas que aprobaste de ahí quedan guardadas y se envían`} si lo vuelves a conectar dentro de 14 días.`
+      );
+    }
   }
 
   async function regenerarToken() {
@@ -219,6 +246,9 @@ export default function PortalesPage() {
 
       {mensaje && (
         <p style={{ color: "var(--status-rechazado)", fontSize: 13, marginBottom: 12 }}>{mensaje}</p>
+      )}
+      {aviso && (
+        <p role="status" style={{ fontSize: 13, marginBottom: 12, color: "var(--text)" }}>{aviso}</p>
       )}
 
       {/* Uso del plan */}
@@ -328,6 +358,13 @@ export default function PortalesPage() {
                     </button>
                   )}
                 </div>
+
+                {!conectado && (esperando.find((e) => e.portal === p.nombre)?.aprobadas ?? 0) > 0 && (
+                  <p style={{ fontSize: 12, color: "var(--chart-4)", display: "flex", alignItems: "flex-start", gap: 6, lineHeight: 1.45 }}>
+                    <TriangleAlert size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+                    {textoAprobadasEsperando(esperando.find((e) => e.portal === p.nombre)?.aprobadas ?? 0)}
+                  </p>
+                )}
 
                 {conectado && cuenta && cuenta.postulaciones > 0 && (
                   <div className="ap-portal-cifras" style={{ marginTop: 16 }}>

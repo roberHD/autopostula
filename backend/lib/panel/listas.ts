@@ -4,6 +4,7 @@ import { datosDeLaOferta } from "@/lib/datos-postulacion";
 import { urlDePortal } from "@/lib/entrada";
 import { estadoExtension } from "@/lib/estado-extension";
 import { filtroSinNoticias } from "@/lib/estado-real";
+import { esperandoEnPortalesDesconectados, portalesConectados } from "@/lib/aprobadas-por-enviar";
 
 // Las listas del panel (Postulaciones y Por decidir). Las usan sus rutas de la
 // API y las páginas mismas, que las arman en el servidor para llegar con los
@@ -93,7 +94,7 @@ export async function listarPorDecidir(userId: string) {
     data: { veredicto: "EXPIRADA" },
   });
 
-  const [pendientes, expiradasSinRevisar] = await Promise.all([
+  const [pendientes, expiradasSinRevisar, conectados] = await Promise.all([
     prisma.decisionOferta.findMany({
       where: { userId, fuente: "BANDA_GRIS", veredicto: "PENDIENTE" },
       orderBy: { venceEn: "asc" },
@@ -101,13 +102,25 @@ export async function listarPorDecidir(userId: string) {
     prisma.decisionOferta.count({
       where: { userId, fuente: "BANDA_GRIS", veredicto: "EXPIRADA", decididoEn: null },
     }),
+    portalesConectados(userId),
   ]);
+
+  // docs/aprobadas-y-portal-desconectado-2026-11-03.md: lo aprobado de un portal
+  // desconectado no se envía. La página lo dice arriba (cuántas esperan y en qué
+  // portal) y en cada tarjeta de ese portal, antes de que la persona diga que sí.
+  const esperandoPortal = await esperandoEnPortalesDesconectados(userId, new Date(), conectados);
 
   // docs/revision-2026-09-28.md §1: el enlace "Ver oferta" de la tarjeta solo
   // si es https:// del portal (las filas de antes no se validaban al guardar).
   return {
-    pendientes: pendientes.map((d) => ({ ...d, url: urlDePortal(d.url, d.plataforma) })),
+    pendientes: pendientes.map((d) => ({
+      ...d,
+      url: urlDePortal(d.url, d.plataforma),
+      // Sin portal (filas viejas) no hay qué avisar.
+      portalConectado: !d.plataforma || conectados.includes(d.plataforma),
+    })),
     expiradasSinRevisar,
+    esperandoPortal,
   };
 }
 

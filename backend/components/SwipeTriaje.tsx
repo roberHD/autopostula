@@ -74,8 +74,9 @@ export function SwipeTriaje<V extends string = "SI" | "NO">({
   // de onboarding no lo necesita y lo deja sin usar.
   renderDetalle?: (item: ItemSwipe) => React.ReactNode;
   // Una línea bajo los botones mientras quedan ofertas (en "Por decidir":
-  // cuándo se envía si dices que sí). Al terminar no se muestra.
-  pie?: React.ReactNode;
+  // cuándo se envía si dices que sí). Al terminar no se muestra. Puede depender
+  // de la tarjeta: la de un portal desconectado no se envía al abrir Chrome.
+  pie?: React.ReactNode | ((item: ItemSwipe) => React.ReactNode);
 }) {
   const [indice, setIndice] = useState(0);
   const [enviando, setEnviando] = useState(false);
@@ -147,7 +148,7 @@ export function SwipeTriaje<V extends string = "SI" | "NO">({
           </button>
         ))}
       </div>
-      {pie}
+      {typeof pie === "function" ? pie(actual) : pie}
     </div>
   );
 }

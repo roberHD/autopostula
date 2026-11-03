@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { limpiarEntradaScorer, puntajeONull, textoCorto, urlDePortal } from "@/lib/entrada";
+import { esLaMismaOferta, filtroMismaOferta } from "@/lib/misma-oferta";
 import { hashToken } from "@/lib/token";
 
 // Reporta una oferta que el scorer local (§6) dejó en banda gris -- entra a
@@ -36,13 +37,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Falta titulo" }, { status: 400 });
   }
 
-  // Evita duplicados si un escaneo posterior (la alarma corre cada 2h) vuelve
-  // a ver la misma oferta mientras sigue pendiente de decisión.
+  // Un escaneo posterior vuelve a ver la misma oferta. Si sigue esperando
+  // decisión, o la persona ya la decidió, no se pregunta de nuevo.
+  //
+  // docs/aprobadas-y-portal-desconectado-2026-11-03.md §3: antes solo se miraba
+  // si había una PENDIENTE con el mismo enlace. Una oferta ya aprobada volvía a
+  // «Por decidir» con el escaneo siguiente: una cuenta aprobó una docena de
+  // ofertas dos veces, y en la base había 36 tarjetas así de 5 personas. Ahora cuenta
+  // cualquier decisión suya sobre esa oferta (en «Por decidir» o en el panel del
+  // portal): el sí, el no, y el sí que la extensión no pudo enviar (EXPIRADA con
+  // fecha de decisión). Solo vuelve a preguntar si la anterior venció sin que
+  // nadie la decidiera.
   if (url) {
-    const existente = await prisma.decisionOferta.findFirst({
-      where: { userId: user.id, url, fuente: "BANDA_GRIS", veredicto: "PENDIENTE" },
+    const candidatas = await prisma.decisionOferta.findMany({
+      where: {
+        userId: user.id,
+        fuente: { in: ["BANDA_GRIS", "PANEL_REVISION"] },
+        AND: [
+          filtroMismaOferta(url, plataforma),
+          { OR: [{ veredicto: { in: ["PENDIENTE", "SI", "NO"] } }, { veredicto: "EXPIRADA", decididoEn: { not: null } }] },
+        ],
+      },
+      select: { url: true, plataforma: true },
+      take: 20,
     });
-    if (existente) {
+    if (candidatas.some((d) => esLaMismaOferta(d, { url, plataforma }))) {
       return NextResponse.json({ ok: true, yaExistia: true });
     }
   }

@@ -149,10 +149,26 @@ async function main() {
   }
   // Un pase que YA venció (la cuenta volvió al plan gratis) y todavía dice ACTIVA: el acceso se decide por fecha.
   await prisma.subscription.create({ data: { userId: P + "n-pase-vencido", planId: plan.id, estado: "ACTIVA", periodoInicio: hace(24 * 40), periodoFin: hace(24 * 10) } });
-  // b tiene 3 aprobadas que se pueden enviar, una sin URL (no se puede enviar) y una que dijo que NO.
+  // b tiene 3 aprobadas que se pueden enviar, una sin URL (no se puede enviar), una que dijo que NO,
+  // y dos de Trabajando, que tiene desconectado: tampoco salen al abrir Chrome
+  // (docs/aprobadas-y-portal-desconectado-2026-11-03.md).
+  const portal = (nombre: string, urlBase: string) =>
+    prisma.jobPlatform.upsert({ where: { nombre }, update: {}, create: { nombre, urlBase, adapterVersion: "prueba" } });
+  const computrabajo = await portal("Computrabajo", "https://cl.computrabajo.com");
+  const trabajando = await portal("Trabajando", "https://www.trabajando.cl");
+  await prisma.platformAccount.createMany({
+    data: [
+      { userId: P + "b-con-aprobadas", platformId: computrabajo.id, activa: true },
+      { userId: P + "b-con-aprobadas", platformId: trabajando.id, activa: false },
+    ],
+  });
   const aprobada = (extra: Record<string, unknown>) => ({ userId: P + "b-con-aprobadas", fuente: "BANDA_GRIS" as const, tituloCrudo: "Oferta", veredicto: "SI" as const, url: "https://x/o", plataforma: "Computrabajo", ...extra });
   await prisma.decisionOferta.createMany({
-    data: [aprobada({}), aprobada({}), aprobada({}), aprobada({ url: null }), aprobada({ veredicto: "NO" }), aprobada({ fuente: "TRIAJE_ONBOARDING" })],
+    data: [
+      aprobada({}), aprobada({}), aprobada({}), aprobada({ url: null }), aprobada({ veredicto: "NO" }), aprobada({ fuente: "TRIAJE_ONBOARDING" }),
+      aprobada({ plataforma: "Trabajando", url: "https://www.trabajando.cl/trabajo/1-vendedor" }),
+      aprobada({ plataforma: "Trabajando", url: "https://www.trabajando.cl/trabajo/2-vendedor" }),
+    ],
   });
 
   const enviados: Enviado[] = [];
@@ -166,7 +182,7 @@ async function main() {
   check("...y a nadie más se le anota nada", (await Promise.all(["c-gratis", "d-de-baja", "e-reciente", "i-pausada", "j-sin-verificar", "k-sin-extension", "m-abandonada", "n-pase-vencido", "h-sin-fecha-de-conexion"].map(marca))).every((m) => m === null));
   const de = (id: string) => enviados.find((e) => e.email.startsWith(P + id))!;
   check("a: 50 h sin ponerse al día = 2 días", de("a-elegible").datos.dias === 2 && de("a-elegible").datos.aprobadas === 0, de("a-elegible").datos);
-  check("b: cuenta solo las aprobadas que se pueden enviar (3 de 6: sin URL, con NO y del triaje no)", de("b-con-aprobadas").datos.aprobadas === 3, de("b-con-aprobadas").datos);
+  check("b: cuenta solo las aprobadas que se pueden enviar (3 de 8: sin URL, con NO, del triaje y las 2 del portal desconectado no)", de("b-con-aprobadas").datos.aprobadas === 3, de("b-con-aprobadas").datos);
   check('g: nunca se puso al día -> dias = null ("todavía no se pone al día")', de("g-nunca-corrio").datos.dias === null, de("g-nunca-corrio").datos);
   check("cada correo trae SU enlace de baja firmado (y solo el suyo)", enviados.every((e) => { const u = e.email.replace("@example.test", ""); return e.datos.urlBaja.includes("u=" + u) && verificarBaja(u, new URL(e.datos.urlBaja).searchParams.get("t")); }));
   check("una cuenta con el pase vencido (ya es gratis aunque diga ACTIVA) no recibe nada", !quienes().includes("n-pase-vencido"));

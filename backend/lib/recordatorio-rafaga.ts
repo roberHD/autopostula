@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { obtenerModoAutomatico } from "./prueba-automatica";
 import { urlBajaRecordatorios, urlBajaUnClic } from "./baja-recordatorios";
 import { enviarCorreoRecordatorioRafaga, type DatosRecordatorioRafaga } from "./correo";
+import { filtroAprobadasPorEnviar, portalesConectados } from "./aprobadas-por-enviar";
 
 // docs/rafagas-y-ponerse-al-dia.md §3.8: el recordatorio por correo para quien lleva
 // días sin ponerse al día. La decisión de a quién se le manda es una función pura
@@ -147,18 +148,11 @@ export async function ejecutarRecordatorios(opciones: {
     }
 
     // Las mismas que la extensión enviaría al abrir Chrome (/api/extension/perfil):
-    // sin URL o sin portal no hay cómo enviarlas, así que no se cuentan.
+    // sin URL o sin portal no hay cómo enviarlas, y las de un portal desconectado
+    // tampoco salen al abrir Chrome, así que no se cuentan
+    // (docs/aprobadas-y-portal-desconectado-2026-11-03.md).
     const aprobadas = await prisma.decisionOferta.count({
-      where: {
-        userId: u.id,
-        fuente: { in: ["BANDA_GRIS", "PANEL_REVISION"] },
-        veredicto: "SI",
-        jobOfferId: null,
-        url: { not: null },
-        plataforma: { not: null },
-        // Las mismas que /api/extension/perfil sigue intentando enviar (14 días).
-        OR: [{ decididoEn: null }, { decididoEn: { gte: new Date(ahora.getTime() - 14 * 24 * HORA_MS) } }],
-      },
+      where: filtroAprobadasPorEnviar(u.id, ahora, await portalesConectados(u.id)),
     });
 
     try {
