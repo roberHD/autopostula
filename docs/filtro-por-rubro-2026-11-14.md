@@ -1,7 +1,7 @@
 # El filtro mira el rubro y el tipo de venta — 2026-11-14
 
 > **Estado:** implementado en `rama-roberto` (extensión 2.22.0, más los textos del panel en el
-> servidor). Desde el 14-11 corre en el Chrome de Roberto, que tiene la extensión cargada desde la
+> servidor; la 2.22.1 suma los dos arreglos al enviar de §7). Desde el 14-11 corre en el Chrome de Roberto, que tiene la extensión cargada desde la
 > carpeta del repo. Falta subirla a la tienda.
 > **Origen:** Roberto: *«si hay una oferta de Adidas y no la toma, hay un problema… necesito mejorar
 > el filtro de búsqueda, que no tenga tantos errores»*. Busca venta de vestuario, part time, en la RM.
@@ -130,13 +130,58 @@ Las que dejan una oferta en «Por decidir» llevan `tope: true`, y la calibraci�
 
 ## 6. Pendiente
 
-1. **Subir la 2.22.0 a la tienda** y **mergear a `main`**. Sin el servidor nuevo, el panel muestra
+1. **Subir la 2.22.1 a la tienda** y **mergear a `main`**. Sin el servidor nuevo, el panel muestra
    «Sin razón registrada» en las razones de rubro.
-2. **Fallas al enviar, vistas en las postulaciones reales** (no son del filtro):
-   - Laborum: «se hizo clic pero no se detectó confirmación», 7 veces y repetida en las mismas
-     ofertas;
-   - el chat de Computrabajo: «no dejó enviar la respuesta», 3 veces.
+2. **Confirmar con una postulación real** los dos arreglos de §7. La prueba quedó bloqueada desde acá:
+   la confirmará la extensión de Roberto en su próxima pasada por esas ofertas.
 3. **Datos que la IA no tiene:** fecha de nacimiento, disponibilidad 5x2, turno nocturno. Van en
    «Información adicional» del perfil.
 4. **Idea:** que la persona elija sus rubros en Filtros (hoy salen de sus señales y vetos). El campo
    `perfil.contexto` ya existe para eso.
+
+---
+
+## 7. Dos fallas al enviar, vistas en las postulaciones reales (2026-11-17, extensión 2.22.1)
+
+De las 62 postulaciones del 14 al 17-11, 15 quedaron a medias. Dos causas se repetían, y ninguna era
+del filtro.
+
+### 7.1 Laborum: el sueldo pretendido
+
+**El síntoma:** «Se hizo clic pero no se detectó confirmación», 7 veces, varias repetidas en la misma
+oferta («Vendedora 20 hrs - Egaña», de INTIME; «Arauco Maipú»; «Vendedora 10 hrs - La Florida»). En
+«Mis postulaciones» de Laborum no aparecía ninguna.
+
+**La causa:** en esos avisos, «Postularme» es el botón de enviar de un formulario
+(`form#form-salario-pretendido`) que pide el sueldo bruto pretendido (`input#salarioPretendido`, solo
+dígitos). Vacío, el clic no hace nada. La extensión esperaba el formulario de preguntas o el
+«Postulado el…», no veía ninguno y la daba por perdida.
+
+**El arreglo:**
+- `adapters/laborum.js` llena el campo con la renta del perfil antes del clic;
+- `AP.montoDeRenta` (`core.js`) entiende «300.000», «$450.000 líquidos» o «300 mil», y no adivina en UF
+  ni sin número;
+- sin renta en el perfil, queda a medias diciendo qué falta.
+
+**Comprobado en el aviso real de INTIME, sin enviar:** el campo tomó «300.000» y Laborum calculó «$240.000,
+un aproximado a tu sueldo líquido». Laborum pide el sueldo **bruto**: si la renta del perfil es líquida,
+conviene subirla.
+
+### 7.2 Computrabajo: las preguntas largas en una pestaña de fondo
+
+**El síntoma:** «El chat de Computrabajo no dejó enviar la respuesta a "Si presentas algún tipo de
+discapacidad…"», 3 veces.
+
+**La causa:** Computrabajo escribe cada pregunta letra por letra, y la flecha de enviar se activa recién
+al terminar. Las postulaciones salen en pestañas de fondo, donde Chrome deja correr los temporizadores a
+lo más una vez por segundo: una pregunta de 150 letras tarda unos 150 s. La extensión esperaba 30 s fijos.
+
+**El arreglo:**
+- el plazo es de 30 s más 1,3 s por letra, con un máximo de 5 minutos;
+- mientras espera, la pestaña manda latidos para que la cola no la cierre a los 90 s;
+- con la pestaña a la vista se escribe en segundos, igual que antes.
+
+**Comprobado en el simulador del chat** (`verificar-chat-computrabajo.js`), con una escena nueva,
+«fondo»: la pregunta larga tarda 42 s en escribirse. Con el plazo fijo de 30 s esa escena falla; con el
+arreglo pasa. Contra: un chat que de verdad no acepta la respuesta ahora tarda hasta 5 minutos en darse
+por perdido.

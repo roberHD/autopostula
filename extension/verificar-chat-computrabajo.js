@@ -27,6 +27,7 @@ const ESCENAS = [
   ['muda', 'El portal no responde: queda por terminar, no enviada'],
   ['falta', 'La IA no sabe un dato: se le pregunta a la persona y su respuesta va al chat'],
   ['atascada', 'El chat no acepta la respuesta: queda por terminar con el motivo'],
+  ['fondo', 'La pregunta larga tarda 42 s en escribirse, como en una pestaña de fondo (antes fallaba a los 30 s)'],
 ];
 
 const PAGINA_TODAS = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Corriendo…</title>
@@ -48,6 +49,7 @@ const ESPERADO = {
   muda: (x) => !x.r.ok && !x.enviado && reportes(x).join() === 'INCOMPLETA' && /no mostró/.test(x.reportes[0].nota),
   falta: (x) => x.r.ok && x.enviado && (x.chat.find(c => c.paso === 3) || {}).valor === 'Lunes a viernes, de 15:00 a 21:00.',
   atascada: (x) => !x.r.ok && !x.enviado && reportes(x).join() === 'INCOMPLETA' && /no dejó enviar/.test(x.reportes[0].nota),
+  fondo: (x) => x.r.ok && x.enviado && x.chat.length === 5 && reportes(x).join() === 'ENVIADA',
 };
 const t = document.getElementById('t'); const marco = document.getElementById('marco');
 let fallas = 0;

@@ -555,6 +555,24 @@ async function postularEnPagina(id, titulo, url, decisionOfertaId, empresa) {
     }
   }
 
+  // Sueldo pretendido (2026-11-17, docs/filtro-por-rubro-2026-11-14.md §7):
+  // en algunos avisos (INTIME, Todomoda...) "Postularme" es el botón de un
+  // formulario que pide el sueldo bruto pretendido. Vacío, el clic no hace nada:
+  // se marcaban "a medias" con "no se detectó confirmación", 7 veces entre el
+  // 16 y el 17 de noviembre, y se reintentaban igual. Se llena con la renta del
+  // perfil; sin ella, se dice qué falta.
+  const formSueldo = btn.form && btn.form.id === 'form-salario-pretendido' ? btn.form : null;
+  const campoSueldo = formSueldo && formSueldo.querySelector('input[name="salarioPretendido"], #salarioPretendido');
+  if (campoSueldo && !String(campoSueldo.value || '').trim()) {
+    const monto = AP.montoDeRenta(AP.cfg && AP.cfg.perfil && AP.cfg.perfil.renta);
+    if (!monto) {
+      marcarIncompleta(id, titulo, url, 'Laborum pide tu sueldo pretendido y no está en tu perfil: agrega tu renta esperada en Perfil', null, decisionOfertaId, empresa);
+      return { ok: false, expirada: false };
+    }
+    setVal(campoSueldo, String(monto));
+    await sleep(300);
+  }
+
   btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
   await sleep(400);
   btn.click();

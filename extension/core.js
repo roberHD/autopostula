@@ -3476,6 +3476,20 @@ AP.clasificarOfertasIA = async function (titulos, objetivo) {
 };
 
 // ── Utilidades de formulario (genéricas — no dependen del sitio) ──
+// La renta del perfil ("300.000", "$450.000 líquidos", "300 mil") como un
+// número de pesos, para un campo que solo acepta dígitos (el sueldo pretendido
+// de Laborum, docs/filtro-por-rubro-2026-11-14.md §7). null si no se entiende:
+// sin número, en UF, o fuera de lo razonable para un sueldo mensual en pesos.
+AP.montoDeRenta = function (texto) {
+  const m = String(texto || '').match(/\d{1,3}(?:[.\s]\d{3})+|\d+/);
+  if (!m) return null;
+  if (/\buf\b/i.test(String(texto))) return null;
+  let monto = parseInt(m[0].replace(/[.\s]/g, ''), 10);
+  if (!monto) return null;
+  if (monto < 10000) monto *= 1000; // "300" o "300 mil"
+  return monto >= 100000 && monto <= 20000000 ? monto : null;
+};
+
 AP.setVal = function (el, val) {
   try {
     const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;

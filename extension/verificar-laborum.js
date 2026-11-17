@@ -192,6 +192,18 @@ const LISTADO_PT = '/en-region-metropolitana/empleos-part-time-busqueda-vendedor
     check('postulando: tampoco avisa que terminó (antes cerraba la pestaña)', t.terminados().length === 0);
   }
 
+  // ── 1b. El sueldo pretendido: la renta del perfil como número (2026-11-17) ──
+  {
+    const t = crear({ pathname: LISTADO_PT, historia: 1, pagina: { sel: {} }, perfil: PERFIL });
+    const m = t.AP.montoDeRenta;
+    check('sueldo: "300.000" -> 300000', m('300.000') === 300000);
+    check('sueldo: "$450.000 líquidos" -> 450000', m('$450.000 líquidos') === 450000);
+    check('sueldo: "300 mil" -> 300000', m('300 mil') === 300000);
+    check('sueldo: "Entre 400.000 y 500.000" toma el primero', m('Entre 400.000 y 500.000') === 400000);
+    check('sueldo: "1.200.000" -> 1200000', m('1.200.000') === 1200000);
+    check('sueldo: en UF, vacío o sin número no se adivina', m('30 UF') === null && m('') === null && m('a convenir') === null && m(null) === null);
+  }
+
   // ── 2. La búsqueda filtrada por jornada: la tarjeta lleva esa jornada ──
   {
     const t = crear({ pathname: LISTADO_PT, historia: 1, pagina: { sel: { 'a[href^="/empleos/"]': [tarjeta({ id: 11, titulo: 'Vendedor de tienda' })] } }, perfil: PERFIL, oculta: true });

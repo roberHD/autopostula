@@ -764,11 +764,31 @@ async function prepararChat(chat, contexto) {
 // Escribe la respuesta y aprieta la flecha. Mientras Computrabajo "escribe" la
 // pregunta no acepta el envío: la flecha recién toma la clase "send" cuando la
 // casilla cambia y la pregunta ya terminó, así que se reintenta.
-async function escribirYEnviar(chat, valor) {
+// Cuánto se espera a que una pregunta termine de "escribirse" (2026-11-17).
+// Computrabajo la escribe letra por letra con temporizadores, y en una pestaña
+// de fondo -- las de la cola lo son -- Chrome los deja correr a lo más una vez
+// por segundo: una pregunta de 150 letras tarda unos 150 s. Con 30 s fijos,
+// las largas ("Si presentas algún tipo de discapacidad, indícanos...") fallaban
+// con "no dejó enviar la respuesta" (3 veces entre el 16 y el 17 de
+// noviembre). Con la pestaña a la vista termina en segundos igual.
+function tiempoParaPregunta(pregunta) {
+  return Math.min(5 * 60 * 1000, 30000 + 1300 * String(pregunta || '').length);
+}
+
+// Mientras se espera, la pestaña avisa que sigue trabajando: si no, la cola la
+// cierra a los 90 s sin noticias (background.js, el tope de cada pestaña).
+async function esperarConLatido(promesa) {
+  const latido = setInterval(() => AP.latido(), 10000);
+  try { return await promesa; } finally { clearInterval(latido); }
+}
+
+async function escribirYEnviar(chat, valor, pregunta) {
   const casilla = chat.casilla;
-  const hasta = Date.now() + 30000;
+  const hasta = Date.now() + tiempoParaPregunta(pregunta);
+  let ultimoLatido = Date.now();
   while (Date.now() < hasta) {
     if (!AP.activo) return false;
+    if (Date.now() - ultimoLatido > 10000) { AP.latido(); ultimoLatido = Date.now(); }
     const flecha = chat.cont.querySelector(KQ.flecha) || document.querySelector(KQ.flecha);
     if (casilla && flecha && !casilla.disabled && AP.esVisible(casilla)) {
       if (casilla.value !== valor) setVal(casilla, valor);
@@ -805,10 +825,10 @@ async function responderChat(chat, respuestasLog) {
       const opcion = r.elegidoEl && r.elegidoEl.kq;
       const grupo = paso.el.querySelector(KQ.grupoOpciones);
       // Las opciones aparecen cuando la pregunta termina de escribirse.
-      const lista = opcion && await esperarEnChat(() => (!grupo || !grupo.classList.contains('hide')) && AP.esVisible(opcion) && opcion, 30000);
+      const lista = opcion && await esperarConLatido(esperarEnChat(() => (!grupo || !grupo.classList.contains('hide')) && AP.esVisible(opcion) && opcion, tiempoParaPregunta(r.pregunta)));
       if (!lista) return { ok: false, razon: 'No pude marcar la opción en «' + cortar(r.pregunta) + '»' };
       lista.click();
-    } else if (!(await escribirYEnviar(chat, r.respuesta))) {
+    } else if (!(await escribirYEnviar(chat, r.respuesta, r.pregunta))) {
       return { ok: false, razon: 'El chat de Computrabajo no dejó enviar la respuesta a «' + cortar(r.pregunta) + '»' };
     }
     const guardada = await esperarEnChat(() => pasoRespondido(paso), 12000);

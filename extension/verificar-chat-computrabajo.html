@@ -137,14 +137,18 @@ function abrirChat() {
     bloqueado = true; flecha.classList.remove('send');
     caja.classList.toggle('hide', el.hasAttribute('data-kq-radio'));
     let k = 0;
+    // 'fondo': la primera pregunta (la larga, de unas 170 letras) se escribe de a
+    // una letra cada 250 ms, como en una pestaña de fondo, donde Chrome frena
+    // los temporizadores: unos 42 s, más que los 30 s que se esperaban antes.
+    const lenta = ESCENA === 'fondo' && i === 0;
     const t = setInterval(() => {
-      k += 4; label.textContent = texto.slice(0, k);
+      k += lenta ? 1 : 4; label.textContent = texto.slice(0, k);
       if (k >= texto.length) {
         clearInterval(t); bloqueado = false; actualizarFlecha();
         const g = el.querySelector('[data-kq-question-radio]');
         if (g) g.classList.remove('hide');
       }
-    }, 20);
+    }, lenta ? 250 : 20);
   }
   function guardar(i, valor, visible) {
     const el = pasos[i];
