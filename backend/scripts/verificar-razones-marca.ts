@@ -41,7 +41,7 @@ const contexto: Record<string, unknown> = {
   clearTimeout,
 };
 vm.createContext(contexto);
-for (const archivo of ["data/comunas-cl.js", "core.js"]) {
+for (const archivo of ["data/comunas-cl.js", "data/sectores-cl.js", "core.js"]) {
   vm.runInContext(fs.readFileSync(path.join(carpeta, archivo), "utf8"), contexto, { filename: archivo });
 }
 const AP = (contexto.window as { AP: { razonComoEnElPanel: (r: unknown) => string; esRazonPositiva: (r: unknown) => boolean | null } }).AP;
@@ -76,6 +76,19 @@ const razones: unknown[] = [
   { tipo: "jornada", declarada: "full_time" },
   { tipo: "jornada_desconocida", declarada: "part_time" },
   { tipo: "jornada_desconocida", declarada: "full_time" },
+  { tipo: "jornada_desconocida", declarada: "part_time", ambas: true },
+  // docs/filtro-por-rubro-2026-11-14.md
+  { tipo: "sector", sector: "vestuario", nombre: "vestuario y moda", relacion: "preferido", donde: "titulo", termino: "adidas" },
+  { tipo: "sector", sector: "vestuario", nombre: "vestuario y moda", relacion: "preferido", donde: "titulo", termino: "moda" },
+  { tipo: "sector", sector: "accesorios", nombre: "accesorios, joyas y lentes", relacion: "afin", donde: "empresa", termino: "luxottica" },
+  { tipo: "sector", sector: "ferreteria", nombre: "ferretería y construcción", relacion: "otro", donde: "empresa", termino: "sodimac", prefieres: ["vestuario y moda", "calzado"], tope: true },
+  { tipo: "sector", sector: "ferreteria", nombre: "ferretería y construcción", relacion: "otro", prefieres: ["calzado"] },
+  { tipo: "sector", sector: "ferreteria", nombre: "ferretería y construcción", relacion: "otro", prefieres: ["vestuario y moda", "calzado", "artículos deportivos"] },
+  { tipo: "sector", sector: "financiero", nombre: "seguros, banca y créditos", relacion: "ajeno", prefieres: [] },
+  { tipo: "sector", sector: "ferreteria", nombre: "ferretería y construcción", relacion: "evitado" },
+  { tipo: "canal", canal: "terreno", nombre: "venta en terreno", relacion: "otro", termino: "terreno" },
+  { tipo: "canal", canal: "telefono", nombre: "venta por teléfono", relacion: "evitado", termino: "telemarketing" },
+  { tipo: "canal", canal: null, nombre: null, relacion: "desconocido", termino: "ejecutivo de ventas", tope: true },
   { tipo: "requisito", que: "titulo" },
   { tipo: "requisito", que: "licencia" },
   { tipo: "requisito", que: "ingles" },

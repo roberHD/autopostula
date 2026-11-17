@@ -43,8 +43,9 @@ export function cargarScorerDeLaExtension(
   };
   vm.createContext(contexto);
   // Mismo orden que manifest.json: sin la lista de comunas no se reconoce
-  // ninguna ubicación.
-  for (const archivo of ["data/comunas-cl.js", "core.js"]) {
+  // ninguna ubicación, y sin el catálogo de rubros el scorer solo mira el cargo
+  // (docs/filtro-por-rubro-2026-11-14.md).
+  for (const archivo of ["data/comunas-cl.js", "data/sectores-cl.js", "core.js"]) {
     vm.runInContext(fs.readFileSync(path.join(carpeta, archivo), "utf8"), contexto, { filename: archivo });
   }
   const AP = (contexto.window as { AP?: { puntuarOferta?: Function } }).AP;

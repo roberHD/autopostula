@@ -88,7 +88,10 @@ export type InformeBanco = {
 export function claveDeRazon(r: unknown): string {
   if (typeof r === "string") return "(razón vieja, en texto)";
   if (!r || typeof r !== "object" || !("tipo" in r)) return "(sin razón)";
-  const x = r as { tipo: unknown; donde?: unknown; certeza?: unknown };
+  const x = r as { tipo: unknown; donde?: unknown; certeza?: unknown; relacion?: unknown };
+  // docs/filtro-por-rubro-2026-11-14.md.
+  if (x.tipo === "sector") return x.relacion === "otro" ? "otra tienda que la que prefiere" : `rubro ${String(x.relacion)}`;
+  if (x.tipo === "canal") return x.relacion === "desconocido" ? "no dice si es en tienda" : "otro tipo de venta";
   if (x.tipo === "veto") return `veto en ${x.donde === "cuerpo" ? "la descripción" : x.donde === "empresa" ? "la empresa" : "el título"}`;
   if (x.tipo === "nivel") return x.certeza === "desconocida" ? "nivel sin confirmar" : "nivel";
   return String(x.tipo);

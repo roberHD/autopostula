@@ -42,7 +42,7 @@ function crearContexto() {
 const ctx = crearContexto();
 // Mismo orden que manifest.json: la lista de comunas se carga antes que core.js
 // (sin ella la ubicación de la oferta nunca se reconoce -- §2.1).
-for (const archivo of ['data/comunas-cl.js', 'core.js']) {
+for (const archivo of ['data/comunas-cl.js', 'data/sectores-cl.js', 'core.js']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, archivo), 'utf8'), ctx, { filename: archivo });
 }
 const AP = ctx.window.AP;
@@ -713,6 +713,173 @@ check('...y "pedro aguirre cerda", "isla de maipo"', AP.formatearRazonCorta({ ti
   check('con comunas y remoto: una presencial fuera de ellas se sigue descartando', conComunas.banda === 'descartar' && conComunas.razones[0].tipo === 'ubicacion');
   const remota = AP.puntuarOferta(Object.assign({}, oferta, { cuerpo: 'Trabajo 100% remoto' }), Object.assign({}, p, { ubicacion: { comunas: ['nunoa'], aceptaRemoto: true } }));
   check('con comunas y remoto: una remota fuera de ellas pasa', remota.banda === 'postular');
+}
+
+// ── docs/filtro-por-rubro-2026-11-14.md: el rubro, el tipo de venta, la jornada
+// escrita de otra forma y el lugar leído en el título ──
+// Los títulos son reales: salen de las 901 ofertas que la extensión vio con la
+// cuenta de Roberto entre septiembre y noviembre de 2026. El perfil es como el
+// suyo: vendedor, part time, toda la RM, con gusto por moda, vestuario y calzado.
+{
+  const todaLaRM = AP.COMUNAS_CL.filter((c) => c.region === 'RM').map((c) => c.nombre);
+  const base = {
+    roles: [
+      { canonico: 'vendedor', sinonimos: ['asesor de ventas', 'ejecutivo de ventas', 'promotor de ventas'], peso: 1 },
+      { canonico: 'asistente de ventas', sinonimos: ['asistente comercial'], peso: 0.9 },
+    ],
+    vetos: [{ patron: 'full time', razon: 'busca part time' }],
+    senales: [{ patron: 'moda', delta: 20 }, { patron: 'vestuario', delta: 20 }, { patron: 'calzado', delta: 15 }],
+    ubicacion: { comunas: todaLaRM, aceptaRemoto: false },
+    jornada: 'part_time', modalidad: 'presencial', amplitud: 'parecidos', modo: 'objetivo', nivelDirectivo: null,
+    umbralPostular: 65, umbralGris: 45,
+  };
+  const con = (cambios) => Object.assign({}, base, cambios);
+  const RM = 'Las Condes, R.Metropolitana';
+  const p = (titulo, empresa, extra, perfilDelCaso) =>
+    AP.puntuarOferta(Object.assign({ titulo: titulo, empresa: empresa || '', ubicacion: RM, cuerpo: '' }, extra || {}), perfilDelCaso || base);
+  const tiene = (r, tipo, campos) => r.razones.some((x) => x.tipo === tipo && Object.keys(campos || {}).every((k) => x[k] === campos[k]));
+
+  // El rubro que prefiere, con el cargo escrito de otra forma.
+  let r = p('Asesor(a) de venta Part Time 20 Horas adidas Quilicura', 'Team-Work', { ubicacion: 'Quilicura, R.Metropolitana' });
+  check('rubro: adidas con "Asesor(a) de venta" se postula y dice que es de vestuario', r.banda === 'postular' && tiene(r, 'sector', { sector: 'vestuario', relacion: 'preferido', termino: 'adidas' }));
+  r = p('Asistente de tienda Part time 30 hrs semanales /Ingreso inmediato', 'XinerLink');
+  check('familia: "Asistente de tienda" cuenta como vendedor (antes: el cargo no se parece)', r.banda === 'postular' && tiene(r, 'rol', { rol: 'vendedor', termino: 'asistente de tienda' }));
+  r = p('Promotor/a de Vestuario Part Time 20hrs. (Miércoles a Viernes)', 'Manpower Chile');
+  check('familia: "Promotor/a de Vestuario" se postula', r.banda === 'postular' && tiene(r, 'sector', { sector: 'vestuario' }));
+  r = p('Asesor/a de Cliente Especialista Moda por evento // Part time 20 hrs Sáb y Dom', 'Falabella Retail Chile');
+  check('familia: "Asesor/a de Cliente Especialista Moda" de Falabella se postula', r.banda === 'postular');
+  r = p('Asesor/ra de ventas Part Time - Parque Arauco', 'PRÜNE');
+  check('género "/ra": "Asesor/ra de ventas" calza, y Prüne es de calzado', r.banda === 'postular' && tiene(r, 'rol') && tiene(r, 'sector', { sector: 'calzado', donde: 'empresa' }));
+  r = p('Asistente Experiencia de Compras Calzado Part Time Ripley Plaza Vespucio', 'RIPLEY');
+  check('varios rubros: calzado en Ripley es de calzado, no de grandes tiendas', r.banda === 'postular' && tiene(r, 'sector', { sector: 'calzado', relacion: 'preferido' }));
+  check('un declarado gana a uno de la familia: "Vendedor/a Asistente de tienda" dice vendedor', tiene(p('Vendedor/a Asistente de tienda Part Time', ''), 'rol', { termino: 'vendedor' }));
+
+  // Otra tienda: se pregunta. Parecida: pasa.
+  r = p('Vendedor/a Sodimac La Reina Jornada PT20 hrs', 'Sodimac Chile');
+  check('otra tienda: Sodimac queda en Por decidir, con la razón primero', r.banda === 'gris' && r.razones[0].tipo === 'sector' && r.razones[0].sector === 'ferreteria' && r.razones[0].relacion === 'otro');
+  check('...y la razón nombra lo que la persona prefiere', JSON.stringify(r.razones[0].prefieres) === JSON.stringify(['vestuario y moda', 'calzado']));
+  r = p('Vendedor 20 horas - La Dehesa', 'SuperZoo');
+  check('otra tienda: SuperZoo (por el nombre de la empresa) queda en Por decidir', r.banda === 'gris' && tiene(r, 'sector', { sector: 'mascotas', donde: 'empresa' }));
+  r = p('Vendedor/a 30 hrs RayBan Mall Parque Arauco', 'EssilorLuxottica');
+  check('rubro afín: lentes y accesorios pasan', r.banda === 'postular' && tiene(r, 'sector', { sector: 'accesorios', relacion: 'afin' }));
+  r = p('Vendedor Part Time 30hrs Peñalolen', 'Importante empresa del sector Retail');
+  check('sin rubro reconocible: pasa como antes ("no sé" no es "no calza")', r.banda === 'postular' && !tiene(r, 'sector') && !tiene(r, 'canal'));
+
+  // Otro tipo de venta y otra clase de trabajo: se descartan.
+  r = p('Ejecutivos de Ventas de Call Center Part Time en Venta Web e Inbound', 'IBRCHILE');
+  check('otro tipo de venta: call center se descarta', r.banda === 'descartar' && r.razones[0].tipo === 'canal' && r.razones[0].canal === 'telefono');
+  check('otro tipo de venta: terreno se descarta', p('Vendedor/a en Terreno Part Time – El Bosque', 'Verisure').razones[0].canal === 'terreno');
+  check('otro tipo de venta: "técnico" es venta a empresas', p('Vendedor Técnico Part Time', '').razones[0].canal === 'empresas');
+  check('otro tipo de venta: ventas digitales desde la casa', p('PROMOTORES Y ASESORES DE VENTA / VIRTUAL PART TIME', 'Confidencial').razones[0].canal === 'remoto');
+  r = p('Ejecutivo de ventas de seguro Hospitalario part time', 'Integral Group Solution');
+  check('otra clase de trabajo: seguros se descarta', r.banda === 'descartar' && r.razones[0].sector === 'financiero' && r.razones[0].relacion === 'ajeno');
+  check('otra clase de trabajo: automotriz se descarta', p('Vendedor(a) de Autos Seminuevos Part Time Mall Cenco Florida', 'Anfruns Motors').banda === 'descartar');
+  r = p('Ejecutivo de Venta Producto Financiero (Captador) Part Time Tda Plaza Vespucio Banco Ripley', 'RIPLEY');
+  check('varios rubros: un producto financiero en Ripley es financiero', r.banda === 'descartar' && r.razones[0].sector === 'financiero');
+  r = p('Vendedor Part Time de vestuario corporativo', '');
+  check('otro tipo de venta en el rubro que prefiere: queda la duda, no se descarta', r.banda === 'gris' && r.razones[0].tipo === 'canal');
+  check('el cargo no calzó: sigue diciendo que el cargo no se parece', p('Agente de Call Center', 'Importante empresa del sector Call Center').razones[0].tipo === 'sin_rol');
+
+  // "Ejecutivo de ventas" y "asistente comercial": depende de si dice tienda.
+  r = p('ejecutivo de ventas part time', 'Confidencial');
+  check('cargo de oficina sin nada que diga tienda: Por decidir', r.banda === 'gris' && r.razones[0].tipo === 'canal' && r.razones[0].relacion === 'desconocido');
+  check('...con una tienda en el aviso, pasa', p('Asistente comercial PT 18 Tda Florida Center', 'RIPLEY', { ubicacion: 'La Florida, R.Metropolitana' }).banda === 'postular');
+
+  // El rubro que prefiere con otro cargo: no se pierde.
+  r = p('Bodegueros Part time PUMA EASTON OUTLET', 'PUMA CHILE S.A.', { ubicacion: 'Quilicura, R.Metropolitana' });
+  check('rubro preferido con otro cargo: Por decidir, con el rubro primero y el cargo después', r.banda === 'gris' && r.razones[0].tipo === 'sector' && tiene(r, 'sin_rol'));
+  check('...si el título dice tienda: "Reponedor en Tienda adidas Costanera Center" sí', p('Reponedor Part time 30 hrs en Tienda Adidas costanera center', 'Team-Work').banda === 'gris');
+  check('...la bodega de adidas en Pudahuel no', p('Operario de bodega / Adidas / Pudahuel / Turno rotativo', 'Team-Work', { ubicacion: 'Pudahuel, R.Metropolitana' }).banda === 'descartar');
+  check('...ni un cargo de oficina del rubro', p('Diseñador/a de Vestuario Junior / Recoleta', 'Alternattiva').banda === 'descartar');
+  check('...una jefatura no se rescata', p('Jefe de Tienda Maipú', 'Tricot S.A.', { ubicacion: 'Maipú, R.Metropolitana' }).banda === 'descartar');
+  check('...ni otro cargo en otra tienda', p('Bodeguero Part time', 'Sodimac Chile').banda === 'descartar');
+
+  // La amplitud manda.
+  check('amplitud "solo": Sodimac se descarta', p('Vendedor/a Sodimac La Reina Jornada PT20 hrs', 'Sodimac Chile', null, con({ amplitud: 'solo' })).banda === 'descartar');
+  check('amplitud "solo": un rubro afín queda en Por decidir', p('Vendedor/a 30 hrs RayBan Mall Parque Arauco', 'EssilorLuxottica', null, con({ amplitud: 'solo' })).banda === 'gris');
+  check('amplitud "todo mi rubro": Sodimac se postula', p('Vendedor/a Sodimac La Reina Jornada PT20 hrs', 'Sodimac Chile', null, con({ amplitud: 'rubro' })).banda === 'postular');
+  check('amplitud "todo mi rubro": el call center también', p('Ejecutivos de Ventas de Call Center Part Time', '', null, con({ amplitud: 'rubro' })).banda === 'postular');
+  check('amplitud "todo mi rubro": adidas sigue diciendo que es lo que prefiere', tiene(p('Vendedor Part Time adidas', '', null, con({ amplitud: 'rubro' })), 'sector', { relacion: 'preferido' }));
+
+  // Sin preferencias, o sin un cargo de ventas, nada cambia.
+  check('sin gusto por ningún rubro: Sodimac se postula como antes', p('Vendedor/a Sodimac La Reina Jornada PT20 hrs', 'Sodimac Chile', null, con({ senales: [] })).banda === 'postular');
+  check('sin gusto por ningún rubro: el call center también', p('Ejecutivos de Ventas de Call Center Part Time', '', null, con({ senales: [] })).banda === 'postular');
+  const bodeguero = con({ roles: [{ canonico: 'bodeguero', sinonimos: [], peso: 1 }] });
+  check('otro oficio (bodeguero) con gusto por la moda: el rubro no se mira', p('Bodeguero Part time', 'Sodimac Chile', null, bodeguero).banda === 'postular' && !tiene(p('Bodeguero Part time', 'adidas', null, bodeguero), 'sector'));
+  check('modo "cualquier trabajo": el rubro no se mira', p('Vendedor/a Sodimac La Reina Jornada PT20 hrs', 'Sodimac Chile', null, con({ modo: 'abierto', amplitud: 'abierto' })).banda === 'postular');
+
+  // Un veto dicho con otra palabra, y el contexto que manda el servidor.
+  r = p('Ejecutivos/as de Ventas Telemarketing – 30 horas (Presencial)', 'Serviclick', null, con({ senales: [], vetos: [{ patron: 'call center', razon: 'no quiere call center' }] }));
+  check('veto "call center": telemarketing es lo mismo, y se descarta', r.banda === 'descartar' && r.razones[0].tipo === 'canal' && r.razones[0].relacion === 'evitado');
+  r = p('Vendedor/a Sodimac La Reina Jornada PT20 hrs', 'Sodimac Chile', null, con({ senales: [], contexto: { sectores: { prefiere: ['calzado'], evita: ['ferreteria'] } } }));
+  check('perfil.contexto del servidor: un rubro evitado se descarta', r.banda === 'descartar' && r.razones[0].relacion === 'evitado');
+  check('perfil.contexto con un id que no existe: se ignora', p('Vendedor Part Time', '', null, con({ senales: [], contexto: { sectores: { prefiere: ['inventado'] } } })).banda === 'postular');
+
+  // Quien escribió un cargo específico no gana los títulos de la familia.
+  const deCalzado = con({ roles: [{ canonico: 'vendedor de calzado', sinonimos: [], peso: 1 }], senales: [] });
+  check('cargo específico ("vendedor de calzado"): "Asistente de tienda" no cuenta', p('Asistente de tienda Part time', '', null, deCalzado).banda === 'descartar');
+  check('...y su rubro sale del cargo mismo', tiene(p('Vendedor(a) de Calzado Part Time', 'Bata Chile S.A.', null, deCalzado), 'sector', { sector: 'calzado', relacion: 'preferido' }));
+
+  // "Promotor" a secas: de una tienda o de la calle.
+  check('"Promotor PartTime para Unicef" (en la calle) no es vendedor de tienda', p('Promotor PartTime para Unicef', 'PROA CHILE SPA').razones[0].tipo === 'sin_rol');
+  check('"Promotor/a Campaña Navidad – Part Time/ Parque Arauco" sí: un centro comercial es tienda', p('Promotor/a Campaña Navidad – Part Time/ Parque Arauco', 'Progestion Chile').banda === 'postular');
+  check('"Mall Alto Las Condes, Activador(a) Campaña Navideña Retail Part Time" cuenta como promotor de tienda', tiene(p('Mall Alto Las Condes, Activador(a) Campaña Navideña Retail Part Time', 'Adecco Chile'), 'rol', { termino: 'activador' }));
+  check('sin gusto por ningún rubro también: "Promotor para Unicef" no cuenta', p('Promotor PartTime para Unicef', 'PROA CHILE SPA', null, con({ senales: [] })).banda === 'descartar');
+  check('...y "Promotor/a de Vestuario Part Time" sí', p('Promotor/a de Vestuario Part Time 20hrs.', 'Manpower Chile', null, con({ senales: [] })).banda === 'postular');
+  check('un promotor que la persona escribió en su perfil ("promotor de ventas") cuenta siempre', tiene(p('Promotor(a) de Ventas Part Time', ''), 'rol', { termino: 'promotor de ventas' }));
+
+  // "post venta" no es "ventas".
+  check('"Asistente de post venta y despachos" no es asistente de ventas', p('Asistente de post venta y despachos Part Time', 'Confidencial').razones[0].tipo === 'sin_rol');
+
+  // La jornada escrita de otra forma.
+  const ficha = 'Publicada hoy por Levi Strauss Chile 2 Vacantes Jornada Completa Vendedor Región Metropolitana';
+  check('jornada: "PartTime" pegado en el título vale, aunque la ficha diga Jornada Completa', p('Vendedor(a) PartTime - Levis Outlet La Fabrica', 'Levi Strauss Chile', { cuerpo: ficha }).banda === 'postular');
+  r = p('Vendedor Fulltime 42 hrs 5x2 / Tienda Aldo Los Dominicos', 'Falabella Retail Chile');
+  check('jornada: "Fulltime" pegado es jornada completa, y el veto de jornada se explica como jornada', r.banda === 'descartar' && r.razones[0].tipo === 'jornada' && r.razones[0].declarada === 'part_time');
+  check('jornada: "Full Time y Part Time" en el título no se descarta por el veto', p('Vendedores Full Time y Part Time La Florida', '', { ubicacion: 'La Florida, R.Metropolitana' }).banda === 'postular');
+  check('jornada: el veto de jornada no mira la descripción', !tiene(p('Vendedor de Tienda Part Time - Región Metropolitana', 'Confidencial', { cuerpo: 'Presencial · Ventas · Full-time, Indeterminado · Junior' }), 'veto'));
+  r = p('Asistente de Ventas - AllSaints', 'Eurofashion', { cuerpo: 'Jornada Completa Vendedor. Modalidades de trabajo disponibles Part time: 30 horas semanales' });
+  check('jornada: la descripción habla de las dos -> Por decidir, y lo dice', r.banda === 'gris' && tiene(r, 'jornada_desconocida', { ambas: true }));
+  check('jornada: la descripción dice solo la contraria -> se descarta, como antes', p('Asistente de Ventas Parfois Parque Arauco', 'Forus S.A.', { cuerpo: 'Jornada Completa Vendedor' }).razones[0].tipo === 'jornada');
+  check('jornada: "JP 25" es jornada parcial', !tiene(p('Asistente Comercial JP 25', 'RIPLEY'), 'jornada_desconocida'));
+  check('jornada: "P20" y "27H" son part time', !tiene(p('Asistente de ventas Sodimac Las Condes P20', ''), 'jornada_desconocida') && !tiene(p('Vendedor(a) de Tienda 27H – Helly Hansen Portal La Dehesa', ''), 'jornada_desconocida'));
+  check('jornada: "18,5 hrs" y "10 hrs" son part time', !tiene(p('Asistente de Ventas PT, 18,5 hrs', ''), 'jornada_desconocida') && p('Vendedora 10 hrs - La Florida', 'INTIME', { ubicacion: 'La Florida, R.Metropolitana' }).banda === 'postular');
+  check('jornada: "Parque Arauco42hrs" pegado es jornada completa', p('Vendedor Tienda Parque Arauco42hrs', 'adidas', null, con({ vetos: [] })).razones[0].tipo === 'jornada');
+  check('jornada: "de 10 a 18 hrs" sigue siendo un horario', tiene(p('Vendedor tienda de 10 a 18 hrs', ''), 'jornada_desconocida'));
+  check('jornada: turnos de fin de semana en el título son part time', !tiene(p('Vendedor/Cajero (fines de semana)', 'Empresa Confidencial'), 'jornada_desconocida'));
+
+  // El lugar leído en el título.
+  const soloRegion = { ubicacion: 'Santiago de Chile, Región Metropolitana' };
+  check('lugar: "Parque Arauco" no es la comuna de Arauco', p('Vendedores Part time PUMA Parque Arauco', 'PUMA CHILE S.A.', soloRegion).banda === 'postular');
+  check('lugar: "Temporada Navidad" no es la comuna de Navidad', p('Vendedor/a de Calzado Deportivo Part time Temporada Navidad', 'GrupoExpro', soloRegion).banda === 'postular');
+  check('lugar: "Mall Florida Center" no es Florida, del Biobío', p('Promo/Vendedor(as) Part Time Mall Florida Center', 'Burô Temps', soloRegion).banda === 'postular');
+  r = p('Vendedores Part time PUMA Parque Arauco', 'PUMA CHILE S.A.', { ubicacion: '' });
+  check('lugar: sin ubicación, "Parque Arauco" es una duda y no un descarte', r.banda === 'gris' && tiene(r, 'ubicacion_desconocida'));
+  r = p('Vendedor Part Time Osorno', 'Maui and Sons', soloRegion);
+  check('lugar: el título dice Osorno y la ubicación, la RM -> la duda', r.banda === 'gris' && tiene(r, 'ubicacion_desconocida'));
+  check('lugar: sin ubicación, una ciudad en el título sigue descartando', p('Vendedor Part Time Temuco', 'Maui and Sons', { ubicacion: '' }).razones[0].tipo === 'ubicacion');
+  check('lugar: si la ubicación del aviso dice Arauco, es Arauco', p('Vendedor Part Time', 'Maui and Sons', { ubicacion: 'Arauco, Biobío' }).razones[0].ofertaEn === 'arauco');
+
+  // El catálogo.
+  const ctxDe = (titulo, empresa) => AP.contextoDeOferta({ titulo: titulo, empresa: empresa || '' });
+  check('catálogo: "fibra óptica" es telefonía, no una óptica', JSON.stringify(ctxDe('Asesor(a) Comercial Fibra Óptica Part Time').sectores.map((s) => s.id)) === '["telecom"]');
+  check('catálogo: "Inmobiliaria e Inversiones" en el nombre de la empresa no es el rubro', ctxDe('Vendedor Part Time', 'Inmobiliaria e Inversiones Los Robles Ltda').sectores.length === 0);
+  check('catálogo: "Comercial e Industrial" en el nombre de la empresa no es el tipo de venta', ctxDe('Vendedor Part Time', 'Sociedad Comercial e Industrial Ltda').canales.length === 0);
+  check('catálogo: Computrabajo esconde la empresa y deja el rubro', ctxDe('Agente de Ventas', 'Importante empresa del sector Call Center').canales.some((c) => c.id === 'telefono'));
+  check('catálogo: una marca con símbolos (H&M) se reconoce', ctxDe('Sales Assistant H&M Costanera').sectores[0].termino === 'h&m');
+  check('catálogo: "modo" no es "moda"', ctxDe('Vendedor de modo part time').sectores.length === 0);
+
+  // Las razones nuevas, en palabras.
+  const sector = (relacion, extra) => Object.assign({ tipo: 'sector', sector: 'ferreteria', nombre: 'ferretería y construcción', relacion: relacion, donde: 'empresa', termino: 'sodimac', prefieres: ['vestuario y moda', 'calzado'] }, extra || {});
+  check('texto: otra tienda', AP.razonComoEnElPanel(sector('otro')) === 'Es de ferretería y construcción, y tú prefieres vestuario y moda o calzado');
+  check('texto: el rubro que prefiere, con la marca', AP.razonComoEnElPanel(sector('preferido', { nombre: 'vestuario y moda', termino: 'adidas' })) === 'Es de vestuario y moda, lo que prefieres (dice "adidas")');
+  check('texto: el rubro que prefiere, sin repetir la palabra', AP.razonComoEnElPanel(sector('preferido', { nombre: 'calzado', termino: 'calzado' })) === 'Es de calzado, lo que prefieres');
+  check('texto: afín y evitado', AP.razonComoEnElPanel(sector('afin')) === 'Es de ferretería y construcción, parecido a lo que prefieres' && AP.razonComoEnElPanel(sector('evitado')) === 'Es de ferretería y construcción, y dijiste que no te interesa');
+  check('texto: otro tipo de venta', AP.razonComoEnElPanel({ tipo: 'canal', canal: 'terreno', nombre: 'venta en terreno', relacion: 'otro' }) === 'Es venta en terreno, y tú buscas venta en tienda');
+  check('texto: no dice si es en tienda', AP.razonComoEnElPanel({ tipo: 'canal', canal: null, relacion: 'desconocido' }) === 'No dice si es en una tienda, que es lo que buscas');
+  check('texto corto, en minúscula', AP.formatearRazonCorta(sector('otro')) === 'es de ferretería y construcción, y tú prefieres vestuario y moda o calzado');
+  check('a favor: el rubro que prefiere y el afín; en contra: lo demás', AP.esRazonPositiva(sector('preferido')) === true && AP.esRazonPositiva(sector('afin')) === true && AP.esRazonPositiva(sector('otro')) === false && AP.esRazonPositiva({ tipo: 'canal', relacion: 'otro' }) === false);
+  check('texto: la descripción habla de las dos jornadas', AP.razonComoEnElPanel({ tipo: 'jornada_desconocida', declarada: 'part_time', ambas: true }) === 'Habla de part time y de jornada completa, y buscas part time');
 }
 
 console.log('\n' + (fallos === 0 ? `Todo OK (0 fallos).` : `${fallos} fallo(s).`));

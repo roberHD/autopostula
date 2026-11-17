@@ -1762,16 +1762,40 @@ AP.formatearRazonCorta = function (r) {
     case 'jornada': return r.declarada === 'part_time'
       ? 'es de jornada completa y buscas part time'
       : 'es part time y buscas jornada completa';
-    case 'jornada_desconocida': return 'no dice la jornada, y buscas ' + (r.declarada === 'part_time' ? 'part time' : 'jornada completa');
+    case 'jornada_desconocida': return (r.ambas ? 'habla de part time y de jornada completa' : 'no dice la jornada') + ', y buscas ' + (r.declarada === 'part_time' ? 'part time' : 'jornada completa');
     case 'requisito': return 'pide ' + (r.que === 'titulo' ? 'un título que no está en tu CV'
       : r.que === 'licencia' ? 'una licencia de conducir profesional que no está en tu CV'
       : 'inglés, y tu CV no lo menciona');
     case 'modo_abierto': return 'cumple tus condiciones (buscas cualquier trabajo)';
     // docs/revision-scorer-2026-09-30.md §4.1.
     case 'rol_fuera_del_titulo': return 'el cargo ("' + r.rol + '") no está en el título, solo en ' + (r.campo === 'empresa' ? 'el nombre de la empresa' : 'la descripción');
+    // docs/filtro-por-rubro-2026-11-14.md: las mismas frases del panel, en minúscula.
+    case 'sector': { const t = apTextoDeSector(r); return t.charAt(0).toLowerCase() + t.slice(1); }
+    case 'canal': { const t = apTextoDeCanal(r); return t.charAt(0).toLowerCase() + t.slice(1); }
     default: return 'sin razón';
   }
 };
+
+// El rubro y el tipo de venta, en palabras (docs/filtro-por-rubro-2026-11-14.md).
+// Mismas frases que backend/lib/formatear-razon.ts.
+function apTextoDeSector(r) {
+  const nombre = r.nombre || 'otro rubro';
+  if (r.relacion === 'preferido') {
+    // La palabra del aviso solo si agrega algo: "adidas" sí, "moda" no.
+    const dice = r.termino && nombre.indexOf(r.termino) === -1 ? ' (dice "' + r.termino + '")' : '';
+    return 'Es de ' + nombre + ', lo que prefieres' + dice;
+  }
+  if (r.relacion === 'afin') return 'Es de ' + nombre + ', parecido a lo que prefieres';
+  if (r.relacion === 'evitado') return 'Es de ' + nombre + ', y dijiste que no te interesa';
+  const prefieres = Array.isArray(r.prefieres) ? r.prefieres.filter(Boolean) : [];
+  const lista = prefieres.length > 1 ? prefieres.slice(0, -1).join(', ') + ' o ' + prefieres[prefieres.length - 1] : prefieres[0];
+  return 'Es de ' + nombre + (lista ? ', y tú prefieres ' + lista : ', y no es lo que prefieres');
+}
+function apTextoDeCanal(r) {
+  if (r.relacion === 'desconocido') return 'No dice si es en una tienda, que es lo que buscas';
+  if (r.relacion === 'evitado') return 'Es ' + (r.nombre || 'otro tipo de venta') + ', y dijiste que no te interesa';
+  return 'Es ' + (r.nombre || 'otro tipo de venta') + ', y tú buscas venta en tienda';
+}
 
 // ── La razón con las palabras del panel (docs/primera-busqueda-guiada.md §11) ──
 // La marca de cada oferta (abajo) dice por qué, igual que el panel
@@ -1814,13 +1838,15 @@ AP.razonComoEnElPanel = function (r) {
       return 'Es de ' + delAviso + ' y buscas ' + buscada;
     }
     case 'jornada_desconocida':
-      return 'No dice la jornada, y buscas ' + (r.declarada === 'part_time' ? 'part time' : 'jornada completa');
+      return (r.ambas ? 'Habla de part time y de jornada completa' : 'No dice la jornada') + ', y buscas ' + (r.declarada === 'part_time' ? 'part time' : 'jornada completa');
     case 'requisito':
       return 'Pide ' + (r.que === 'titulo' ? 'un título que no está en tu CV'
         : r.que === 'licencia' ? 'una licencia de conducir profesional que no está en tu CV'
         : 'inglés, y tu CV no lo menciona');
     case 'modo_abierto': return 'Cumple tus condiciones (buscas cualquier trabajo)';
     case 'sin_perfil': return 'Tu perfil de búsqueda todavía no estaba listo';
+    case 'sector': return apTextoDeSector(r);
+    case 'canal': return apTextoDeCanal(r);
     default: return 'Sin razón registrada';
   }
 };
@@ -1831,6 +1857,8 @@ AP.esRazonPositiva = function (r) {
   if (!r || typeof r !== 'object' || !r.tipo) return null;
   if (r.tipo === 'rol' || r.tipo === 'modo_abierto') return true;
   if (r.tipo === 'senal') return r.delta >= 0;
+  if (r.tipo === 'sector') return r.relacion === 'preferido' || r.relacion === 'afin';
+  if (r.tipo === 'canal') return false;
   if (['sin_rol', 'veto', 'ubicacion', 'ubicacion_desconocida', 'rol_fuera_del_titulo', 'nivel', 'duplicado',
        'sin_senales', 'jornada', 'jornada_desconocida', 'requisito'].indexOf(r.tipo) !== -1) return false;
   return null;
@@ -2309,9 +2337,27 @@ const AP_KEYWORDS_JORNADA = {
 // 42 horas): así titulan sus ofertas Sodimac, Paris y otras en trabajando.com
 // (verificado en vivo el 2026-09-30). "pt" con límite de palabra no los calza:
 // va pegado al número. Se prueban sobre texto ya normalizado (AP.n).
+// "JP 25" (jornada parcial de 25 horas) es como titula Ripley (2026-11-14).
 const AP_JORNADA_CON_HORAS = {
-  part_time: /\bpt\s*\d{1,2}(?!\d)/,
+  part_time: /\b(?:pt|jp)\s*\d{1,2}(?!\d)/,
   full_time: /\bft\s*\d{2}(?!\d)/,
+};
+// La jornada escrita con palabras, para el scorer (2026-11-14). Antes salía de
+// AP_KEYWORDS_JORNADA, frase por frase, y "PartTime" (así titula Levi's),
+// "Fulltime", "partime" y "Parti-time" no calzaban con ninguna: un aviso de
+// Levi's con "PartTime" en el título se descartó por la ficha "Jornada
+// Completa" del portal. "Peak time" son turnos de pocas horas.
+const AP_JORNADA_EN_TEXTO = {
+  part_time: /\bpart[\s-]*time\b|\bpartime\b|\bparti[\s-]*time\b|\bpeak[\s-]*time\b|\bmedia jornada\b|\bjornada parcial\b|\bmedio tiempo\b|\bpt\b/,
+  full_time: /\bfull[\s-]*time\b|\bjornada completa\b|\btiempo completo\b/,
+};
+// Solo en el TÍTULO: "Ejecutivo Comercial Parcial 25 hrs", "Asistente Comercial
+// JP", "Sodimac Las Condes P20", y los turnos de fin de semana. En una
+// descripción, "evaluación parcial" o "disponibilidad fines de semana" no
+// dicen la jornada.
+const AP_JORNADA_SOLO_TITULO = {
+  part_time: /\bjp\b|\bparcial\b|\bp(?:20|25|30)\b|\bfin(?:es)? de semana\b|\bsabados? y domingos?\b|\bdomingos? y festivos\b/,
+  full_time: /(?!)/,
 };
 // Las horas a secas, solo en el TÍTULO (2026-10-01): "Vendedor/a 30 hrs
 // RayBan", "Vendedor 20 horas - La Dehesa", "Vendedora volante 30hrs pm" y,
@@ -2322,9 +2368,14 @@ const AP_JORNADA_CON_HORAS = {
 // horario. Tampoco cuenta 24 ("farmacia 24 horas") ni lo que viene después de
 // " a ", " hasta " o un guion ("de 10 a 18 hrs", "10-18 hrs"); la "a" tiene que
 // ir suelta, porque "Vendedor/a 30 hrs" sí es una jornada.
+//
+// 2026-11-14: también "27H" y "20h", con decimales ("18,5 hrs", "27,5hrs"),
+// pegadas a la palabra anterior ("Parque Arauco42hrs") y desde 10 horas
+// ("Vendedora 10 hrs - La Florida"). 12 sigue afuera: "turnos de 12 hrs" es
+// jornada completa.
 const AP_JORNADA_HORAS_TITULO = {
-  part_time: /(?<!\sa\s|\shasta\s|[-–]\s?)\b(?:1[5-9]|2[0-35-9]|30)\s*(?:hrs?|horas|hs)\b(?!\.?\s*diari)|\b[1-6]\s*(?:hrs?|horas|hs)\.?\s*diari/,
-  full_time: /\b4[0-5]\s*(?:hrs?|horas|hs)\b(?!\.?\s*diari)|\b(?:8|9|10)\s*(?:hrs?|horas|hs)\.?\s*diari/,
+  part_time: /(?<!\sa\s|\shasta\s|[-–]\s?|\d)(?:1[013-9]|2[0-35-9]|30)(?:[.,]\d)?\s*(?:hrs?|horas|hs|h)\b(?!\.?\s*diari)|\b[1-6]\s*(?:hrs?|horas|hs)\.?\s*diari/,
+  full_time: /(?<!\d)4[0-5]\s*(?:hrs?|horas|hs|h)\b(?!\.?\s*diari)|\b(?:8|9|10)\s*(?:hrs?|horas|hs)\.?\s*diari/,
 };
 
 // ── Modo "cualquier trabajo" (docs/amplitud-de-busqueda.md §5) ──
@@ -2484,7 +2535,10 @@ function apPatronPalabra(palabra) {
 // Computrabajo real: "Ejecutivo(a) de Ventas Retail" caía a "sin_rol" pese a
 // tener "ejecutivo de ventas" como sinónimo exacto configurado). Se permite
 // este ruido de género, opcional, entre cada par de palabras.
-const AP_RUIDO_GENERO = '(?:\\s*[/(][ao]s?\\)?)?';
+//
+// 2026-11-14: también "/ra", "/or" y "/es" ("Asesor/ra de ventas", de Prüne,
+// quedaba sin cargo reconocido).
+const AP_RUIDO_GENERO = '(?:\\s*[/(](?:[ao]s?|r[ao]s?|or[ae]?s?|es)\\)?)?';
 
 // docs/amplitud-de-busqueda.md §2.3: los avisos chilenos meten preposiciones
 // cortas entre las palabras de un cargo ("vendedor DE retail", "asesor DE
@@ -2493,7 +2547,10 @@ const AP_RUIDO_GENERO = '(?:\\s*[/(][ao]s?\\)?)?';
 // permiten hasta 2 palabras cortas (<=4 letras: de, en, para...) de enlace
 // entre cada par, no palabras arbitrarias -- así "vendedor retail" calza con
 // "vendedor de retail" pero no con "vendedor de repuestos para retail".
-const AP_ENLACE_CORTO = '(?:\\s+\\w{1,4}){0,2}';
+//
+// 2026-11-14: "post" y "pre" no son de enlace: "Asistente de post venta y
+// despachos" calzaba con "asistente de ventas" y se postulaba solo.
+const AP_ENLACE_CORTO = '(?:\\s+(?!post\\b|pre\\b)\\w{1,4}){0,2}';
 
 // Frase completa con límites de palabra, nunca subcadena (§6, mismo bug que
 // tenía coincideFiltros con "aseo"/"paseo"). El texto de entrada ya debe venir
@@ -2526,6 +2583,247 @@ function apPatronPalabraSoloPlural(palabra) {
   return escapada;
 }
 
+// ── Rubro y tipo de venta (docs/filtro-por-rubro-2026-11-14.md) ──────────
+// Hasta la 2.21 el scorer miraba una sola cosa: el cargo. "Vendedor" valía 100
+// en adidas, en una ferretería y en un call center de seguros, y la preferencia
+// de la persona por un rubro (una señal de +20) no cambiaba nada, porque el
+// puntaje ya estaba en el tope. Con el historial real de Roberto, que busca
+// venta de vestuario: se postuló solo a Sodimac, a telemarketing y a seguros,
+// y descartó "Asistente de tienda Parque Arauco" y "Promotor/a de Vestuario
+// Part Time" por no decir "vendedor".
+//
+// El catálogo vive en data/sectores-cl.js (AP.SECTORES_CL, AP.CANALES_CL y
+// AP.FAMILIAS_CARGO_CL). Sin él -- una prueba que no lo carga -- nada de esto
+// encuentra algo y el scorer queda como antes.
+
+// Los términos de una entrada del catálogo como una sola expresión. Los
+// límites van con lookaround y no con \b: "h&m" y "liquidos.cl" traen símbolos.
+function apRxDeTerminos(terminos, conPlural, global) {
+  const alternativas = [];
+  for (const t of terminos || []) {
+    const palabras = AP.n(t).split(/\s+/).filter(Boolean).map(apEscaparRegex);
+    if (!palabras.length) continue;
+    if (conPlural) {
+      const ultima = palabras[palabras.length - 1];
+      palabras[palabras.length - 1] = ultima + (/[aeiou]$/.test(ultima) ? 's?' : /[bcdfglmnprtvz]$/.test(ultima) ? '(?:es)?' : '');
+    }
+    alternativas.push(palabras.join('[\\s-]+'));
+  }
+  if (!alternativas.length) return null;
+  // Las más largas primero: "grandes tiendas" antes que "tienda".
+  alternativas.sort((a, b) => b.length - a.length);
+  return new RegExp('(?<![a-z0-9&])(?:' + alternativas.join('|') + ')(?![a-z0-9&])', global ? 'g' : '');
+}
+
+const AP_CLASIFICADORES = new WeakMap();
+function apClasificador(entrada) {
+  let c = AP_CLASIFICADORES.get(entrada);
+  if (!c) {
+    c = {
+      palabras: apRxDeTerminos(entrada.palabras, true),
+      marcas: apRxDeTerminos(entrada.marcas, false),
+      excepto: apRxDeTerminos(entrada.excepto, true, true),
+    };
+    AP_CLASIFICADORES.set(entrada, c);
+  }
+  return c;
+}
+
+// Qué entradas de un catálogo aparecen en un texto ya normalizado (AP.n).
+function apHallazgos(catalogo, texto) {
+  const hallazgos = [];
+  if (!texto) return hallazgos;
+  for (const entrada of catalogo || []) {
+    const c = apClasificador(entrada);
+    const limpio = c.excepto ? texto.replace(c.excepto, ' ') : texto;
+    const m = (c.marcas && c.marcas.exec(limpio)) || (c.palabras && c.palabras.exec(limpio));
+    if (m) hallazgos.push({ id: entrada.id, termino: m[0] });
+  }
+  return hallazgos;
+}
+
+// El rubro y el tipo de venta de un aviso, y dónde lo dice. Solo el título y
+// la empresa: la descripción menciona de pasada el seguro de salud, la ropa de
+// trabajo o los descuentos en tiendas, y nada de eso dice de qué es el aviso.
+//
+// El nombre de una empresa dice el rubro ("Farmacias Knop", "Levi Strauss
+// Chile") salvo en los rubros marcados soloTitulo: "Inmobiliaria e Inversiones
+// X" y "Comercial e Industrial Y" son razones sociales de cualquier negocio.
+// Por lo mismo el tipo de venta se lee solo en el título, con una excepción:
+// Computrabajo esconde el nombre y deja el rubro ("Importante empresa del
+// sector Call Center").
+AP.contextoDeOferta = function (campos) {
+  const titulo = AP.n((campos && campos.titulo) || '');
+  const empresa = AP.n((campos && campos.empresa) || '');
+  const juntar = (catalogo, partes) => {
+    const lista = [];
+    for (const [donde, texto] of partes) {
+      for (const h of apHallazgos(catalogo, texto)) {
+        if (donde === 'empresa' && (catalogo.find((e) => e.id === h.id) || {}).soloTitulo) continue;
+        if (!lista.some((x) => x.id === h.id)) lista.push({ id: h.id, termino: h.termino, donde: donde });
+      }
+    }
+    return lista;
+  };
+  const empresaAnonima = /^importante empresa\b/.test(empresa);
+  return {
+    sectores: juntar(AP.SECTORES_CL || [], [['titulo', titulo], ['empresa', empresa]]),
+    canales: juntar(AP.CANALES_CL || [], empresaAnonima ? [['titulo', titulo], ['empresa', empresa]] : [['titulo', titulo]]),
+  };
+};
+
+// Un cargo sin sus palabras de enlace: "asesor de ventas" y "asesor en ventas"
+// son el mismo. Con apConstruirPatron (que deja pasar palabras cortas entre
+// medio) calza con los dos, y con "Asesor(a) de venta".
+function apPalabrasDeCargo(termino) {
+  return AP.n(termino || '').split(/\s+/).filter((p) => p.length > 3).join(' ');
+}
+
+// La familia de un cargo del perfil: la del primer término del catálogo con
+// que empieza ("vendedor de calzado" es de la familia de "vendedor"). Con
+// `aSecas`, solo si el cargo es ese término y nada más ("vendedor", "asesora
+// de ventas").
+function apFamiliaDeCargo(termino, aSecas) {
+  const texto = AP.n(termino || '');
+  if (!texto) return null;
+  for (const familia of AP.FAMILIAS_CARGO_CL || []) {
+    for (const t of (familia.terminos || []).concat(familia.terminosConTienda || [])) {
+      const rx = apConstruirPatron(apPalabrasDeCargo(t));
+      if (rx && new RegExp('^' + rx.source + (aSecas ? '$' : '')).test(texto)) return familia;
+    }
+  }
+  return null;
+}
+
+// Lo que el perfil dice del rubro y del tipo de venta, calculado una vez por
+// perfil. Sale de `perfil.contexto` si el servidor lo manda; si no, de lo que
+// el perfil ya trae:
+//   - prefiere los rubros que nombran sus señales a favor ("moda", "calzado")
+//     y sus cargos ("vendedor de calzado");
+//   - evita los rubros y tipos de venta que nombran sus vetos.
+// Solo se usa en perfiles que buscan un cargo de ventas: es donde el mismo
+// título ("vendedor") cubre trabajos que no se parecen. `extras` son los
+// títulos de la misma familia que cada cargo del perfil gana.
+const AP_CONTEXTO_DE_PERFIL = new WeakMap();
+function apContextoDelPerfil(perfil) {
+  if (AP_CONTEXTO_DE_PERFIL.has(perfil)) return AP_CONTEXTO_DE_PERFIL.get(perfil);
+  const sectores = AP.SECTORES_CL || [];
+  const umbral = perfil.umbralPostular != null ? perfil.umbralPostular : 65;
+  const extras = new Map();
+  let vende = false;
+  for (const rol of perfil.roles || []) {
+    const declarados = [rol.canonico].concat(rol.sinonimos || []).filter(Boolean);
+    const familias = declarados.map(apFamiliaDeCargo).filter(Boolean);
+    if (!familias.length) continue;
+    const peso = rol.peso != null ? rol.peso : 1;
+    if (!rol.porAmplitud && peso * 100 >= umbral) vende = true;
+    // Solo se suman los títulos que ya dicen "tienda": los de oficina
+    // ("ejecutivo comercial") traerían avisos de otro tipo de trabajo. Y solo
+    // si la persona puso el cargo a secas: quien escribió "vendedor de
+    // repuestos" fue específica, y abrirle "vendedor" sería desoírla.
+    const yaEstan = new Set(declarados.map(apPalabrasDeCargo));
+    const lista = [];
+    for (const familia of new Set(declarados.map((t) => apFamiliaDeCargo(t, true)).filter(Boolean))) {
+      if (!familia.tienda) continue;
+      for (const [terminos, conTienda] of [[familia.terminos || [], false], [familia.terminosConTienda || [], true]]) {
+        for (const t of terminos) {
+          const patron = apPalabrasDeCargo(t);
+          if (yaEstan.has(patron)) continue;
+          yaEstan.add(patron);
+          // conTienda: solo cuenta si el aviso dice que es en una tienda.
+          lista.push({ termino: t, patron: patron, conTienda: conTienda });
+        }
+      }
+    }
+    if (lista.length) extras.set(rol, lista);
+  }
+
+  const prefiere = new Set(), evita = new Set(), canalesEvita = new Set();
+  const dado = perfil.contexto && typeof perfil.contexto === 'object' ? perfil.contexto : null;
+  const validos = (lista, catalogo) => (Array.isArray(lista) ? lista : []).filter((id) => (catalogo || []).some((e) => e.id === id));
+  if (dado) {
+    validos(dado.sectores && dado.sectores.prefiere, sectores).forEach((id) => prefiere.add(id));
+    validos(dado.sectores && dado.sectores.evita, sectores).forEach((id) => evita.add(id));
+    validos(dado.canales && dado.canales.evita, AP.CANALES_CL).forEach((id) => canalesEvita.add(id));
+  } else {
+    for (const s of perfil.senales || []) {
+      if (!((s.delta || 0) > 0)) continue;
+      apHallazgos(sectores, AP.n(s.patron || '')).forEach((h) => prefiere.add(h.id));
+    }
+    for (const rol of perfil.roles || []) {
+      if (rol.porAmplitud || !apFamiliaDeCargo(rol.canonico)) continue;
+      apHallazgos(sectores, AP.n(rol.canonico || '')).forEach((h) => prefiere.add(h.id));
+    }
+    for (const v of perfil.vetos || []) {
+      const texto = AP.n(v.patron || '');
+      apHallazgos(sectores, texto).forEach((h) => { if (!prefiere.has(h.id)) evita.add(h.id); });
+      apHallazgos(AP.CANALES_CL, texto).forEach((h) => { if (h.id !== 'tienda') canalesEvita.add(h.id); });
+    }
+  }
+
+  const afines = new Set(), clases = new Set(), nombres = [];
+  for (const s of sectores) {
+    if (!prefiere.has(s.id)) continue;
+    clases.add(s.clase);
+    nombres.push(s.nombre);
+    (s.afines || []).forEach((id) => { if (!prefiere.has(id) && !evita.has(id)) afines.add(id); });
+  }
+  const contexto = {
+    // Sin el catálogo cargado, o sin un cargo de ventas, nada de esto se usa.
+    activo: vende && (prefiere.size > 0 || evita.size > 0 || canalesEvita.size > 0),
+    amplitud: perfil.amplitud || 'parecidos',
+    prefiere: prefiere, afines: afines, evita: evita, canalesEvita: canalesEvita,
+    clases: clases, nombres: nombres.slice(0, 3),
+    // Quien prefiere rubros que atienden público busca venta en tienda.
+    buscaTienda: prefiere.size > 0 && clases.size === 1 && clases.has('tienda'),
+    extras: extras,
+  };
+  AP_CONTEXTO_DE_PERFIL.set(perfil, contexto);
+  return contexto;
+}
+
+// Cómo queda el aviso frente a lo que la persona prefiere. Si el título y la
+// empresa nombran varios rubros manda el peor para ella, salvo el afín:
+// "Promotor de Grandes Tiendas, Área Calzado" es de calzado, y "repuestos y
+// accesorios automotrices" es automotriz.
+//   evitado   -> lo dijo ella (un veto)
+//   ajeno     -> otra clase de trabajo (seguros, automotriz) que la que prefiere
+//   preferido
+//   otro      -> otra tienda (ferretería, mascotas)
+//   afin      -> parecido a lo que prefiere (accesorios, grandes tiendas)
+const AP_ORDEN_RELACION = { evitado: 5, ajeno: 4, preferido: 3, otro: 2, afin: 1 };
+function apRelacionDeContexto(ctx, pref) {
+  let sector = null, tiendaDicha = false;
+  for (const h of ctx.sectores) {
+    const entrada = (AP.SECTORES_CL || []).find((e) => e.id === h.id);
+    if (!entrada) continue;
+    if (entrada.clase === 'tienda') tiendaDicha = true;
+    const relacion = pref.evita.has(h.id) ? 'evitado'
+      : !pref.prefiere.size ? null
+      : pref.prefiere.has(h.id) ? 'preferido'
+      : pref.afines.has(h.id) ? 'afin'
+      : pref.clases.has(entrada.clase) ? 'otro' : 'ajeno';
+    if (!relacion) continue;
+    if (!sector || AP_ORDEN_RELACION[relacion] > AP_ORDEN_RELACION[sector.relacion]) {
+      sector = { id: h.id, nombre: entrada.nombre, relacion: relacion, donde: h.donde, termino: h.termino };
+    }
+  }
+  let canal = null;
+  for (const h of ctx.canales) {
+    if (h.id === 'tienda') { tiendaDicha = true; continue; }
+    const relacion = pref.canalesEvita.has(h.id) ? 'evitado' : pref.buscaTienda ? 'otro' : null;
+    if (!relacion) continue;
+    if (!canal || (relacion === 'evitado' && canal.relacion !== 'evitado')) {
+      const entrada = (AP.CANALES_CL || []).find((e) => e.id === h.id);
+      canal = { id: h.id, nombre: entrada ? entrada.nombre : h.id, relacion: relacion, termino: h.termino };
+    }
+  }
+  // mixto: el mismo título habla de tienda y de otro tipo de venta.
+  const diceTienda = ctx.canales.some((h) => h.id === 'tienda');
+  if (canal) canal.mixto = diceTienda;
+  return { sector: sector, canal: canal, tiendaDicha: tiendaDicha, diceTienda: diceTienda };
+}
+
 // ── Comuna conocida de una oferta (docs/revision-2026-09-16.md §2.1, punto 4) ──
 // AP.COMUNAS_CL (data/comunas-cl.js, cargado antes que este archivo) trae las
 // comunas normalizadas (minúsculas, sin tildes) con su región. ubicacionNorm
@@ -2554,12 +2852,32 @@ function apExtraerComunaConocida(ubicacionNorm, tituloNorm) {
 
   if (tituloNorm) {
     for (const c of comunas) {
+      if (AP_COMUNAS_QUE_NO_SON_LUGAR_EN_UN_TITULO.has(c.nombre)) continue;
       const rx = apConstruirPatron(c.nombre);
-      if (rx && rx.test(tituloNorm)) return c;
+      // delTitulo: no lo dijo la ubicación del aviso, se leyó en el título.
+      if (rx && rx.test(tituloNorm)) return { nombre: c.nombre, region: c.region, delTitulo: true };
     }
   }
   return null;
 }
+
+// Nombres de comunas que en el título de un aviso casi nunca son la comuna
+// (2026-11-14). Con la ubicación "Región Metropolitana" y sin comuna, el
+// título mandaba: "Vendedores Part time PUMA Parque Arauco" quedaba "en
+// Arauco", "Temporada Navidad" en Navidad, "Mall Florida Center" en Florida
+// (Biobío) y "tienda Universidad de los Andes" en Los Andes, y todas se
+// descartaban por estar fuera de las comunas de la persona. Si la ubicación
+// del aviso dice una de estas, sigue valiendo: esto es solo para el título.
+const AP_COMUNAS_QUE_NO_SON_LUGAR_EN_UN_TITULO = new Set([
+  'arauco',        // Parque Arauco, Arauco Maipú, Marina Arauco: centros comerciales
+  'navidad',       // "Temporada Navidad", "Apoyo Navidad"
+  'primavera',     // "Temporada Primavera-Verano"
+  'florida',       // Mall Florida Center (la comuna de la RM es "La Florida")
+  'los andes',     // Universidad de los Andes
+  'santa maria',   // Clínica Santa María
+  'san carlos',    // San Carlos de Apoquindo
+  'la estrella', 'porvenir', 'retiro', 'empedrado', 'el carmen',
+]);
 
 // ── Región de una oferta (docs/revision-scorer-2026-09-30.md §2.5) ──
 // Hay ofertas que dicen solo la región ("Región Metropolitana",
@@ -2646,10 +2964,36 @@ AP.puntuarOferta = function (campos, perfil) {
     return { coincide: enTitulo || enEmpresa || enCuerpo, enTitulo, enEmpresa, enCuerpo };
   }
 
+  // La jornada que dice el aviso. En el título valen además las horas a secas
+  // y las abreviaturas ("30 hrs", "P20", "JP"); en el resto del aviso no.
+  function diceJornada(jornada, soloTitulo) {
+    const texto = soloTitulo ? titulo : titulo + ' ' + empresa + ' ' + cuerpo;
+    return AP_JORNADA_EN_TEXTO[jornada].test(texto) || AP_JORNADA_CON_HORAS[jornada].test(texto) ||
+      AP_JORNADA_SOLO_TITULO[jornada].test(titulo) || AP_JORNADA_HORAS_TITULO[jornada].test(titulo);
+  }
+
   perfil = perfil || {};
   // docs/amplitud-de-busqueda.md §5: en modo "cualquier trabajo" el eje deja de
   // ser el rol y pasa a ser las condiciones (comuna, jornada, vetos, requisitos).
   const modoAbierto = perfil.modo === 'abierto';
+
+  // docs/filtro-por-rubro-2026-11-14.md: el rubro y el tipo de venta del aviso
+  // frente a lo que la persona prefiere. En modo abierto no se mira: ahí pidió
+  // cualquier trabajo.
+  const pref = apContextoDelPerfil(perfil);
+  const usaContexto = pref.activo && !modoAbierto;
+  let contextoDelAviso = null;
+  const contexto = () => contextoDelAviso || (contextoDelAviso = AP.contextoDeOferta(campos));
+  const rel = usaContexto ? apRelacionDeContexto(contexto(), pref) : { sector: null, canal: null, tiendaDicha: false, diceTienda: false };
+  // El aviso dice que es en una tienda: con la palabra ("tienda", "mall",
+  // "Parque Arauco") o con un rubro que atiende público ("adidas", "Sodimac").
+  const esDeTienda = () => {
+    const c = contexto();
+    return c.canales.some((h) => h.id === 'tienda') ||
+      c.sectores.some((h) => ((AP.SECTORES_CL || []).find((e) => e.id === h.id) || {}).clase === 'tienda');
+  };
+  const razonSector = (s) => ({ tipo: 'sector', sector: s.id, nombre: s.nombre, relacion: s.relacion, donde: s.donde, termino: s.termino, prefieres: pref.nombres });
+  const razonCanal = (c) => ({ tipo: 'canal', canal: c.id, nombre: c.nombre, relacion: c.relacion, termino: c.termino });
 
   // docs/revision-scorer-2026-09-30.md §3-§5: el puntaje responde UNA pregunta,
   // "¿es lo que busco?" (el rol), y las señales de gusto lo mueven. "¿Puedo
@@ -2669,6 +3013,25 @@ AP.puntuarOferta = function (campos, perfil) {
   const vetos = perfil.vetos || [];
   let vetoCuerpo = null;
   for (const veto of vetos) {
+    // Un veto de jornada ("full time") es la jornada dicha de otra forma, y se
+    // trata igual que ella (2026-11-14): vale por lo que dice el título, y no
+    // si el título ofrece las dos. Con el perfil real de Roberto, "Vendedores
+    // Full Time y Part Time La Florida" se descartaba por decir "full time", y
+    // en trabajando.com (cuya ficha dice "Jornada Completa" hasta en los avisos
+    // part time) todo quedaba con la duda de un veto en la descripción.
+    const patronVeto = AP.n(veto.patron || '');
+    const jornadaVetada = AP_JORNADA_EN_TEXTO.full_time.test(patronVeto) ? 'full_time'
+      : AP_JORNADA_EN_TEXTO.part_time.test(patronVeto) ? 'part_time' : null;
+    if (jornadaVetada) {
+      const laOtra = jornadaVetada === 'full_time' ? 'part_time' : 'full_time';
+      if (diceJornada(jornadaVetada, true) && !diceJornada(laOtra, true)) {
+        // Con las palabras de la jornada ("Es de jornada completa y buscas part
+        // time") y no con las del veto, que escribe la IA al compilar el
+        // perfil ("rechazó múltiples ofertas full time; busca part time...").
+        return { score: 0, banda: 'descartar', razones: [{ tipo: 'jornada', declarada: laOtra }] };
+      }
+      continue;
+    }
     const resultado = buscar(veto.patron);
     if (!resultado.coincide) continue;
     if (resultado.enTitulo || resultado.enEmpresa) {
@@ -2680,6 +3043,16 @@ AP.puntuarOferta = function (campos, perfil) {
       };
     }
     if (!vetoCuerpo) vetoCuerpo = { tipo: 'veto', patron: veto.patron, razon: veto.razon || ('posible: ' + veto.patron), donde: 'cuerpo' };
+  }
+
+  // 1b. Un rubro o un tipo de venta que la persona dijo que no quiere: como un
+  // veto en el título, aunque el aviso lo diga con otra palabra (su veto dice
+  // "call center" y el aviso, "telemarketing").
+  if (rel.sector && rel.sector.relacion === 'evitado') {
+    return { score: 0, banda: 'descartar', razones: [razonSector(rel.sector)] };
+  }
+  if (rel.canal && rel.canal.relacion === 'evitado') {
+    return { score: 0, banda: 'descartar', razones: [razonCanal(rel.canal)] };
   }
 
   // 2. Requisitos excluyentes (docs/amplitud-de-busqueda.md §5). Solo en modo
@@ -2729,7 +3102,17 @@ AP.puntuarOferta = function (campos, perfil) {
   if (comunasDeclaradas.length) {
     const pareceRemoto = /\bremot[oa]\b/.test(cuerpo) || /\bremot[oa]\b/.test(titulo) || /\bremot[oa]\b/.test(ubicacion);
     if (!(ubicacionCfg.aceptaRemoto && pareceRemoto)) {
-      const comunaOferta = apExtraerComunaConocida(ubicacion, titulo);
+      let comunaOferta = apExtraerComunaConocida(ubicacion, titulo);
+      const regiones = apRegionesEnTexto(ubicacion);
+      // 2026-11-14: la ubicación del aviso dice una región y el título nombra
+      // una comuna de OTRA ("Vendedor Part Time Osorno", ubicación "Región
+      // Metropolitana"). Una de las dos está mal y no se sabe cuál: ni se
+      // descarta por la del título ni se da por buena la de la ubicación.
+      let lugarContradictorio = false;
+      if (comunaOferta && comunaOferta.delTitulo && regiones.length && regiones.indexOf(comunaOferta.region) === -1) {
+        lugarContradictorio = true;
+        comunaOferta = null;
+      }
       if (comunaOferta) {
         const dentro = comunasDeclaradas.some((c) => AP.n(c) === comunaOferta.nombre);
         if (!dentro) {
@@ -2740,10 +3123,10 @@ AP.puntuarOferta = function (campos, perfil) {
           };
         }
       } else {
-        const regiones = apRegionesEnTexto(ubicacion);
         const cobertura = apCoberturaDeclarada(ubicacionCfg);
         if (regiones.some((r) => cobertura.enteras.has(r))) {
-          // Dentro: declaró esa región entera.
+          // Dentro: declaró esa región entera. Con el título diciendo otra cosa, la duda.
+          if (lugarContradictorio) ubicacionIncierta = { tipo: 'ubicacion_desconocida', ofertaEn: (campos && campos.ubicacion) || null };
         } else if (regiones.length && regiones.every((r) => !cobertura.conAlguna.has(r))) {
           const nombres = AP.NOMBRE_REGION_CL || {};
           return {
@@ -2775,19 +3158,26 @@ AP.puntuarOferta = function (campos, perfil) {
   // si el título dice la declarada, calza (aunque diga las dos); si no, una
   // mención de la contraria en cualquier parte descarta, y si nada dice la
   // declarada queda la duda, como antes.
+  //
+  // 2026-11-14: si la contraria aparece solo en la descripción y la declarada
+  // también ("jornadas part time y full time", o un aviso part time con la
+  // ficha "Jornada Completa" de trabajando.com), no se sabe cuál es: queda la
+  // duda en vez de descartarse. Lo que diga el título sigue mandando.
   let jornadaIncierta = null;
   const jornadaDeclarada = perfil.jornada;
   if (jornadaDeclarada === 'full_time' || jornadaDeclarada === 'part_time') {
     const contraria = jornadaDeclarada === 'full_time' ? 'part_time' : 'full_time';
-    const dice = (jornada, soloTitulo) =>
-      AP_KEYWORDS_JORNADA[jornada].some((k) => { const r = buscar(k); return soloTitulo ? r.enTitulo : r.coincide; }) ||
-      AP_JORNADA_CON_HORAS[jornada].test(soloTitulo ? titulo : titulo + ' ' + empresa + ' ' + cuerpo) ||
-      AP_JORNADA_HORAS_TITULO[jornada].test(titulo);
-    if (!dice(jornadaDeclarada, true)) {
-      if (dice(contraria, false)) {
+    if (!diceJornada(jornadaDeclarada, true)) {
+      const laDiceLaDescripcion = diceJornada(jornadaDeclarada, false);
+      if (diceJornada(contraria, true) || (diceJornada(contraria, false) && !laDiceLaDescripcion)) {
         return { score: 0, banda: 'descartar', razones: [{ tipo: 'jornada', declarada: jornadaDeclarada }] };
       }
-      if (!dice(jornadaDeclarada, false)) jornadaIncierta = { tipo: 'jornada_desconocida', declarada: jornadaDeclarada };
+      // La dice solo la descripción, sin la contraria: confirmada, como antes.
+      if (!laDiceLaDescripcion) {
+        jornadaIncierta = { tipo: 'jornada_desconocida', declarada: jornadaDeclarada };
+      } else if (diceJornada(contraria, false)) {
+        jornadaIncierta = { tipo: 'jornada_desconocida', declarada: jornadaDeclarada, ambas: true };
+      }
     }
   }
 
@@ -2816,6 +3206,18 @@ AP.puntuarOferta = function (campos, perfil) {
         mejorRol = { rol: rol.canonico, termino: termino, campo: campo };
       }
     }
+    // Los otros títulos de la misma familia (docs/filtro-por-rubro-2026-11-14.md):
+    // quien busca "vendedor" también busca "Asistente de tienda" y "Promotor/a
+    // de Vestuario". Solo por el título: no los puso la persona, así que una
+    // mención en la descripción no dice nada. Van después de los declarados:
+    // si los dos calzan, se muestra el que ella escribió.
+    for (const extra of pref.extras.get(rol) || []) {
+      if (peso * 100 <= score || !buscar(extra.patron).enTitulo) continue;
+      // "Promotor" a secas puede ser de una tienda o de la calle.
+      if (extra.conTienda && !esDeTienda()) continue;
+      score = peso * 100;
+      mejorRol = { rol: rol.canonico, termino: extra.termino, campo: 'titulo' };
+    }
   }
   score = Math.min(100, score);
   // §5: la base del modo abierto se aplica acá, después de los roles -- un rol
@@ -2828,6 +3230,64 @@ AP.puntuarOferta = function (campos, perfil) {
     razones.push({ tipo: 'modo_abierto' });
   } else if (roles.length) {
     razones.push({ tipo: 'sin_rol' });
+  }
+
+  // 6b. Rubro y tipo de venta (docs/filtro-por-rubro-2026-11-14.md). El cargo
+  // dice QUÉ se hace; esto dice DÓNDE. Con la amplitud que eligió la persona:
+  //
+  //                                  solo        parecidos    todo mi rubro
+  //   rubro que prefiere             pasa        pasa         pasa
+  //   rubro afín (accesorios)        duda        pasa         pasa
+  //   otra tienda (ferretería)       descarta    duda         pasa
+  //   otra clase (seguros, autos)    descarta    descarta     pasa
+  //   otro tipo de venta (terreno)   descarta    descarta     pasa
+  //   no se reconoce                 pasa        pasa         pasa
+  //
+  // Lo que no se reconoce pasa como antes: el catálogo no conoce todas las
+  // marcas, y "no sé" no es "no calza". Si el título habla de otro tipo de venta
+  // pero el rubro es el suyo, o el mismo título dice tienda y terreno, queda la
+  // duda. Solo descarta cuando el cargo calzó: sin cargo, el aviso ya no pasaba.
+  let contextoIncierto = null;
+  let rescatePorRubro = false;
+  if (usaContexto && roles.length) {
+    const estricto = pref.amplitud === 'solo';
+    const amplio = pref.amplitud === 'rubro';
+    const s = rel.sector, c = rel.canal;
+    const preferido = !!s && s.relacion === 'preferido';
+    if (mejorRol && !amplio) {
+      if (c && !preferido && !c.mixto) return { score: 0, banda: 'descartar', razones: [razonCanal(c)] };
+      if (s && s.relacion === 'ajeno') return { score: 0, banda: 'descartar', razones: [razonSector(s)] };
+      if (s && s.relacion === 'otro') {
+        if (estricto) return { score: 0, banda: 'descartar', razones: [razonSector(s)] };
+        contextoIncierto = razonSector(s);
+      } else if (c) {
+        contextoIncierto = razonCanal(c);
+      } else if (s && s.relacion === 'afin' && estricto) {
+        contextoIncierto = razonSector(s);
+      } else if (!s && !rel.tiendaDicha && pref.buscaTienda) {
+        // "Ejecutivo de ventas" o "Asistente comercial", sin nada que diga que
+        // es en una tienda: puede ser una oficina o un call center.
+        const familia = apFamiliaDeCargo(mejorRol.termino);
+        if (familia && !familia.tienda) contextoIncierto = { tipo: 'canal', canal: null, nombre: null, relacion: 'desconocido', termino: mejorRol.termino };
+      }
+      // tope: la razón que dejó la oferta en "Por decidir" sin importar el
+      // puntaje. El servidor no ajusta el corte con esas decisiones
+      // (backend/lib/calibracion-umbral.ts, esTopeDelScorer).
+      if (contextoIncierto) contextoIncierto.tope = true;
+    }
+    if (preferido && mejorRol) {
+      razones.push(razonSector(s));
+    } else if (preferido && !nivelIncierto && rel.diceTienda) {
+      // El rubro que prefiere, en una tienda y con otro cargo ("Reponedor part
+      // time en Tienda adidas Costanera Center"): no se postula solo, pero
+      // tampoco se pierde. Va a "Por decidir". Una jefatura no ("Jefe de
+      // Tienda" en Tricot), ni lo que no es de tienda ("Operario de bodega /
+      // adidas / Pudahuel", "Diseñador/a de Vestuario").
+      razones.unshift(razonSector(s));
+      rescatePorRubro = true;
+    } else if (s && s.relacion === 'afin' && !contextoIncierto) {
+      razones.push(razonSector(s));
+    }
   }
 
   // docs/revision-scorer-2026-09-30.md §4.1: un cargo mencionado de pasada en
@@ -2866,13 +3326,15 @@ AP.puntuarOferta = function (campos, perfil) {
   if (score >= umbralPostular) banda = 'postular';
   else if (score <= umbralGris) banda = 'descartar';
   else banda = 'gris';
+  // 6b: el rubro que prefiere con otro cargo no se descarta, se pregunta.
+  if (rescatePorRubro && banda === 'descartar') banda = 'gris';
 
   // 9. Topes, todos en un solo lugar (§5): ninguno descarta, ninguno se
   // compensa con puntos, y con cualquiera la oferta no pasa de "Por decidir".
   // Van primero en las razones, que es lo que la persona tiene que mirar. Si el
   // puntaje ya la descartó, las dudas no cambian nada; solo el rol fuera del
   // título explica por qué el puntaje fue bajo, y va primero.
-  const topes = [jornadaIncierta, nivelIncierto, ubicacionIncierta, vetoCuerpo, rolFueraDelTitulo].filter(Boolean);
+  const topes = [jornadaIncierta, nivelIncierto, ubicacionIncierta, vetoCuerpo, rolFueraDelTitulo, contextoIncierto].filter(Boolean);
   if (banda === 'descartar') {
     if (rolFueraDelTitulo) razones.unshift(rolFueraDelTitulo);
   } else if (topes.length) {

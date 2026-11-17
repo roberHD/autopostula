@@ -79,6 +79,10 @@ console.log("── Calibración del umbral (§7) ──");
   check("no es tope: veto en el título (ese descarta)", !esTopeDelScorer({ tipo: "veto", donde: "titulo" }));
   check("tope: nivel sin confirmar", esTopeDelScorer({ tipo: "nivel", termino: "jefe", certeza: "desconocida" }));
   check("tope: el cargo fuera del título", esTopeDelScorer({ tipo: "rol_fuera_del_titulo" }));
+  // docs/filtro-por-rubro-2026-11-14.md
+  check("tope: otra tienda que la que prefiere", esTopeDelScorer({ tipo: "sector", relacion: "otro", tope: true }));
+  check("tope: no dice si es en tienda", esTopeDelScorer({ tipo: "canal", relacion: "desconocido", tope: true }));
+  check("no es tope: el rubro que prefiere, como dato a favor", !esTopeDelScorer({ tipo: "sector", relacion: "preferido" }));
   check("no es tope: una razón vieja en texto", !esTopeDelScorer("calza con vendedor"));
 
   // Lo que iba a salir solo (65 o más), revisado en el panel del portal (§9.3 del panel).

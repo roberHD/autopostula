@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutoPostula",
-  "version": "2.21.0",
+  "version": "2.22.0",
   "description": "Postulaci\u00f3n autom\u00e1tica inteligente para Computrabajo, Laborum y Trabajando.com. Powered by IA.",
   "permissions": [
     "storage",
@@ -33,6 +33,7 @@
       ],
       "js": [
         "data/comunas-cl.js",
+        "data/sectores-cl.js",
         "core.js",
         "adapters/computrabajo.js"
       ],
@@ -44,6 +45,7 @@
       ],
       "js": [
         "data/comunas-cl.js",
+        "data/sectores-cl.js",
         "core.js",
         "adapters/laborum.js"
       ],
@@ -55,6 +57,7 @@
       ],
       "js": [
         "data/comunas-cl.js",
+        "data/sectores-cl.js",
         "core.js",
         "adapters/trabajando.js"
       ],

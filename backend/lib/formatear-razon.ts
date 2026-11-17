@@ -22,10 +22,25 @@ export type RazonEstructurada =
   | { tipo: "senal"; patron: string; delta: number }
   | { tipo: "sin_senales" }
   | { tipo: "jornada"; declarada: "full_time" | "part_time" }
-  | { tipo: "jornada_desconocida"; declarada: "full_time" | "part_time" }
+  // ambas: la descripción habla de las dos jornadas y el título de ninguna.
+  | { tipo: "jornada_desconocida"; declarada: "full_time" | "part_time"; ambas?: boolean }
   // docs/amplitud-de-busqueda.md §5, modo "cualquier trabajo".
   | { tipo: "requisito"; que: "titulo" | "licencia" | "ingles" }
-  | { tipo: "modo_abierto" };
+  | { tipo: "modo_abierto" }
+  // docs/filtro-por-rubro-2026-11-14.md: el rubro del aviso frente al que la
+  // persona prefiere, y el tipo de venta (tienda, terreno, teléfono...).
+  // `tope`: fue la razón que dejó la oferta en "Por decidir".
+  | {
+      tipo: "sector";
+      sector: string;
+      nombre: string;
+      relacion: "preferido" | "afin" | "otro" | "ajeno" | "evitado";
+      donde?: "titulo" | "empresa";
+      termino?: string;
+      prefieres?: string[];
+      tope?: boolean;
+    }
+  | { tipo: "canal"; canal: string | null; nombre: string | null; relacion: "otro" | "evitado" | "desconocido"; termino?: string; tope?: boolean };
 
 // §D: la tarjeta de "Por decidir" ya no lista las razones como bullets del
 // cálculo, sino como el intercambio que se le pide decidir a la persona
@@ -40,7 +55,31 @@ export function esRazonPositiva(r: unknown): boolean | null {
   if (razon.tipo === "senal") return razon.delta >= 0;
   if (razon.tipo === "sin_rol" || razon.tipo === "veto" || razon.tipo === "ubicacion" || razon.tipo === "ubicacion_desconocida" || razon.tipo === "rol_fuera_del_titulo" || razon.tipo === "nivel" || razon.tipo === "duplicado" || razon.tipo === "sin_senales" || razon.tipo === "jornada" || razon.tipo === "jornada_desconocida" || razon.tipo === "requisito") return false;
   if (razon.tipo === "modo_abierto") return true;
+  if (razon.tipo === "sector") return razon.relacion === "preferido" || razon.relacion === "afin";
+  if (razon.tipo === "canal") return false;
   return null;
+}
+
+// docs/filtro-por-rubro-2026-11-14.md. Mismas frases que la extensión
+// (extension/core.js, apTextoDeSector y apTextoDeCanal).
+function textoDeSector(r: Extract<RazonEstructurada, { tipo: "sector" }>): string {
+  const nombre = r.nombre || "otro rubro";
+  if (r.relacion === "preferido") {
+    // La palabra del aviso solo si agrega algo: "adidas" sí, "moda" no.
+    const dice = r.termino && !nombre.includes(r.termino) ? ` (dice "${r.termino}")` : "";
+    return `Es de ${nombre}, lo que prefieres${dice}`;
+  }
+  if (r.relacion === "afin") return `Es de ${nombre}, parecido a lo que prefieres`;
+  if (r.relacion === "evitado") return `Es de ${nombre}, y dijiste que no te interesa`;
+  const prefieres = Array.isArray(r.prefieres) ? r.prefieres.filter(Boolean) : [];
+  const lista = prefieres.length > 1 ? `${prefieres.slice(0, -1).join(", ")} o ${prefieres[prefieres.length - 1]}` : prefieres[0];
+  return `Es de ${nombre}${lista ? `, y tú prefieres ${lista}` : ", y no es lo que prefieres"}`;
+}
+
+function textoDeCanal(r: Extract<RazonEstructurada, { tipo: "canal" }>): string {
+  if (r.relacion === "desconocido") return "No dice si es en una tienda, que es lo que buscas";
+  if (r.relacion === "evitado") return `Es ${r.nombre || "otro tipo de venta"}, y dijiste que no te interesa`;
+  return `Es ${r.nombre || "otro tipo de venta"}, y tú buscas venta en tienda`;
 }
 
 // En palabras de quien busca trabajo, no del cálculo: nada de puntajes
@@ -94,7 +133,7 @@ export function formatearRazon(r: unknown): string {
     }
     case "jornada_desconocida": {
       const buscada = razon.declarada === "part_time" ? "part time" : "jornada completa";
-      return `No dice la jornada, y buscas ${buscada}`;
+      return `${razon.ambas ? "Habla de part time y de jornada completa" : "No dice la jornada"}, y buscas ${buscada}`;
     }
     // docs/amplitud-de-busqueda.md §5, modo "cualquier trabajo".
     case "requisito": {
@@ -110,6 +149,10 @@ export function formatearRazon(r: unknown): string {
       return "Cumple tus condiciones (buscas cualquier trabajo)";
     case "sin_perfil":
       return "Tu perfil de búsqueda todavía no estaba listo";
+    case "sector":
+      return textoDeSector(razon);
+    case "canal":
+      return textoDeCanal(razon);
     default:
       return "Sin razón registrada";
   }

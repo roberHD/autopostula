@@ -41,8 +41,12 @@ export const DIAS_DE_DECISIONES = 90;
  */
 export function esTopeDelScorer(r: unknown): boolean {
   if (!r || typeof r !== "object") return false;
-  const x = r as { tipo?: unknown; certeza?: unknown; donde?: unknown };
+  const x = r as { tipo?: unknown; certeza?: unknown; donde?: unknown; tope?: unknown };
   return (
+    // docs/filtro-por-rubro-2026-11-14.md: otra tienda que la que prefiere, u
+    // otro tipo de venta. La extensión marca la razón cuando fue ella la que
+    // dejó la duda; el mismo rubro como dato a favor no es un tope.
+    ((x.tipo === "sector" || x.tipo === "canal") && x.tope === true) ||
     x.tipo === "ubicacion_desconocida" ||
     x.tipo === "jornada_desconocida" ||
     x.tipo === "rol_fuera_del_titulo" ||
